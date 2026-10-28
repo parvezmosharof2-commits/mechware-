@@ -96,17 +96,17 @@ live chat, B2B pricing, multi-warehouse routing, flash-sale queueing, marketplac
 
 ---
 
-## 4. Tech Stack (Enterprise Hybrid: C# .NET Backend + Next.js Frontend)
+## 4. Tech Stack (Enterprise Hybrid: C# .NET 10 Backend + Next.js 15 Frontend)
 
 > [!NOTE]
-> C# (.NET 8/9, ASP.NET Core) is chosen for the **Core Backend, Order Processing, Financial Ledger & High-Concurrency APIs** where it outperforms Node.js in throughput, memory efficiency, native 128-bit `decimal` precision for money, and robust multi-threaded transaction locking. TypeScript (Next.js 15) is kept for the **Storefront and Admin/Seller Web UI** for top-tier SEO, Core Web Vitals, and responsive UI design.
+> **C# (.NET 10, ASP.NET Core 10, C# 13, Visual Studio 2026)** is chosen for the **Core Backend, Order Processing, Financial Ledger & High-Concurrency APIs**. Verified and running on .NET 10.0.401 on this machine. TypeScript (Next.js 15) is kept for the **Storefront and Admin/Seller Web UI** for top-tier SEO, Core Web Vitals, and responsive UI design.
 
 | Area | Choice | Why |
 |---|---|---|
 | Frontend Storefront | Next.js 15 App Router (TypeScript, Tailwind CSS 4, shadcn/ui, Framer Motion, TanStack Query, Zustand, next-intl) | Industry leader in SSR/ISR, SEO, LCP performance, image optimization |
 | Admin + Seller Console | Next.js 15 (TypeScript, TanStack Table, Recharts) | Rapid UI development, rich data-table ecosystems |
-| Backend Core Engine | **C# 12 / .NET 8 (or .NET 9) ASP.NET Core Web API** (Modular Monolith / Clean Architecture) | Top-tier performance (TechEmpower top rankings), rock-solid type safety, asynchronous high-concurrency |
-| ORM & Database Access | **Entity Framework Core 8/9 (EF Core) + Npgsql + Dapper** (for ultra-fast read queries) | Strongly typed migrations, LINQ safety, raw SQL speed where needed |
+| Backend Core Engine | **C# 13 / .NET 10 ASP.NET Core Web API** (Visual Studio 2026 Clean Architecture) | Latest cutting-edge performance, rock-solid type safety, asynchronous high-concurrency |
+| ORM & Database Access | **Entity Framework Core 10 (EF Core) + Npgsql + Dapper** (for ultra-fast read queries) | Strongly typed migrations, LINQ safety, raw SQL speed where needed |
 | Database | PostgreSQL 16 | ACID transactions, JSONB for flexible attributes, row-level locking |
 | Concurrency & Architecture | CQRS with MediatR, FluentValidation, Pipeline Behaviors (Logging, Validation, Transaction, Idempotency) | Clear boundaries, testable business logic |
 | Background Workers & Queue | .NET BackgroundService / MassTransit / Hangfire with Redis & PostgreSQL Outbox | Guaranteed outbox processing, resilient retry policies (Polly) |
