@@ -1,0 +1,9 @@
+[১. Antigravity ফেজের কোড লিখবে ও লোকাল টেস্ট চালাবে]
+                        ↓
+[২. Antigravity স্বয়ংক্রিয়ভাবে Git-এ Commit & Push করবে]
+                        ↓
+[৩. আপনি Google AI Studio-তে কোড দিয়ে অডিট করাবেন]
+                        ↓
+[৪. AI Studio-র অডিট রিপোর্টটি Antigravity-তে পেস্ট করবেন]
+                        ↓
+[৫. Antigravity ত্রুটিগুলো ফিক্স করে ফাইনাল Git Push দিবে]

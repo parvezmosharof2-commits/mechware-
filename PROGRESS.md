@@ -1,0 +1,271 @@
+# MECHWARE Platform Implementation Progress
+
+> **Target Standard:** USD 100,000+ Enterprise Industrial Commerce & Automation Platform
+> **Architecture:** C# 13 / .NET 10 Clean Architecture + Next.js 15 Monorepo + PostgreSQL 16 + Redis 7 + Meilisearch
+
+---
+
+## 📊 Phase Overview
+
+- [x] **Phase 0: Kickoff, Architecture & Master Blueprint** (Completed & Ready for Review)
+- [ ] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)**
+- [ ] **Phase 2: Cybernetic Design System & Component Library (`packages/ui`)**
+- [ ] **Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors**
+- [ ] **Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data**
+- [ ] **Phase 5: Sub-50ms Typo-Tolerant Search & Discovery (Meilisearch + Bangla)**
+- [ ] **Phase 6: Storefront Foundation, Mega Menu & Dynamic Homepage Sections**
+- [ ] **Phase 7: Industrial Product Experience (PLP & PDP with CAD/Datasheets)**
+- [ ] **Phase 8: Cart, Promotions Engine, Atomic Checkout & Multi-Payment Gateways**
+- [ ] **Phase 9: Order Fulfillment, Courier Tracking, Returns & Vector PDF Invoices**
+- [ ] **Phase 10: Multi-Vendor Seller Center & Double-Entry Financial Ledger**
+- [ ] **Phase 11: Operations & Executive Admin Console (Stripe/Shopify Grade)**
+- [ ] **Phase 12: Google Gemini AI Intelligence (Search, Review Summaries, Assistant)**
+- [ ] **Phase 13: Hardening, OWASP ASVS Security, Lighthouse 90+ & Accessibility**
+- [ ] **Phase 14: k6 Concurrency Load Testing, Production Containerization & Launch**
+
+---
+
+## Detailed Task Breakdown
+
+### Phase 0: Kickoff, Architecture & Master Blueprint
+- [x] Analyze `docs/01_PROJECT_BRIEF.md`, `docs/COMPANY_PROFILE.md`, and `docs/02_DESIGN_SYSTEM.md`.
+- [x] Create Architectural Decision Records (`docs/adr/`):
+  - [x] ADR 0001: Modular Monolith with Clean Architecture (.NET 10 + Next.js 15)
+  - [x] ADR 0002: Money Representation, Rounding, and Currency Handling
+  - [x] ADR 0003: Order Splitting per Seller (Parent Order and SubOrder Hierarchy)
+  - [x] ADR 0004: Stock Reservation Strategy and High-Concurrency Inventory Control
+  - [x] ADR 0005: Search Provider Abstraction and Meilisearch Integration
+  - [x] ADR 0006: Dual-Token Authentication, Refresh Token Family Tracking, and RBAC
+  - [x] ADR 0007: AI Provider Abstraction and Gemini API Key Security
+- [x] Formulate Full PostgreSQL Database Specification & ER Diagram (`docs/DATA_MODEL.md`).
+- [x] Define OpenAPI & ProblemDetails REST API Contract (`docs/API_CONTRACT.md`).
+- [x] Formulate System Architecture with C4, Request Flows & Traceability Matrix (`docs/ARCHITECTURE.md`).
+- [x] Document Open Questions and Default Recommendations for Product Owner.
+- [x] Establish Master `PROGRESS.md` Task Tracker.
+
+---
+
+### Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)
+- [ ] **Repository Structure Setup**:
+  - [ ] Initialize `backend/` C# 13 / .NET 10 solution (`ShopVerse.sln`).
+  - [ ] Create `ShopVerse.Domain` project (Entities, Value Objects, Domain Events).
+  - [ ] Create `ShopVerse.Application` project (CQRS MediatR, FluentValidation).
+  - [ ] Create `ShopVerse.Infrastructure` project (EF Core 10, Npgsql, Redis).
+  - [ ] Create `ShopVerse.Payment` project (Gateway abstractions).
+  - [ ] Create `ShopVerse.Worker` project (BackgroundService outbox relay).
+  - [ ] Create `ShopVerse.Api` project (ASP.NET Core Web API).
+  - [ ] Create unit & integration test projects (`ShopVerse.UnitTests`, `ShopVerse.IntegrationTests`).
+- [ ] **Backend Foundation & Quality Plumbing**:
+  - [ ] Strongly typed `IOptions<T>` configuration validation at startup.
+  - [ ] Serilog structured JSON logging with `CorrelationId` and `TraceId`.
+  - [ ] Global Exception Handling Middleware returning RFC 7807 ProblemDetails.
+  - [ ] Health checks (`/health/live`, `/health/ready`) for Postgres, Redis, MinIO.
+  - [ ] OpenAPI / Swagger configuration with XML comments and JWT Bearer UI.
+  - [ ] Native 128-bit `Money` Domain Value Object with Banker's Rounding and 100% unit test coverage.
+- [ ] **Frontend Monorepo Foundation**:
+  - [ ] Initialize pnpm workspace in `frontend/`.
+  - [ ] Create Next.js 15 App Router skeletons for `apps/web` and `apps/console`.
+  - [ ] Configure `next-intl` (en, bn) and theme provider (dark default).
+  - [ ] Create `packages/ui`, `packages/config`, and `packages/api-client`.
+  - [ ] Set up OpenAPI client code generation (`openapi-typescript` / `orval`).
+- [ ] **Docker Infrastructure (`infra/docker/docker-compose.yml`)**:
+  - [ ] PostgreSQL 16 container with healthchecks and persistent volumes.
+  - [ ] Redis 7 container with persistent snapshotting.
+  - [ ] Meilisearch container with master key.
+  - [ ] MinIO container with automated bucket provisioning (`public-media`, `private-kyc`).
+  - [ ] Mailpit container for local email testing.
+- [ ] **CI & Automation**:
+  - [ ] GitHub Actions workflow for `dotnet test` and `dotnet format`.
+  - [ ] GitHub Actions workflow for frontend lint, type-check, and build.
+  - [ ] Integration test runner using `Testcontainers.NET`.
+
+---
+
+### Phase 2: Cybernetic Design System & Component Library (`packages/ui`)
+- [ ] Extract and configure MECHWARE semantic color tokens (Tech Midnight `#060B18`, Electric Cyan `#00E5FF`, Industrial Navy `#0F3E7D`).
+- [ ] Configure typography tokens (Inter, Plus Jakarta Sans, Hind Siliguri).
+- [ ] Build core UI components with Radix/shadcn primitives:
+  - [ ] `Button`, `IconButton` with loading spinners and accessible touch targets.
+  - [ ] `Input`, `Textarea`, `Select`, `Combobox`, `PhoneInput` (+880 BD format).
+  - [ ] `Checkbox`, `Radio`, `RadioCard` (for delivery and payment selection).
+  - [ ] `QuantityStepper`, `Price` (with tabular nums and lakh formatting), `Rating`, `Badge`.
+  - [ ] `ProductCard` (3 sizes: default, compact, horizontal) with skeleton loader.
+  - [ ] `Modal`, `Drawer`, `Toast`, `AlertBanner`, `Breadcrumb`, `Pagination`.
+  - [ ] `Carousel` (Embla), `CountdownTimer`, `ImageGallery` with zoom & lightbox.
+  - [ ] `DataTable` (TanStack Table) with server-side sort/filter and sticky headers.
+- [ ] Configure Framer Motion presets respecting `prefers-reduced-motion`.
+- [ ] Build `/design-system` showcase documentation page in `apps/web`.
+- [ ] Run WCAG 2.2 AA contrast checks and axe accessibility automated tests.
+
+---
+
+### Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors
+- [ ] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`.
+- [ ] Authentication flows:
+  - [ ] Email + Password registration and login with Argon2id hashing.
+  - [ ] Phone SMS OTP registration and login with mock/real provider adapter.
+  - [ ] Google OAuth / OIDC token validation.
+- [ ] Token infrastructure:
+  - [ ] 15-minute access JWT signed with high-entropy key.
+  - [ ] Rotating refresh token in `httpOnly, Secure, SameSite=Lax` cookie.
+  - [ ] Token family tracking with instant session revocation upon reuse detection.
+  - [ ] Session revocation endpoint (`/api/v1/auth/sessions/revoke`).
+- [ ] TOTP 2FA implementation for Admin and Finance staff accounts.
+- [ ] Granular permission authorization handler (`[RequirePermission(Permissions.OrdersRefund)]`).
+- [ ] Seller resource isolation handler (preventing cross-tenant access).
+- [ ] EF Core `SaveChangesAsync` interceptor automatically populating `AuditLog`.
+- [ ] Address book CRUD with pre-seeded Bangladesh divisions, districts, and upazilas.
+- [ ] Frontend auth modals and dedicated pages in `apps/web` and `apps/console`.
+
+---
+
+### Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data
+- [ ] EF Core mapping for `Category`, `Brand`, `Product`, `ProductVariant`, `ProductMedia`, `Warehouse`, `InventoryItem`, `StockReservation`, `SlugHistory`.
+- [ ] High-concurrency inventory reservation service:
+  - [ ] PostgreSQL `SELECT ... FOR UPDATE` with `Available = OnHand - Reserved`.
+  - [ ] Redis RedLock distributed lock for high-contention spikes.
+  - [ ] Background worker releasing expired reservations every 60 seconds.
+- [ ] Deterministic pricing domain service (sale windows, VAT calculations).
+- [ ] Outbox message creation on product mutations (`ProductUpdatedDomainEvent`).
+- [ ] Deterministic seed data generator (< 2 minutes execution):
+  - [ ] 12 industrial categories with 3 hierarchy levels and technical attribute schemas.
+  - [ ] 40 manufacturer brands with logos (Siemens, Mitsubishi, Delta, Omron).
+  - [ ] 25 verified sellers with logos, banners, and ratings.
+  - [ ] 400+ realistic industrial products with grouped specifications, CAD/PDF attachments, and variants.
+  - [ ] 3,000+ realistic reviews and customer Q&A records.
+- [ ] Concurrency test: 50 parallel reservation requests for 10 units -> exactly 10 succeed.
+
+---
+
+### Phase 5: Sub-50ms Typo-Tolerant Search & Discovery (Meilisearch + Bangla)
+- [ ] Implement `ISearchProvider` port and `MeilisearchSearchProvider` adapter.
+- [ ] Product indexing schema with facets (category, brand, price, voltage, phase, availability).
+- [ ] Typo-tolerance, exact prefix match, and popularity score ranking rules.
+- [ ] Synonyms and Bangla transliteration support ("inverter = vfd = ইনভার্টার").
+- [ ] Sub-50ms autocomplete endpoint (`/api/v1/search/autocomplete`).
+- [ ] Transactional Outbox relay synchronization from PostgreSQL to Meilisearch.
+- [ ] Frontend search bar with instant dropdown, recent queries, and keyboard navigation.
+
+---
+
+### Phase 6: Storefront Foundation, Mega Menu & Dynamic Homepage Sections
+- [ ] Sticky cybernetic header with utility bar, category mega menu, and search input.
+- [ ] Mobile responsive layout with drawer navigation and thumb-zone bottom bar.
+- [ ] 12 CMS Homepage Sections:
+  1. Hero carousel with priority LCP image loading.
+  2. Value proposition strip (Free Delivery, Authentic, 7-Day Returns, COD).
+  3. Industrial Category visual grid.
+  4. Deals of the Day with live countdown and stock progress bars.
+  5. Trending and recommended machinery.
+  6. Promotional multi-banner campaigns.
+  7. Best sellers by category tabs.
+  8. Verified brand showcase strip.
+  9. New arrivals in automation.
+  10. Recently viewed machinery history.
+  11. Newsletter and Industry 4.0 technical bulletin subscription.
+  12. Comprehensive footer with trust certifications, courier logos, and legal links.
+
+---
+
+### Phase 7: Industrial Product Experience (PLP & PDP with CAD/Datasheets)
+- [ ] **Product Listing Page (PLP)**:
+  - [ ] Dynamic faceted filter sidebar (price range, brands, ratings, technical specs).
+  - [ ] Active filter chips with live URL query synchronization.
+  - [ ] Grid and list layout toggles.
+  - [ ] Category SEO intro, FAQ accordion, and JSON-LD structured data.
+- [ ] **Product Detail Page (PDP)**:
+  - [ ] High-resolution image gallery with hover zoom and lightbox.
+  - [ ] Technical specifications table with grouped engineering categories.
+  - [ ] Direct CAD model (.STEP/.IGES) and PDF datasheet download buttons.
+  - [ ] Variant matrix selector (voltage, phase, power output) with live stock updates.
+  - [ ] Sticky Buy Box with Add to Cart, Buy Now, and Request for Quote (RFQ) buttons.
+  - [ ] Verified customer reviews breakdown with AI pros/cons summary chips.
+  - [ ] Frequently bought together and technical cross-reference comparisons.
+
+---
+
+### Phase 8: Cart, Promotions Engine, Atomic Checkout & Multi-Payment Gateways
+- [ ] Guest cart cookie storage in Redis with seamless migration on login.
+- [ ] Cart line grouping by fulfilling seller with delivery timeline estimates.
+- [ ] Advanced promotion engine supporting stacking rules, spend tiers, and coupon validation.
+- [ ] Atomic checkout with 15-minute stock reservation token.
+- [ ] Two-tier order creation: 1 Master Order (`SV-YYMMDD-XXXXXX`) split into child `SubOrders`.
+- [ ] Payment Gateway Integrations (`ShopVerse.Payment`):
+  - [ ] bKash Tokenized Checkout adapter.
+  - [ ] Stripe PaymentIntent adapter.
+  - [ ] SSLCommerz Hosted Payment adapter.
+  - [ ] Cash on Delivery (COD) adapter with mandatory SMS OTP challenge.
+- [ ] Idempotent, cryptographically verified payment webhook handlers.
+- [ ] Double-entry ledger batch posting upon successful payment capture.
+
+---
+
+### Phase 9: Order Fulfillment, Courier Tracking, Returns & Vector PDF Invoices
+- [ ] Sub-order state machine with transition event audit log (`order_events`).
+- [ ] Customer account order history, visual stepper timeline, and tracking details.
+- [ ] Courier integration adapters (Steadfast, Pathao) with tracking webhooks.
+- [ ] Vector PDF invoice generation using QuestPDF with QR code verification.
+- [ ] RMA Return Request flow with customer photo uploads and inspection approvals.
+- [ ] Automated review solicitation trigger (Delivered + 48 hours).
+- [ ] Verified customer review submission and seller single-reply feature.
+
+---
+
+### Phase 10: Multi-Vendor Seller Center & Double-Entry Financial Ledger
+- [ ] Seller onboarding wizard with KYC document upload to private S3 bucket.
+- [ ] Seller management portal (`apps/console`):
+  - [ ] Real-time sales, order status, and inventory dashboard.
+  - [ ] Product catalog manager with specification inputs and variant matrix generator.
+  - [ ] Sub-order fulfillment, packaging slips, and courier label printing.
+- [ ] Double-Entry Financial Ledger (`ledger_accounts`, `ledger_entries`):
+  - [ ] Guaranteed zero-sum balance ($\sum \text{Debits} == \sum \text{Credits}$).
+  - [ ] Platform commission tracking and seller payable escrow.
+  - [ ] Automated weekly Sunday payout execution job (minimum 500 BDT).
+  - [ ] Downloadable CSV and PDF payout statements.
+
+---
+
+### Phase 11: Operations & Executive Admin Console (Stripe/Shopify Grade)
+- [ ] Executive KPI dashboard with sparklines, revenue charts, and anomaly indicators.
+- [ ] Global command palette (⌘K) for instant navigation to orders, products, and users.
+- [ ] Server-side paginated data tables with multi-filter, column toggle, and bulk exports.
+- [ ] Seller KYC review and approval workflow.
+- [ ] Catalog moderation queue for new seller listings.
+- [ ] Refund management with granular permission checks (`orders.refund`).
+- [ ] System audit log viewer with JSON before/after state diffing.
+
+---
+
+### Phase 12: Google Gemini AI Intelligence (Search, Review Summaries, Assistant)
+- [ ] Server-side `IAiProvider` with `GeminiAiProvider` implementation.
+- [ ] Natural language search parser mapping queries to Meilisearch filters.
+- [ ] Automated review summarization generating "Customers say..." and pros/cons tags.
+- [ ] Grounded shopping assistant with strict tool calling against catalog APIs.
+- [ ] Seller listing assistant generating titles, highlights, and SEO tags from inputs.
+- [ ] AI review and Q&A content moderation background job.
+- [ ] Redis caching for all AI responses with circuit breaker fallbacks.
+
+---
+
+### Phase 13: Hardening, OWASP ASVS Security, Lighthouse 90+ & Accessibility
+- [ ] OWASP Top 10 security audit:
+  - [ ] Strict Content Security Policy (CSP) with nonces.
+  - [ ] Rate limiting on authentication, search, and checkout endpoints.
+  - [ ] DOMPurify sanitization on rich text inputs.
+  - [ ] PII encryption at rest for KYC and financial data.
+- [ ] Performance optimization:
+  - [ ] Core Web Vitals audit: LCP < 2.5s, INP < 200ms, CLS < 0.1.
+  - [ ] Mobile Lighthouse score >= 90 across storefront routes.
+  - [ ] Next.js bundle optimization ensuring initial route JS < 170 KB gzipped.
+- [ ] Accessibility verification: WCAG 2.2 AA compliance with zero axe errors.
+- [ ] Full bilingual testing in English and Bengali.
+
+---
+
+### Phase 14: k6 Concurrency Load Testing, Production Containerization & Launch
+- [ ] k6 load test script simulating 5,000 concurrent users.
+- [ ] High-concurrency checkout stress test: 200 orders/minute without overselling.
+- [ ] Multi-stage production Dockerfiles for .NET 10 API, Worker, and Next.js apps.
+- [ ] Production Docker Compose / Kubernetes deployment manifests.
+- [ ] Automated database backup and disaster recovery test (RPO 1h, RTO 4h).
+- [ ] Final launch verification checklist sign-off.
