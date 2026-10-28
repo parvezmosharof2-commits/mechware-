@@ -58,6 +58,20 @@ erDiagram
 
     reviews ||--o{ review_media : "attaches"
     questions ||--o{ answers : "answered_by"
+
+    users ||--o{ wishlists : "creates"
+    wishlists ||--o{ wishlist_items : "contains"
+    products ||--o{ wishlist_items : "saved_in"
+
+    users ||--o{ recently_viewed : "views"
+    products ||--o{ recently_viewed : "tracked_in"
+
+    users ||--o{ saved_searches : "stores"
+
+    attributes ||--o{ attribute_values : "defines"
+    attribute_values ||--o{ product_attribute_values : "assigned_in"
+
+    cms_sections ||--o{ cms_banners : "contains"
 ```
 
 ---
@@ -300,6 +314,34 @@ Purchasable SKUs with physical pricing and stock attributes.
 #### `product_media`
 - `id (uuid PK)`, `product_id (uuid FK)`, `variant_id (uuid FK nullable)`, `url (text NOT NULL)`, `alt_text (varchar(255))`, `media_type (varchar(20) NOT NULL default 'image')` (`'image'`, `'video'`), `position (int NOT NULL default 0)`, `width (int)`, `height (int)`, `blur_data_url (text)`, `created_at`.
 
+#### `attributes`, `attribute_values`, and `product_attribute_values`
+Normalized technical specification attributes powering relational faceted queries alongside JSONB specs.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| **`attributes`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Attribute ID |
+| `name_en` | `varchar(100)` | NOT NULL | e.g. `'Input Voltage'`, `'Mounting Type'` |
+| `name_bn` | `varchar(100)` | NOT NULL | e.g. `'ইনপুট ভোল্টেজ'` |
+| `code` | `varchar(100)` | NOT NULL, UNIQUE | Filter parameter key (e.g. `'input_voltage'`) |
+| `data_type` | `varchar(30)` | NOT NULL, default `'string'` | `'string'`, `'number'`, `'boolean'`, `'range'` |
+| `unit` | `varchar(30)` | nullable | e.g. `'V'`, `'kW'`, `'A'`, `'mm'` |
+| `is_filterable` | `boolean` | NOT NULL, default `true` | Display in PLP filter sidebar |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+| **`attribute_values`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Value ID |
+| `attribute_id` | `uuid` | FK -> `attributes(id)` ON DELETE CASCADE | Parent attribute |
+| `value_en` | `varchar(150)` | NOT NULL | e.g. `'24V DC'`, `'3-Phase 380V'` |
+| `value_bn` | `varchar(150)` | NOT NULL | Localized value |
+| `sort_order` | `int` | NOT NULL, default `0` | Filter sequence |
+| **`product_attribute_values`** | | | |
+| `product_id` | `uuid` | FK -> `products(id)` ON DELETE CASCADE | Associated product |
+| `attribute_value_id` | `uuid` | FK -> `attribute_values(id)` ON DELETE CASCADE | Assigned value |
+| `PRIMARY KEY` | `(product_id, attribute_value_id)` | Composite PK | Fast indexed joining |
+
+**Indexes:**
+- `ix_product_attr_val_lookup` (`attribute_value_id`, `product_id`) — fast faceted filtering join.
+
 #### `slug_histories`
 301 redirects when product or category slugs are updated.
 - `id (uuid PK)`, `entity_type (varchar(30))` (`'product'`, `'category'`), `entity_id (uuid NOT NULL)`, `old_slug (varchar(255) NOT NULL UNIQUE)`, `created_at`.
@@ -489,12 +531,94 @@ Guarantees mathematical balance: for every transaction, $\sum \text{Debits} == \
 - `questions`: `id (uuid PK)`, `product_id (uuid FK)`, `user_id (uuid FK)`, `question_text (text NOT NULL)`, `is_approved (boolean default false)`, `created_at`.
 - `answers`: `id (uuid PK)`, `question_id (uuid FK ON DELETE CASCADE)`, `user_id (uuid FK)`, `is_seller_or_staff (boolean default false)`, `answer_text (text NOT NULL)`, `is_approved (boolean default false)`, `created_at`.
 
+#### `wishlists` and `wishlist_items`
+Customer product bookmarks with price-drop alerts.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| **`wishlists`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Wishlist ID |
+| `user_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE, UNIQUE | Owning user |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+| **`wishlist_items`**| | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Item ID |
+| `wishlist_id` | `uuid` | FK -> `wishlists(id)` ON DELETE CASCADE | Parent wishlist |
+| `product_id` | `uuid` | FK -> `products(id)` ON DELETE CASCADE | Saved product |
+| `variant_id` | `uuid` | FK -> `product_variants(id)` ON DELETE SET NULL | Optional variant |
+| `price_at_addition_minor`| `bigint`| NOT NULL | For price-drop tracking |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+
+**Indexes:**
+- `ux_wishlist_user_product`: UNIQUE (`wishlist_id`, `product_id`, `variant_id`).
+
+#### `recently_viewed`
+Storefront browsing history.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` | History record ID |
+| `user_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE, nullable | Registered user |
+| `guest_token` | `varchar(64)` | nullable | Anonymous visitor token |
+| `product_id` | `uuid` | FK -> `products(id)` ON DELETE CASCADE | Viewed product |
+| `viewed_at` | `timestamptz` | NOT NULL, default `NOW()` | View timestamp |
+
+**Indexes:**
+- `ix_recently_viewed_user` (`user_id`, `viewed_at` DESC).
+- `ix_recently_viewed_guest` (`guest_token`, `viewed_at` DESC).
+
+#### `saved_searches`
+Alerts on saved technical search queries.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Saved search ID |
+| `user_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE | Buyer account |
+| `query_text` | `varchar(255)` | NOT NULL | Search query (e.g. 'Siemens S7-1500') |
+| `filters` | `jsonb` | NOT NULL, default `'{}'` | Applied facets |
+| `notify_on_new_match`| `boolean`| NOT NULL, default `true` | Email alert toggle |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+
 ---
 
 ### 2.9 CMS, Notifications, and System Infrastructure
 
-#### `cms_banners`, `cms_sections`, `cms_pages`
-- Structured dynamic storefront CMS with start/end schedule and device targeting (`desktop`, `mobile`, `all`).
+#### `cms_pages`, `cms_sections`, and `cms_banners`
+Dynamic CMS scheduling with device targeting.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| **`cms_pages`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Page ID |
+| `slug` | `varchar(150)` | NOT NULL, UNIQUE | URL path (`/terms`, `/privacy`) |
+| `title_en` | `varchar(200)` | NOT NULL | English title |
+| `title_bn` | `varchar(200)` | NOT NULL | Bengali title |
+| `content_html_en` | `text` | NOT NULL | English body (DOMPurify sanitized) |
+| `content_html_bn` | `text` | NOT NULL | Bengali body |
+| `is_published` | `boolean` | NOT NULL, default `false` | Live state |
+| `updated_at` | `timestamptz` | NOT NULL, default `NOW()` | Audit timestamp |
+| **`cms_sections`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Section ID |
+| `section_key` | `varchar(100)` | NOT NULL, UNIQUE | Key (e.g. `'home_hero'`, `'home_deals'`) |
+| `title_en` | `varchar(200)` | NOT NULL | Display title |
+| `title_bn` | `varchar(200)` | NOT NULL | Localized title |
+| `section_type` | `varchar(50)` | NOT NULL | `'carousel'`, `'product_grid'`, `'banner_strip'` |
+| `configuration` | `jsonb` | NOT NULL, default `'{}'` | Autoplay, speed, query params |
+| `sort_order` | `int` | NOT NULL, default `0` | Sequence on homepage |
+| `is_active` | `boolean` | NOT NULL, default `true` | Visibility toggle |
+| **`cms_banners`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Banner ID |
+| `section_id` | `uuid` | FK -> `cms_sections(id)` ON DELETE CASCADE | Associated section |
+| `image_desktop_url`| `text` | NOT NULL | 16:9 desktop banner |
+| `image_mobile_url` | `text` | NOT NULL | 4:5 mobile banner |
+| `headline_en` | `varchar(200)` | nullable | Overlay headline |
+| `headline_bn` | `varchar(200)` | nullable | Localized headline |
+| `cta_label_en` | `varchar(100)` | nullable | Button text (e.g. 'Explore PLCs') |
+| `cta_label_bn` | `varchar(100)` | nullable | Localized button |
+| `cta_url` | `text` | NOT NULL | Destination link |
+| `target_device` | `varchar(20)` | NOT NULL, default `'all'` | `'desktop'`, `'mobile'`, `'all'` |
+| `starts_at` | `timestamptz` | nullable | Campaign launch window |
+| `ends_at` | `timestamptz` | nullable | Campaign end window |
+| `sort_order` | `int` | NOT NULL, default `0` | Order |
 
 #### `notifications`
 - `id (uuid PK)`, `user_id (uuid FK ON DELETE CASCADE)`, `type (varchar(50) NOT NULL)`, `channel (varchar(20) NOT NULL)` (`'in_app'`, `'email'`, `'sms'`), `title (varchar(255))`, `body (text NOT NULL)`, `action_url (text)`, `read_at (timestamptz nullable)`, `created_at`.
@@ -522,5 +646,31 @@ Guarantees At-Least-Once event publishing without dual-write inconsistency.
 
 #### `audit_logs`
 - `id (uuid PK)`, `actor_id (uuid nullable)`, `actor_email (varchar(255))`, `actor_role (varchar(50))`, `action (varchar(50) NOT NULL)` (`'create'`, `'update'`, `'delete'`, `'login'`, `'refund_override'`), `entity_name (varchar(100) NOT NULL)`, `entity_id (uuid NOT NULL)`, `old_values (jsonb nullable)`, `new_values (jsonb nullable)`, `ip_address (varchar(45))`, `user_agent (text)`, `created_at (timestamptz default NOW())`.
+
+#### `feature_flags`
+Dynamic runtime feature switches stored in PostgreSQL with Redis caching.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Flag ID |
+| `key` | `varchar(100)` | NOT NULL, UNIQUE | Flag identifier (e.g. `'enable_gemini_shopping_assistant'`) |
+| `description` | `text` | NOT NULL | Explanation of the feature |
+| `is_enabled` | `boolean` | NOT NULL, default `false` | Global enable/disable switch |
+| `rollout_percentage`| `int` | NOT NULL, default `0`, CHECK (`rollout_percentage BETWEEN 0 AND 100`) | Phased rollout |
+| `allowed_user_ids`| `uuid[]` | NOT NULL, default `'{}'` | Whitelisted beta testers |
+| `updated_at` | `timestamptz` | NOT NULL, default `NOW()` | Audit timestamp |
+
+#### `system_settings`
+Global business settings configurable by Ops and Super Admins.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `key` | `varchar(100)` | PK | Key (e.g. `'shipping.free_threshold_minor'`) |
+| `value` | `text` | NOT NULL | Serialized setting value |
+| `data_type` | `varchar(20)` | NOT NULL | `'string'`, `'number'`, `'boolean'`, `'json'` |
+| `description` | `text` | NOT NULL | Setting purpose |
+| `is_public` | `boolean` | NOT NULL, default `false` | True if exposed to storefront |
+| `updated_at` | `timestamptz` | NOT NULL, default `NOW()` | Audit timestamp |
+| `updated_by` | `uuid` | FK -> `users(id)` nullable | Acting admin |
 
 ---

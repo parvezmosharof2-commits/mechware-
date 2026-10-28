@@ -459,7 +459,10 @@ This matrix verifies that every requirement from Sections 3, 7, 8, 9, 10, and 15
 | **3.1 Split Orders & Fulfillment** | `Order`, `Shipping` | `orders`, `sub_orders`, `order_items`, `shipments` | `POST /checkout/orders`, `GET /orders/{orderNumber}` | Phase 8, Phase 9 |
 | **3.1 Seller Center & Payouts** | `Seller`, `Finance` | `sellers`, `seller_documents`, `ledger_accounts`, `payouts` | `GET /console/seller/*`, `POST /finance/payouts/execute` | Phase 10 |
 | **3.1 Admin Console & Audit** | `Admin`, `Audit` | `audit_logs`, `roles`, `permissions` | `GET /console/admin/*`, `GET /admin/audit-logs` | Phase 11 |
-| **7. Domain Model Entities** | Complete Architecture | All 35+ tables specified in `DATA_MODEL.md` | Full REST API across all modules | Phase 3, Phase 4, Phase 8, Phase 9, Phase 10 |
+| **7. Domain Model Entities** | Complete Architecture | All 42 tables specified in `DATA_MODEL.md` | Full REST API across all modules | Phase 3, Phase 4, Phase 8, Phase 9, Phase 10 |
+| **7. Wishlist & History** | `Customer` | `wishlists`, `wishlist_items`, `recently_viewed`, `saved_searches` | `GET/POST /wishlist`, `GET /recently-viewed` | Phase 7, Phase 8 |
+| **7. CMS Pages & Banners** | `CMS` | `cms_pages`, `cms_sections`, `cms_banners` | `GET /cms/homepage`, `POST /admin/cms/banners` | Phase 6, Phase 11 |
+| **7. Feature Flags & Settings**| `System` | `feature_flags`, `system_settings` | `GET /admin/feature-flags`, `/health/ready` | Phase 1, Phase 11 |
 | **8.1 Pricing & VAT Rules** | `Catalog`, `Application` | `product_variants`, `categories.commission_rate` | Domain Service `PricingEngine` | Phase 4 |
 | **8.2 Promotions Engine** | `Promotion` | `promotions`, `coupons`, `coupon_usages` | Domain Service `PromotionEngine` | Phase 8 |
 | **8.3 Concurrency & 15m Hold** | `Inventory` | `inventory_items`, `stock_reservations` | `POST /checkout/reserve`, `ShopVerse.Worker` | Phase 4, Phase 8 |

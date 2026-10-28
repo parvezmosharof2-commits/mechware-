@@ -103,6 +103,36 @@
   { "label": "Factory HQ", "recipientName": "Engr. Kabir", "phone": "+8801711000000", "line1": "Plot 12, Export Processing Zone", "line2": "Building B", "area": "Savar", "district": "Dhaka", "division": "Dhaka", "postalCode": "1349", "isDefaultShipping": true }
   ```
 
+#### `GET /users/me/export` (GDPR Data Portability)
+- **Auth**: Bearer (`customer`) | **Rate Limit**: 1 req/hour
+- **Response**: `200 OK` JSON bundle containing all profile data, order history, addresses, and audit records.
+
+#### `DELETE /users/me` (Right to Erasure / Anonymization)
+- **Auth**: Bearer (`customer`) | **Rate Limit**: 1 req/day | **Idempotency**: Mandatory
+- **Response**: `200 OK` `{ "status": "anonymized", "message": "Personal identifiable information scrubbed." }`
+
+---
+
+### 2.2 Seller Onboarding & KYC (`/sellers`)
+
+#### `POST /sellers/onboard`
+- **Auth**: Bearer (`user`) | **Rate Limit**: 5 req/hour
+- **Request**:
+  ```json
+  {
+    "storeName": "Alpha Automation & Robotics",
+    "description": "Authorized Siemens & Omron Industrial Integration Partner",
+    "plan": "pro"
+  }
+  ```
+- **Response**: `201 Created` `{ "sellerId": "uuid", "slug": "alpha-automation-robotics", "status": "pending" }`
+
+#### `POST /sellers/me/documents` (Private KYC Upload)
+- **Auth**: Bearer (`seller`) | **Rate Limit**: 10 req/min
+- **Request**: Multipart Form Data (`docType`: `'nid'` | `'trade_license'` | `'tin_certificate'`, `file`: PDF/Image)
+- **Behavior**: Direct server-side streaming to isolated private S3 bucket (`private-kyc`).
+- **Response**: `201 Created` `{ "documentId": "uuid", "verificationStatus": "pending" }`
+
 ---
 
 ### 2.2 Product Catalog & Search (`/categories`, `/brands`, `/products`, `/search`)
@@ -260,5 +290,92 @@
 
 #### `POST /ai/assistant/chat` (Server-Sent Events / Streaming)
 - **Auth**: Optional | **Rate Limit**: 10 req/min | **Stream**: Grounded text chunks with verified catalog product cards.
+
+---
+
+### 2.9 Wishlists, Customer Reviews & Q&A (`/wishlist`, `/reviews`, `/questions`)
+
+#### `GET /wishlist` & `POST /wishlist/items` & `DELETE /wishlist/items/{variantId}`
+- **Auth**: Bearer (`customer`) | **Rate Limit**: 60 req/min
+- **Request (POST)**: `{ "productId": "uuid", "variantId": "uuid" }`
+- **Response**: `200 OK` Updated wishlist items with current price & price-drop indicators.
+
+#### `POST /reviews`
+- **Auth**: Bearer (`customer`) | **Idempotency**: Mandatory
+- **Request**:
+  ```json
+  {
+    "orderItemId": "uuid",
+    "rating": 5,
+    "title": "Outstanding noise immunity in textile spinning plant",
+    "body": "Tested under heavy inverter noise. Flawless Modbus RTU communication.",
+    "photos": ["https://s3.../review1.jpg"]
+  }
+  ```
+- **Response**: `201 Created` `{ "reviewId": "uuid", "status": "pending_moderation" }`
+
+#### `POST /reviews/{id}/helpful`
+- **Auth**: Bearer (`customer`) | **Rate Limit**: 30 req/min
+- **Response**: `200 OK` `{ "helpfulCount": 14 }`
+
+#### `POST /reviews/{id}/reply`
+- **Auth**: Bearer (`[RequirePermission(Permissions.CatalogUpdate)]` or matching `seller_id`)
+- **Request**: `{ "replyText": "Thank you Engr. Kabir! Official technical support is always available." }`
+
+#### `GET /products/{productId}/questions` & `POST /products/{productId}/questions`
+- **Auth**: Public (GET), Bearer (POST) | **Rate Limit**: 30 req/min
+- **Request (POST)**: `{ "questionText": "Does this S7-1200 CPU include analog inputs onboard?" }`
+
+#### `POST /questions/{questionId}/answers`
+- **Auth**: Bearer (Seller / Staff / Verified Customer) | **Rate Limit**: 20 req/min
+- **Request**: `{ "answerText": "Yes, it includes 2 integrated 0-10V DC analog inputs." }`
+
+#### `GET /recently-viewed` & `POST /recently-viewed`
+- **Auth**: Optional (Bearer or Guest token) | **Rate Limit**: 60 req/min
+- **Request (POST)**: `{ "productId": "uuid" }`
+
+---
+
+### 2.10 Dynamic Storefront CMS (`/cms`)
+
+#### `GET /cms/homepage`
+- **Auth**: Public | **Caching**: Redis Tagged (`cache:cms:homepage`), TTL 1h | **Rate Limit**: 100 req/min
+- **Response**: Structured payload of all 12 homepage sections, scheduled active banners, deal countdown timers, and value strip copy.
+
+#### `POST /admin/cms/banners`
+- **Auth**: Bearer (`[RequirePermission(Permissions.CmsEdit)]`)
+- **Request**:
+  ```json
+  {
+    "sectionId": "uuid",
+    "imageDesktopUrl": "https://s3.../hero-industry40.png",
+    "imageMobileUrl": "https://s3.../hero-industry40-mobile.png",
+    "headlineEn": "Empowering Bangladesh Industry with Precision Automation",
+    "headlineBn": "বাংলাদেশের শিল্প কারখানা সমৃদ্ধ করতে আধুনিক অটোমেশন",
+    "ctaLabelEn": "Explore Made in BD Machinery",
+    "ctaUrl": "/c/made-in-bd-machinery",
+    "targetDevice": "all",
+    "startsAt": "2026-10-29T00:00:00Z"
+  }
+  ```
+
+---
+
+### 2.11 System Administration, Feature Flags & Health (`/admin`, `/health`)
+
+#### `GET /admin/audit-logs`
+- **Auth**: Bearer (`[RequirePermission(Permissions.AuditView)]`) | **Rate Limit**: 30 req/min
+- **Query Params**: `entityName=Product`, `action=update`, `actorId=uuid`, `from=2026-10-01`, `page=1`, `pageSize=50`.
+- **Response**: Paginated audit events with JSON before/after state diffs.
+
+#### `GET /admin/feature-flags` & `PUT /admin/feature-flags/{key}`
+- **Auth**: Bearer (`[RequirePermission(Permissions.SettingsEdit)]`)
+- **Request (PUT)**: `{ "isEnabled": true, "rolloutPercentage": 50 }`
+- **Response**: `200 OK` (Invalidates Redis flag cache tag).
+
+#### `GET /health/live` & `GET /health/ready`
+- **Auth**: Public | **Rate Limit**: Unrestricted
+- **Live**: `200 OK` `{ "status": "Healthy" }`
+- **Ready**: `200 OK` (Checks PostgreSQL connection, Redis ping, MinIO bucket accessibility, and Meilisearch health). If any dependent service is down, returns `503 Service Unavailable`.
 
 ---
