@@ -82,20 +82,21 @@
 ---
 
 ### Phase 2: Cybernetic Design System & Component Library (`packages/ui`)
-- [ ] Extract and configure MECHWARE semantic color tokens (Tech Midnight `#060B18`, Electric Cyan `#00E5FF`, Industrial Navy `#0F3E7D`).
-- [ ] Configure typography tokens (Inter, Plus Jakarta Sans, Hind Siliguri).
-- [ ] Build core UI components with Radix/shadcn primitives:
-  - [ ] `Button`, `IconButton` with loading spinners and accessible touch targets.
-  - [ ] `Input`, `Textarea`, `Select`, `Combobox`, `PhoneInput` (+880 BD format).
-  - [ ] `Checkbox`, `Radio`, `RadioCard` (for delivery and payment selection).
-  - [ ] `QuantityStepper`, `Price` (with tabular nums and lakh formatting), `Rating`, `Badge`.
-  - [ ] `ProductCard` (3 sizes: default, compact, horizontal) with skeleton loader.
-  - [ ] `Modal`, `Drawer`, `Toast`, `AlertBanner`, `Breadcrumb`, `Pagination`.
-  - [ ] `Carousel` (Embla), `CountdownTimer`, `ImageGallery` with zoom & lightbox.
-  - [ ] `DataTable` (TanStack Table) with server-side sort/filter and sticky headers.
-- [ ] Configure Framer Motion presets respecting `prefers-reduced-motion`.
-- [ ] Build `/design-system` showcase documentation page in `apps/web`.
-- [ ] Run WCAG 2.2 AA contrast checks and axe accessibility automated tests.
+- [x] Extract and configure MECHWARE semantic color tokens (Tech Midnight `#060B18`, Electric Cyan `#00E5FF`, Industrial Navy `#0F3E7D`).
+- [x] Configure typography tokens (Inter, Plus Jakarta Sans, Hind Siliguri, tabular numerals).
+- [x] Build core UI components with Radix/shadcn primitives:
+  - [x] `Button`, `IconButton` with loading spinners and accessible touch targets.
+  - [x] `Input`, `Textarea`, `Select`, `Combobox`, `PhoneInput` (+880 BD format).
+  - [x] `Checkbox`, `Radio`, `RadioCard` (for delivery and payment selection).
+  - [x] `QuantityStepper`, `Price` (with tabular nums and lakh formatting `৳1,25,000`), `Rating`, `Badge`.
+  - [x] `ProductCard` (3 sizes: default, compact, horizontal) with matching zero-CLS skeleton loader.
+  - [x] `Modal` (`Dialog`), `Drawer` (`Sheet`), `Toast`, `AlertBanner`, `Breadcrumb`, `Pagination`.
+  - [x] `Carousel` (Embla), `CountdownTimer`, `ImageGallery` with zoom & lightbox.
+  - [x] `DataTable` (TanStack Table) with sorting, pagination, and sticky headers.
+- [x] Configure Framer Motion presets respecting `prefers-reduced-motion`.
+- [x] Build custom SVG line illustration set (`EmptyCart`, `EmptySearch`, `OrderConfirmed`, `SystemFault`, `NoOrders`).
+- [x] Build `/design-system` showcase documentation page in `apps/web`.
+- [x] Run WCAG 2.2 AA automated contrast audit (22/22 token pairs passed) and unit tests.
 
 ---
 
