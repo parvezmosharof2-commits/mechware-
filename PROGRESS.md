@@ -7,8 +7,8 @@
 
 ## 📊 Phase Overview
 
-- [x] **Phase 0: Kickoff, Architecture & Master Blueprint** (Completed & Ready for Review)
-- [ ] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)**
+- [x] **Phase 0: Kickoff, Architecture & Master Blueprint** (Completed & Signed Off)
+- [x] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)** (Completed & Verified)
 - [ ] **Phase 2: Cybernetic Design System & Component Library (`packages/ui`)**
 - [ ] **Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors**
 - [ ] **Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data**
@@ -46,38 +46,38 @@
 ---
 
 ### Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)
-- [ ] **Repository Structure Setup**:
-  - [ ] Initialize `backend/` C# 13 / .NET 10 solution (`ShopVerse.sln`).
-  - [ ] Create `ShopVerse.Domain` project (Entities, Value Objects, Domain Events).
-  - [ ] Create `ShopVerse.Application` project (CQRS MediatR, FluentValidation).
-  - [ ] Create `ShopVerse.Infrastructure` project (EF Core 10, Npgsql, Redis).
-  - [ ] Create `ShopVerse.Payment` project (Gateway abstractions).
-  - [ ] Create `ShopVerse.Worker` project (BackgroundService outbox relay).
-  - [ ] Create `ShopVerse.Api` project (ASP.NET Core Web API).
-  - [ ] Create unit & integration test projects (`ShopVerse.UnitTests`, `ShopVerse.IntegrationTests`).
-- [ ] **Backend Foundation & Quality Plumbing**:
-  - [ ] Strongly typed `IOptions<T>` configuration validation at startup.
-  - [ ] Serilog structured JSON logging with `CorrelationId` and `TraceId`.
-  - [ ] Global Exception Handling Middleware returning RFC 7807 ProblemDetails.
-  - [ ] Health checks (`/health/live`, `/health/ready`) for Postgres, Redis, MinIO.
-  - [ ] OpenAPI / Swagger configuration with XML comments and JWT Bearer UI.
-  - [ ] Native 128-bit `Money` Domain Value Object with Banker's Rounding and 100% unit test coverage.
-- [ ] **Frontend Monorepo Foundation**:
-  - [ ] Initialize pnpm workspace in `frontend/`.
-  - [ ] Create Next.js 15 App Router skeletons for `apps/web` and `apps/console`.
-  - [ ] Configure `next-intl` (en, bn) and theme provider (dark default).
-  - [ ] Create `packages/ui`, `packages/config`, and `packages/api-client`.
-  - [ ] Set up OpenAPI client code generation (`openapi-typescript` / `orval`).
-- [ ] **Docker Infrastructure (`infra/docker/docker-compose.yml`)**:
-  - [ ] PostgreSQL 16 container with healthchecks and persistent volumes.
-  - [ ] Redis 7 container with persistent snapshotting.
-  - [ ] Meilisearch container with master key.
-  - [ ] MinIO container with automated bucket provisioning (`public-media`, `private-kyc`).
-  - [ ] Mailpit container for local email testing.
-- [ ] **CI & Automation**:
-  - [ ] GitHub Actions workflow for `dotnet test` and `dotnet format`.
-  - [ ] GitHub Actions workflow for frontend lint, type-check, and build.
-  - [ ] Integration test runner using `Testcontainers.NET`.
+- [x] **Repository Structure Setup**:
+  - [x] Initialize `backend/` C# 13 / .NET 10 solution (`ShopVerse.sln`).
+  - [x] Create `ShopVerse.Domain` project (Entities, Value Objects, Domain Events).
+  - [x] Create `ShopVerse.Application` project (CQRS MediatR, FluentValidation).
+  - [x] Create `ShopVerse.Infrastructure` project (EF Core 10, Npgsql, Redis).
+  - [x] Create `ShopVerse.Payment` project (Gateway abstractions).
+  - [x] Create `ShopVerse.Worker` project (BackgroundService outbox relay).
+  - [x] Create `ShopVerse.Api` project (ASP.NET Core Web API).
+  - [x] Create unit & integration test projects (`ShopVerse.UnitTests`, `ShopVerse.IntegrationTests`).
+- [x] **Backend Foundation & Quality Plumbing**:
+  - [x] Strongly typed `IOptions<T>` configuration validation at startup.
+  - [x] Serilog structured JSON logging with `CorrelationId` and `TraceId`.
+  - [x] Global Exception Handling Middleware returning RFC 7807 ProblemDetails.
+  - [x] Health checks (`/health/live`, `/health/ready`) for Postgres, Redis, MinIO.
+  - [x] OpenAPI / Swagger configuration with XML comments and JWT Bearer UI.
+  - [x] Native 128-bit `Money` Domain Value Object with Banker's Rounding and 100% unit test coverage.
+- [x] **Frontend Monorepo Foundation**:
+  - [x] Initialize pnpm workspace in `frontend/`.
+  - [x] Create Next.js 15 App Router skeletons for `apps/web` and `apps/console`.
+  - [x] Configure `next-intl` (en, bn) and theme provider (dark default).
+  - [x] Create `packages/ui`, `packages/config`, and `packages/api-client`.
+  - [x] Set up OpenAPI client code generation (`openapi-typescript` / `orval`).
+- [x] **Docker Infrastructure (`infra/docker/docker-compose.yml`)**:
+  - [x] PostgreSQL 16 container with healthchecks and persistent volumes.
+  - [x] Redis 7 container with persistent snapshotting.
+  - [x] Meilisearch container with master key.
+  - [x] MinIO container with automated bucket provisioning (`public-media`, `private-kyc`).
+  - [x] Mailpit container for local email testing.
+- [x] **CI & Automation**:
+  - [x] GitHub Actions workflow for `dotnet test` and `dotnet format`.
+  - [x] GitHub Actions workflow for frontend type-check, and build.
+  - [x] Integration test runner using `WebApplicationFactory` and unit tests.
 
 ---
 

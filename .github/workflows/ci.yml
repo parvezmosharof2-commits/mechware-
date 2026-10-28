@@ -1,0 +1,60 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  backend-checks:
+    name: .NET 10 Solution Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Backend Dependencies
+        run: dotnet restore backend/ShopVerse.sln
+
+      - name: Build Backend Solution
+        run: dotnet build backend/ShopVerse.sln --no-restore --configuration Release
+
+      - name: Run Unit & Integration Tests
+        run: dotnet test backend/ShopVerse.sln --no-build --configuration Release --verbosity normal
+
+  frontend-checks:
+    name: Next.js 15 Monorepo Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Frontend Monorepo
+        working-directory: frontend
+        run: pnpm typecheck
+
+      - name: Build Frontend Apps
+        working-directory: frontend
+        run: pnpm build

@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #060B18;
+  --bg-subtle: #0A1128;
+  --bg-muted: #101B3B;
+  --surface: #0D1635;
+  --border: #1B2B55;
+  --border-strong: #2A4078;
+  --text: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-subtle: #64748B;
+  --accent: #00E5FF;
+  --accent-fg: #060B18;
+  --brand-navy: #0F3E7D;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}

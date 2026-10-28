@@ -1,0 +1,18 @@
+{
+  "Common": {
+    "brandName": "MECHWARE",
+    "tagline": "YOUR GATEWAY TO INDUSTRY 4.0",
+    "subtitle": "Technology for Smarter Systems | Made in Bangladesh Machinery",
+    "exploreCatalog": "Explore Industrial Machinery",
+    "requestQuote": "Request Engineering Quote",
+    "systemHealthy": "All Systems Operational"
+  },
+  "Navigation": {
+    "home": "Home",
+    "categories": "Categories",
+    "search": "Search",
+    "cart": "Cart",
+    "account": "Account",
+    "sellOnMechWare": "Sell on MECHWARE"
+  }
+}

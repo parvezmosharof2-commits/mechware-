@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShopVerse.Api/ShopVerse.Api.csproj" />
+    <Project Path="src/ShopVerse.Application/ShopVerse.Application.csproj" />
+    <Project Path="src/ShopVerse.Domain/ShopVerse.Domain.csproj" />
+    <Project Path="src/ShopVerse.Infrastructure/ShopVerse.Infrastructure.csproj" />
+    <Project Path="src/ShopVerse.Payment/ShopVerse.Payment.csproj" />
+    <Project Path="src/ShopVerse.Worker/ShopVerse.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShopVerse.IntegrationTests/ShopVerse.IntegrationTests.csproj" />
+    <Project Path="tests/ShopVerse.UnitTests/ShopVerse.UnitTests.csproj" />
+  </Folder>
+</Solution>
