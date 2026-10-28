@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useParams } from 'next/navigation';
 import {
   colors,
   scales,
@@ -259,8 +260,13 @@ const sampleGalleryImages = [
 
 // Inner Design System Showcase Page Component
 function DesignSystemContent() {
-  const [isDark, setIsDark] = useState(true);
-  const [locale, setLocale] = useState<'en' | 'bn'>('en');
+  const searchParams = useSearchParams();
+  const params = useParams();
+  const themeParam = searchParams.get('theme');
+  const routeLocale = params?.locale === 'bn' ? 'bn' : 'en';
+
+  const [isDark, setIsDark] = useState<boolean>(() => (themeParam === 'light' ? false : true));
+  const [locale, setLocale] = useState<'en' | 'bn'>(routeLocale);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [selectedRadioCard, setSelectedRadioCard] = useState('express');
   const [paymentOption, setPaymentOption] = useState('bkash');
@@ -270,6 +276,18 @@ function DesignSystemContent() {
   const [sliderVal, setSliderVal] = useState(1);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (themeParam === 'light') {
+      setIsDark(false);
+      document.documentElement.classList.add('light');
+      document.documentElement.classList.remove('dark');
+    } else if (themeParam === 'dark') {
+      setIsDark(true);
+      document.documentElement.classList.add('dark');
+      document.documentElement.classList.remove('light');
+    }
+  }, [themeParam]);
 
   const toggleTheme = () => {
     const next = !isDark;
@@ -1183,8 +1201,10 @@ function DesignSystemContent() {
 
 export default function DesignSystemPage() {
   return (
-    <ToastProvider>
-      <DesignSystemContent />
-    </ToastProvider>
+    <Suspense fallback={<div className="min-h-screen bg-bg text-text p-8 text-center font-sans">Loading MECHWARE Design System...</div>}>
+      <ToastProvider>
+        <DesignSystemContent />
+      </ToastProvider>
+    </Suspense>
   );
 }

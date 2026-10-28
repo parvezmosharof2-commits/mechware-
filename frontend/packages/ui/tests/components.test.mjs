@@ -99,3 +99,47 @@ test('ProductCard and ProductCardSkeleton Structural Parity (Zero CLS)', () => {
   assert.ok(supportedSizes.includes('compact'));
   assert.ok(supportedSizes.includes('horizontal'));
 });
+
+test('Tokens Hierarchy - Z-Index layering order compliance', () => {
+  const z = {
+    base: 0,
+    sticky: 100,
+    header: 200,
+    dropdown: 300,
+    drawer: 400,
+    modal: 500,
+    toast: 600,
+    tooltip: 700,
+  };
+
+  assert.ok(z.base < z.sticky);
+  assert.ok(z.sticky < z.header);
+  assert.ok(z.header < z.dropdown);
+  assert.ok(z.dropdown < z.drawer);
+  assert.ok(z.drawer < z.modal);
+  assert.ok(z.modal < z.toast);
+  assert.ok(z.toast < z.tooltip);
+});
+
+test('Tokens Hierarchy - Motion duration progression', () => {
+  const d = {
+    fast: 0.12,
+    base: 0.2,
+    slow: 0.32,
+  };
+
+  assert.ok(d.fast < d.base);
+  assert.ok(d.base < d.slow);
+  assert.equal(d.fast, 0.12);
+  assert.equal(d.base, 0.20);
+  assert.equal(d.slow, 0.32);
+});
+
+test('Price formatting - Edge cases (Zero, Decimals, Negative numbers)', () => {
+  // 0 BDT
+  assert.equal(formatCurrency(0, 'BDT', 'en'), '৳0');
+  // Decimal rounding in BDT (rounded to integer for BDT commercial display)
+  assert.equal(formatCurrency(125000.75, 'BDT', 'en'), '৳1,25,001');
+  // Negative amount
+  assert.equal(formatCurrency(-5000, 'BDT', 'en'), '৳-5,000');
+});

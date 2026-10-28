@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm --recursive run build",
     "lint": "pnpm --recursive run lint",
+    "lint:tokens": "node packages/config/lint-tokens.mjs",
     "typecheck": "pnpm --recursive run typecheck",
     "dev:web": "pnpm --filter @mechware/web dev",
     "dev:console": "pnpm --filter @mechware/console dev"
