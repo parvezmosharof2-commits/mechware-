@@ -39,6 +39,11 @@ dotnet run --project src/ShopVerse.Worker        # reservation-expiry + outbox w
 ```
 Then try `GET http://localhost:5000/api/v1/storefront/categories`.
 
+No .NET at hand? The generated artwork is committed under `frontend/apps/web/public/seed-media/`, and a ready-made database (schema + the demo catalogue) is in `backend/seed/`:
+```bash
+createdb shopverse && gunzip -c backend/seed/shopverse-catalog-seed.sql.gz | psql shopverse
+```
+
 ### 4. Start Next.js 15 Frontends
 ```bash
 cd frontend
