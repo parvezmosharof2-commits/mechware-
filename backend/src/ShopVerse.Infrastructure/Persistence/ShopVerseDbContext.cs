@@ -1,6 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Identity;
+using ShopVerse.Domain.Inventory;
+using ShopVerse.Domain.Reviews;
+using ShopVerse.Domain.Sellers;
+using ShopVerse.Infrastructure.Persistence.Configurations;
+using ShopVerse.Infrastructure.Persistence.Outbox;
 
 namespace ShopVerse.Infrastructure.Persistence;
 
@@ -24,6 +30,26 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<BdLocation> BdLocations => Set<BdLocation>();
 
+    // Phase 4: catalog, inventory, reviews, outbox
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Brand> Brands => Set<Brand>();
+    public DbSet<Seller> Sellers => Set<Seller>();
+    public DbSet<Product> Products => Set<Product>();
+    public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
+    public DbSet<ProductMedia> ProductMedia => Set<ProductMedia>();
+    public DbSet<AttributeDefinition> Attributes => Set<AttributeDefinition>();
+    public DbSet<AttributeValue> AttributeValues => Set<AttributeValue>();
+    public DbSet<ProductAttributeValue> ProductAttributeValues => Set<ProductAttributeValue>();
+    public DbSet<SlugHistory> SlugHistories => Set<SlugHistory>();
+    public DbSet<Warehouse> Warehouses => Set<Warehouse>();
+    public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
+    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<ReviewMedia> ReviewMedia => Set<ReviewMedia>();
+    public DbSet<Question> Questions => Set<Question>();
+    public DbSet<Answer> Answers => Set<Answer>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -38,6 +64,10 @@ public sealed class ShopVerseDbContext : DbContext
         ConfigureOtpCode(modelBuilder.Entity<OtpCode>());
         ConfigureAuditLog(modelBuilder.Entity<AuditLog>());
         ConfigureBdLocation(modelBuilder.Entity<BdLocation>());
+
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(ShopVerseDbContext).Assembly,
+            t => t.Namespace == typeof(CategoryConfiguration).Namespace);
     }
 
     private static void ConfigureUser(EntityTypeBuilder<User> builder)

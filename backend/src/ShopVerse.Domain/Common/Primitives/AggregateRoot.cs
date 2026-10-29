@@ -3,7 +3,7 @@ namespace ShopVerse.Domain.Common.Primitives;
 /// <summary>
 /// Aggregate root base class capturing domain events to be published via the transactional outbox.
 /// </summary>
-public abstract class AggregateRoot<TId> : Entity<TId>
+public abstract class AggregateRoot<TId> : Entity<TId>, IHasDomainEvents
     where TId : notnull
 {
     private readonly List<IDomainEvent> _domainEvents = [];

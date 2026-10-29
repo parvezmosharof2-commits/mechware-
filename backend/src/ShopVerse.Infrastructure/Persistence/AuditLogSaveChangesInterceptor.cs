@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using ShopVerse.Application.Identity;
+using ShopVerse.Domain.Common.Primitives;
 using ShopVerse.Domain.Identity;
 
 namespace ShopVerse.Infrastructure.Persistence;
@@ -53,6 +54,7 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
         foreach (EntityEntry entry in context.ChangeTracker.Entries().ToList())
         {
             if (entry.Entity is AuditLog ||
+                Attribute.IsDefined(entry.Entity.GetType(), typeof(NotAuditedAttribute)) ||
                 entry.State is EntityState.Detached or EntityState.Unchanged)
             {
                 continue;
