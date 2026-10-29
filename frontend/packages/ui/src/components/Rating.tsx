@@ -51,7 +51,7 @@ export const Rating: React.FC<RatingProps> = ({
       aria-label={`Rated ${value.toFixed(1)} out of 5 stars${count ? ` across ${count.toLocaleString()} ratings` : ''}`}
       {...props}
     >
-      <div className="flex items-center text-amber-400">
+      <div className="flex items-center text-warning">
         {[...Array(fullStars)].map((_, i) => (
           <button
             key={`full-${i}`}
@@ -63,7 +63,7 @@ export const Rating: React.FC<RatingProps> = ({
             className={cn('p-0 border-0 bg-transparent', interactive && 'cursor-pointer hover:scale-110 transition-transform')}
             aria-label={`${i + 1} Star`}
           >
-            <Star className={cn(starClass, 'fill-amber-400 stroke-amber-400')} />
+            <Star className={cn(starClass, 'fill-warning stroke-warning')} />
           </button>
         ))}
 
@@ -75,7 +75,7 @@ export const Rating: React.FC<RatingProps> = ({
             className={cn('p-0 border-0 bg-transparent relative', interactive && 'cursor-pointer')}
             aria-label={`${fullStars + 0.5} Stars`}
           >
-            <StarHalf className={cn(starClass, 'fill-amber-400 stroke-amber-400')} />
+            <StarHalf className={cn(starClass, 'fill-warning stroke-warning')} />
           </button>
         )}
 

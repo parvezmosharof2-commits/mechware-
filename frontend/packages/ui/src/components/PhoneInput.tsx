@@ -40,6 +40,12 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   const [rawNumber, setRawNumber] = useState(value ?? defaultValue);
   const [touched, setTouched] = useState(false);
 
+  React.useEffect(() => {
+    if (value !== undefined) {
+      setRawNumber(value);
+    }
+  }, [value]);
+
   const validateBdPhone = (phone: string): boolean => {
     // 013, 014, 015, 016, 017, 018, 019 followed by 8 digits
     const cleaned = phone.replace(/\D/g, '');
@@ -87,6 +93,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={(e) => {
               const found = countryCodes.find((c) => c.code === e.target.value) || countryCodes[0];
               setSelectedCountry(found);
+              const isFoundBd = found.code === '+880';
+              const valid = isFoundBd ? validateBdPhone(rawNumber) : rawNumber.replace(/\D/g, '').length >= 7;
+              onChange?.(`${found.code}${rawNumber}`, valid);
             }}
             disabled={disabled}
             aria-label="Country dial code"

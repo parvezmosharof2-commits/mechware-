@@ -52,12 +52,16 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     return ConnectionMultiplexer.Connect(options);
 });
 
-// 2.2 Forwarded Headers Options (HIGH-03: reverse-proxy client IP for rate limiting)
+// 2.2 Forwarded Headers Options (HIGH-03 / MW-P1-NEW-03: reverse-proxy client IP for rate limiting)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardLimit = 1;
+    if (builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing")
+    {
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
 });
 
 // 3. Health Checks
@@ -106,6 +110,13 @@ builder.Services.AddSwaggerGen(options =>
             new List<string>()
         }
     });
+
+    var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (System.IO.File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
 });
 
 // 5. Rate Limiting Middleware

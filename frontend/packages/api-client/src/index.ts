@@ -55,15 +55,16 @@ export class MechWareApiClient {
     }
 
     if (!response.ok) {
+      const rawBody = await response.text();
       let problem: ProblemDetails;
       try {
-        problem = await response.json();
+        problem = JSON.parse(rawBody) as ProblemDetails;
       } catch {
         problem = {
           type: 'https://api.mechware.com.bd/errors/HTTP_ERROR',
-          title: response.statusText,
+          title: response.statusText || 'HTTP Error',
           status: response.status,
-          detail: await response.text()
+          detail: rawBody || `Request failed with status ${response.status}`,
         };
       }
       throw problem;

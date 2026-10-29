@@ -71,3 +71,27 @@ export const cartBadgeBouncePreset: Variants = {
     transition: { duration: 0.45, ease: 'easeInOut' },
   },
 };
+
+/**
+ * Returns variants adapted for prefers-reduced-motion: removes translations/scale and shortens transitions
+ */
+export function getMotionVariants(variants: Variants, prefersReducedMotion = false): Variants {
+  if (!prefersReducedMotion) return variants;
+
+  const reduced: Variants = {};
+  for (const [key, variant] of Object.entries(variants)) {
+    if (typeof variant === 'object' && variant !== null) {
+      reduced[key] = {
+        ...variant,
+        x: 0,
+        y: 0,
+        scale: 1,
+        transition: { duration: 0.01 },
+      };
+    } else {
+      reduced[key] = variant;
+    }
+  }
+  return reduced;
+}
+

@@ -35,24 +35,24 @@ const variantConfig: Record<
     className: 'bg-accent/15 text-accent border-accent/40 font-semibold',
   },
   bestseller: {
-    className: 'bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold',
-    icon: <Flame className="h-3 w-3 shrink-0 text-amber-400" />,
+    className: 'bg-warning/15 text-warning border-warning/30 font-semibold',
+    icon: <Flame className="h-3 w-3 shrink-0 text-warning" />,
   },
   authentic: {
-    className: 'bg-brand-navy/60 text-sky-300 border-sky-500/40 font-medium',
-    icon: <ShieldCheck className="h-3 w-3 shrink-0 text-sky-400" />,
+    className: 'bg-brand-navy/60 text-accent border-accent/40 font-medium',
+    icon: <ShieldCheck className="h-3 w-3 shrink-0 text-accent" />,
   },
   'low-stock': {
     className: 'bg-warning/15 text-warning border-warning/30 font-medium',
     icon: <AlertTriangle className="h-3 w-3 shrink-0" />,
   },
   'free-delivery': {
-    className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 font-medium',
+    className: 'bg-status-online/15 text-status-online border-status-online/30 font-medium',
     icon: <Truck className="h-3 w-3 shrink-0" />,
   },
   ai: {
     className:
-      'bg-gradient-to-r from-accent/20 via-indigo-500/20 to-purple-500/20 text-accent border-accent/40 font-semibold shadow-glow-cyan-sm',
+      'bg-accent/20 text-accent border-accent/40 font-semibold shadow-glow-cyan-sm',
     icon: <Sparkles className="h-3 w-3 shrink-0 text-accent" />,
   },
   outline: {

@@ -1,12 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+const rootDir = path.resolve(import.meta.dirname, '../..');
 const searchDirs = [
-  path.resolve(process.cwd(), 'apps'),
-  path.resolve(process.cwd(), 'packages'),
+  path.resolve(rootDir, 'apps'),
+  path.resolve(rootDir, 'packages'),
 ];
 
 const arbitraryColorPattern = /\b(?:bg|text|border|ring|fill|stroke|from|to|via)-\[(?:#|rgb|hsl)[^\]]+\]/g;
+const rawTailwindPalettePattern = /\b(?:bg|text|border|ring|fill|stroke|from|to|via)-(?:red|blue|green|yellow|purple|pink|gray|slate|zinc|neutral|stone|amber|sky|emerald|indigo|violet|rose|teal|cyan|orange|lime|fuchsia)-[1-9]00(?:\/\d+)?\b/g;
 
 let violations = [];
 
@@ -32,16 +34,20 @@ function scanDir(dir) {
       entry.isFile() &&
       (entry.name.endsWith('.tsx') || entry.name.endsWith('.ts') || entry.name.endsWith('.jsx'))
     ) {
+      // Exclude token definitions and test scripts themselves if needed, but let's check standard files
       const content = fs.readFileSync(fullPath, 'utf-8');
       const lines = content.split('\n');
 
       lines.forEach((line, lineNum) => {
-        const matches = line.match(arbitraryColorPattern);
-        if (matches) {
+        const arbitraryMatches = line.match(arbitraryColorPattern) || [];
+        const rawMatches = line.match(rawTailwindPalettePattern) || [];
+        const allMatches = [...arbitraryMatches, ...rawMatches];
+
+        if (allMatches.length > 0) {
           violations.push({
-            file: path.relative(process.cwd(), fullPath),
+            file: path.relative(rootDir, fullPath),
             line: lineNum + 1,
-            matches,
+            matches: allMatches,
           });
         }
       });
@@ -55,11 +61,11 @@ for (const d of searchDirs) {
 
 console.log('\n================ MECHWARE TOKEN ENFORCEMENT LINTER ================');
 if (violations.length > 0) {
-  console.error(`✗ Detected ${violations.length} arbitrary color usages:`);
+  console.error(`✗ Detected ${violations.length} raw / arbitrary color usages:`);
   for (const v of violations) {
     console.error(`  - ${v.file}:${v.line} -> ${v.matches.join(', ')}`);
   }
-  console.error('\nRule Violation: Arbitrary colors like [#[A-Fa-f0-9]] are strictly prohibited.');
+  console.error('\nRule Violation: Raw Tailwind palette colors and arbitrary colors are strictly prohibited.');
   console.error('Please use defined semantic tokens (e.g. bg-accent, text-text, border-surface-border).');
   process.exit(1);
 } else {

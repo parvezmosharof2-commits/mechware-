@@ -42,7 +42,7 @@ All tokens live in `packages/ui/tokens` and are exposed as CSS variables + a Tai
 | `--deal` / `--fault` | #DC2626 | #F87171 | System fault, discount badge, critical alarm |
 | `--success` / `--online` | #10B981 | #34D399 | Controller online, in-stock, verified partner |
 | `--warning` / `--pending` | #B45309 | #FBBF24 | Low stock alert, calibration due |
-| `--focus-ring` | #00A8B5 | #00E5FF | 2px electric cyan ring with 2px offset |
+| `--focus-ring` | #00707D | #00E5FF | 2px electric cyan ring with 2px offset |
 
 Generate full 50–950 scales for primary, accent and neutrals for illustrations and charts.
 Chart palette: 6 colors with tested contrast and colour-blind-safe order.

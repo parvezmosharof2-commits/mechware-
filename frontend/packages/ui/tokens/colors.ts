@@ -73,7 +73,7 @@ export const colors: { dark: ColorPalette; light: ColorPalette } = {
     online: '#10B981',
     warning: '#B45309',
     pending: '#B45309',
-    focusRing: '#00A8B5',
+    focusRing: '#00707D',
   },
 };
 

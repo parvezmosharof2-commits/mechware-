@@ -376,7 +376,7 @@ function DesignSystemContent() {
             size="sm"
             onClick={toggleTheme}
             aria-label="Toggle Theme"
-            leftIcon={isDark ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-brand-navy" />}
+            leftIcon={isDark ? <Sun className="h-4 w-4 text-warning" /> : <Moon className="h-4 w-4 text-brand-navy" />}
           >
             {isDark ? 'Light Mode' : 'Dark Mode'}
           </Button>
@@ -653,19 +653,19 @@ function DesignSystemContent() {
                 value="bkash"
                 title="bKash Merchant"
                 description="Instant 1.2% cash rebate on B2B checkout"
-                icon={<CreditCard className="h-5 w-5 text-pink-500" />}
+                icon={<CreditCard className="h-5 w-5 text-deal" />}
               />
               <RadioCard
                 value="nagad"
                 title="Nagad Corporate"
                 description="Direct postal digital disbursement"
-                icon={<CreditCard className="h-5 w-5 text-orange-500" />}
+                icon={<CreditCard className="h-5 w-5 text-warning" />}
               />
               <RadioCard
                 value="card"
                 title="Corporate Cards"
                 description="Visa, Mastercard, Amex with 0% EMI"
-                icon={<CreditCard className="h-5 w-5 text-sky-400" />}
+                icon={<CreditCard className="h-5 w-5 text-accent" />}
               />
               <RadioCard
                 value="po"

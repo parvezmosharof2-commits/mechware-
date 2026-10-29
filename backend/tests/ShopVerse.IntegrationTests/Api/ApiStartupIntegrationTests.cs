@@ -43,6 +43,23 @@ public class ApiStartupIntegrationTests : IClassFixture<WebApplicationFactory<Pr
 
         response.Headers.Should().ContainKey("X-Frame-Options");
         response.Headers.GetValues("X-Frame-Options").First().Should().Be("DENY");
+
+        response.Headers.Should().ContainKey("Content-Security-Policy");
+    }
+
+    [Fact]
+    public async Task MaliciousCorrelationId_ShouldBeSanitizedToNewGuid()
+    {
+        var maliciousCorrelationId = "invalid correlation id with spaces & <script>alert(1)</script>";
+        var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
+        request.Headers.Add("X-Correlation-Id", maliciousCorrelationId);
+
+        var response = await _client.SendAsync(request);
+
+        response.Headers.Should().ContainKey("X-Correlation-Id");
+        var actualId = response.Headers.GetValues("X-Correlation-Id").First();
+        actualId.Should().NotBe(maliciousCorrelationId);
+        actualId.Should().MatchRegex("^[a-f0-9]{32}$");
     }
 
     [Fact]

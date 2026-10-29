@@ -184,9 +184,6 @@ Phone and email verification codes bound to specific reference entities to preve
 **Indexes:**
 - `ix_otp_codes_lookup` (`recipient`, `type`, `reference_id`, `is_consumed`) — replay-safe lookup.
 
-**Indexes:**
-- `ix_otp_codes_lookup` (`recipient`, `type`, `is_consumed`) — verify active OTPs.
-
 ---
 
 ### 2.2 Sellers and KYC
