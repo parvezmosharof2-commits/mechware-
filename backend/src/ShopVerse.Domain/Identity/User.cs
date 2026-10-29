@@ -112,6 +112,21 @@ public sealed class User : AggregateRoot<Guid>
         }
     }
 
+    /// <summary>
+    /// Computes progressive exponential backoff delay (in milliseconds) for failed login attempts
+    /// prior to hard account lockout (03_PHASE_PROMPTS.md Phase 3 #5).
+    /// </summary>
+    public int GetProgressiveLoginDelayMilliseconds() =>
+        FailedLoginAttempts switch
+        {
+            <= 0 => 0,
+            1 => 250,
+            2 => 500,
+            3 => 1000,
+            4 => 2000,
+            _ => 4000
+        };
+
     public void RecordSuccessfulLogin(DateTime utcNow)
     {
         FailedLoginAttempts = 0;

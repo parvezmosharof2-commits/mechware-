@@ -427,7 +427,9 @@ public sealed class SellerIsolationResourcesController : ControllerBase
 
     [HttpPut]
     [RequirePermission(Permissions.CatalogUpdateOwn)]
-    public async Task<IActionResult> UpdateSellerProtectedResource(Guid sellerId)
+    public async Task<IActionResult> UpdateSellerProtectedResource(
+        Guid sellerId,
+        [FromBody] UpdateSellerResourceRequestDto? request = null)
     {
         var resource = new SellerOwnedResource(Guid.NewGuid(), sellerId, "seller_catalog_listing");
         AuthorizationResult authResult = await _authorizationService.AuthorizeAsync(
@@ -453,6 +455,7 @@ public sealed class SellerIsolationResourcesController : ControllerBase
             {
                 sellerId,
                 resourceType = resource.ResourceType,
+                sku = request?.Sku,
                 modified = true,
                 isolationVerified = true
             }

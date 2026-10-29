@@ -84,16 +84,16 @@ export function RoleAwareSidebar({
   return (
     <aside
       aria-label="Role-aware console navigation"
-      className="w-72 shrink-0 border-r border-surface-border bg-bg-subtle p-4 flex flex-col justify-between"
+      className="w-72 shrink-0 border-r border-border-subtle bg-bg-surface p-4 flex flex-col justify-between"
     >
       <div className="space-y-5">
-        <div className="rounded-lg border border-surface-border bg-surface p-3 space-y-2">
+        <div className="rounded-lg border border-border-subtle bg-bg-elevated p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+            <span className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
               Active Staff/Seller Role
             </span>
             {requires2Fa && (
-              <span className="rounded-sm bg-bg-subtle px-1.5 py-0.5 font-mono text-xs font-bold text-accent">
+              <span className="rounded-sm bg-bg-surface px-1.5 py-0.5 font-mono text-xs font-bold text-brand-accent">
                 MANDATORY 2FA
               </span>
             )}
@@ -104,7 +104,7 @@ export function RoleAwareSidebar({
               aria-label="Switch console RBAC role"
               value={activeRole}
               onChange={(e) => onSelectRole(e.target.value as ConsoleRole)}
-              className="w-full rounded-md border border-surface-border bg-bg-subtle px-2.5 py-1.5 font-mono text-xs text-text"
+              className="w-full rounded-md border border-border-subtle bg-bg-surface px-2.5 py-1.5 font-mono text-xs text-fg-primary"
             >
               <option value="admin">admin (All Permissions + 2FA)</option>
               <option value="finance">finance (Payouts + Refunds + 2FA)</option>
@@ -115,8 +115,8 @@ export function RoleAwareSidebar({
           )}
 
           {activeRole === 'seller' && (
-            <div className="rounded-sm border border-surface-border bg-bg-subtle p-2 font-mono text-xs text-text-muted">
-              Isolated SellerId: <span className="text-accent">{sellerId.slice(0, 13)}…</span>
+            <div className="rounded-sm border border-border-subtle bg-bg-surface p-2 font-mono text-xs text-fg-muted">
+              Isolated SellerId: <span className="text-brand-accent">{sellerId.slice(0, 13)}…</span>
             </div>
           )}
         </div>
@@ -131,19 +131,19 @@ export function RoleAwareSidebar({
                 onClick={() => onSelectItem && onSelectItem(item.id)}
                 className={`w-full rounded-md px-3 py-2.5 text-left text-xs transition-colors flex flex-col gap-1 ${
                   isActive
-                    ? 'border border-accent bg-surface font-semibold text-accent'
-                    : 'text-text hover:bg-surface'
+                    ? 'border border-brand-accent bg-bg-elevated font-semibold text-brand-accent'
+                    : 'text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span>{item.label}</span>
                   {item.badge && (
-                    <span className="rounded-sm bg-bg-subtle px-1.5 py-0.5 font-mono text-[10px] text-accent">
+                    <span className="rounded-sm bg-bg-surface px-1.5 py-0.5 font-mono text-xs text-brand-accent">
                       {item.badge}
                     </span>
                   )}
                 </div>
-                <span className="font-mono text-[11px] text-text-muted">
+                <span className="font-mono text-xs text-fg-muted">
                   [{item.requiredPermission}]
                 </span>
               </button>
@@ -152,11 +152,11 @@ export function RoleAwareSidebar({
         </nav>
       </div>
 
-      <div className="rounded-lg border border-surface-border bg-surface p-3 text-xs text-text-muted">
-        <div className="font-semibold text-text">RBAC Policy Enforcement</div>
+      <div className="rounded-lg border border-border-subtle bg-bg-elevated p-3 text-xs text-fg-muted">
+        <div className="font-semibold text-fg-primary">RBAC Policy Enforcement</div>
         <p className="mt-1">
-          Routes are guarded by <code className="font-mono text-accent">[RequirePermission]</code> &{' '}
-          <code className="font-mono text-accent">SellerResourceIsolationHandler</code>.
+          Routes are guarded by <code className="font-mono text-brand-accent">[RequirePermission]</code> &{' '}
+          <code className="font-mono text-brand-accent">SellerResourceIsolationHandler</code>.
         </p>
       </div>
     </aside>

@@ -123,7 +123,7 @@ public sealed class IdentityService : IIdentityService
 
     public async Task<(RegisterResponseDto Response, string RawOtpForDev)> RegisterAsync(
         RegisterRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
@@ -177,7 +177,7 @@ public sealed class IdentityService : IIdentityService
 
     public async Task<(SendOtpResponseDto Response, string RawOtpForDev)> SendOtpAsync(
         SendOtpRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.Recipient))
@@ -205,13 +205,13 @@ public sealed class IdentityService : IIdentityService
         User? user = FindUserByIdentifier(recipient);
         RecordAudit(user?.Id, clientIp, "user.otp_dispatched", "otp_codes", otp.Id.ToString(), null, new { recipient, otp.Type, otp.ReferenceId });
 
-        return (new SendOtpResponseDto(recipient, otpType.ToString(), otp.ReferenceId, 300), rawCode);
+        return (new SendOtpResponseDto(recipient, otpType.ToString(), otp.ReferenceId, 300, OtpCode.MaxVerificationAttempts), rawCode);
     }
 
     public AuthTokenResponseDto VerifyOtp(
         VerifyOtpRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
@@ -225,7 +225,7 @@ public sealed class IdentityService : IIdentityService
 
         if (otp is null || !otp.CanVerify(now))
         {
-            throw new ValidationException("code", "OTP has expired, been consumed, or exceeded maximum attempts.");
+            throw new ValidationException("code", "Maximum OTP verification attempts exceeded, or OTP has expired / been consumed.");
         }
 
         string providedHash = _tokenService.HashToken(request.Code);
@@ -262,8 +262,8 @@ public sealed class IdentityService : IIdentityService
 
     public AuthTokenResponseDto Login(
         LoginRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
@@ -320,8 +320,8 @@ public sealed class IdentityService : IIdentityService
 
     public AuthTokenResponseDto GoogleLogin(
         GoogleLoginRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
@@ -359,8 +359,8 @@ public sealed class IdentityService : IIdentityService
     /// </summary>
     public AuthTokenResponseDto RotateRefreshToken(
         string rawRefreshToken,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null)
     {
         if (string.IsNullOrWhiteSpace(rawRefreshToken))
@@ -457,14 +457,17 @@ public sealed class IdentityService : IIdentityService
     /// Revokes the specific refresh token family associated with the caller's httpOnly refresh_token cookie
     /// (AUD-P3-05: supports logout even when the 15-minute Access JWT has expired, without wiping other device sessions).
     /// </summary>
-    public bool RevokeRefreshTokenByCookie(string? rawRefreshToken, string? clientIp)
+    public bool RevokeRefreshTokenByCookie(
+        string? rawRefreshToken,
+        string? clientIp = null,
+        DateTime? utcNowOverride = null)
     {
         if (string.IsNullOrWhiteSpace(rawRefreshToken))
         {
             return false;
         }
 
-        var now = DateTime.UtcNow;
+        var now = utcNowOverride ?? DateTime.UtcNow;
         string tokenHash = _tokenService.HashToken(rawRefreshToken);
 
         lock (_tokenLock)
@@ -491,7 +494,7 @@ public sealed class IdentityService : IIdentityService
         }
     }
 
-    public (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp)
+    public (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         User? user = FindUserByIdentifier(identifier);
@@ -507,7 +510,7 @@ public sealed class IdentityService : IIdentityService
         return (otp.ReferenceId, rawCode);
     }
 
-    public void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp)
+    public void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         _passwordHasher.ValidatePasswordPolicy(request.NewPassword);
@@ -547,7 +550,7 @@ public sealed class IdentityService : IIdentityService
         RecordAudit(user.Id, clientIp, "user.password_reset_completed", "users", user.Id.ToString(), null, null);
     }
 
-    public TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp)
+    public TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         User user = GetUserByIdOrThrow(userId);
@@ -564,7 +567,7 @@ public sealed class IdentityService : IIdentityService
         return new TotpSetupResponseDto(secret, otpAuthUri, rawRecoveryCodes);
     }
 
-    public void VerifyAndEnableTwoFactor(Guid userId, string code, string? clientIp, DateTimeOffset? timestampOverride = null)
+    public void VerifyAndEnableTwoFactor(Guid userId, string code, string? clientIp = null, DateTimeOffset? timestampOverride = null)
     {
         var now = timestampOverride ?? DateTimeOffset.UtcNow;
         User user = GetUserByIdOrThrow(userId);
@@ -609,7 +612,7 @@ public sealed class IdentityService : IIdentityService
     public int RevokeSessions(
         Guid userId,
         RevokeSessionsRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         string? currentRawRefreshToken = null)
     {
         var now = DateTime.UtcNow;
@@ -661,7 +664,7 @@ public sealed class IdentityService : IIdentityService
             .ToList()
             .AsReadOnly();
 
-    public AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp)
+    public AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         ValidateBdLocationHierarchy(request.Division, request.District, request.Upazila);
@@ -695,7 +698,7 @@ public sealed class IdentityService : IIdentityService
         return MapAddressDto(address);
     }
 
-    public AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp)
+    public AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         if (!_addresses.TryGetValue(addressId, out Address? address) || address.UserId != userId)
@@ -732,7 +735,7 @@ public sealed class IdentityService : IIdentityService
         return MapAddressDto(address);
     }
 
-    public void DeleteAddress(Guid userId, Guid addressId, string? clientIp)
+    public void DeleteAddress(Guid userId, Guid addressId, string? clientIp = null)
     {
         if (!_addresses.TryGetValue(addressId, out Address? address) || address.UserId != userId)
         {
@@ -763,7 +766,7 @@ public sealed class IdentityService : IIdentityService
             .AsReadOnly();
     }
 
-    public GdprExportBundleDto ExportUserData(Guid userId, string? clientIp)
+    public GdprExportBundleDto ExportUserData(Guid userId, string? clientIp = null)
     {
         User user = GetUserByIdOrThrow(userId);
         RecordAudit(userId, clientIp, "user.gdpr_export", "users", userId.ToString(), null, null);
@@ -784,7 +787,7 @@ public sealed class IdentityService : IIdentityService
             auditEvents);
     }
 
-    public void AnonymizeAndEraseUser(Guid userId, string? clientIp)
+    public void AnonymizeAndEraseUser(Guid userId, string? clientIp = null)
     {
         var now = DateTime.UtcNow;
         User user = GetUserByIdOrThrow(userId);
@@ -812,6 +815,8 @@ public sealed class IdentityService : IIdentityService
         User user = GetUserByIdOrThrow(userId);
         return MapUserDto(user);
     }
+
+    public IReadOnlyList<User> GetUsersForAudit() => [.. _users.Values];
 
     public IReadOnlyList<AuditLog> GetAuditLogs() => [.. _auditLogs];
 

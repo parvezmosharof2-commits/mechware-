@@ -457,4 +457,76 @@ test('Phase 3 R1 Audit Fix (AUD-P3-07): 3-Level Bangladesh Division -> District 
   assert.equal(validateHierarchy('Dhaka', 'Gazipur', 'Savar EPZ'), false);
 });
 
+// 24. Pass 2 DB Index Parity (DATA_MODEL.md §2.1 -> ShopVerseDbContext.cs + Migration)
+test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1 indexes', () => {
+  const repoRoot = path.resolve(__dirname, '../../../../');
+  const dbContextSrc = fs.readFileSync(
+    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/ShopVerseDbContext.cs'),
+    'utf8'
+  );
+  const migrationSrc = fs.readFileSync(
+    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/Migrations/202610290001_Phase3IdentityAndAccess.cs'),
+    'utf8'
+  );
+
+  for (const idxName of [
+    'ux_users_email',
+    'ux_users_phone',
+    'ux_users_google_sub',
+    'ix_users_status',
+    'ix_otp_codes_recipient_type',
+    'ix_otp_codes_expires_at'
+  ]) {
+    assert.ok(dbContextSrc.includes(idxName), `ShopVerseDbContext missing index ${idxName}`);
+    assert.ok(migrationSrc.includes(idxName), `Phase3IdentityAndAccess migration missing index ${idxName}`);
+  }
+  assert.ok(migrationSrc.includes('ix_bd_locations_level_parent'));
+  assert.ok(migrationSrc.includes('ux_refresh_tokens_hash'));
+  assert.ok(migrationSrc.includes('ix_refresh_tokens_family_id'));
+});
+
+// 25. Pass 2 Brute-Force Progressive Delay & Email Verification / Password Reset Session Revocation
+test('25. User entity computes progressive login delay and unit tests cover email OTP + password reset session revocation', () => {
+  const repoRoot = path.resolve(__dirname, '../../../../');
+  const userSrc = fs.readFileSync(
+    path.join(repoRoot, 'backend/src/ShopVerse.Domain/Identity/User.cs'),
+    'utf8'
+  );
+  const unitTestsSrc = fs.readFileSync(
+    path.join(repoRoot, 'backend/tests/ShopVerse.UnitTests/Identity/IdentityPhase3UnitTests.cs'),
+    'utf8'
+  );
+
+  assert.ok(userSrc.includes('GetProgressiveLoginDelayMilliseconds()'));
+  assert.ok(unitTestsSrc.includes('GetProgressiveLoginDelayMilliseconds()'));
+  assert.ok(unitTestsSrc.includes('EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset'));
+});
+
+// 26. Pass 2 Zero `any` Types and Canonical Semantic Tokens in Console Sidebar & Web Auth
+test('26. Phase 3 frontend files contain zero explicit any types and RoleAwareSidebar uses canonical semantic tokens', () => {
+  const repoRoot = path.resolve(__dirname, '../../../../');
+  const phase3FrontendFiles = [
+    'frontend/apps/web/src/components/auth/AuthModal.tsx',
+    'frontend/apps/web/src/components/auth/HeaderAccountMenu.tsx',
+    'frontend/apps/web/src/app/[locale]/account/addresses/page.tsx',
+    'frontend/apps/console/src/components/RoleAwareSidebar.tsx',
+    'frontend/apps/console/src/app/login/page.tsx',
+    'src/components/Phase3IdentityWorkbench.tsx'
+  ];
+
+  for (const relPath of phase3FrontendFiles) {
+    const content = fs.readFileSync(path.join(repoRoot, relPath), 'utf8');
+    assert.equal(/:\s*any\b|<any>|as\s+any\b/.test(content), false, `Forbidden 'any' type found in ${relPath}`);
+  }
+
+  const sidebarSrc = fs.readFileSync(
+    path.join(repoRoot, 'frontend/apps/console/src/components/RoleAwareSidebar.tsx'),
+    'utf8'
+  );
+  assert.ok(sidebarSrc.includes('border-border-subtle'));
+  assert.ok(sidebarSrc.includes('bg-bg-surface'));
+  assert.ok(sidebarSrc.includes('bg-bg-elevated'));
+  assert.ok(sidebarSrc.includes('text-brand-accent'));
+  assert.equal(sidebarSrc.includes('border-surface-border'), false);
+});
 

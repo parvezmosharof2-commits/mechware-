@@ -43,23 +43,29 @@ public class IdentityPhase3UnitTests
     }
 
     [Fact]
-    public void UserBruteForceLockout_ShouldLockAccountAfterFiveFailedAttempts()
+    public void UserBruteForceLockout_ShouldComputeProgressiveDelay_AndLockAccountAfterFiveFailedAttempts()
     {
         var now = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
         var user = User.Create("engineer@mechware.com.bd", "+8801711999999", "hash", "Test Engineer");
 
+        user.GetProgressiveLoginDelayMilliseconds().Should().Be(0);
+
+        int[] expectedDelaysMs = [250, 500, 1000, 2000];
         for (int i = 0; i < 4; i++)
         {
             user.RecordFailedLogin(now);
             user.IsLockedOut(now).Should().BeFalse();
+            user.GetProgressiveLoginDelayMilliseconds().Should().Be(expectedDelaysMs[i]);
         }
 
         user.RecordFailedLogin(now);
         user.IsLockedOut(now).Should().BeTrue();
         user.LockoutUntilUtc.Should().Be(now.AddMinutes(5));
+        user.GetProgressiveLoginDelayMilliseconds().Should().Be(4000);
 
         user.RecordSuccessfulLogin(now.AddMinutes(6));
         user.FailedLoginAttempts.Should().Be(0);
+        user.GetProgressiveLoginDelayMilliseconds().Should().Be(0);
         user.IsLockedOut(now.AddMinutes(6)).Should().BeFalse();
     }
 
@@ -170,7 +176,8 @@ public class IdentityPhase3UnitTests
             t0.AddSeconds(1));
 
         // Logout Device 1 via its refresh_token cookie
-        identityService.RevokeRefreshTokenByCookie(device1.RefreshTokenCookieValue!, t0.AddSeconds(5));
+        identityService.RevokeRefreshTokenByCookie(device1.RefreshTokenCookieValue!, "203.112.218.10", t0.AddSeconds(5))
+            .Should().BeTrue();
 
         // Device 1 refresh token is now revoked
         Action act1 = () => identityService.RotateRefreshToken(
@@ -208,7 +215,7 @@ public class IdentityPhase3UnitTests
         string validJwt = $"{header}.{validPayload}.sig_verified";
 
         var session = identityService.GoogleLogin(
-            new GoogleOAuthRequestDto(validJwt, null, null),
+            new GoogleLoginRequestDto(validJwt, null, null),
             "203.112.218.10",
             "Mozilla/5.0");
         session.AccessToken.Should().NotBeNullOrWhiteSpace();
@@ -223,10 +230,10 @@ public class IdentityPhase3UnitTests
             exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds()
         }));
         Action badIssAct = () => identityService.GoogleLogin(
-            new GoogleOAuthRequestDto($"{header}.{badIssuerPayload}.sig", null, null),
+            new GoogleLoginRequestDto($"{header}.{badIssuerPayload}.sig", null, null),
             "203.112.218.10",
             "Mozilla/5.0");
-        badIssAct.Should().Throw<UnauthorizedAccessException>().WithMessage("*issuer*");
+        badIssAct.Should().Throw<ValidationException>().WithMessage("*issuer*");
     }
 
     [Fact]
@@ -235,7 +242,7 @@ public class IdentityPhase3UnitTests
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
         var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
 
-        SendOtpResponseDto otpSent = await identityService.SendOtpAsync(
+        (SendOtpResponseDto otpSent, _) = await identityService.SendOtpAsync(
             new SendOtpRequestDto("+8801711000001", "Login"),
             "203.112.218.10");
 
@@ -259,6 +266,44 @@ public class IdentityPhase3UnitTests
     }
 
     [Fact]
+    public async Task EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset()
+    {
+        var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+
+        // 1. Register user with email only -> triggers EmailVerify OTP channel
+        var (regResp, emailOtp) = await identityService.RegisterAsync(
+            new RegisterRequestDto("emailonly@mechware.com.bd", null, "InitialPass#2026!", "Email Only Buyer"),
+            "203.112.218.10");
+
+        regResp.VerificationChannel.Should().Be("email_otp");
+
+        AuthTokenResponseDto initialSession = identityService.VerifyOtp(
+            new VerifyOtpRequestDto("emailonly@mechware.com.bd", emailOtp, "EmailVerify", regResp.ReferenceId),
+            "203.112.218.10",
+            "Mozilla/5.0");
+
+        initialSession.AccessToken.Should().NotBeNullOrWhiteSpace();
+        string oldRefreshToken = initialSession.RefreshTokenCookieValue!;
+
+        // 2. Initiate & complete password reset -> must revoke all existing refresh tokens
+        var (resetRefId, resetOtp) = identityService.InitiatePasswordReset("emailonly@mechware.com.bd", "203.112.218.10");
+        identityService.CompletePasswordReset(
+            new ResetPasswordRequestDto("emailonly@mechware.com.bd", resetRefId, resetOtp, "UpdatedPass#2026!"),
+            "203.112.218.10");
+
+        Action useOldRefreshAct = () => identityService.RotateRefreshToken(oldRefreshToken, "203.112.218.10", "Mozilla/5.0");
+        useOldRefreshAct.Should().Throw<UnauthorizedAccessException>();
+
+        // 3. Login with new password succeeds
+        var newSession = identityService.Login(
+            new LoginRequestDto("emailonly@mechware.com.bd", "UpdatedPass#2026!", null),
+            "203.112.218.10",
+            "Mozilla/5.0");
+        newSession.AccessToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
     public void BangladeshAddressBook_ShouldRejectCrossDivisionDistrictUpazilaMismatch()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
@@ -276,14 +321,15 @@ public class IdentityPhase3UnitTests
                 "Plot 1",
                 null,
                 "Halishahar",
-                "Chattogram",
                 "Dhaka",
+                "Chattogram",
                 "Chattogram EPZ (Halishahar)",
                 "4223",
                 false,
                 false,
                 null,
-                null));
+                null),
+            "203.112.218.10");
 
         mismatchDistrictAct.Should().Throw<ValidationException>()
             .WithMessage("*does not belong to division*");

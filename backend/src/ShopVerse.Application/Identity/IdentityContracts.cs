@@ -14,6 +14,11 @@ public interface ISellerOwnedResource
 
 public sealed record SellerOwnedResource(Guid ResourceId, Guid SellerId, string ResourceType) : ISellerOwnedResource;
 
+public sealed record UpdateSellerResourceRequestDto(
+    string Sku,
+    decimal UnitPriceBdt,
+    int StockQuantity);
+
 public sealed record RegisterRequestDto(
     string Email,
     string? Phone,
@@ -36,7 +41,8 @@ public sealed record SendOtpResponseDto(
     string Recipient,
     string Type,
     string ReferenceId,
-    int ExpiresInSeconds);
+    int ExpiresInSeconds,
+    int MaxAttempts = 3);
 
 public sealed record VerifyOtpRequestDto(
     string Recipient,
@@ -221,50 +227,53 @@ public interface IIdentityService
 {
     Task<(RegisterResponseDto Response, string RawOtpForDev)> RegisterAsync(
         RegisterRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         CancellationToken cancellationToken = default);
 
     Task<(SendOtpResponseDto Response, string RawOtpForDev)> SendOtpAsync(
         SendOtpRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         CancellationToken cancellationToken = default);
 
     AuthTokenResponseDto VerifyOtp(
         VerifyOtpRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null);
 
     AuthTokenResponseDto Login(
         LoginRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null);
 
     AuthTokenResponseDto GoogleLogin(
         GoogleLoginRequestDto request,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null);
 
     AuthTokenResponseDto RotateRefreshToken(
         string rawRefreshToken,
-        string? clientIp,
-        string? userAgent,
+        string? clientIp = null,
+        string? userAgent = null,
         DateTime? utcNowOverride = null);
 
-    bool RevokeRefreshTokenByCookie(string? rawRefreshToken, string? clientIp);
+    bool RevokeRefreshTokenByCookie(
+        string? rawRefreshToken,
+        string? clientIp = null,
+        DateTime? utcNowOverride = null);
 
-    (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp);
+    (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp = null);
 
-    void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp);
+    void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp = null);
 
-    TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp);
+    TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp = null);
 
     void VerifyAndEnableTwoFactor(
         Guid userId,
         string code,
-        string? clientIp,
+        string? clientIp = null,
         DateTimeOffset? timestampOverride = null);
 
     IReadOnlyList<ActiveSessionDto> GetActiveSessions(Guid userId, string? currentRawRefreshToken = null);
@@ -272,24 +281,26 @@ public interface IIdentityService
     int RevokeSessions(
         Guid userId,
         RevokeSessionsRequestDto request,
-        string? clientIp,
+        string? clientIp = null,
         string? currentRawRefreshToken = null);
 
     IReadOnlyList<AddressDto> GetAddresses(Guid userId);
 
-    AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp);
+    AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp = null);
 
-    AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp);
+    AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null);
 
-    void DeleteAddress(Guid userId, Guid addressId, string? clientIp);
+    void DeleteAddress(Guid userId, Guid addressId, string? clientIp = null);
 
     IReadOnlyList<BdLocationDto> GetBdLocations(string? level = null, Guid? parentId = null);
 
-    GdprExportBundleDto ExportUserData(Guid userId, string? clientIp);
+    GdprExportBundleDto ExportUserData(Guid userId, string? clientIp = null);
 
-    void AnonymizeAndEraseUser(Guid userId, string? clientIp);
+    void AnonymizeAndEraseUser(Guid userId, string? clientIp = null);
 
     AuthenticatedUserDto GetUserProfile(Guid userId);
+
+    IReadOnlyList<User> GetUsersForAudit();
 
     IReadOnlyList<AuditLog> GetAuditLogs();
 }

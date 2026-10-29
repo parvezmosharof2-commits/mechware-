@@ -67,9 +67,10 @@ public sealed class ShopVerseDbContext : DbContext
         builder.Property(u => u.UpdatedAtUtc).HasColumnName("updated_at");
         builder.Property(u => u.DeletedAtUtc).HasColumnName("deleted_at");
 
-        builder.HasIndex(u => u.Email).IsUnique().HasFilter("deleted_at IS NULL");
-        builder.HasIndex(u => u.Phone).IsUnique().HasFilter("phone IS NOT NULL AND deleted_at IS NULL");
-        builder.HasIndex(u => u.GoogleSubjectId).IsUnique().HasFilter("google_subject_id IS NOT NULL");
+        builder.HasIndex(u => u.Email).IsUnique().HasDatabaseName("ux_users_email").HasFilter("deleted_at IS NULL");
+        builder.HasIndex(u => u.Phone).IsUnique().HasDatabaseName("ux_users_phone").HasFilter("phone IS NOT NULL AND deleted_at IS NULL");
+        builder.HasIndex(u => u.GoogleSubjectId).IsUnique().HasDatabaseName("ux_users_google_sub").HasFilter("google_subject_id IS NOT NULL AND deleted_at IS NULL");
+        builder.HasIndex(u => u.Status).HasDatabaseName("ix_users_status");
 
         builder.Ignore(u => u.DomainEvents);
     }
@@ -178,7 +179,8 @@ public sealed class ShopVerseDbContext : DbContext
         builder.Property(o => o.ExpiresAtUtc).HasColumnName("expires_at");
         builder.Property(o => o.CreatedAtUtc).HasColumnName("created_at");
 
-        builder.HasIndex(o => new { o.Recipient, o.Type, o.ReferenceId });
+        builder.HasIndex(o => new { o.Recipient, o.Type, o.ReferenceId }).HasDatabaseName("ix_otp_codes_recipient_type");
+        builder.HasIndex(o => o.ExpiresAtUtc).HasDatabaseName("ix_otp_codes_expires_at");
     }
 
     private static void ConfigureAuditLog(EntityTypeBuilder<AuditLog> builder)

@@ -211,6 +211,91 @@ public partial class Phase3IdentityAndAccess : Migration
             {
                 table.PrimaryKey("pk_bd_locations", x => x.id);
             });
+
+        // Phase 3 Indexes (DATA_MODEL.md §2.1 & ShopVerseDbContext)
+        migrationBuilder.CreateIndex(
+            name: "ux_users_email",
+            table: "users",
+            column: "email",
+            unique: true,
+            filter: "deleted_at IS NULL");
+
+        migrationBuilder.CreateIndex(
+            name: "ux_users_phone",
+            table: "users",
+            column: "phone",
+            unique: true,
+            filter: "phone IS NOT NULL AND deleted_at IS NULL");
+
+        migrationBuilder.CreateIndex(
+            name: "ux_users_google_sub",
+            table: "users",
+            column: "google_subject_id",
+            unique: true,
+            filter: "google_subject_id IS NOT NULL AND deleted_at IS NULL");
+
+        migrationBuilder.CreateIndex(
+            name: "ix_users_status",
+            table: "users",
+            column: "status");
+
+        migrationBuilder.CreateIndex(
+            name: "ix_addresses_user_id",
+            table: "addresses",
+            column: "user_id");
+
+        migrationBuilder.CreateIndex(
+            name: "ux_roles_name",
+            table: "roles",
+            column: "name",
+            unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "ux_permissions_code",
+            table: "permissions",
+            column: "code",
+            unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "ux_refresh_tokens_hash",
+            table: "refresh_tokens",
+            column: "token_hash",
+            unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "ix_refresh_tokens_family_id",
+            table: "refresh_tokens",
+            column: "family_id");
+
+        migrationBuilder.CreateIndex(
+            name: "ix_refresh_tokens_user_id",
+            table: "refresh_tokens",
+            column: "user_id");
+
+        migrationBuilder.CreateIndex(
+            name: "ix_otp_codes_recipient_type",
+            table: "otp_codes",
+            columns: new[] { "recipient", "type", "reference_id" });
+
+        migrationBuilder.CreateIndex(
+            name: "ix_otp_codes_expires_at",
+            table: "otp_codes",
+            column: "expires_at");
+
+        migrationBuilder.CreateIndex(
+            name: "ix_audit_logs_entity",
+            table: "audit_logs",
+            columns: new[] { "entity_name", "entity_id" });
+
+        migrationBuilder.CreateIndex(
+            name: "ix_audit_logs_actor_created",
+            table: "audit_logs",
+            columns: new[] { "actor_id", "created_at" });
+
+        migrationBuilder.CreateIndex(
+            name: "ix_bd_locations_level_parent",
+            table: "bd_locations",
+            columns: new[] { "level", "parent_id" });
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
