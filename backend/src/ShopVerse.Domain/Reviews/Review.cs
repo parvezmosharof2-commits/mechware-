@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
 
@@ -62,7 +63,7 @@ public sealed class ReviewMedia : Entity<Guid>
     internal ReviewMedia(Guid id, Guid reviewId, string mediaUrl) : base(id)
     {
         ReviewId = reviewId;
-        MediaUrl = mediaUrl;
+        MediaUrl = SafeUrl.Require(mediaUrl, "mediaUrl");
     }
 }
 

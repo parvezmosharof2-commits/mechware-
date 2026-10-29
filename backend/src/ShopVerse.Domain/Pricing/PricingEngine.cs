@@ -82,6 +82,7 @@ public static class PricingEngine
     public static bool IsSaleActive(PricingInput input, DateTime asOfUtc) =>
         input.SalePrice is { } sale
         && sale.IsPositive
+        && sale < input.Price      // a sale never raises the price (e.g. regular price lowered after scheduling)
         && input.SaleStartsAtUtc is { } start
         && input.SaleEndsAtUtc is { } end
         && asOfUtc >= start

@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
 
@@ -22,7 +23,7 @@ public sealed class ProductMedia : Entity<Guid>
     internal ProductMedia(Guid id, Guid productId, Guid? variantId, string url, string altText, MediaType type,
         int position, int width, int height, string? blurDataUrl) : base(id)
     {
-        if (string.IsNullOrWhiteSpace(url)) throw new ValidationException("url", "Media URL is required.");
+        SafeUrl.Require(url, "url");
         if (string.IsNullOrWhiteSpace(altText)) throw new ValidationException("altText", "Meaningful alt text is required.");
         if (width <= 0 || height <= 0) throw new ValidationException("dimensions", "Media width/height are required (CLS).");
 
@@ -34,6 +35,6 @@ public sealed class ProductMedia : Entity<Guid>
         Position = position;
         Width = width;
         Height = height;
-        BlurDataUrl = blurDataUrl;
+        BlurDataUrl = SafeUrl.RequireBlurPlaceholder(blurDataUrl, "blurDataUrl");
     }
 }

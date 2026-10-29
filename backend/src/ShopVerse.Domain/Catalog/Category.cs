@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
 
@@ -68,7 +69,7 @@ public sealed class Category : AggregateRoot<Guid>
             MaterializedPath = parent is null ? $"root.{validSlug}" : $"{parent.MaterializedPath}.{validSlug}",
             Depth = parent is null ? 0 : parent.Depth + 1,
             SortOrder = sortOrder,
-            ImageUrl = imageUrl,
+            ImageUrl = SafeUrl.RequireOptional(imageUrl, "imageUrl"),
             VatRate = vatRate,
             CommissionRate = commissionRate,
             AttributeSchemaJson = string.IsNullOrWhiteSpace(attributeSchemaJson) ? "[]" : attributeSchemaJson
@@ -118,7 +119,7 @@ public sealed class Category : AggregateRoot<Guid>
 
         NameEn = nameEn.Trim();
         NameBn = nameBn.Trim();
-        ImageUrl = imageUrl;
+        ImageUrl = SafeUrl.RequireOptional(imageUrl, "imageUrl");
         SeoTitle = seoTitle;
         SeoDescription = seoDescription;
         VatRate = vatRate;

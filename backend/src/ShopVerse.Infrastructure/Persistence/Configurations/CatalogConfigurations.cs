@@ -37,6 +37,7 @@ internal sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         });
         b.MapAudit();
         b.IgnoreEvents();
+        b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
         b.Property(c => c.ParentId).HasColumnName("parent_id");
         b.Property(c => c.NameEn).HasColumnName("name_en").HasMaxLength(150).IsRequired();
         b.Property(c => c.NameBn).HasColumnName("name_bn").HasMaxLength(150).IsRequired();
@@ -106,6 +107,7 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.ToTable("products");
         b.MapAudit();
         b.IgnoreEvents();
+        b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
         b.Property(p => p.SellerId).HasColumnName("seller_id");
         b.Property(p => p.CategoryId).HasColumnName("category_id");
         b.Property(p => p.BrandId).HasColumnName("brand_id");
@@ -164,6 +166,7 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
             t.HasCheckConstraint("ck_variants_sale_price", "sale_price_minor IS NULL OR sale_price_minor > 0");
         });
         b.MapAudit();
+        b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
         b.Property(v => v.ProductId).HasColumnName("product_id");
         b.Property(v => v.Sku).HasColumnName("sku").HasMaxLength(100).IsRequired();
         b.Property(v => v.Barcode).HasColumnName("barcode").HasMaxLength(100);

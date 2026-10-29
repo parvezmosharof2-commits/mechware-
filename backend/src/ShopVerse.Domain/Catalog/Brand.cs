@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
 
@@ -17,7 +18,7 @@ public sealed class Brand : Entity<Guid>
         if (string.IsNullOrWhiteSpace(name)) throw new ValidationException("name", "Brand name is required.");
         Name = name.Trim();
         Slug = Catalog.Slug.Require(slug);
-        LogoUrl = logoUrl;
+        LogoUrl = SafeUrl.RequireOptional(logoUrl, "logoUrl");
         IsVerified = isVerified;
     }
 }

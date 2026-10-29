@@ -172,6 +172,7 @@
 - [x] Deterministic seed (`dotnet run --project backend/src/ShopVerse.Worker -- seed-catalog`, ~5 s): 12 roots / 120 categories / 72 leaves, 40 brands, 25 sellers, 572 industrial products (≈840 variants), 3 240 reviews (446 with photos), 242 questions, report in `docs/PHASE4_SEED_REPORT.md`.
 - [x] Concurrency test: 50 parallel reservations for 10 units → exactly 10 succeed (PostgreSQL-only and with RedLock).
 - [x] Unit tests: pricing, lifecycle, variant generation, slug-history redirects, inventory invariants, seed-plan integrity.
+- [x] Phase 4 audit (`docs/PHASE4_AUDIT.md`): 10 findings fixed with regression tests, 6 documented as accepted/open.
 - [ ] Known gaps / follow-ups: product images are generated SVG illustrations (no licensed photography reachable from the build environment); CAD/datasheet files are not seeded; `checkout_sessions` is deferred to Phase 8 (reservations use `reference_id`); manufacturer part numbers and specs must be verified against datasheets before real listings.
 
 ---

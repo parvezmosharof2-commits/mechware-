@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Enums;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
@@ -72,7 +73,7 @@ public sealed class Product : AggregateRoot<Guid>
         Slug = Catalog.Slug.Require(slug);
         ShortDescriptionEn = shortDescriptionEn;
         ShortDescriptionBn = shortDescriptionBn;
-        DescriptionHtml = descriptionHtml;
+        DescriptionHtml = RichTextSanitizer.Sanitize(descriptionHtml);
     }
 
     #region Content
@@ -82,8 +83,18 @@ public sealed class Product : AggregateRoot<Guid>
         EnsureEditable();
         HighlightsJson = string.IsNullOrWhiteSpace(highlightsJson) ? "[]" : highlightsJson;
         SpecsJson = string.IsNullOrWhiteSpace(specsJson) ? "{}" : specsJson;
-        DatasheetUrl = datasheetUrl;
-        CadModelUrl = cadModelUrl;
+        DatasheetUrl = SafeUrl.RequireOptional(datasheetUrl, "datasheetUrl");
+        CadModelUrl = SafeUrl.RequireOptional(cadModelUrl, "cadModelUrl");
+        MarkUpdated();
+    }
+
+    /// <summary>Replaces the rich-text description; HTML is sanitized against an allow-list.</summary>
+    public void SetDescription(string shortEn, string shortBn, string descriptionHtml)
+    {
+        EnsureEditable();
+        ShortDescriptionEn = shortEn;
+        ShortDescriptionBn = shortBn;
+        DescriptionHtml = RichTextSanitizer.Sanitize(descriptionHtml);
         MarkUpdated();
     }
 

@@ -71,6 +71,8 @@ public sealed class ProductVariant : Entity<Guid>
     {
         if (!price.IsPositive) throw new ValidationException("price", "Price must be greater than zero.");
         EnsureSameCurrency(price, compareAtPrice);
+        if (SalePriceMinor is { } sale && sale >= price.ToMinorUnits())
+            throw new ValidationException("price", "Clear or lower the scheduled sale price before raising the regular price to or above it.");
         PriceMinor = price.ToMinorUnits();
         CompareAtPriceMinor = compareAtPrice?.ToMinorUnits();
         UpdatedAtUtc = DateTime.UtcNow;
@@ -81,6 +83,8 @@ public sealed class ProductVariant : Entity<Guid>
     {
         if (!salePrice.IsPositive) throw new ValidationException("salePrice", "Sale price must be greater than zero.");
         if (salePrice >= Price) throw new ValidationException("salePrice", "Sale price must be below the regular price.");
+        if (startsAtUtc.Kind != DateTimeKind.Utc || endsAtUtc.Kind != DateTimeKind.Utc)
+            throw new ValidationException("saleWindow", "Sale window timestamps must be UTC.");
         if (endsAtUtc <= startsAtUtc) throw new ValidationException("saleEndsAt", "Sale must end after it starts.");
         EnsureSameCurrency(Price, salePrice);
 

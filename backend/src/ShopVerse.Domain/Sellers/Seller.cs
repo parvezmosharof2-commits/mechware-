@@ -1,3 +1,4 @@
+using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.Primitives;
 
@@ -37,8 +38,8 @@ public sealed class Seller : Entity<Guid>
         UserId = userId;
         StoreName = storeName.Trim();
         Slug = ShopVerse.Domain.Catalog.Slug.Require(slug);
-        LogoUrl = logoUrl;
-        BannerUrl = bannerUrl;
+        LogoUrl = SafeUrl.RequireOptional(logoUrl, "logoUrl");
+        BannerUrl = SafeUrl.RequireOptional(bannerUrl, "bannerUrl");
         Description = description;
         RatingAvg = ratingAvg;
         RatingCount = ratingCount;

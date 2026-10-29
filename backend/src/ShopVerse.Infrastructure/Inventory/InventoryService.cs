@@ -4,7 +4,9 @@ using Npgsql;
 using ShopVerse.Application.Catalog;
 using ShopVerse.Application.Common;
 using ShopVerse.Application.Inventory;
+using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Common.Exceptions;
+using ShopVerse.Domain.Pricing;
 using ShopVerse.Domain.Inventory;
 using ShopVerse.Infrastructure.Persistence;
 
@@ -38,14 +40,19 @@ public sealed class InventoryService : IInventoryService
 
     public async Task<ReserveStockResult> ReserveAsync(ReserveStockRequest request, CancellationToken ct = default)
     {
+        if (request.ReferenceId == Guid.Empty) throw new ValidationException("referenceId", "A reference id is required.");
         if (request.Lines.Count == 0) throw new ValidationException("lines", "At least one line is required.");
-        if (request.Lines.Any(l => l.Quantity <= 0)) throw new ValidationException("quantity", "Quantity must be positive.");
+        if (request.Lines.Count > ReserveStockRequest.MaxLines) throw new ValidationException("lines", $"At most {ReserveStockRequest.MaxLines} lines per reservation.");
+        if (request.Lines.Any(l => l.Quantity <= 0 || l.Quantity > ReserveStockRequest.MaxQuantityPerLine))
+            throw new ValidationException("quantity", $"Quantity must be between 1 and {ReserveStockRequest.MaxQuantityPerLine}.");
 
         var lines = request.Lines
             .GroupBy(l => l.VariantId)
-            .Select(g => new ReservationLine(g.Key, g.Sum(x => x.Quantity), g.First().LockedUnitPriceMinor))
+            .Select(g => new ReservationLine(g.Key, (int)Math.Min(g.Sum(x => (long)x.Quantity), ReserveStockRequest.MaxQuantityPerLine + 1L)))
             .OrderBy(l => l.VariantId)
             .ToList();
+        if (lines.Any(l => l.Quantity > ReserveStockRequest.MaxQuantityPerLine))
+            throw new ValidationException("quantity", $"Quantity must be between 1 and {ReserveStockRequest.MaxQuantityPerLine}.");
 
         var held = new List<IAsyncDisposable>();
         try
@@ -72,20 +79,44 @@ public sealed class InventoryService : IInventoryService
     {
         var now = _clock.GetUtcNow().UtcDateTime;
         var ttl = request.Ttl ?? StockReservation.DefaultTtl;
+        if (ttl <= TimeSpan.Zero || ttl > ReserveStockRequest.MaxTtl)
+            throw new ValidationException("ttl", "Reservation TTL must be between 0 and 30 minutes.");
         var variantIds = lines.Select(l => l.VariantId).ToArray();
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         var items = await LockInventoryAsync(variantIds, ct);
 
-        // Idempotent retry: a reference that already holds stock returns the existing holds.
+        // Idempotent retry: a reference that already holds stock returns the existing holds, but only if the
+        // retry asks for exactly the same lines — otherwise it is a client bug or a tampering attempt.
         var existing = await _db.StockReservations
             .Where(r => r.ReferenceId == request.ReferenceId && r.Status == ReservationStatus.Active)
             .ToListAsync(ct);
         if (existing.Count > 0)
         {
             await tx.RollbackAsync(ct);
+            var held = existing.GroupBy(r => r.VariantId).ToDictionary(g => g.Key, g => g.Sum(r => r.Quantity));
+            if (held.Count != lines.Count || lines.Any(l => !held.TryGetValue(l.VariantId, out var q) || q != l.Quantity))
+                throw new ConflictException("RESERVATION_CONFLICT", "This reference already holds a different reservation.");
             return ReserveStockResult.Ok(existing.Select(r => r.Id).ToList(), existing.Min(r => r.ExpiresAtUtc));
         }
+
+        // Only active variants of active, non-deleted products may be reserved; the price comes from the catalogue.
+        var catalogue = await (
+            from v in _db.ProductVariants.AsNoTracking()
+            join p in _db.Products.AsNoTracking() on v.ProductId equals p.Id
+            join c in _db.Categories.AsNoTracking() on p.CategoryId equals c.Id
+            where variantIds.Contains(v.Id) && v.Status == VariantStatus.Active && p.Status == ProductStatus.Active && p.DeletedAtUtc == null
+            select new { Variant = v, c.VatRate }).ToListAsync(ct);
+        var unavailable = variantIds.Where(id => catalogue.All(x => x.Variant.Id != id)).ToList();
+        if (unavailable.Count > 0)
+        {
+            await tx.RollbackAsync(ct);
+            return ReserveStockResult.Unavailable(unavailable);
+        }
+
+        var unitPrices = catalogue.ToDictionary(
+            x => x.Variant.Id,
+            x => PricingEngine.Quote(PricingInput.From(x.Variant, x.VatRate), now, TaxMode.Inclusive).Gross.ToMinorUnits());
 
         var shortfalls = new List<InsufficientStockLine>();
         var plan = new List<(InventoryItem Item, ReservationLine Line)>();
@@ -121,7 +152,7 @@ public sealed class InventoryService : IInventoryService
             if (!item.TryReserve(line.Quantity)) throw new InvalidOperationException("Row-locked reservation failed unexpectedly.");
             var reservation = new StockReservation(
                 Guid.NewGuid(), line.VariantId, item.WarehouseId, request.ReferenceId, line.Quantity,
-                line.LockedUnitPriceMinor, now, ttl);
+                unitPrices[line.VariantId], now, ttl);
             _db.StockReservations.Add(reservation);
             ids.Add(reservation.Id);
         }

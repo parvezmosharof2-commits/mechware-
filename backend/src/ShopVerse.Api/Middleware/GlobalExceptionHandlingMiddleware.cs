@@ -50,6 +50,18 @@ public sealed class GlobalExceptionHandlingMiddleware
                 valEx.Message,
                 valEx.Errors.Select(e => (object)new { field = e.Field, message = e.Message }).ToArray()
             ),
+            Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException => (
+                HttpStatusCode.Conflict,
+                "CONCURRENT_MODIFICATION",
+                "The record was modified by someone else. Reload and retry.",
+                Array.Empty<object>()
+            ),
+            ConflictException conflictEx => (
+                HttpStatusCode.Conflict,
+                conflictEx.Code,
+                conflictEx.Message,
+                Array.Empty<object>()
+            ),
             DomainException domainEx => (
                 HttpStatusCode.BadRequest,
                 domainEx.Code,

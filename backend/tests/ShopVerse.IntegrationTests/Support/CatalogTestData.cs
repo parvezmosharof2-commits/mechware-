@@ -24,6 +24,9 @@ public static class CatalogTestData
             $"test-product-{suffix}", "short", "সংক্ষিপ্ত", "<p>desc</p>");
         var variant = product.AddVariant(Guid.NewGuid(), $"SKU-{suffix}", null, new Dictionary<string, string> { ["Model"] = "A" },
             Money.FromMinorUnits(priceMinor, Currency.BDT), null, null, 0.5m, true);
+        product.AddMedia(Guid.NewGuid(), null, "/seed-media/test.svg", "Test product front view", 1200, 1200);
+        product.SubmitForReview();
+        product.Approve();
         var warehouse = new Warehouse(Guid.NewGuid(), null, "Hub", $"HUB-{suffix}", "Dhaka", "Dhaka", "Gulshan");
         var item = new InventoryItem(Guid.NewGuid(), variant.Id, warehouse.Id, onHand, lowStockThreshold);
 

@@ -22,7 +22,7 @@ public class ReservationExpiryTests : IClassFixture<PostgresDatabaseFixture>
         var svc = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
         var reserveAt = DateTime.UtcNow;
 
-        (await svc.ReserveAsync(new ReserveStockRequest(Guid.NewGuid(), [new ReservationLine(seeded.VariantId, 6, 100_000)]))).Succeeded.Should().BeTrue();
+        (await svc.ReserveAsync(new ReserveStockRequest(Guid.NewGuid(), [new ReservationLine(seeded.VariantId, 6)]))).Succeeded.Should().BeTrue();
 
         // Within the TTL nothing is released.
         await using (var early = _fixture.CreateContext())

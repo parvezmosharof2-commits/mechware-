@@ -28,7 +28,7 @@ public class InventoryConcurrencyTests : IClassFixture<PostgresDatabaseFixture>
             await using var db = _fixture.CreateContext();
             var svc = factory(db);
             gate.Wait();
-            return await svc.ReserveAsync(new ReserveStockRequest(Guid.NewGuid(), [new ReservationLine(variantId, 1, 150_000)]));
+            return await svc.ReserveAsync(new ReserveStockRequest(Guid.NewGuid(), [new ReservationLine(variantId, 1)]));
         })).ToList();
 
         gate.Set();
@@ -85,8 +85,8 @@ public class InventoryConcurrencyTests : IClassFixture<PostgresDatabaseFixture>
         var svc = NewService(db, new NoopLockProvider());
         var result = await svc.ReserveAsync(new ReserveStockRequest(Guid.NewGuid(),
         [
-            new ReservationLine(plenty.VariantId, 5, 100_000),
-            new ReservationLine(scarce.VariantId, 2, 100_000)
+            new ReservationLine(plenty.VariantId, 5),
+            new ReservationLine(scarce.VariantId, 2)
         ]));
 
         result.Succeeded.Should().BeFalse();
@@ -102,7 +102,7 @@ public class InventoryConcurrencyTests : IClassFixture<PostgresDatabaseFixture>
         await using var db = _fixture.CreateContext();
         var seeded = await CatalogTestData.SeedVariantAsync(db, onHand: 10);
         var reference = Guid.NewGuid();
-        var request = new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 3, 100_000)]);
+        var request = new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 3)]);
 
         var first = await NewService(db, new NoopLockProvider()).ReserveAsync(request);
         await using var db2 = _fixture.CreateContext();
@@ -124,7 +124,7 @@ public class InventoryConcurrencyTests : IClassFixture<PostgresDatabaseFixture>
         var reference = Guid.NewGuid();
 
         var svc = NewService(db, new NoopLockProvider());
-        (await svc.ReserveAsync(new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 4, 100_000)]))).Succeeded.Should().BeTrue();
+        (await svc.ReserveAsync(new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 4)]))).Succeeded.Should().BeTrue();
         (await svc.CommitAsync(reference)).Should().Be(1);
 
         await using var verify = _fixture.CreateContext();
@@ -145,7 +145,7 @@ public class InventoryConcurrencyTests : IClassFixture<PostgresDatabaseFixture>
         var seeded = await CatalogTestData.SeedVariantAsync(db, onHand: 5);
         var reference = Guid.NewGuid();
         var svc = NewService(db, new NoopLockProvider());
-        await svc.ReserveAsync(new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 5, 100_000)]));
+        await svc.ReserveAsync(new ReserveStockRequest(reference, [new ReservationLine(seeded.VariantId, 5)]));
         (await svc.CancelAsync(reference)).Should().Be(1);
 
         await using var verify = _fixture.CreateContext();
