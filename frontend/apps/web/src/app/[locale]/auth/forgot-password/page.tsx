@@ -1,4 +1,4 @@
-import { AuthFlowSurface } from '../../../components/auth/AuthModal';
+import { AuthFlowSurface } from '../../../../components/auth/AuthModal';
 
 interface ForgotPasswordPageProps {
   params: Promise<{ locale: string }>;

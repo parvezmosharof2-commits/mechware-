@@ -29,7 +29,7 @@ export interface SavedIndustrialAddress {
   isDefaultBilling: boolean;
 }
 
-export const SEEDED_BD_LOCATIONS: BdHierarchyNode[] = [
+const SEEDED_BD_LOCATIONS: BdHierarchyNode[] = [
   { id: 'div-dhaka', parentId: null, level: 'division', nameEn: 'Dhaka', nameBn: 'ঢাকা', shippingZone: 'inside_dhaka', postalCodePrefix: '1000' },
   { id: 'div-ctg', parentId: null, level: 'division', nameEn: 'Chattogram', nameBn: 'চট্টগ্রাম', shippingZone: 'outside_dhaka', postalCodePrefix: '4000' },
   { id: 'div-raj', parentId: null, level: 'division', nameEn: 'Rajshahi', nameBn: 'রাজশাহী', shippingZone: 'outside_dhaka', postalCodePrefix: '6000' },
