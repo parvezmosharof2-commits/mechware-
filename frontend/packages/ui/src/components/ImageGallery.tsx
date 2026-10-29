@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Maximize2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -20,8 +20,26 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className })
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [zoomStyle, setZoomStyle] = useState<React.CSSProperties>({ display: 'none' });
 
-  if (!images || images.length === 0) return null;
-  const currentImage = images[selectedIndex] || images[0];
+  const currentImage = images?.[selectedIndex] || images?.[0];
+
+  useEffect(() => {
+    if (!isLightboxOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsLightboxOpen(false);
+      } else if (e.key === 'ArrowLeft') {
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : (images?.length || 1) - 1));
+      } else if (e.key === 'ArrowRight') {
+        setSelectedIndex((prev) => (prev < (images?.length || 1) - 1 ? prev + 1 : 0));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLightboxOpen, images?.length]);
+
+  if (!images || images.length === 0 || !currentImage) return null;
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
@@ -30,7 +48,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className })
 
     setZoomStyle({
       display: 'block',
-      backgroundImage: `url(${currentImage.src})`,
+      backgroundImage: `url("${encodeURI(currentImage.src)}")`,
       backgroundPosition: `${x}% ${y}%`,
       backgroundSize: '250%',
     });
@@ -110,6 +128,10 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, className })
       {/* Fullscreen Lightbox Modal */}
       {isLightboxOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image Lightbox"
+          tabIndex={-1}
           className="fixed inset-0 z-modal bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in-50 duration-fast"
           onClick={() => setIsLightboxOpen(false)}
         >

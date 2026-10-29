@@ -1,32 +1,30 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
-using ShopVerse.Api.Configuration;
 using StackExchange.Redis;
 
 namespace ShopVerse.Api.Health;
 
 public sealed class RedisHealthCheck : IHealthCheck
 {
-    private readonly RedisOptions _options;
+    private readonly IConnectionMultiplexer _multiplexer;
 
-    public RedisHealthCheck(IOptions<RedisOptions> options)
+    public RedisHealthCheck(IConnectionMultiplexer multiplexer)
     {
-        _options = options.Value;
+        _multiplexer = multiplexer;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
-            var config = ConfigurationOptions.Parse(_options.ConnectionString);
-            config.ConnectTimeout = 2000;
-            config.AbortOnConnectFail = false;
+            if (!_multiplexer.IsConnected)
+            {
+                return HealthCheckResult.Unhealthy("Redis multiplexer is disconnected.");
+            }
 
-            using var redis = await ConnectionMultiplexer.ConnectAsync(config);
-            var db = redis.GetDatabase();
-            var ping = await db.PingAsync();
+            var db = _multiplexer.GetDatabase();
+            var latency = await db.PingAsync().WaitAsync(cancellationToken);
 
-            return HealthCheckResult.Healthy($"Redis ping responded in {ping.TotalMilliseconds:F1}ms.");
+            return HealthCheckResult.Healthy($"Redis ping responded in {latency.TotalMilliseconds:F1}ms.");
         }
         catch (Exception ex)
         {

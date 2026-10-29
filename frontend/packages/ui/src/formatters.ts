@@ -9,11 +9,12 @@ export function formatCurrency(
   const symbol = currency === 'BDT' ? '৳' : '$';
 
   if (currency === 'BDT') {
-    // South Asian Lakh formatting (e.g. 1,25,000)
+    // South Asian Lakh formatting (e.g. 1,25,000 or 1,250.50)
     const isNegative = val < 0;
     const absVal = Math.abs(val);
-    const parts = absVal.toFixed(0).split('.');
-    let integerPart = parts[0];
+    const hasDecimals = Math.round((absVal % 1) * 100) > 0;
+    const [intPart, decPart] = absVal.toFixed(hasDecimals ? 2 : 0).split('.');
+    let integerPart = intPart;
 
     if (integerPart.length > 3) {
       const lastThree = integerPart.substring(integerPart.length - 3);
@@ -23,13 +24,18 @@ export function formatCurrency(
       integerPart = `${groupedRemaining},${lastThree}`;
     }
 
+    let decimalPart = decPart ? `.${decPart}` : '';
+
     if (locale === 'bn') {
       // Bengali numeral conversion
       const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
       integerPart = integerPart.replace(/\d/g, (d) => banglaDigits[parseInt(d, 10)]);
+      if (decimalPart) {
+        decimalPart = decimalPart.replace(/\d/g, (d) => banglaDigits[parseInt(d, 10)]);
+      }
     }
 
-    return `${symbol}${isNegative ? '-' : ''}${integerPart}`;
+    return `${symbol}${isNegative ? '-' : ''}${integerPart}${decimalPart}`;
   }
 
   // Western currency formatting
@@ -46,6 +52,6 @@ export function validateBdPhone(phone: string): boolean {
 }
 
 export function calcDiscountPercent(price: number, compareAt?: number): number {
-  if (!compareAt || compareAt <= price) return 0;
-  return Math.round(((compareAt - price) / compareAt) * 100);
+  if (!compareAt || compareAt <= price || price < 0) return 0;
+  return Math.floor(((compareAt - price) / compareAt) * 100);
 }

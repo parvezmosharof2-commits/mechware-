@@ -517,3 +517,39 @@
 - **Response**: Current quote review status, official engineering estimate, downloadable formal proforma PDF invoice, and advance payment CTA.
 
 ---
+
+### 2.15 Buyer-Seller Direct Messaging, Notifications & Disputes (`/conversations`, `/notifications`, `/disputes`)
+
+#### `GET /conversations`
+- **Auth**: Bearer (`customer` or `seller`) | **Rate Limit**: 30 req/min
+- **Response**: List of active inquiry threads with unread counts, latest message preview, and merchant/buyer details.
+
+#### `POST /conversations`
+- **Auth**: Bearer (`customer`) | **Idempotency**: Mandatory | **Rate Limit**: 10 req/min
+- **Request**: `{ "sellerId": "uuid", "orderId": "uuid" (optional), "subject": "Inquiry on Siemens S7-1500 lead time", "initialMessage": "Do you have 5 units in stock for immediate delivery?" }`
+- **Response**: `201 Created` `{ "conversationId": "uuid", "createdAt": "..." }`
+
+#### `GET /conversations/{id}/messages`
+- **Auth**: Bearer (Thread participant) | **Rate Limit**: 60 req/min
+- **Response**: Chronological messages with sender roles, text, and internal storage attachment links. Automatically marks thread messages as read.
+
+#### `POST /conversations/{id}/messages`
+- **Auth**: Bearer (Thread participant) | **Rate Limit**: 20 req/min
+- **Request**: `{ "content": "Yes, all 5 units are in our Gazipur central warehouse ready for dispatch.", "photoObjectKeys": [] }`
+- **Response**: `201 Created` Serialized message object.
+
+#### `GET /notifications`
+- **Auth**: Bearer | **Rate Limit**: 60 req/min
+- **Query Params**: `unreadOnly=true&limit=20`
+- **Response**: Array of in-app notifications with type, title, body, action URL, and read status.
+
+#### `PATCH /notifications/{id}/read` & `POST /notifications/read-all`
+- **Auth**: Bearer | **Rate Limit**: 60 req/min
+- **Response**: `200 OK` Updated read status.
+
+#### `POST /disputes`
+- **Auth**: Bearer (`customer`) | **Header**: `Idempotency-Key` (Mandatory) | **Rate Limit**: 5 req/min
+- **Request**: `{ "subOrderId": "uuid", "reason": "damaged_in_transit", "description": "Hydraulic coupling arrived fractured.", "photoObjectKeys": ["uploads/rma/photo-01.jpg"] }`
+- **Response**: `201 Created` `{ "disputeTicketNumber": "DSP-261029-X7K", "status": "under_investigation" }`
+
+---

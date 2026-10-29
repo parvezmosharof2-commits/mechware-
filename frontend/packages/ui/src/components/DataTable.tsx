@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
   getSortedRowModel,
+  PaginationState,
   SortingState,
   useReactTable,
 } from '@tanstack/react-table';
@@ -30,22 +31,28 @@ export function DataTable<TData, TValue>({
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [rowSelection, setRowSelection] = useState({});
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize,
+  });
+
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageSize }));
+  }, [pageSize]);
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
     onRowSelectionChange: setRowSelection,
+    onPaginationChange: setPagination,
     state: {
       sorting,
       rowSelection,
-      pagination: {
-        pageIndex: 0,
-        pageSize,
-      },
+      pagination,
     },
   });
 
@@ -54,7 +61,7 @@ export function DataTable<TData, TValue>({
       <div className="rounded-lg border border-surface-border bg-surface overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm border-collapse">
-            <thead className="bg-bg-muted/80 text-text-muted text-xs uppercase tracking-wider border-b border-surface-border">
+            <thead className="sticky top-0 z-10 bg-bg-muted/95 text-text-muted text-xs uppercase tracking-wider border-b border-surface-border backdrop-blur-xs">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {

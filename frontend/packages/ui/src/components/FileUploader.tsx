@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UploadCloud, FileText, CheckCircle2, X, AlertCircle } from 'lucide-react';
 import { cn } from '../utils';
 import { Progress } from './Progress';
@@ -37,6 +37,14 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [files, setFiles] = useState<UploadedFileItem[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const intervalsRef = useRef<ReturnType<typeof setInterval>[]>([]);
+
+  useEffect(() => {
+    return () => {
+      intervalsRef.current.forEach(clearInterval);
+      intervalsRef.current = [];
+    };
+  }, []);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;

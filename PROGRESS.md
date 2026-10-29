@@ -99,6 +99,23 @@
 - [x] Run WCAG 2.2 AA automated contrast audit (22/22 token pairs passed) and unit tests.
 - [x] Automated Axe Core Accessibility tests verifying 0 violations across all components.
 - [x] Visual validation at 360px and 1440px in light and dark themes with headless screenshots captured.
+- [x] **Principal Architecture & Cybersecurity Audit Remediation (Full Sign-off)**:
+  - [x] Fixed Redis socket exhaustion in `RedisHealthCheck` by registering singleton `IConnectionMultiplexer`.
+  - [x] Sanitized `/health/ready` output to prevent internal exception disclosure in non-development environments.
+  - [x] Hardened `SecurityHeadersMiddleware` with strict `Content-Security-Policy` and `X-XSS-Protection: 0`.
+  - [x] Sanitized `X-Correlation-Id` in `CorrelationIdMiddleware` against regex to eliminate log injection.
+  - [x] Added `UseForwardedHeaders` before `UseRateLimiter` so reverse proxies rate limit per client IP.
+  - [x] Hardened `GlobalExceptionHandlingMiddleware` with response `HasStarted` guard and mapped `ValidationException`.
+  - [x] Optimized `Money.cs` value object with cached `CultureInfo("bn-BD")` and integer power calculation.
+  - [x] Fixed `DataTable.tsx` pagination state and sticky header.
+  - [x] Fixed `Price.tsx` and `formatters.ts` discount rounding (`Math.floor`) and fractional poisha BDT formatting.
+  - [x] Fixed `ImageGallery.tsx` CSS injection and added accessible lightbox keyboard trap (`Escape`, `ArrowLeft`, `ArrowRight`).
+  - [x] Fixed `CommandPalette.tsx` grouped item index mismatch and added `role="dialog"`.
+  - [x] Fixed `CountdownTimer.tsx` Next.js 15 SSR hydration mismatch with `mounted` guard.
+  - [x] Fixed `PhoneInput.tsx` paste bug with `+88` / `88` country prefix stripping.
+  - [x] Fixed `FileUploader.tsx` unmount timer cleanup and aligned `ProductCardSkeleton.tsx` zero-CLS heights.
+  - [x] Replaced browser blocking `alert()` with toast in design system showcase.
+  - [x] Added missing `flash_sales`, `flash_sale_items`, `conversations`, `messages` to `docs/DATA_MODEL.md` and `docs/API_CONTRACT.md`.
 
 ---
 

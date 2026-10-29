@@ -28,13 +28,25 @@ public readonly record struct Money : IComparable<Money>, IComparable
     /// </summary>
     public static Money Zero(Currency currency = Currency.BDT) => new(0m, currency);
 
+    private static readonly CultureInfo BdCulture = CultureInfo.ReadOnly(new CultureInfo("bn-BD"));
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static decimal GetMultiplier(int decimals) => decimals switch
+    {
+        0 => 1m,
+        2 => 100m,
+        3 => 1000m,
+        4 => 10000m,
+        _ => (decimal)Math.Pow(10, decimals)
+    };
+
     /// <summary>
     /// Factory from minor units (e.g. 125050 Poisha -> 1250.50 BDT).
     /// </summary>
     public static Money FromMinorUnits(long minorUnits, Currency currency = Currency.BDT)
     {
         int decimals = currency.DecimalPlaces();
-        decimal divisor = (decimal)Math.Pow(10, decimals);
+        decimal divisor = GetMultiplier(decimals);
         decimal amount = (decimal)minorUnits / divisor;
         return new Money(amount, currency);
     }
@@ -45,7 +57,7 @@ public readonly record struct Money : IComparable<Money>, IComparable
     public long ToMinorUnits()
     {
         int decimals = Currency.DecimalPlaces();
-        decimal multiplier = (decimal)Math.Pow(10, decimals);
+        decimal multiplier = GetMultiplier(decimals);
         return (long)decimal.Round(Amount * multiplier, 0, MidpointRounding.ToEven);
     }
 
@@ -185,7 +197,7 @@ public readonly record struct Money : IComparable<Money>, IComparable
     public override string ToString()
     {
         var culture = Currency == Currency.BDT
-            ? new CultureInfo("bn-BD")
+            ? BdCulture
             : CultureInfo.InvariantCulture;
 
         return $"{Currency.Symbol()}{Amount.ToString("N2", culture)}";

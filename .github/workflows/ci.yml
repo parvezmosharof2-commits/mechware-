@@ -23,6 +23,9 @@ jobs:
       - name: Restore Backend Dependencies
         run: dotnet restore backend/ShopVerse.sln
 
+      - name: Verify Code Formatting
+        run: dotnet format backend/ShopVerse.sln --verify-no-changes
+
       - name: Build Backend Solution
         run: dotnet build backend/ShopVerse.sln --no-restore --configuration Release
 
@@ -51,9 +54,17 @@ jobs:
         working-directory: frontend
         run: pnpm install --frozen-lockfile
 
+      - name: Verify Semantic Design Token Enforcement
+        working-directory: frontend
+        run: pnpm lint:tokens
+
       - name: Typecheck Frontend Monorepo
         working-directory: frontend
         run: pnpm typecheck
+
+      - name: Run Frontend & Axe Accessibility Tests
+        working-directory: frontend
+        run: pnpm --filter @mechware/ui test
 
       - name: Build Frontend Apps
         working-directory: frontend

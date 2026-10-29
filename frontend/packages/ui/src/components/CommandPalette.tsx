@@ -67,23 +67,27 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   );
 
   // Group filtered items
-  const grouped = filteredItems.reduce<Record<string, CommandItem[]>>((acc, item) => {
-    if (!acc[item.group]) acc[item.group] = [];
-    acc[item.group].push(item);
-    return acc;
-  }, {});
+  const grouped = React.useMemo(() => {
+    return filteredItems.reduce<Record<string, CommandItem[]>>((acc, item) => {
+      if (!acc[item.group]) acc[item.group] = [];
+      acc[item.group].push(item);
+      return acc;
+    }, {});
+  }, [filteredItems]);
+
+  const orderedItems = React.useMemo(() => Object.values(grouped).flat(), [grouped]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev < filteredItems.length - 1 ? prev + 1 : 0));
+      setSelectedIndex((prev) => (prev < orderedItems.length - 1 ? prev + 1 : 0));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : filteredItems.length - 1));
+      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : orderedItems.length - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (filteredItems[selectedIndex]) {
-        filteredItems[selectedIndex].onSelect();
+      if (orderedItems[selectedIndex]) {
+        orderedItems[selectedIndex].onSelect();
         setOpen(false);
       }
     }
@@ -95,6 +99,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command Palette"
       className="fixed inset-0 z-modal bg-black/80 backdrop-blur-sm flex items-start justify-center pt-20 px-4 animate-in fade-in-50 duration-fast select-none font-sans"
       onClick={() => setOpen(false)}
     >

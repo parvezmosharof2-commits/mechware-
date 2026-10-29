@@ -35,13 +35,13 @@ All tokens live in `packages/ui/tokens` and are exposed as CSS variables + a Tai
 | `--text-subtle` | #64748B | #64748B | SKU numbers, timestamps, pinouts |
 | `--primary` | #0A1128 | #F8FAFC | Primary buttons, headers, high-contrast actions |
 | `--primary-fg` | #FFFFFF | #060B18 | Text on primary |
-| `--accent` (Mech Teal) | #0093A2 | #00E5FF | **Primary CTA Glow, Add to Cart, Request Quote, Live Circuit Traces** |
+| `--accent` (Mech Teal) | #00707D | #00E5FF | **Primary CTA Glow, Add to Cart, Request Quote, Live Circuit Traces** |
 | `--accent-fg` | #FFFFFF | #060B18 | Text on accent |
-| `--accent-hover` | #007A87 | #38EFFF | Hover state for CTAs |
+| `--accent-hover` | #005C66 | #38EFFF | Hover state for CTAs |
 | `--brand-blue` | #0F3E7D | #1A5CB0 | Deep Industrial Navy from the MW Monogram |
 | `--deal` / `--fault` | #DC2626 | #F87171 | System fault, discount badge, critical alarm |
 | `--success` / `--online` | #10B981 | #34D399 | Controller online, in-stock, verified partner |
-| `--warning` / `--pending` | #F59E0B | #FBBF24 | Low stock alert, calibration due |
+| `--warning` / `--pending` | #B45309 | #FBBF24 | Low stock alert, calibration due |
 | `--focus-ring` | #00A8B5 | #00E5FF | 2px electric cyan ring with 2px offset |
 
 Generate full 50–950 scales for primary, accent and neutrals for illustrations and charts.

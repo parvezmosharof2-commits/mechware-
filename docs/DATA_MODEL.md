@@ -381,7 +381,7 @@ High-concurrency stock balances.
 | `updated_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
 
 **Constraints:**
-- `ck_inventory_available`: `CHECK (on_hand >= reserved)` — mathematical guarantee against overselling.
+- `ck_inventory_available`: `CHECK (on_hand >= reserved AND reserved >= 0)` — mathematical guarantee against overselling and negative holds.
 - `ux_inventory_variant_warehouse`: UNIQUE (`variant_id`, `warehouse_id`).
 
 #### `checkout_sessions`
@@ -447,6 +447,13 @@ Persists frozen pricing, addresses, coupons, and freight details during the 15-m
 - `promotions`: `id (uuid PK)`, `title (varchar(200))`, `promo_type (varchar(50))` (`'percentage_discount'`, `'fixed_discount'`, `'free_shipping'`, `'tiered_discount'`), `discount_value (numeric(10,2))`, `max_discount_minor (bigint nullable)`, `min_spend_minor (bigint default 0)`, `priority (int default 0)`, `is_stackable (boolean default false)`, `funded_by (varchar(20) default 'platform')` (`'platform'`, `'seller'`), `seller_id (uuid FK nullable)`, `starts_at (timestamptz)`, `ends_at (timestamptz)`, `status (varchar(20) default 'active')`.
 - `coupons`: `id (uuid PK)`, `promotion_id (uuid FK)`, `code (varchar(50) UNIQUE)`, `usage_limit_total (int nullable)`, `usage_limit_per_user (int default 1)`, `usage_count (int default 0)`.
 - `coupon_usages`: `id (uuid PK)`, `coupon_id (uuid FK)`, `user_id (uuid FK nullable)`, `order_id (uuid FK)`, `discount_amount_minor (bigint)`, `created_at`.
+
+#### `flash_sales` and `flash_sale_items`
+Time-bounded high-urgency promotional campaigns.
+- `flash_sales`: `id (uuid PK)`, `title (varchar(150) NOT NULL)`, `slug (varchar(150) UNIQUE NOT NULL)`, `starts_at (timestamptz NOT NULL)`, `ends_at (timestamptz NOT NULL)`, `is_active (boolean default true)`, `banner_url (varchar(500) nullable)`, `created_at (timestamptz default NOW())`.
+- `flash_sale_items`: `id (uuid PK)`, `flash_sale_id (uuid FK -> flash_sales(id) ON DELETE CASCADE)`, `variant_id (uuid FK -> product_variants(id) ON DELETE CASCADE)`, `discount_price_minor (bigint NOT NULL CHECK (discount_price_minor > 0))`, `stock_cap (int NOT NULL CHECK (stock_cap > 0))`, `sold_count (int NOT NULL DEFAULT 0 CHECK (sold_count >= 0))`, `is_active (boolean default true)`.
+  - UNIQUE (`flash_sale_id`, `variant_id`).
+  - `ck_flash_sale_stock`: `CHECK (sold_count <= stock_cap)`.
 
 **Indexes & Concurrency Invariant:**
 - `ix_coupon_usages_coupon_user` (`coupon_id`, `user_id`) — fast user redemption counting.
@@ -696,6 +703,34 @@ Alerts on saved technical search queries.
 | `filters` | `jsonb` | NOT NULL, default `'{}'` | Applied facets |
 | `notify_on_new_match`| `boolean`| NOT NULL, default `true` | Email alert toggle |
 | `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+
+#### `conversations` and `messages` (Buyer-Seller Direct Messaging)
+Internal communication threads between industrial buyers and equipment merchants.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| **`conversations`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Thread ID |
+| `buyer_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE | Initiating buyer |
+| `seller_id` | `uuid` | FK -> `sellers(id)` ON DELETE CASCADE | Target equipment merchant |
+| `order_id` | `uuid` | FK -> `orders(id)` ON DELETE SET NULL, nullable | Associated order context |
+| `subject` | `varchar(200)` | nullable | Topic / RFQ headline |
+| `last_message_at` | `timestamptz` | NOT NULL, default `NOW()` | Activity timestamp |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Thread creation |
+| **`messages`** | | | |
+| `id` | `uuid` | PK, default `gen_random_uuid()` | Message ID |
+| `conversation_id` | `uuid` | FK -> `conversations(id)` ON DELETE CASCADE | Parent thread |
+| `sender_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE | Message author |
+| `sender_role` | `varchar(20)` | NOT NULL | `'buyer'`, `'seller'`, `'admin'` |
+| `content` | `text` | NOT NULL | Message body (HTML-sanitized) |
+| `attachments` | `jsonb` | NOT NULL, default `'[]'` | Storage object keys for schematics/photos |
+| `is_read` | `boolean` | NOT NULL, default `false` | Read status |
+| `created_at` | `timestamptz` | NOT NULL, default `NOW()` | Timestamp |
+
+**Indexes:**
+- `ix_messages_conversation_date` (`conversation_id`, `created_at` ASC).
+- `ix_conversations_buyer_updated` (`buyer_id`, `last_message_at` DESC).
+- `ix_conversations_seller_updated` (`seller_id`, `last_message_at` DESC).
 
 ---
 

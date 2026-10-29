@@ -51,7 +51,10 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
   const showError = touched && rawNumber.length > 0 && !isValid;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
+    let val = e.target.value;
+    if (isBd) {
+      val = val.replace(/\D/g, '').replace(/^88(?=01)/, '').slice(0, 11);
+    }
     setRawNumber(val);
     const valid = isBd ? validateBdPhone(val) : val.replace(/\D/g, '').length >= 7;
     onChange?.(`${selectedCountry.code}${val}`, valid);

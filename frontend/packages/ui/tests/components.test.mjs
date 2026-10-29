@@ -8,6 +8,10 @@ test('Price formatting - South Asian Lakh grouping for BDT', () => {
   const formatted1 = formatCurrency(125000, 'BDT', 'en');
   assert.equal(formatted1, '৳1,25,000');
 
+  // Fractional poisha decimals preserved
+  const formattedPoisha = formatCurrency(1250.5, 'BDT', 'en');
+  assert.equal(formattedPoisha, '৳1,250.50');
+
   // 1,00,00,000 BDT (1 Crore)
   const formattedCrore = formatCurrency(10000000, 'BDT', 'en');
   assert.equal(formattedCrore, '৳1,00,00,000');
@@ -56,9 +60,9 @@ test('Bangladesh Mobile Phone Format Validation (01XXXXXXXXX)', () => {
 });
 
 test('Discount percentage calculation', () => {
-  // 125,000 vs 160,000 -> 22%
-  assert.equal(calcDiscountPercent(125000, 160000), 22);
-  // 3,850 vs 4,500 -> 14%
+  // 125,000 vs 160,000 -> 21.875% -> Math.floor = 21%
+  assert.equal(calcDiscountPercent(125000, 160000), 21);
+  // 3,850 vs 4,500 -> 14.444% -> Math.floor = 14%
   assert.equal(calcDiscountPercent(3850, 4500), 14);
   // No discount
   assert.equal(calcDiscountPercent(100, 100), 0);
@@ -138,8 +142,8 @@ test('Tokens Hierarchy - Motion duration progression', () => {
 test('Price formatting - Edge cases (Zero, Decimals, Negative numbers)', () => {
   // 0 BDT
   assert.equal(formatCurrency(0, 'BDT', 'en'), '৳0');
-  // Decimal rounding in BDT (rounded to integer for BDT commercial display)
-  assert.equal(formatCurrency(125000.75, 'BDT', 'en'), '৳1,25,001');
+  // Decimal preservation in BDT when fractional poisha exists (e.g. ৳1,25,000.75)
+  assert.equal(formatCurrency(125000.75, 'BDT', 'en'), '৳1,25,000.75');
   // Negative amount
   assert.equal(formatCurrency(-5000, 'BDT', 'en'), '৳-5,000');
 });

@@ -917,7 +917,14 @@ function DesignSystemContent() {
                 title: 'High Pressure Alarm Detected',
                 description: 'Hydraulic Sensor #4 reported pressure surge above 250 Bar.',
                 variant: 'fault',
-                action: { label: 'View Telemetry', onClick: () => alert('Opening Telemetry') }
+                action: {
+                  label: 'View Telemetry',
+                  onClick: () => toast({
+                    title: 'Telemetry Panel',
+                    description: 'Opening live sensor diagnostics stream...',
+                    variant: 'info'
+                  })
+                }
               })}
             >
               Trigger System Fault Toast

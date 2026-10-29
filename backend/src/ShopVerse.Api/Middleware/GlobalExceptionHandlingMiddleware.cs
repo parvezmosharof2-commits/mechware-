@@ -34,10 +34,22 @@ public sealed class GlobalExceptionHandlingMiddleware
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
+        if (context.Response.HasStarted)
+        {
+            _logger.LogWarning("The response has already started, cannot write problem details for exception: {Message}", exception.Message);
+            return;
+        }
+
         string traceId = context.TraceIdentifier;
 
         var (statusCode, errorCode, message, details) = exception switch
         {
+            ValidationException valEx => (
+                HttpStatusCode.BadRequest,
+                valEx.Code,
+                valEx.Message,
+                valEx.Errors.Select(e => (object)new { field = e.Field, message = e.Message }).ToArray()
+            ),
             DomainException domainEx => (
                 HttpStatusCode.BadRequest,
                 domainEx.Code,

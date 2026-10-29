@@ -1,11 +1,13 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using Serilog;
 using ShopVerse.Api.Configuration;
 using ShopVerse.Api.Health;
 using ShopVerse.Api.Middleware;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,8 +40,32 @@ builder.Services.AddOptions<StorageOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// 2.1 Singleton ConnectionMultiplexer (CRIT-01: prevents socket exhaustion DoS)
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+{
+    var redisConn = builder.Configuration.GetConnectionString("Redis")
+        ?? builder.Configuration.GetSection(RedisOptions.SectionName)["ConnectionString"]
+        ?? "localhost:6379";
+    var options = ConfigurationOptions.Parse(redisConn);
+    options.AbortOnConnectFail = false;
+    options.ConnectTimeout = 3000;
+    return ConnectionMultiplexer.Connect(options);
+});
+
+// 2.2 Forwarded Headers Options (HIGH-03: reverse-proxy client IP for rate limiting)
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 // 3. Health Checks
-builder.Services.AddHttpClient("MinioHealth");
+builder.Services.AddHttpClient("MinioHealth", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(3);
+});
+
 builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<PostgreSqlHealthCheck>("postgresql", tags: ["ready"])
@@ -120,6 +146,7 @@ builder.Services.AddControllers();
 var app = builder.Build();
 
 // Configure Middleware Pipeline
+app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<GlobalExceptionHandlingMiddleware>();
@@ -152,17 +179,19 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     ResponseWriter = async (context, report) =>
     {
         context.Response.ContentType = "application/json";
+        var isDev = app.Environment.IsDevelopment();
+
         var result = System.Text.Json.JsonSerializer.Serialize(new
         {
             status = report.Status.ToString(),
-            duration = report.TotalDuration,
+            durationMs = Math.Round(report.TotalDuration.TotalMilliseconds, 2),
             checks = report.Entries.Select(e => new
             {
                 name = e.Key,
                 status = e.Value.Status.ToString(),
-                description = e.Value.Description,
-                duration = e.Value.Duration,
-                error = e.Value.Exception?.Message
+                description = isDev ? e.Value.Description : null,
+                error = isDev ? e.Value.Exception?.Message : null,
+                durationMs = Math.Round(e.Value.Duration.TotalMilliseconds, 2)
             })
         });
         await context.Response.WriteAsync(result);

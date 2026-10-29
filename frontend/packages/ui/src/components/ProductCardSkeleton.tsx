@@ -65,21 +65,23 @@ export const ProductCardSkeleton: React.FC<ProductCardSkeletonProps> = ({
       {/* Brand */}
       <Skeleton className="h-3 w-20 rounded-xs mb-1.5" />
 
-      {/* Title 2 lines */}
-      <Skeleton className="h-4 w-full rounded-xs mb-1" />
-      <Skeleton className="h-4 w-4/5 rounded-xs mb-2.5" />
+      {/* Title 2 lines with min-h-[2.5rem] */}
+      <div className="min-h-[2.5rem] flex flex-col justify-center gap-1 mb-2">
+        <Skeleton className="h-4 w-full rounded-xs" />
+        <Skeleton className="h-4 w-4/5 rounded-xs" />
+      </div>
 
       {/* Rating */}
-      <Skeleton className="h-3.5 w-28 rounded-xs mb-3" />
+      <Skeleton className="h-4 w-28 rounded-xs mb-2.5" />
 
       {/* Price block */}
-      <Skeleton className="h-6 w-32 rounded-xs mb-2.5" />
+      <Skeleton className="h-6 w-32 rounded-xs mb-2" />
 
       {/* Delivery hint */}
       <Skeleton className="h-3.5 w-40 rounded-xs mb-3.5" />
 
       {/* Quick Add To Cart Button area */}
-      <div className="pt-2 border-t border-surface-border/40">
+      <div className="mt-auto pt-2 border-t border-surface-border/40">
         <Skeleton className="h-10 w-full rounded-md" />
       </div>
     </div>

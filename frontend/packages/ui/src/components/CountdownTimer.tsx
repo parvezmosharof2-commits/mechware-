@@ -44,21 +44,32 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   className,
 }) => {
   const targetMs = React.useMemo(() => new Date(targetDate).getTime(), [targetDate]);
+  const [mounted, setMounted] = useState(false);
   const [time, setTime] = useState<TimeRemaining>(() => calculateTimeRemaining(targetMs));
+  const onExpireRef = React.useRef(onExpire);
+  onExpireRef.current = onExpire;
 
   useEffect(() => {
+    setMounted(true);
+    const initial = calculateTimeRemaining(targetMs);
+    setTime(initial);
+    if (initial.isExpired) {
+      onExpireRef.current?.();
+      return;
+    }
+
     const timer = setInterval(() => {
       const remaining = calculateTimeRemaining(targetMs);
       setTime(remaining);
       if (remaining.isExpired) {
         clearInterval(timer);
-        onExpire?.();
+        onExpireRef.current?.();
       }
     }, 1000);
     (timer as any).unref?.();
 
     return () => clearInterval(timer);
-  }, [targetMs, onExpire]);
+  }, [targetMs]);
 
   const padZero = (n: number) => n.toString().padStart(2, '0');
 
@@ -68,11 +79,15 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     lg: 'px-3 py-1.5 text-lg rounded-md min-w-[44px]',
   };
 
+  const displayTime = mounted
+    ? time
+    : { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: false };
+
   return (
     <div
       className={cn('inline-flex items-center gap-2 font-sans select-none', className)}
       role="timer"
-      aria-label={`${label}: ${time.days}d ${time.hours}h ${time.minutes}m ${time.seconds}s`}
+      aria-label={`${label}: ${displayTime.days}d ${displayTime.hours}h ${displayTime.minutes}m ${displayTime.seconds}s`}
     >
       {label && (
         <span className="flex items-center gap-1.5 text-xs font-semibold text-text-muted uppercase tracking-wider">
@@ -82,10 +97,10 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
       )}
 
       <div className="flex items-center gap-1 text-center font-mono">
-        {time.days > 0 && (
+        {displayTime.days > 0 && (
           <>
             <div className={cn('bg-bg-muted border border-surface-border font-bold text-text tabular-nums', sizeBox[size])}>
-              {padZero(time.days)}
+              {mounted ? padZero(displayTime.days) : '--'}
               <span className="block text-[9px] font-sans font-normal text-text-subtle">d</span>
             </div>
             <span className="text-text-subtle font-bold">:</span>
@@ -93,19 +108,19 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
         )}
 
         <div className={cn('bg-bg-muted border border-surface-border font-bold text-text tabular-nums', sizeBox[size])}>
-          {padZero(time.hours)}
+          {mounted ? padZero(displayTime.hours) : '--'}
           <span className="block text-[9px] font-sans font-normal text-text-subtle">h</span>
         </div>
         <span className="text-text-subtle font-bold">:</span>
 
         <div className={cn('bg-bg-muted border border-surface-border font-bold text-text tabular-nums', sizeBox[size])}>
-          {padZero(time.minutes)}
+          {mounted ? padZero(displayTime.minutes) : '--'}
           <span className="block text-[9px] font-sans font-normal text-text-subtle">m</span>
         </div>
         <span className="text-text-subtle font-bold">:</span>
 
         <div className={cn('bg-fault/15 border border-fault/30 font-bold text-fault tabular-nums', sizeBox[size])}>
-          {padZero(time.seconds)}
+          {mounted ? padZero(displayTime.seconds) : '--'}
           <span className="block text-[9px] font-sans font-normal text-fault/70">s</span>
         </div>
       </div>

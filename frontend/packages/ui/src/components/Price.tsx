@@ -58,7 +58,7 @@ export const Price: React.FC<PriceProps> = ({
 
   const hasDiscount = numericCompareAt !== undefined && numericCompareAt > numericAmount;
   const discountPercent = hasDiscount
-    ? Math.round(((numericCompareAt - numericAmount) / numericCompareAt) * 100)
+    ? Math.floor(((numericCompareAt - numericAmount) / numericCompareAt) * 100)
     : 0;
 
   const currentStyles = sizeStyles[size];

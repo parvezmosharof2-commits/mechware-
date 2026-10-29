@@ -4,22 +4,23 @@ public sealed class SecurityHeadersMiddleware
 {
     private readonly RequestDelegate _next;
 
-    public SecurityHeadersMiddleware(RequestDelegate _next)
+    public SecurityHeadersMiddleware(RequestDelegate next)
     {
-        this._next = _next;
+        _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public Task InvokeAsync(HttpContext context)
     {
         var headers = context.Response.Headers;
 
-        headers["X-Content-Type-Options"] = "nosniff";
-        headers["X-Frame-Options"] = "DENY";
-        headers["X-XSS-Protection"] = "1; mode=block";
-        headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
-        headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
-        headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload";
+        headers.TryAdd("X-Content-Type-Options", "nosniff");
+        headers.TryAdd("X-Frame-Options", "DENY");
+        headers.TryAdd("X-XSS-Protection", "0");
+        headers.TryAdd("Referrer-Policy", "strict-origin-when-cross-origin");
+        headers.TryAdd("Permissions-Policy", "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()");
+        headers.TryAdd("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+        headers.TryAdd("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
 
-        await _next(context);
+        return _next(context);
     }
 }
