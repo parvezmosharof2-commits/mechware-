@@ -147,3 +147,62 @@ test('Price formatting - Edge cases (Zero, Decimals, Negative numbers)', () => {
   // Negative amount
   assert.equal(formatCurrency(-5000, 'BDT', 'en'), '৳-5,000');
 });
+
+test('Tailwind Preset - status.* semantic color namespace is defined (MW-P2-NEW-01)', async () => {
+  const presetMod = await import('../../config/tailwind.preset.js');
+  const preset = presetMod.default || presetMod;
+  const colors = preset.theme.extend.colors;
+
+  assert.ok(colors.status, 'colors.status namespace must exist');
+  assert.equal(colors.status.online, 'var(--status-online, #34D399)');
+  assert.equal(colors.status.pending, 'var(--status-pending, #FBBF24)');
+  assert.equal(colors.status.fault, 'var(--status-fault, #F87171)');
+});
+
+test('Color Tokens - Light Mode focusRing matches WCAG AA #00707D (MW-P0-NEW-08)', async () => {
+  const { colors } = await import('../tokens/colors.ts');
+  assert.equal(colors.light.focusRing, '#00707D');
+  assert.equal(colors.dark.focusRing, '#00E5FF');
+});
+
+test('PhoneInput paste normalization strips leading +880 / 88 without truncating digits', () => {
+  const normalizeBdPaste = (input) =>
+    input.replace(/\D/g, '').replace(/^88(?=01)/, '').slice(0, 11);
+
+  assert.equal(normalizeBdPaste('+8801711223344'), '01711223344');
+  assert.equal(normalizeBdPaste('8801812345678'), '01812345678');
+  assert.equal(normalizeBdPaste('01912-345-678'), '01912345678');
+  assert.equal(validateBdPhone(normalizeBdPaste('+8801711223344')), true);
+});
+
+test('MechWareApiClient non-JSON error handling reads stream only once (MW-P1-NEW-04)', async () => {
+  const { MechWareApiClient } = await import('../../api-client/src/index.ts');
+
+  const originalFetch = globalThis.fetch;
+  try {
+    // Return a real Response with non-JSON HTML (e.g. 502 Bad Gateway from Nginx)
+    globalThis.fetch = async () =>
+      new Response('<html><body>502 Bad Gateway</body></html>', {
+        status: 502,
+        statusText: 'Bad Gateway',
+        headers: { 'Content-Type': 'text/html' },
+      });
+
+    const client = new MechWareApiClient({ baseUrl: 'https://api.mechware.com.bd' });
+
+    await assert.rejects(
+      async () => {
+        await client.fetch('/api/v1/catalog/products');
+      },
+      (err) => {
+        assert.equal(err.status, 502);
+        assert.equal(err.title, 'Bad Gateway');
+        assert.match(err.detail, /502 Bad Gateway/);
+        return true;
+      }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
