@@ -24,7 +24,7 @@ const variantStyles: Record<NonNullable<ButtonProps['variant']>, string> = {
   ghost:
     'text-text hover:bg-bg-muted hover:text-accent active:scale-[0.98] focus-visible:ring-accent bg-transparent',
   destructive:
-    'bg-fault text-white font-semibold hover:opacity-90 active:scale-[0.98] focus-visible:ring-fault shadow-sm border border-transparent',
+    'bg-fault text-white dark:text-bg font-semibold hover:opacity-90 active:scale-[0.98] focus-visible:ring-fault shadow-sm border border-transparent',
   link:
     'text-accent underline-offset-4 hover:underline p-0 h-auto font-medium focus-visible:ring-accent bg-transparent',
 };

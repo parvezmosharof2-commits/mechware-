@@ -5,6 +5,11 @@ module.exports = {
     extend: {
       colors: {
         bg: {
+          // Aliases used by the auth / account screens (kept so one vocabulary maps onto the semantic tokens below).
+          canvas: 'var(--bg, #060B18)',
+          surface: 'var(--surface, #0D1635)',
+          elevated: 'var(--bg-muted, #101B3B)',
+          inverse: '#060B18',
           DEFAULT: 'var(--bg, #060B18)',
           subtle: 'var(--bg-subtle, #0A1128)',
           muted: 'var(--bg-muted, #101B3B)',
@@ -15,6 +20,7 @@ module.exports = {
           'border-strong': 'var(--border-strong, #2A4078)',
         },
         border: {
+          subtle: 'var(--border, #1B2B55)',
           DEFAULT: 'var(--border, #1B2B55)',
           strong: 'var(--border-strong, #2A4078)',
         },
@@ -34,8 +40,21 @@ module.exports = {
           teal: '#00A8B5',
         },
         brand: {
+          primary: 'var(--accent, #00E5FF)',
+          'primary-hover': 'var(--accent-hover, #38EFFF)',
+          accent: 'var(--accent, #00E5FF)',
           navy: 'var(--brand-navy, #0F3E7D)',
           blue: 'var(--brand-blue, #1A5CB0)',
+        },
+        fg: {
+          primary: 'var(--text, #F8FAFC)',
+          secondary: 'var(--text-muted, #94A3B8)',
+          muted: 'var(--text-muted, #94A3B8)',
+          'on-accent': 'var(--accent-fg, #060B18)',
+        },
+        state: {
+          danger: 'var(--fault, #F87171)',
+          success: 'var(--success, #34D399)',
         },
         deal: 'var(--deal, #F87171)',
         fault: 'var(--fault, #F87171)',

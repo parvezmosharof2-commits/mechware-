@@ -78,6 +78,10 @@ jobs:
         working-directory: frontend
         run: pnpm lint:tokens
 
+      - name: Lint Frontend (ESLint, Next.js core-web-vitals)
+        working-directory: frontend
+        run: pnpm lint
+
       - name: Typecheck Frontend Monorepo
         working-directory: frontend
         run: pnpm typecheck

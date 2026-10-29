@@ -349,7 +349,7 @@ function DesignSystemContent() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Quick Command Launcher */}
           <button
             type="button"
@@ -375,7 +375,6 @@ function DesignSystemContent() {
             variant="outline"
             size="sm"
             onClick={toggleTheme}
-            aria-label="Toggle Theme"
             leftIcon={isDark ? <Sun className="h-4 w-4 text-warning" /> : <Moon className="h-4 w-4 text-brand-navy" />}
           >
             {isDark ? 'Light Mode' : 'Dark Mode'}
@@ -456,7 +455,7 @@ function DesignSystemContent() {
                 <div className="flex flex-col">
                   <span className="text-xs font-mono font-bold text-text truncate">{token.name}</span>
                   <span className="text-[11px] font-mono text-text-muted">{token.hex}</span>
-                  <span className="text-[10px] text-text-subtle mt-0.5">{token.label}</span>
+                  <span className="text-[10px] text-text-muted mt-0.5">{token.label}</span>
                 </div>
               </div>
             ))}
@@ -559,7 +558,7 @@ function DesignSystemContent() {
             <Select defaultValue="plc">
               <div className="flex flex-col gap-1.5 w-full">
                 <label className="text-sm font-medium text-text">Industrial Equipment Category</label>
-                <SelectTrigger>
+                <SelectTrigger aria-label="Industrial Equipment Category">
                   <SelectValue placeholder="Select classification..." />
                 </SelectTrigger>
                 <SelectContent>

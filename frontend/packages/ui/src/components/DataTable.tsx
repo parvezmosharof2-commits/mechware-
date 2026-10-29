@@ -59,7 +59,7 @@ export function DataTable<TData, TValue>({
   return (
     <div className={cn('w-full flex flex-col gap-3 font-sans', className)}>
       <div className="rounded-lg border border-surface-border bg-surface overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Data table">
           <table className="w-full text-left text-sm border-collapse">
             <thead className="sticky top-0 z-10 bg-bg-muted/95 text-text-muted text-xs uppercase tracking-wider border-b border-surface-border backdrop-blur-xs">
               {table.getHeaderGroups().map((headerGroup) => (
