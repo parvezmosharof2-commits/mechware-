@@ -317,6 +317,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
 
         var result = new PagedResult<ProductCardDto>(cards, page, pageSize, total);
         await redis.StringSetAsync(key, JsonSerializer.Serialize(result, CacheJson.Options), StorefrontCacheKeys.ListingTtl);
+        await redis.SetAddAsync(StorefrontCacheKeys.ListingIndex, key);
         return SlugLookupResult<PagedResult<ProductCardDto>>.Found(result);
     }
 

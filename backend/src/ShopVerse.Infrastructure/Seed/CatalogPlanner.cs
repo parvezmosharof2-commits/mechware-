@@ -90,7 +90,7 @@ internal static class CatalogPlanner
             {
                 var model = row.ContainsKey("Model") ? row["Model"] : row[family.Header.Split('|')[0]];
                 var mpn = row.TryGetValue("MPN", out var m) ? m : model;
-                var titleEn = family.Expand(family.Title, row);
+                var titleEn = CleanTitle(family.Expand(family.Title, row));
                 var basePrice = RoundPrice(decimal.Parse(row["Price"], CultureInfo.InvariantCulture) * (decimal)(0.97 + rng.NextDouble() * 0.08));
 
                 var slugCore = Slug.From(titleEn);
@@ -139,7 +139,7 @@ internal static class CatalogPlanner
                     Domain = ReviewCorpus.RootDomain[rootSlug],
                     Model = model,
                     TitleEn = titleEn.Length > 250 ? titleEn[..250] : titleEn,
-                    TitleBn = $"{family.Brand} {model} {family.NounBn}",
+                    TitleBn = CleanTitle($"{family.Brand} {model} {family.NounBn}"),
                     Slug = slug,
                     ShortEn = Truncate(string.Join(" · ", highlights.Take(2)), 280),
                     ShortBn = $"{family.Brand} {model} {family.NounBn} — অনুমোদিত সরবরাহকারীর কাছ থেকে ওয়ারেন্টি ও টেকনিক্যাল সাপোর্টসহ।",
@@ -313,6 +313,22 @@ internal static class CatalogPlanner
         sb.Append("<h3>Warranty and support</h3><p>").Append(family.WarrantyMonths)
           .Append("-month warranty handled locally by the seller. Technical selection, wiring and programming support is available from our engineers; datasheets are shared on request. VAT invoice provided with every order.</p>");
         return sb.ToString();
+    }
+
+    /// <summary>Drops a word when the next word repeats or extends it ("Fluke Fluke 17B+", "HG-KR HG-KR73").</summary>
+    internal static string CleanTitle(string title)
+    {
+        var words = title.Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        for (var i = 0; i < words.Count - 1; i++)
+        {
+            if (words[i].Length >= 3 && words[i + 1].StartsWith(words[i], StringComparison.OrdinalIgnoreCase))
+            {
+                words.RemoveAt(i);
+                i--;
+            }
+        }
+
+        return string.Join(' ', words);
     }
 
     private static string Html(string text) => System.Net.WebUtility.HtmlEncode(text);

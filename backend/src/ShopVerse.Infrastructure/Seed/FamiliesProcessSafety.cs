@@ -23,7 +23,7 @@ internal static class FamiliesProcessSafety
                 "Promag W 400 DN150|DN150 (6″)|18 – 1 270 m³/h|465000",
                 "Promag W 400 DN200|DN200 (8″)|32 – 2 260 m³/h|585000"
             ],
-            Title = "{Brand} {Model} Electromagnetic Flow Meter {Size}",
+            Title = "{Brand} {Series} Electromagnetic Flow Meter {Size}",
             Intro = "The Promag W 400 {Model} measures conductive liquids such as water, wastewater and sludge in lines of {Size}, with a typical range of {Flow range}. The 4-wire transmitter outputs 4–20 mA, pulse and Modbus; the flange sensor is lined with polyurethane or rubber for drinking water and effluent.",
             Highlights = ["{Size}, flow range {Flow range}", "±0.5 % of reading accuracy", "4–20 mA / pulse / Modbus RTU outputs", "No moving parts, no pressure drop"],
             Applications = ["Effluent and ETP inlet/outlet metering", "Water distribution", "Dosing and chemical feed lines"],
@@ -244,7 +244,7 @@ internal static class FamiliesProcessSafety
                 "Unilift KP 150-A1|Submersible drainage|0.75 kW|15 m³/h|36500",
                 "Unilift AP 12.40.04.1|Submersible wastewater|0.9 kW|18 m³/h|62500"
             ],
-            Title = "{Brand} {Model} {Type} Pump, {Power}",
+            Title = "{Brand} {Model} — {Type}, {Power}",
             Intro = "The Grundfos {Model} is a {Type} pump rated {Power} with up to {Max flow} flow. Suitable for water supply, pressure boosting, drainage and wastewater duty depending on the version.",
             Highlights = ["{Type}, {Power}", "Maximum flow {Max flow}", "Stainless-steel wetted parts (CM)", "Thermal motor protection"],
             Applications = ["Pressure boosting", "Sump and drainage", "Wastewater lift stations"],
@@ -276,7 +276,7 @@ internal static class FamiliesProcessSafety
                 "MBS 3000 0–40 bar|0–40 bar|4–20 mA|14500",
                 "MBS 3000 0–100 bar|0–100 bar|4–20 mA|16500"
             ],
-            Title = "{Brand} {Model} Pressure Transmitter {Range}, {Output}",
+            Title = "{Brand} {Series} Pressure Transmitter {Range}, {Output}",
             Intro = "The Danfoss {Model} is a stainless-steel pressure transmitter with {Range} range and {Output} output. The all-welded sensor is used on hydraulics, pneumatics, water systems and refrigeration plants; G1/4 process connection and DIN connector.",
             Highlights = ["Range {Range}, {Output}", "Stainless-steel welded sensor", "±0.5 % FS accuracy", "G1/4 process connection"],
             Applications = ["Pump discharge pressure", "Hydraulic power packs", "Compressors and refrigeration"],
@@ -303,7 +303,7 @@ internal static class FamiliesProcessSafety
                 "Cerabar PMC11 0–10 bar|0–10 bar|46500",
                 "Cerabar PMC11 0–40 bar|0–40 bar|48500"
             ],
-            Title = "{Brand} {Model} Ceramic Pressure Transmitter {Range}, 4–20 mA",
+            Title = "{Brand} {Series} Ceramic Pressure Transmitter {Range}, 4–20 mA",
             Intro = "The Cerabar PMC11 {Model} uses a dry ceramic Ceraphire sensor for absolute overload resistance and long-term stability on water, wastewater and gas. Output 4–20 mA, process connection G½.",
             Highlights = ["Range {Range}", "Ceramic sensor, high overload resistance", "4–20 mA output", "Wetted parts compatible with water/air/oil"],
             Applications = ["Water and wastewater pressure", "Filtration monitoring"],
@@ -332,7 +332,7 @@ internal static class FamiliesProcessSafety
                 "KP 35|Low pressure, with manual reset|-0.2 – 8 bar|8250",
                 "KP 36|Low pressure, automatic reset|-0.2 – 8 bar|8250"
             ],
-            Title = "{Brand} {Model} Pressure Switch — {Application}",
+            Title = "{Brand} {Model} Pressure Switch, {Application}",
             Intro = "The Danfoss {Model} is a {Application} pressure switch with {Range} range, SPDT contact and adjustable differential. Used for compressor and pump protection on chillers, air compressors and process lines.",
             Highlights = ["{Application}", "Range {Range}", "SPDT contact, adjustable differential", "IP30 / IP54 options"],
             Applications = ["Compressor protection", "Chiller control", "Pump dry-run / overpressure cut-out"],
@@ -361,7 +361,7 @@ internal static class FamiliesProcessSafety
                 "K-type thermocouple Ø6 × 300 mm|Type K thermocouple|300 mm|9250",
                 "J-type thermocouple Ø6 × 150 mm|Type J thermocouple|150 mm|8250"
             ],
-            Title = "{Brand} {Model} — {Type}, Stainless Steel Sheath",
+            Title = "{Brand} {Model}, Stainless Steel Sheath",
             Intro = "A stainless-steel sheathed {Type} probe of {Length} immersion length with ½″ BSP adjustable compression fitting and terminal head. Pt100 probes give accuracy and stability for process control; thermocouples cover higher temperatures.",
             Highlights = ["{Type}, {Length} immersion", "316 stainless sheath, Ø6 mm", "Terminal head with ceramic block", "Class A accuracy (RTD)"],
             Applications = ["Boiler and oven temperature", "Process tanks", "HVAC ducts and pipes"],
@@ -583,7 +583,7 @@ internal static class FamiliesProcessSafety
                 "PNOZ X3 24 VDC/24 VAC|777303|Multi-function safety relay, 3 safety contacts|34500",
                 "PNOZ s30 24–240 V|751330|Safety relay with timed + instantaneous contacts|58500"
             ],
-            Title = "{Brand} {Model} Safety Relay ({MPN}) — {Function}",
+            Title = "{Brand} {Model} ({MPN}) — {Function}",
             Intro = "The Pilz {Model} (order no. {MPN}) is a safety relay for {Function}. Suitable for applications up to SIL 3 / PL e, it monitors emergency stops, guard doors and light barriers.",
             Highlights = ["{Function}", "Up to SIL 3 / PL e", "Order no. {MPN}", "Pluggable terminals (s-series)"],
             Applications = ["Emergency-stop monitoring", "Guard-door monitoring", "Press and packaging safety circuits"],
@@ -605,16 +605,16 @@ internal static class FamiliesProcessSafety
             Header = "Model|Class|Accuracy|Price",
             Rows =
             [
-                "Fluke 101|Pocket|0.5 % DCV|7850",
-                "Fluke 106|Handheld|0.5 % DCV|12500",
-                "Fluke 15B+|Handheld|0.5 % DCV|9850",
-                "Fluke 17B+|Handheld with temperature|0.5 % DCV|15850",
-                "Fluke 115|True-rms field service|0.5 % DCV|24500",
-                "Fluke 117|True-rms electrician (non-contact voltage)|0.5 % DCV|31500",
-                "Fluke 179|True-rms with temperature|0.09 % DCV|40500",
-                "Fluke 87V|True-rms industrial|0.05 % DCV|56500"
+                "101|Pocket|0.5 % DCV|7850",
+                "106|Handheld|0.5 % DCV|12500",
+                "15B+|Handheld|0.5 % DCV|9850",
+                "17B+|Handheld with temperature|0.5 % DCV|15850",
+                "115|True-rms field service|0.5 % DCV|24500",
+                "117|True-rms electrician (non-contact voltage)|0.5 % DCV|31500",
+                "179|True-rms with temperature|0.09 % DCV|40500",
+                "87V|True-rms industrial|0.05 % DCV|56500"
             ],
-            Title = "{Brand} {Model} Digital Multimeter ({Class})",
+            Title = "{Brand} {Model} Digital Multimeter, {Class}",
             Intro = "The {Model} is a {Class} digital multimeter from Fluke with {Accuracy} basic DC accuracy. A trusted tool for maintenance technicians, electricians and commissioning engineers.",
             Highlights = ["{Class}", "Basic DC accuracy {Accuracy}", "CAT III 600 V (CAT IV on higher models)", "Includes test leads and batteries"],
             Applications = ["Electrical troubleshooting", "Commissioning and maintenance"],
@@ -637,15 +637,15 @@ internal static class FamiliesProcessSafety
             Header = "Model|Type|Rating|Price",
             Rows =
             [
-                "Fluke 317|Clamp meter, AC/DC|600 A|18500",
-                "Fluke 323|True-rms AC clamp meter|400 A AC|21500",
-                "Fluke 324|True-rms AC clamp meter with temperature|400 A AC|27500",
-                "Fluke 325|True-rms AC/DC clamp meter|400 A AC/DC|34500",
-                "Fluke 376 FC|True-rms AC/DC clamp meter, wireless|1000 A AC/DC|74500",
-                "Fluke 1507|Insulation tester|500 V – 1 kV, 10 GΩ|88500",
-                "Fluke 1587 FC|Insulation multimeter, wireless|50 V – 1 kV, 2 GΩ|128000"
+                "317|Clamp meter, AC/DC|600 A|18500",
+                "323|True-rms AC clamp meter|400 A AC|21500",
+                "324|True-rms AC clamp meter with temperature|400 A AC|27500",
+                "325|True-rms AC/DC clamp meter|400 A AC/DC|34500",
+                "376 FC|True-rms AC/DC clamp meter, wireless|1000 A AC/DC|74500",
+                "1507|Insulation tester|500 V – 1 kV, 10 GΩ|88500",
+                "1587 FC|Insulation multimeter, wireless|50 V – 1 kV, 2 GΩ|128000"
             ],
-            Title = "{Brand} {Model} {Type} ({Rating})",
+            Title = "{Brand} {Model} — {Type}, {Rating}",
             Intro = "The Fluke {Model} is a {Type} rated {Rating}. Clamp meters measure current without breaking the circuit; insulation testers verify motor, cable and transformer insulation resistance before commissioning.",
             Highlights = ["{Type}", "Rating {Rating}", "CAT III 600 V / CAT IV 300 V or better", "Carry case and leads included"],
             Applications = ["Motor current checks", "Insulation resistance testing", "Preventive maintenance"],
@@ -704,7 +704,7 @@ internal static class FamiliesProcessSafety
                 "SK 3110 thermostat NC|Enclosure thermostat, NC (0–60 °C)|10 A / 250 V|2850",
                 "SK 3110 thermostat NO|Enclosure thermostat, NO (0–60 °C)|10 A / 250 V|2850"
             ],
-            Title = "{Brand} {Model} — {Function} ({Rating})",
+            Title = "{Brand} {Model} — {Function}",
             Intro = "The Rittal {Model}: {Function}, {Rating}. Prevents condensation and maintains a safe temperature range inside enclosures installed in humid or outdoor locations.",
             Highlights = ["{Function}", "Rating {Rating}", "Snap-on DIN-rail mounting", "Touch-safe housing"],
             Applications = ["Preventing condensation in panels", "Frost protection of outdoor cabinets"],

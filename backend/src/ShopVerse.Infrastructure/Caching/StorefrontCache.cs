@@ -18,7 +18,9 @@ public static class StorefrontCacheKeys
     public static string Stock(Guid productId) => $"sf:stock:{productId:N}";
     public static string Categories => "sf:categories";
     public static string Listing(string categorySlug, int page, int size) => $"sf:plp:{categorySlug}:{page}:{size}";
-    public const string ListingPattern = "sf:plp:*";
+
+    /// <summary>Set of every cached listing key, so invalidation is O(listings) instead of a keyspace SCAN.</summary>
+    public const string ListingIndex = "sf:plp:index";
 }
 
 /// <summary>Redis-backed invalidation used by the outbox relay and the inventory service.</summary>
@@ -49,13 +51,11 @@ public sealed class RedisStorefrontCacheInvalidator : IStorefrontCacheInvalidato
 
     private async Task DeleteListingsAsync()
     {
-        foreach (var endpoint in _redis.GetEndPoints())
-        {
-            var server = _redis.GetServer(endpoint);
-            if (server.IsReplica) continue;
-            var keys = server.Keys(pattern: StorefrontCacheKeys.ListingPattern, pageSize: 250).ToArray();
-            if (keys.Length > 0) await _redis.GetDatabase().KeyDeleteAsync(keys);
-        }
+        var db = _redis.GetDatabase();
+        var members = await db.SetMembersAsync(StorefrontCacheKeys.ListingIndex);
+        if (members.Length == 0) return;
+        var keys = members.Select(m => (RedisKey)(string)m!).Append(StorefrontCacheKeys.ListingIndex).ToArray();
+        await db.KeyDeleteAsync(keys);
     }
 }
 

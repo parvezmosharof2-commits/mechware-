@@ -201,7 +201,7 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 1200,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:StorefrontPermitPerMinute") ?? 1200,
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));

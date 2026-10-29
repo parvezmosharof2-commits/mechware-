@@ -160,10 +160,10 @@ internal static class FamiliesSensorsPower
             [
                 "E3Z-T61|Through-beam (emitter + receiver)|15 m|NPN|5450",
                 "E3Z-T81|Through-beam (emitter + receiver)|15 m|PNP|5450",
-                "E3X-NA11|Fibre amplifier (cable type)|Fibre dependent|NPN|9250",
-                "E3X-NA41|Fibre amplifier (cable type)|Fibre dependent|PNP|9250"
+                "E3X-NA11|Fibre amplifier (cable type)|per fibre head|NPN|9250",
+                "E3X-NA41|Fibre amplifier (cable type)|per fibre head|PNP|9250"
             ],
-            Title = "{Brand} {Model} {Type} — {Range}, {Output}",
+            Title = "{Brand} {Model} {Type}, range {Range}, {Output}",
             Intro = "The Omron {Model} provides {Type} sensing with {Range}. Through-beam sensors give the longest, most reliable detection distance; the E3X amplifier works with a wide range of fibre heads for small-part and tight-space detection.",
             Highlights = ["{Type}", "Range: {Range}", "{Output} output", "Easy alignment indicators"],
             Applications = ["Long-range object detection", "Small-part detection with fibre heads", "Glass and film detection"],
@@ -279,7 +279,7 @@ internal static class FamiliesSensorsPower
                 "W22 IE3 15 kW 4P|15 kW (20 HP)|160L|1 465 rpm|92.1 %|98500",
                 "W22 IE3 22 kW 4P|22 kW (30 HP)|180L|1 465 rpm|93.0 %|145000"
             ],
-            Title = "{Brand} {Model} Three-phase Induction Motor, {Power}, Frame {Frame}",
+            Title = "{Brand} {Model} Three-phase Induction Motor, Frame {Frame}",
             Intro = "The WEG {Model} is a premium-efficiency (IE3) three-phase squirrel-cage induction motor rated {Power} at 380–415 V / 50 Hz, IEC frame {Frame} with a cast-iron housing. IE3 efficiency of {Efficiency} lowers running cost on continuous-duty pumps, fans and compressors.",
             Highlights = ["{Power}, 4-pole, {Speed}", "IE3 premium efficiency: {Efficiency}", "IEC frame {Frame}, B3 foot mounting", "IP55, Class F insulation, S1 duty"],
             Applications = ["Pumps and compressors", "Fans and blowers", "Conveyors and mixers"],
@@ -310,7 +310,7 @@ internal static class FamiliesSensorsPower
                 "1.5 kW 2P 2 800 rpm|1.5 kW (2 HP)|90S|2 800 rpm|14500",
                 "2.2 kW 2P 2 800 rpm|2.2 kW (3 HP)|90L|2 800 rpm|18500"
             ],
-            Title = "{Brand} {Model} Single-phase Capacitor-run Motor {Power}",
+            Title = "{Brand} Single-phase Capacitor-run Motor {Power}, 2-pole, {Speed}",
             Intro = "A 230 V / 50 Hz single-phase capacitor motor rated {Power}, IEC frame {Frame}, {Speed}. Suitable for pumps, compressors, small machine tools and workshop equipment where only a single-phase supply is available.",
             Highlights = ["{Power}, {Speed}, 230 V 50 Hz", "IEC frame {Frame}, B3 foot mounting", "Aluminium housing, ball bearings", "IP44"],
             Applications = ["Small pumps and compressors", "Workshop machinery", "Fans and blowers"],
@@ -340,7 +340,7 @@ internal static class FamiliesSensorsPower
                 "WG20 2.2 kW i=40|2.2 kW|40:1|35 rpm|345 N·m|58500",
                 "WG20 3 kW i=50|3 kW|50:1|28 rpm|560 N·m|74500"
             ],
-            Title = "{Brand} {Model} Helical Geared Motor {Power}, Ratio {Ratio}, {OutputSpeed}",
+            Title = "{Brand} {Model} Helical Geared Motor, {OutputSpeed} Output",
             Intro = "A foot-mounted helical geared motor combining a {Power} four-pole IE2 motor with a hardened helical gear stage. Ratio {Ratio} gives {OutputSpeed} and about {Torque} output torque, suited to conveyors, mixers and feeders.",
             Highlights = ["{Power}, ratio {Ratio}", "Output speed {OutputSpeed}, torque {Torque}", "Hardened and ground helical gears", "Pre-filled synthetic oil, IP55"],
             Applications = ["Conveyors", "Mixers and agitators", "Feeders and hoppers"],
@@ -370,7 +370,7 @@ internal static class FamiliesSensorsPower
                 "GST05 0.75 kW i=40|0.75 kW|40:1|35 rpm|62500",
                 "GST05 1.1 kW i=30|1.1 kW|30:1|47 rpm|72500"
             ],
-            Title = "{Brand} {Model} Worm Geared Motor, {Power}, {Ratio}",
+            Title = "{Brand} {Model} Worm Geared Motor, {OutputSpeed} Output",
             Intro = "A compact right-angle worm geared motor delivering {OutputSpeed} at {Ratio}. The self-locking tendency of the worm stage at higher ratios helps hold loads, making it popular on hoists, gates and conveyor drives.",
             Highlights = ["{Power}, ratio {Ratio}", "Output speed {OutputSpeed}", "Right-angle, hollow or solid output shaft", "Aluminium housing"],
             Applications = ["Conveyors", "Gates and barriers", "Mixers"],
@@ -458,7 +458,7 @@ internal static class FamiliesSensorsPower
                 "iC60N C40|40 A|A9F79140|760",
                 "iC60N C63|63 A|A9F79163|980"
             ],
-            Title = "{Brand} {Series} {Model} Miniature Circuit Breaker {Rating}, C Curve, 6 kA",
+            Title = "{Brand} Acti9 {Model} Miniature Circuit Breaker {Rating}, C Curve, 6 kA",
             Intro = "The Acti9 {Model} is a {Rating} C-curve miniature circuit breaker with 6 kA breaking capacity (IEC 60898-1) and 10 kA to IEC 60947-2. Supplied in one to four pole versions on 35 mm DIN rail (reference shown is the 1-pole version).",
             Highlights = ["{Rating} C-curve, 6 kA (IEC 60898-1)", "Choice of 1P, 2P, 3P and 4P", "Visible contact position indicator", "Reference (1P): {Reference}"],
             Applications = ["Lighting and socket circuits", "Motor control circuit protection", "Distribution boards"],

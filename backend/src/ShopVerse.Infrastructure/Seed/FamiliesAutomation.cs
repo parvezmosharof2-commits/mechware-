@@ -283,7 +283,7 @@ internal static class FamiliesAutomation
                 "KTP700 Basic PN|6AV2123-2GB03-0AX0|7″|800 × 480|59500",
                 "KTP900 Basic PN|6AV2123-2JB03-0AX0|9″|800 × 480|82500"
             ],
-            Title = "{Brand} {Model} {Size} Basic HMI Panel ({MPN})",
+            Title = "{Brand} {Model} {Size} HMI Panel ({MPN})",
             Intro = "The {Model} is the entry panel in the SIMATIC HMI line: a {Size} touch display with PROFINET, configured in WinCC (TIA Portal) alongside the S7-1200 or S7-1500 project. Ideal for machine-level operation with keys, alarms and trends.",
             Highlights = ["{Size} touch display, {Resolution}", "PROFINET and USB interfaces", "Configured in WinCC (TIA Portal)", "Supports alarms, recipes and trends"],
             Applications = ["Operator panels for S7-1200/1500 machines", "Utility monitoring"],
@@ -309,7 +309,7 @@ internal static class FamiliesAutomation
                 "TP900 Comfort|6AV2124-0JC01-0AX0|9″ widescreen|800 × 480|198000",
                 "TP1200 Comfort|6AV2124-0MC01-0AX0|12″ widescreen|1280 × 800|265000"
             ],
-            Title = "{Brand} {Model} {Size} Comfort HMI Panel ({MPN})",
+            Title = "{Brand} {Model} {Size} HMI Panel ({MPN})",
             Intro = "The {Model} is a high-end SIMATIC Comfort Panel with a {Size} multi-touch display, PROFINET, PROFIBUS-capable MPI/DP and an SD slot. It supports scripting, archiving and web access, making it suited to production lines and process plants.",
             Highlights = ["{Size} multi-touch display, {Resolution}", "PROFINET, PROFIBUS/MPI, 2 × USB, SD card slot", "Archives, scripts, web server and audit trail options", "Aluminium front, IP65"],
             Applications = ["Production-line supervision", "Process plants and ETP", "Recipe-driven batch machines"],

@@ -11,7 +11,7 @@
 - [x] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)** (Completed & Verified)
 - [x] **Phase 2: Cybernetic Design System & Component Library (`packages/ui`)** (Completed & Verified)
 - [x] **Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors** (Completed & R1 Signed Off)
-- [ ] **Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data**
+- [x] **Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data**
 - [ ] **Phase 5: Sub-50ms Typo-Tolerant Search & Discovery (Meilisearch + Bangla)**
 - [ ] **Phase 6: Storefront Foundation, Mega Menu & Dynamic Homepage Sections**
 - [ ] **Phase 7: Industrial Product Experience (PLP & PDP with CAD/Datasheets)**
@@ -159,20 +159,20 @@
 ---
 
 ### Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data
-- [ ] EF Core mapping for `Category`, `Brand`, `Product`, `ProductVariant`, `ProductMedia`, `Warehouse`, `InventoryItem`, `StockReservation`, `SlugHistory`.
-- [ ] High-concurrency inventory reservation service:
-  - [ ] PostgreSQL `SELECT ... FOR UPDATE` with `Available = OnHand - Reserved`.
-  - [ ] Redis RedLock distributed lock for high-contention spikes.
-  - [ ] Background worker releasing expired reservations every 60 seconds.
-- [ ] Deterministic pricing domain service (sale windows, VAT calculations).
-- [ ] Outbox message creation on product mutations (`ProductUpdatedDomainEvent`).
-- [ ] Deterministic seed data generator (< 2 minutes execution):
-  - [ ] 12 industrial categories with 3 hierarchy levels and technical attribute schemas.
-  - [ ] 40 manufacturer brands with logos (Siemens, Mitsubishi, Delta, Omron).
-  - [ ] 25 verified sellers with logos, banners, and ratings.
-  - [ ] 400+ realistic industrial products with grouped specifications, CAD/PDF attachments, and variants.
-  - [ ] 3,000+ realistic reviews and customer Q&A records.
-- [ ] Concurrency test: 50 parallel reservation requests for 10 units -> exactly 10 succeed.
+- [x] EF Core mapping for `Category` (materialized path, JSONB attribute schema), `Brand`, `Seller`, `Product`, `ProductVariant`, `ProductMedia`, `AttributeDefinition`/`AttributeValue`, `Warehouse`, `InventoryItem`, `StockReservation`, `SlugHistory`, `Review`, `Question`/`Answer`, `OutboxMessage`; migration `Phase4CatalogInventoryOutbox` (also carries the baseline schema because the Phase 3 migration file was never wired with `[Migration]`).
+- [x] Product lifecycle Draft → PendingReview → Active/Rejected → Archived (`Product`, unit-tested).
+- [x] High-concurrency inventory reservation service (`InventoryService`):
+  - [x] PostgreSQL `SELECT ... FOR UPDATE` in deterministic `(variant_id, warehouse_id)` order, `Available = OnHand - Reserved`, `ck_inventory_available` CHECK as a last line of defence.
+  - [x] Redis RedLock (RedLock.net) per variant, optional — correctness never depends on it.
+  - [x] `ReservationExpiryWorker` (60 s, 15 min TTL, set-based sweep with `FOR UPDATE SKIP LOCKED`).
+  - [x] `StockLowDomainEvent` raised once per downward threshold crossing and delivered through the outbox.
+- [x] Deterministic pricing domain service (`PricingEngine`: sale windows `[start,end)`, compare-at, floor-% discount, VAT inclusive/exclusive, banker's rounding).
+- [x] Transactional outbox: `DomainEventOutboxInterceptor` writes events in the same `SaveChanges`; `OutboxRelay` (`SKIP LOCKED`) feeds the `search:sync:queue` Redis list and storefront cache invalidation.
+- [x] Storefront read models: `GET /api/v1/storefront/products/{slug}` (Redis cache, 301 on retired slugs), `/categories`, `/categories/{slug}/products`.
+- [x] Deterministic seed (`dotnet run --project backend/src/ShopVerse.Worker -- seed-catalog`, ~5 s): 12 roots / 120 categories / 72 leaves, 40 brands, 25 sellers, 572 industrial products (≈840 variants), 3 240 reviews (446 with photos), 242 questions, report in `docs/PHASE4_SEED_REPORT.md`.
+- [x] Concurrency test: 50 parallel reservations for 10 units → exactly 10 succeed (PostgreSQL-only and with RedLock).
+- [x] Unit tests: pricing, lifecycle, variant generation, slug-history redirects, inventory invariants, seed-plan integrity.
+- [ ] Known gaps / follow-ups: product images are generated SVG illustrations (no licensed photography reachable from the build environment); CAD/datasheet files are not seeded; `checkout_sessions` is deferred to Phase 8 (reservations use `reference_id`); manufacturer part numbers and specs must be verified against datasheets before real listings.
 
 ---
 

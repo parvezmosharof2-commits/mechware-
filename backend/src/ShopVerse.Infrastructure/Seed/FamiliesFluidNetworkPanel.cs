@@ -727,7 +727,7 @@ internal static class FamiliesFluidNetworkPanel
                 "Stainless steel enclosure 304, medium|AISI 304 stainless|400 × 300 × 200 mm|26500",
                 "Stainless steel enclosure 316, medium|AISI 316 stainless|400 × 300 × 200 mm|38500"
             ],
-            Title = "{Brand} {Model}, {Size} ({Material})",
+            Title = "{Brand} {Model}, {Size}",
             Intro = "A {Material} enclosure, {Size}, for corrosive or wash-down environments such as ETP plants, food processing and chemical areas. Sealed lid with captive screws and IP66 rating.",
             Highlights = ["{Material}, {Size}", "IP66 sealed", "Corrosion resistant", "Mounting lugs included"],
             Applications = ["ETP and water-treatment plants", "Food and beverage", "Chemical plants"],
@@ -903,7 +903,7 @@ internal static class FamiliesFluidNetworkPanel
                 "CG M25 nylon gland|M25 × 1.5|9–16 mm|165",
                 "CG M32 nylon gland|M32 × 1.5|13–20 mm|240"
             ],
-            Title = "{Brand} {Model} {Thread}, Cable Ø {Cable range} (IP68)",
+            Title = "{Brand} {Model}, Cable Ø {Cable range} (IP68)",
             Intro = "A polyamide cable gland with {Thread} thread for cables of {Cable range}, with sealing insert and strain relief, IP68. For entering cables into enclosures and junction boxes.",
             Highlights = ["{Thread} thread", "Cable Ø {Cable range}", "IP68 with locknut and gasket", "UV-stable polyamide"],
             Applications = ["Cable entry into panels and boxes"],

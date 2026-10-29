@@ -30,6 +30,15 @@ dotnet run --project src/ShopVerse.Api
 - Liveness Probe: [http://localhost:5000/health/live](http://localhost:5000/health/live)
 - Readiness Probe: [http://localhost:5000/health/ready](http://localhost:5000/health/ready)
 
+### 3b. Load the demo catalogue (Phase 4)
+```bash
+cd backend
+dotnet run --project src/ShopVerse.Worker -- seed-catalog \
+  --media-root ../frontend/apps/web/public/seed-media --report ../docs/PHASE4_SEED_REPORT.md
+dotnet run --project src/ShopVerse.Worker        # reservation-expiry + outbox workers
+```
+Then try `GET http://localhost:5000/api/v1/storefront/categories`.
+
 ### 4. Start Next.js 15 Frontends
 ```bash
 cd frontend

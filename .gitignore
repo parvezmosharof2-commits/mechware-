@@ -35,3 +35,7 @@ Thumbs.db
 -e 
 # AI Studio internal artifacts
 .aistudio/
+
+# Generated demo artwork (run: dotnet run --project backend/src/ShopVerse.Worker -- seed-catalog)
+frontend/apps/web/public/seed-media/
+seed-media/
