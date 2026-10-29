@@ -262,6 +262,9 @@ public sealed class Product : AggregateRoot<Guid>
         MarkUpdated();
     }
 
+    /// <summary>Queues a <see cref="ProductUpdatedEvent"/> without changing state (admin "reindex", bulk imports).</summary>
+    public void RequestReindex() => AddDomainEvent(new ProductUpdatedEvent(Id, Slug, Status));
+
     public void SoftDelete(DateTime nowUtc)
     {
         DeletedAtUtc = nowUtc;

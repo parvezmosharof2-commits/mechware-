@@ -1,6 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ShopVerse.UnitTests" />
+    <InternalsVisibleTo Include="ShopVerse.IntegrationTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ShopVerse.Application\ShopVerse.Application.csproj" />
     <ProjectReference Include="..\ShopVerse.Domain\ShopVerse.Domain.csproj" />
   </ItemGroup>
