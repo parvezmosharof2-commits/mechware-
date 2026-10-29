@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShopVerse.Domain\ShopVerse.Domain.csproj" />
     <ProjectReference Include="..\..\src\ShopVerse.Application\ShopVerse.Application.csproj" />
+    <ProjectReference Include="..\..\src\ShopVerse.Infrastructure\ShopVerse.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\ShopVerse.Api\ShopVerse.Api.csproj" />
   </ItemGroup>
 

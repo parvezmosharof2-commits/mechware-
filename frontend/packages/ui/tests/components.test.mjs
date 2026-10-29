@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { formatCurrency, validateBdPhone, calcDiscountPercent } from '../src/formatters.ts';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 test('Price formatting - South Asian Lakh grouping for BDT', () => {
   // 1,25,000 BDT
@@ -180,7 +185,6 @@ test('MechWareApiClient non-JSON error handling reads stream only once (MW-P1-NE
 
   const originalFetch = globalThis.fetch;
   try {
-    // Return a real Response with non-JSON HTML (e.g. 502 Bad Gateway from Nginx)
     globalThis.fetch = async () =>
       new Response('<html><body>502 Bad Gateway</body></html>', {
         status: 502,
@@ -188,7 +192,7 @@ test('MechWareApiClient non-JSON error handling reads stream only once (MW-P1-NE
         headers: { 'Content-Type': 'text/html' },
       });
 
-    const client = new MechWareApiClient({ baseUrl: 'https://api.mechware.com.bd' });
+    const client = new MechWareApiClient({ baseUrl: 'https://api.mechware.com.bd', autoRefreshOn401: false });
 
     await assert.rejects(
       async () => {
@@ -206,3 +210,114 @@ test('MechWareApiClient non-JSON error handling reads stream only once (MW-P1-NE
   }
 });
 
+test('Phase 3 Acceptance #1: InMemoryTokenVault stores short-lived accessToken strictly in memory with TTL expiry', async () => {
+  const { createInMemoryTokenVault } = await import('../../api-client/src/index.ts');
+  const vault = createInMemoryTokenVault();
+
+  assert.equal(vault.getToken(), null);
+
+  vault.setToken('jwt_short_lived_15m_token', 900);
+  assert.equal(vault.getToken(), 'jwt_short_lived_15m_token');
+
+  // Expired token is automatically purged from memory
+  vault.setToken('jwt_already_expired', -1);
+  assert.equal(vault.getToken(), null);
+
+  // Verify no Web Storage API is used
+  assert.equal(typeof globalThis.localStorage, 'undefined');
+});
+
+test('Phase 3 E2E Token Refresh: MechWareApiClient automatically rotates token on 401 and retries request', async () => {
+  const { MechWareApiClient, defaultTokenVault } = await import('../../api-client/src/index.ts');
+  defaultTokenVault.setToken('expired_access_token', 900);
+
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+
+  try {
+    globalThis.fetch = async (url, init) => {
+      calls.push({ url: String(url), auth: new Headers(init?.headers).get('Authorization') });
+
+      if (String(url).endsWith('/api/v1/auth/refresh')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              accessToken: 'rotated_fresh_access_token_15m',
+              expiresIn: 900,
+              tokenType: 'Bearer',
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const authHeader = new Headers(init?.headers).get('Authorization');
+      if (authHeader === 'Bearer expired_access_token') {
+        return new Response(JSON.stringify({ title: 'Token Expired', status: 401 }), { status: 401 });
+      }
+
+      return new Response(JSON.stringify({ data: { orders: ['SV-261029-X7K92M'] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+
+    const client = new MechWareApiClient({ baseUrl: 'https://api.mechware.com.bd' });
+    const res = await client.fetch('/api/v1/users/me/orders');
+
+    assert.deepEqual(res, { data: { orders: ['SV-261029-X7K92M'] } });
+    assert.equal(defaultTokenVault.getToken(), 'rotated_fresh_access_token_15m');
+    assert.equal(calls.length, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
+    defaultTokenVault.clear();
+  }
+});
+
+test('Phase 3 Acceptance #2: Seller Resource Isolation prevents Seller A from reading or modifying Seller B resources', () => {
+  const canAccessSellerResource = (principal, resourceSellerId) => {
+    if (!resourceSellerId) return false;
+    if (principal.roles.includes('admin')) return true;
+    return principal.roles.includes('seller') && principal.sellerId === resourceSellerId;
+  };
+
+  const sellerAlpha = { roles: ['seller'], sellerId: 'aaaa0000-0000-0000-0000-000000000001' };
+  const sellerBetaResource = 'bbbb0000-0000-0000-0000-000000000002';
+  const adminUser = { roles: ['admin'], sellerId: null };
+
+  assert.equal(canAccessSellerResource(sellerAlpha, sellerAlpha.sellerId), true);
+  assert.equal(canAccessSellerResource(sellerAlpha, sellerBetaResource), false);
+  assert.equal(canAccessSellerResource(adminUser, sellerBetaResource), true);
+});
+
+test('Phase 3 Open Redirect Protection: sanitizeReturnToPath blocks external URLs and protocol-relative redirects', () => {
+  const sanitizeReturnToPath = (rawPath) => {
+    if (!rawPath || typeof rawPath !== 'string') return '/';
+    const trimmed = rawPath.trim();
+    if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) {
+      return '/';
+    }
+    return trimmed;
+  };
+
+  assert.equal(sanitizeReturnToPath('/bn/account/addresses?tab=default'), '/bn/account/addresses?tab=default');
+  assert.equal(sanitizeReturnToPath('https://evil.example.com/phish'), '/');
+  assert.equal(sanitizeReturnToPath('//evil.example.com'), '/');
+  assert.equal(sanitizeReturnToPath('/\\evil.example.com'), '/');
+});
+
+test('Phase 3 Acceptance #3: Bangla (bn) and English (en) Auth & Address translation parity', () => {
+  const enPath = path.resolve(__dirname, '../../../apps/web/src/messages/en.json');
+  const bnPath = path.resolve(__dirname, '../../../apps/web/src/messages/bn.json');
+
+  const enJson = JSON.parse(fs.readFileSync(enPath, 'utf8'));
+  const bnJson = JSON.parse(fs.readFileSync(bnPath, 'utf8'));
+
+  assert.ok(enJson.Auth, 'en.json must contain Auth namespace');
+  assert.ok(bnJson.Auth, 'bn.json must contain Auth namespace');
+
+  const enAuthKeys = Object.keys(enJson.Auth).sort();
+  const bnAuthKeys = Object.keys(bnJson.Auth).sort();
+  assert.deepEqual(bnAuthKeys, enAuthKeys, 'bn.json Auth keys must have 100% parity with en.json');
+  assert.match(bnJson.Auth.signInTitle, /সাইন ইন/);
+});

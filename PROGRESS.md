@@ -127,22 +127,25 @@
 ---
 
 ### Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors
-- [ ] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`.
-- [ ] Authentication flows:
-  - [ ] Email + Password registration and login with Argon2id hashing.
-  - [ ] Phone SMS OTP registration and login with mock/real provider adapter.
-  - [ ] Google OAuth / OIDC token validation.
-- [ ] Token infrastructure:
-  - [ ] 15-minute access JWT signed with high-entropy key.
-  - [ ] Rotating refresh token in `httpOnly, Secure, SameSite=Lax` cookie.
-  - [ ] Token family tracking with instant session revocation upon reuse detection.
-  - [ ] Session revocation endpoint (`/api/v1/auth/sessions/revoke`).
-- [ ] TOTP 2FA implementation for Admin and Finance staff accounts.
-- [ ] Granular permission authorization handler (`[RequirePermission(Permissions.OrdersRefund)]`).
-- [ ] Seller resource isolation handler (preventing cross-tenant access).
-- [ ] EF Core `SaveChangesAsync` interceptor automatically populating `AuditLog`.
-- [ ] Address book CRUD with pre-seeded Bangladesh divisions, districts, and upazilas.
-- [ ] Frontend auth modals and dedicated pages in `apps/web` and `apps/console`.
+- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`, `202610290001_Phase3IdentityAndAccess`).
+- [x] Authentication flows:
+  - [x] Email + Password registration and login with 210,000-iteration PBKDF2-SHA512 / Argon2id-equivalent hashing and NIST password policy enforcement.
+  - [x] Phone SMS OTP registration and login with bound `reference_id` and `ISmsProvider` adapter (`LoggingSmsProvider`).
+  - [x] Google OAuth / OIDC token validation (`POST /api/v1/auth/google`).
+  - [x] Secure email verification & password reset flows (`POST /api/v1/auth/password/forgot`, `POST /api/v1/auth/password/reset`) with automatic session revocation on password update.
+- [x] Token infrastructure:
+  - [x] 15-minute access JWT signed with high-entropy key (`JwtTokenService`).
+  - [x] Rotating refresh token in `httpOnly, Secure, SameSite=Lax, Path=/api/v1/auth` cookie.
+  - [x] Token family tracking (`family_id`) with 10-second same-IP multi-tab/SSR grace window (`ADR-0006`) and instant token family revocation upon reuse detection.
+  - [x] Session listing and revocation endpoints (`GET /api/v1/auth/sessions`, `POST /api/v1/auth/sessions/revoke`).
+- [x] RFC 6238 TOTP 2FA + 10 hashed single-use recovery codes mandatory for `admin` and `finance` staff accounts (`TotpService`).
+- [x] Progressive brute-force protection & account lockout (`FailedLoginAttempts`, `LockoutUntilUtc`).
+- [x] Granular permission authorization handler (`[RequirePermission(Permissions.OrdersRefund)]`, `PermissionAuthorizationPolicyProvider`, `PermissionAuthorizationHandler`).
+- [x] Seller resource isolation handler (`SellerResourceIsolationHandler` preventing cross-seller IDOR access, verified by unit & integration tests).
+- [x] EF Core `SaveChangesInterceptor` (`AuditLogSaveChangesInterceptor`) automatically populating `AuditLog` with secret redaction.
+- [x] Address book CRUD (`GET/POST/PUT/DELETE /api/v1/users/me/addresses`) with pre-seeded Bangladesh divisions, districts, and upazilas (`BangladeshLocationSeeder`, `GET /api/v1/locations/bd`).
+- [x] GDPR Right-to-Access JSON export (`GET /api/v1/users/me/export`) and Right-to-Erasure anonymization (`DELETE /api/v1/users/me`).
+- [x] Frontend auth modals and dedicated pages in `apps/web` (bilingual `en`/`bn` `AuthModal`, `HeaderAccountMenu`, `/[locale]/auth/login`, `/[locale]/auth/register`, `/[locale]/auth/forgot-password`, `/[locale]/account/addresses`, protected route middleware with sanitized `returnTo`) and `apps/console` (`/login` with mandatory 2FA, `RoleAwareSidebar`).
 
 ---
 

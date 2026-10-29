@@ -1,12 +1,22 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using Serilog;
+using ShopVerse.Api.Authentication;
+using ShopVerse.Api.Authorization;
 using ShopVerse.Api.Configuration;
 using ShopVerse.Api.Health;
 using ShopVerse.Api.Middleware;
+using ShopVerse.Api.Services;
+using ShopVerse.Application.Identity;
+using ShopVerse.Infrastructure.Identity;
+using ShopVerse.Infrastructure.Persistence;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -52,17 +62,58 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     return ConnectionMultiplexer.Connect(options);
 });
 
-// 2.2 Forwarded Headers Options (HIGH-03 / MW-P1-NEW-03: reverse-proxy client IP for rate limiting)
+// 2.2 Forwarded Headers Options (HIGH-03: reverse-proxy client IP for rate limiting)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 1;
+
     if (builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing")
     {
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
     }
 });
+
+// 2.3 Phase 3 Identity, Persistence & RBAC Registration
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, HttpContextCurrentUserService>();
+builder.Services.AddScoped<AuditLogSaveChangesInterceptor>();
+
+builder.Services.AddDbContext<ShopVerseDbContext>((sp, options) =>
+{
+    var dbConn = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? builder.Configuration.GetSection(DatabaseOptions.SectionName)["ConnectionString"]
+        ?? "Host=localhost;Port=5432;Database=mechware_db;Username=mechware;Password=mechware_dev_password";
+
+    options.UseNpgsql(dbConn)
+        .AddInterceptors(sp.GetRequiredService<AuditLogSaveChangesInterceptor>());
+});
+
+builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
+builder.Services.AddSingleton<ITotpService, TotpService>();
+builder.Services.AddSingleton<ISmsProvider, LoggingSmsProvider>();
+builder.Services.AddSingleton<ITokenService>(sp =>
+{
+    JwtOptions jwtOpts = sp.GetRequiredService<IOptions<JwtOptions>>().Value;
+    return new JwtTokenService(
+        jwtOpts.Secret,
+        jwtOpts.Issuer,
+        jwtOpts.Audience,
+        jwtOpts.AccessTokenExpiryMinutes);
+});
+builder.Services.AddSingleton<IdentityService>();
+
+builder.Services
+    .AddAuthentication(JwtBearerAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, JwtBearerAuthenticationHandler>(
+        JwtBearerAuthenticationHandler.SchemeName,
+        _ => { });
+
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
+builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, SellerResourceIsolationHandler>();
+builder.Services.AddAuthorization();
 
 // 3. Health Checks
 builder.Services.AddHttpClient("MinioHealth", client =>
@@ -93,6 +144,13 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 
+    var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (System.IO.File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -110,13 +168,6 @@ builder.Services.AddSwaggerGen(options =>
             new List<string>()
         }
     });
-
-    var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFilename);
-    if (System.IO.File.Exists(xmlPath))
-    {
-        options.IncludeXmlComments(xmlPath);
-    }
 });
 
 // 5. Rate Limiting Middleware
@@ -169,6 +220,8 @@ app.UseSerilogRequestLogging(options =>
 
 app.UseCors("MechWareCors");
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Swagger Documentation UI
 app.UseSwagger();
