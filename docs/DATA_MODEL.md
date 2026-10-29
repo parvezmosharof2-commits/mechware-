@@ -95,6 +95,8 @@ Core user identity for buyers, seller personnel, and internal staff.
 | `status` | `varchar(20)` | NOT NULL, default `'active'` | `'active'`, `'suspended'`, `'locked'` |
 | `two_factor_enabled` | `boolean` | NOT NULL, default `false` | Mandatory for admin/finance |
 | `two_factor_secret` | `text` | nullable | Encrypted TOTP secret key |
+| `two_factor_recovery_codes` | `jsonb` | NOT NULL, default `'[]'` | Hashed single-use backup recovery codes |
+| `google_subject_id` | `varchar(128)` | UNIQUE, nullable | Google OIDC `sub` identifier |
 | `failed_login_attempts`| `int` | NOT NULL, default `0` | Progressive delay counter |
 | `lockout_until` | `timestamptz` | nullable | Timestamp when lockout releases |
 | `email_verified_at` | `timestamptz` | nullable | Verification timestamp |
@@ -107,13 +109,14 @@ Core user identity for buyers, seller personnel, and internal staff.
 **Indexes:**
 - `ux_users_email` UNIQUE (`email`) WHERE `deleted_at IS NULL` — fast lookup & unique constraint.
 - `ux_users_phone` UNIQUE (`phone`) WHERE `deleted_at IS NULL` — fast phone lookup for OTP auth.
+- `ux_users_google_sub` UNIQUE (`google_subject_id`) WHERE `google_subject_id IS NOT NULL AND deleted_at IS NULL` — OAuth lookup.
 - `ix_users_status` (`status`) — filter active vs suspended users.
 
 #### `addresses`
-Saved shipping and billing destinations with Bangladesh administrative hierarchy.
+Saved shipping and billing destinations with Bangladesh administrative hierarchy (`division` -> `district` -> `upazila`).
 
 | Column | Type | Constraints | Description |
-|---|---|---|---|
+|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | Unique address ID |
 | `user_id` | `uuid` | FK -> `users(id)` ON DELETE CASCADE | Owner of the address |
 | `label` | `varchar(50)` | NOT NULL, default `'Home'` | `'Home'`, `'Office'`, `'Factory'` |
@@ -122,7 +125,8 @@ Saved shipping and billing destinations with Bangladesh administrative hierarchy
 | `line1` | `varchar(255)` | NOT NULL | Street, house/road number, industrial zone |
 | `line2` | `varchar(255)` | nullable | Floor, suite, building details |
 | `area` | `varchar(100)` | NOT NULL | Neighborhood / Sub-locality (e.g. 'Gulshan-1') |
-| `district` | `varchar(100)` | NOT NULL | District (e.g. 'Dhaka', 'Chittagong') |
+| `upazila` | `varchar(100)` | NOT NULL | Upazila / Thana (e.g. 'Gulshan', 'Savar') |
+| `district` | `varchar(100)` | NOT NULL | District (e.g. 'Dhaka', 'Chattogram') |
 | `division` | `varchar(100)` | NOT NULL | Division (e.g. 'Dhaka', 'Chattogram') |
 | `postal_code` | `varchar(20)` | NOT NULL | Postal index |
 | `country` | `varchar(2)` | NOT NULL, default `'BD'` | ISO 3166-1 alpha-2 |
@@ -135,6 +139,11 @@ Saved shipping and billing destinations with Bangladesh administrative hierarchy
 
 **Indexes:**
 - `ix_addresses_user_id` (`user_id`) — fast retrieval of user address book.
+
+#### `bd_locations`
+Pre-seeded Bangladesh administrative hierarchy (8 Divisions, 64 Districts, 495+ Upazilas/Thanas) with bilingual labels and shipping zone mapping.
+
+- `id (uuid PK)`, `parent_id (uuid FK -> bd_locations(id) nullable)`, `level (varchar(20))` (`'division'`, `'district'`, `'upazila'`), `name_en (varchar(100) NOT NULL)`, `name_bn (varchar(100) NOT NULL)`, `shipping_zone (varchar(30))` (`'inside_dhaka'`, `'dhaka_suburbs'`, `'outside_dhaka'`), `postal_code_prefix (varchar(10))`.
 
 #### `roles`, `permissions`, `role_permissions`, `user_roles`
 RBAC foundation mapping granular permissions to roles and users.
@@ -183,6 +192,7 @@ Phone and email verification codes bound to specific reference entities to preve
 
 **Indexes:**
 - `ix_otp_codes_lookup` (`recipient`, `type`, `reference_id`, `is_consumed`) — replay-safe lookup.
+- `ix_otp_codes_expires_at` (`expires_at`) — expired OTP cleanup.
 
 ---
 

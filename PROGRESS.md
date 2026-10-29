@@ -116,6 +116,13 @@
   - [x] Fixed `FileUploader.tsx` unmount timer cleanup and aligned `ProductCardSkeleton.tsx` zero-CLS heights.
   - [x] Replaced browser blocking `alert()` with toast in design system showcase.
   - [x] Added missing `flash_sales`, `flash_sale_items`, `conversations`, `messages` to `docs/DATA_MODEL.md` and `docs/API_CONTRACT.md`.
+  - [x] Added nested `status.*` color tokens to `tailwind.preset.js` and `globals.css` (`MW-P2-NEW-01`).
+  - [x] Scoped `/swagger` Content-Security-Policy and enabled OpenAPI XML documentation (`MW-P1-NEW-02`).
+  - [x] Hardened `ForwardedHeadersOptions` (`ForwardLimit = 1` & Dev/Test proxy guard) (`MW-P1-NEW-03`).
+  - [x] Fixed `MechWareApiClient` non-JSON error stream double-read bug (`MW-P1-NEW-04`) and added 15-test regression suite.
+  - [x] Replaced all raw Tailwind palette classes in `Badge.tsx`, `Rating.tsx`, and `design-system/page.tsx` and hardened `lint-tokens.mjs` (`MW-P2-NEW-06`).
+  - [x] Synchronized `PhoneInput.tsx` controlled `value` prop & country switch handler, and added `getMotionVariants` reduced-motion helper (`MW-P2-NEW-07`).
+  - [x] Deduplicated `ix_otp_codes_lookup` index, synced Light Mode `--focus-ring` (`#00707D`), and aligned all Phase 3 Auth/2FA/OAuth/Upazila specs in `DATA_MODEL.md` and `API_CONTRACT.md` (`MW-P0-NEW-08`).
 
 ---
 

@@ -91,17 +91,40 @@
 
 #### `POST /auth/refresh`
 - **Auth**: Public (Reads `refresh_token` cookie) | **Rate Limit**: 20 req/min
-- **Response**: `200 OK` with rotated access token & updated refresh cookie. `401 Unauthorized` (or `403 Token Family Revoked` upon reuse).
+- **Response**: `200 OK` with rotated access token & updated refresh cookie. `401 Unauthorized` (or `403 Token Family Revoked` upon reuse outside the 10-second multi-tab grace window).
+
+#### `POST /auth/google`
+- **Auth**: Public | **Rate Limit**: 10 req/min per IP
+- **Request**: `{ "idToken": "eyJhbGciOiJSUzI1NiIs..." }`
+- **Response**: `200 OK` (Validates Google OIDC ID token, creates/links `users.google_subject_id`, sets `refresh_token` cookie, and returns `accessToken` + `user`).
 
 #### `POST /auth/otp/send` & `POST /auth/otp/verify`
-- **Auth**: Public | **Rate Limit**: 3 req/min | **Payload**: `{ "phone": "+88017...", "type": "cod_confirm" | "login" }`
+- **Auth**: Public | **Rate Limit**: 3 req/min | **Payload**: `{ "phone": "+88017...", "type": "phone_verify" | "login" | "cod_confirm", "referenceId": "optional-uuid" }`
 
-#### `GET /users/me/addresses` & `POST /users/me/addresses`
+#### `POST /auth/password/forgot` & `POST /auth/password/reset`
+- **Auth**: Public | **Rate Limit**: 3 req/min per IP
+- **Forgot Request**: `{ "identifier": "engineer@squarebd.com" }` -> Dispatches time-bound reset token/OTP.
+- **Reset Request**: `{ "identifier": "engineer@squarebd.com", "token": "849201", "newPassword": "NewStrongPassword123!" }` -> Rotates password hash and revokes all active `refresh_tokens` families for the user.
+
+#### `GET /auth/sessions` & `POST /auth/sessions/revoke`
+- **Auth**: Bearer (`authenticated`) | **Rate Limit**: 30 req/min
+- **Revoke Request**: `{ "sessionId": "optional-family-uuid", "revokeAllExceptCurrent": false }` -> Marks target or all refresh token families as `is_revoked = true` and clears cookie on full logout.
+
+#### `POST /auth/2fa/setup` & `POST /auth/2fa/verify`
+- **Auth**: Bearer (`authenticated`, mandatory for `admin` & `finance` roles) | **Rate Limit**: 10 req/min
+- **Setup Response**: `200 OK` `{ "secret": "JBSWY3DPEHPK3PXP", "qrCodeOtpAuthUrl": "otpauth://totp/MECHWARE:admin@mechware.com.bd?...", "recoveryCodes": ["MW-8F92-K19A", "..."] }`
+- **Verify Request**: `{ "totpCode": "123456" }` -> Enables `two_factor_enabled = true` and stores hashed recovery codes.
+
+#### `GET /users/me/addresses`, `POST /users/me/addresses`, `PUT /users/me/addresses/{id}` & `DELETE /users/me/addresses/{id}`
 - **Auth**: Bearer (`customer`) | **Rate Limit**: 60 req/min
 - **Address Request**:
   ```json
-  { "label": "Factory HQ", "recipientName": "Engr. Kabir", "phone": "+8801711000000", "line1": "Plot 12, Export Processing Zone", "line2": "Building B", "area": "Savar", "district": "Dhaka", "division": "Dhaka", "postalCode": "1349", "isDefaultShipping": true }
+  { "label": "Factory HQ", "recipientName": "Engr. Kabir", "phone": "+8801711000000", "line1": "Plot 12, Export Processing Zone", "line2": "Building B", "area": "DEPZ", "upazila": "Savar", "district": "Dhaka", "division": "Dhaka", "postalCode": "1349", "isDefaultShipping": true, "isDefaultBilling": true }
   ```
+
+#### `GET /locations/bd`
+- **Auth**: Public (Cached 24h in Redis) | **Rate Limit**: 120 req/min
+- **Response**: `200 OK` Hierarchical tree of Bangladesh `divisions` -> `districts` -> `upazilas` (with English & Bengali names and calculated `shippingZone`).
 
 #### `GET /users/me/export` (GDPR Data Portability)
 - **Auth**: Bearer (`customer`) | **Rate Limit**: 1 req/hour
