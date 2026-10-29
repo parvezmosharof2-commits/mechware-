@@ -53,25 +53,49 @@ We implement a **Two-Phase Inventory Reservation Pattern** with tiered concurren
 
 ### 2. Concurrency Strategy
 1. **Tier 1 — High-Contention Guard (Redis RedLock)**:
-   For products under high write pressure, a distributed lock with a key `lock:inventory:{variantId}` is acquired with a 2-second timeout.
-2. **Tier 2 — ACID Database Concurrency**:
-   Inside an EF Core / Npgsql database transaction, the target row in `inventory_items` is selected with `FOR UPDATE`:
+   For products under high write pressure, a distributed lock with key `lock:inventory:{variantId}` is acquired with a 2-second timeout.
+2. **Tier 2 — ACID Database Concurrency & Deadlock Prevention**:
+   Inside an EF Core / Npgsql database transaction, all inventory items for a multi-line order are locked in **strict deterministic UUID order (`ORDER BY variant_id ASC, warehouse_id ASC`)** to mathematically prevent AB-BA deadlocks between concurrent checkouts:
    ```sql
-   SELECT id, on_hand, reserved 
+   SELECT id, variant_id, warehouse_id, on_hand, reserved 
    FROM inventory_items 
-   WHERE variant_id = @variantId AND warehouse_id = @warehouseId 
+   WHERE (variant_id, warehouse_id) IN ((@v1, @w1), (@v2, @w2))
+   ORDER BY variant_id ASC, warehouse_id ASC
    FOR UPDATE;
    ```
-   If `(on_hand - reserved) < requested_quantity`, the transaction rolls back immediately and returns an RFC 7807 `INSUFFICIENT_STOCK` error.
-   If sufficient, `reserved` is incremented and a `stock_reservations` row is created.
+   If `(on_hand - reserved) < requested_quantity` for any item, the transaction rolls back immediately and returns an RFC 7807 `INSUFFICIENT_STOCK` error.
+   If all items are sufficient, `reserved` is incremented, and corresponding `stock_reservations` records are created with `status = 'active'`.
 
 ### 3. Expiry and Reconciliation
-- A background worker (`ShopVerse.Worker`) runs every 60 seconds executing:
+- A background worker (`ShopVerse.Worker`) runs every 60 seconds executing an atomic set-based CTE query with `FOR UPDATE SKIP LOCKED` to release expired active holds without lock contention:
   ```sql
-  SELECT * FROM stock_reservations WHERE expires_at < NOW() AND status = 'pending';
+  WITH expired_holds AS (
+      SELECT id, variant_id, warehouse_id, quantity
+      FROM stock_reservations
+      WHERE status = 'active' AND expires_at <= NOW()
+      ORDER BY variant_id ASC, warehouse_id ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 500
+  ),
+  released_reservations AS (
+      UPDATE stock_reservations sr
+      SET status = 'expired'
+      FROM expired_holds eh
+      WHERE sr.id = eh.id
+      RETURNING eh.variant_id, eh.warehouse_id, eh.quantity
+  )
+  UPDATE inventory_items inv
+  SET reserved = inv.reserved - agg.total_qty,
+      updated_at = NOW()
+  FROM (
+      SELECT variant_id, warehouse_id, SUM(quantity) AS total_qty
+      FROM released_reservations
+      GROUP BY variant_id, warehouse_id
+  ) agg
+  WHERE inv.variant_id = agg.variant_id
+    AND inv.warehouse_id = agg.warehouse_id;
   ```
-  Expired reservations are atomatically cancelled in a batch transaction, decrementing `reserved` on the inventory items and emitting a `StockReservationExpiredDomainEvent`.
-- When an order payment is captured, the reservation is marked as `Fulfilled`, decrementing `on_hand` and `reserved` atomically.
+- When an order payment is captured, the reservation is transitioned to `status = 'fulfilled'`, atomically decrementing `on_hand` and `reserved`.
 
 ## Consequences
 ### Positive:

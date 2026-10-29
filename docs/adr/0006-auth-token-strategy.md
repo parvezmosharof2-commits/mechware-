@@ -34,18 +34,22 @@ We implement a **Dual-Token Scheme with Refresh Token Family Tracking** and **Gr
    - Stored in an `httpOnly`, `Secure`, `SameSite=Lax`, `Path=/api/v1/auth` cookie. JavaScript cannot read this cookie.
    - Hashed with SHA-256 before persisting into the PostgreSQL `refresh_tokens` table.
 
-### 2. Refresh Token Family Tracking & Reuse Detection
-- Each refresh token belongs to a `family_id` (UUID).
-- When a refresh token is exchanged at `/api/v1/auth/refresh`:
-  1. The server checks if the presented token has already been used.
-  2. If the token was **already used** (indicating potential token theft and replay attack):
-     - The server immediately flags a security breach.
-     - **All tokens in the entire `family_id` are instantly revoked**.
-     - All active sessions for that user are terminated.
-     - A high-priority security audit log entry is dispatched.
-  3. If the token is valid and unused:
-     - The old token is marked as `is_used = true`.
-     - A new refresh token is issued within the same `family_id`, and a new access JWT is returned.
+### 2. Refresh Token Family Tracking & Concurrency-Safe Reuse Detection
+- Each refresh token belongs to a `family_id` (UUID) and records `used_at (timestamptz)` and `replaced_by_token_hash`.
+- When a refresh token is presented at `/api/v1/auth/refresh`:
+  1. The server checks if the presented token has already been marked as `is_used = true`.
+  2. **10-Second Concurrency Grace Window (Same-Client / Multi-Tab / Next.js 15 SSR)**:
+     If the token was marked used within the last 10 seconds (`used_at >= NOW() - INTERVAL '10 seconds'`) AND the incoming request originates from the same `created_by_ip` and client context:
+     - The server does **not** treat this as a breach.
+     - It returns the active valid access JWT for the current family head without revoking the session, preventing false-positive family revocations during concurrent React Server Component queries or multiple browser tabs on mobile 4G networks.
+  3. If the token was used outside the 10-second grace window OR from a suspicious IP/client:
+     - The server immediately flags a security breach (true token theft / replay attack).
+     - **All tokens across the entire `family_id` are instantly revoked**.
+     - Active sessions for that user are terminated.
+     - A high-priority security audit event is logged.
+  4. If the token is valid and unused:
+     - The token is updated: `is_used = true`, `used_at = NOW()`, `replaced_by_token_hash = HASH(newToken)`.
+     - A new refresh token is generated within the same `family_id`, and a new access JWT is issued.
 
 ### 3. Granular RBAC (Permission-Driven, Not Role-Checked)
 - Code checks permissions, not raw roles:

@@ -65,7 +65,7 @@ Read docs/01_PROJECT_BRIEF.md (sections 4, 5, 6, 16), docs/ARCHITECTURE.md and P
 
 Build:
 1. Repository structure exactly as in brief section 5:
-   - backend/: C# 12 / .NET 8 (or 9) Solution (ShopVerse.sln):
+   - backend/: C# 13 / .NET 10 Solution (ShopVerse.sln):
      - ShopVerse.Domain (Entities, Value Objects, Domain Events, Enums)
      - ShopVerse.Application (CQRS Commands/Queries, MediatR, FluentValidation)
      - ShopVerse.Infrastructure (EF Core DbContext, PostgreSQL, Redis, MinIO, Mailpit)

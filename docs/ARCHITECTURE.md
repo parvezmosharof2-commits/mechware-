@@ -96,21 +96,24 @@ flowchart TD
 
 | Module | Core Responsibilities | Owned Tables | Public Application Service Interface | Domain Events Published / Consumed |
 |---|---|---|---|---|
-| **Identity & Access** | Authentication (Password, OTP, OAuth), Refresh Token Rotation, RBAC, 2FA, Address book. | `users`, `addresses`, `roles`, `permissions`, `role_permissions`, `user_roles`, `refresh_tokens`, `otp_codes`, `audit_logs` | `IIdentityService`, `ITokenService`, `IOtpService`, `IAddressService` | **Pub**: `UserRegistered`, `UserLoggedIn`, `UserLockedOut`<br>**Sub**: None |
-| **Seller & KYC** | Multi-vendor onboarding, KYC verification, store profile, commission overrides. | `sellers`, `seller_documents` | `ISellerService`, `IKycVerificationService` | **Pub**: `SellerApplied`, `SellerApproved`, `SellerSuspended`<br>**Sub**: `UserRegistered` |
-| **Catalog & Taxonomy** | Hierarchical categories, brands, industrial products, variants, rich specs, CAD/datasheets, slug history. | `categories`, `brands`, `products`, `product_variants`, `product_media`, `slug_histories` | `ICatalogService`, `IProductQueryService`, `ICategoryService` | **Pub**: `ProductCreated`, `ProductUpdated`, `ProductStatusChanged`, `CategoryUpdated`<br>**Sub**: `ReviewSubmitted` (updates rating average) |
-| **Inventory & Warehouse** | Stock tracking per warehouse, 15-min reservation hold, concurrency control (`SELECT FOR UPDATE`), low stock alerts. | `warehouses`, `inventory_items`, `stock_reservations` | `IInventoryService`, `IStockReservationService` | **Pub**: `StockReserved`, `StockReservationExpired`, `StockDeducted`, `StockLow`<br>**Sub**: `OrderPlaced`, `PaymentCaptured`, `OrderCancelled` |
-| **Cart & Promotions** | Guest/user cart management, cart merging on login, multi-seller item grouping, discount calculations, coupon limits. | `carts`, `cart_items`, `promotions`, `coupons`, `coupon_usages` | `ICartService`, `IPromotionEngine` | **Pub**: `CartMerged`, `CouponRedeemed`<br>**Sub**: `UserLoggedIn` |
-| **Checkout & Order** | Two-tier order creation (Parent `Order` + child `SubOrder` per seller), state machine, order cancellation. | `orders`, `sub_orders`, `order_items`, `order_events` | `ICheckoutService`, `IOrderService`, `ISubOrderService` | **Pub**: `OrderPlaced`, `SubOrderConfirmed`, `SubOrderStatusChanged`, `OrderCancelled`<br>**Sub**: `PaymentCaptured`, `PaymentFailed`, `ShipmentDelivered` |
-| **Payment & Settlement** | Gateway abstraction (bKash, Stripe, SSLCommerz, COD), webhook verification, refunds, reconciliation. | `payments`, `refunds` | `IPaymentService`, `IPaymentGatewayFactory`, `IRefundService` | **Pub**: `PaymentInitiated`, `PaymentCaptured`, `PaymentFailed`, `RefundIssued`<br>**Sub**: `OrderPlaced`, `ReturnApproved` |
+| **Identity & Access** | Authentication (Argon2id Password, OTP, OAuth), Refresh Token Rotation with 10s grace window, RBAC, 2FA, Address book. | `users`, `addresses`, `roles`, `permissions`, `role_permissions`, `user_roles`, `refresh_tokens`, `otp_codes`, `audit_logs` | `IIdentityService`, `ITokenService`, `IOtpService`, `IAddressService` | **Pub**: `UserRegistered`, `UserLoggedIn`, `UserLockedOut`<br>**Sub**: None |
+| **Seller & KYC** | Multi-vendor onboarding, KYC document verification (magic bytes + 10MB cap), store profile, commission overrides, first-10-listing gate. | `sellers`, `seller_documents` | `ISellerService`, `IKycVerificationService` | **Pub**: `SellerApplied`, `SellerApproved`, `SellerSuspended`<br>**Sub**: `UserRegistered` |
+| **Catalog & Taxonomy** | Hierarchical categories with VAT rates, brands, industrial products, variants with sale windows & weight, CAD/datasheets, dynamic specs, slug history. | `categories`, `brands`, `products`, `product_variants`, `product_media`, `slug_histories`, `attributes`, `attribute_values`, `product_attribute_values` | `ICatalogService`, `IProductQueryService`, `ICategoryService` | **Pub**: `ProductCreated`, `ProductUpdated`, `ProductStatusChanged`, `CategoryUpdated`<br>**Sub**: `ReviewSubmitted` (updates rating average) |
+| **Inventory & Warehouse** | Multi-warehouse stock tracking, deterministic UUID ordering (`ORDER BY variant_id, warehouse_id`), 15-min reservation hold, concurrency control (`SELECT FOR UPDATE`), low stock alerts. | `warehouses`, `inventory_items`, `stock_reservations` | `IInventoryService`, `IStockReservationService` | **Pub**: `StockReserved`, `StockReservationExpired`, `StockDeducted`, `StockLow`<br>**Sub**: `OrderPlaced`, `PaymentCaptured`, `OrderCancelled` |
+| **Cart & Promotions** | Guest/user cart management, cart line update/delete, cart merge on login, multi-seller item grouping, atomic coupon increment, promo engine. | `carts`, `cart_items`, `promotions`, `coupons`, `coupon_usages` | `ICartService`, `IPromotionEngine` | **Pub**: `CartMerged`, `CouponRedeemed`<br>**Sub**: `UserLoggedIn` |
+| **Customer Engagement & State** | Customer wishlist management, recently viewed industrial hardware history, saved search alerts. | `wishlists`, `wishlist_items`, `recently_viewed`, `saved_searches` | `IWishlistService`, `ICustomerStateService` | **Pub**: `ItemWishlisted`<br>**Sub**: `UserLoggedIn` |
+| **Checkout & Order** | Locked 15-min checkout session snapshotting, two-tier order creation (Parent `Order` + child `SubOrder` per seller with seller vs platform discount split), state machine, order cancellation. | `orders`, `sub_orders`, `order_items`, `order_events`, `checkout_sessions` | `ICheckoutService`, `IOrderService`, `ISubOrderService` | **Pub**: `OrderPlaced`, `SubOrderConfirmed`, `SubOrderStatusChanged`, `OrderCancelled`<br>**Sub**: `PaymentCaptured`, `PaymentFailed`, `ShipmentDelivered` |
+| **B2B Engineering & Turnkey RFQ** | Industrial custom machinery quotes, turnkey project specs, proforma invoice requests, milestone billing advances. | `rfq_requests` | `IRfqService` | **Pub**: `RfqSubmitted`, `RfqQuoted`, `RfqAccepted`<br>**Sub**: `OrderPlaced` |
+| **Payment & Settlement** | Gateway abstraction (bKash Server Execute, Stripe, SSLCommerz, COD with OTP verification), AWS SNS IPN / Stripe webhook capture, refunds, nightly bank reconciliation. | `payments`, `refunds`, `payment_reconciliations` | `IPaymentService`, `IPaymentGatewayFactory`, `IRefundService`, `IReconciliationService` | **Pub**: `PaymentInitiated`, `PaymentCaptured`, `PaymentFailed`, `RefundIssued`<br>**Sub**: `OrderPlaced`, `ReturnApproved` |
 | **Shipping & Courier** | Delivery fee matrix by zone/weight, courier dispatch (Steadfast/Pathao), consignment tracking, status webhooks. | `shipments`, `shipment_tracking_events` | `IShippingCalculator`, `ICourierAdapterFactory`, `IShipmentService` | **Pub**: `ShipmentCreated`, `ShipmentInTransit`, `ShipmentDelivered`, `DeliveryFailed`<br>**Sub**: `SubOrderStatusChanged` (when packed) |
-| **Returns & Customer Support** | RMA request workflow, return verification, automatic/manual approval, replacement/refund dispatch. | `return_requests` | `IReturnService`, `IRmaWorkflowService` | **Pub**: `ReturnRequested`, `ReturnApproved`, `ReturnCompleted`<br>**Sub**: `ShipmentDelivered` |
-| **Finance & Ledger** | Double-entry bookkeeping (`Debit == Credit`), platform commission, tax payable, seller payout batching. | `ledger_accounts`, `ledger_entries`, `payouts` | `IFinancialLedgerService`, `IPayoutService` | **Pub**: `LedgerBalancedBatchPosted`, `PayoutBatchExecuted`<br>**Sub**: `PaymentCaptured`, `RefundIssued`, `SubOrderCompleted` |
-| **Reviews & Q&A** | Verified purchaser ratings, AI review moderation, helpful votes, seller replies, Q&A threads. | `reviews`, `review_media`, `questions`, `answers` | `IReviewService`, `IQnaService` | **Pub**: `ReviewSubmitted`, `ReviewPublished`<br>**Sub**: `ShipmentDelivered` |
+| **Returns & Customer Support** | RMA request workflow, return verification with internal photo object keys, automatic/manual approval, replacement/refund dispatch. | `return_requests` | `IReturnService`, `IRmaWorkflowService` | **Pub**: `ReturnRequested`, `ReturnApproved`, `ReturnCompleted`<br>**Sub**: `ShipmentDelivered` |
+| **Finance & Ledger** | Multi-vendor double-entry bookkeeping (`Debit == Credit` enforced via deferred constraint trigger `trg_ledger_batch_zero_sum`), platform promo expense, platform commission, tax payable, seller payout batching. | `ledger_accounts`, `ledger_entries`, `payouts` | `IFinancialLedgerService`, `IPayoutService` | **Pub**: `LedgerBalancedBatchPosted`, `PayoutBatchExecuted`<br>**Sub**: `PaymentCaptured`, `RefundIssued`, `SubOrderCompleted` |
+| **Reviews & Q&A** | Verified purchaser ratings, internal storage object key attachments, AI review moderation, helpful votes, seller replies, Q&A threads. | `reviews`, `review_media`, `questions`, `answers` | `IReviewService`, `IQnaService` | **Pub**: `ReviewSubmitted`, `ReviewPublished`<br>**Sub**: `ShipmentDelivered` |
 | **Search & Discovery** | Typo-tolerant search, faceted filtering, autocomplete (<50ms), synonyms, Bangla transliteration. | None (Index stored in Meilisearch) | `ISearchProvider`, `IAutocompleteService` | **Pub**: None<br>**Sub**: `ProductUpdated`, `ProductStatusChanged`, `CategoryUpdated` |
-| **CMS & Notifications** | Dynamic homepage banners, campaign blocks, bilingual notifications (SMS, Email, In-App). | `cms_banners`, `cms_sections`, `cms_pages`, `notifications` | `ICmsService`, `INotificationDispatcher` | **Pub**: `NotificationDispatched`<br>**Sub**: `OrderPlaced`, `PaymentFailed`, `ShipmentDelivered`, `StockLow` |
+| **CMS & Content** | Dynamic homepage banners, campaign blocks, bilingual pages and layout sections. | `cms_banners`, `cms_sections`, `cms_pages` | `ICmsService` | **Pub**: `CmsContentUpdated`<br>**Sub**: None |
+| **Notifications & Comms** | Bilingual notifications (SMS via local gateway, Email via Mailpit/SendGrid, In-App toast/bell). | `notifications` | `INotificationDispatcher` | **Pub**: `NotificationDispatched`<br>**Sub**: `OrderPlaced`, `PaymentFailed`, `ShipmentDelivered`, `StockLow` |
 | **AI Services (Gemini)** | Semantic search query parsing, PDP review summarization, shopping assistant chat, seller listing generation. | None (Prompt cache in Redis) | `IAiProvider`, `IShoppingAssistantService` | **Pub**: `AiSummaryGenerated`<br>**Sub**: `ReviewPublished` |
-| **Audit & Reliability** | Transactional outbox relay, API idempotency filter, automated audit trail for mutating requests. | `outbox_messages`, `idempotency_records` | `IOutboxDispatcher`, `IIdempotencyService`, `IAuditLogger` | **Pub**: Relays all domain events to subscribers<br>**Sub**: All entity mutations |
+| **Audit, Config & Reliability** | Transactional outbox relay, scoped API idempotency filter `(actor_scope, endpoint, key)` with in-flight locking, global system settings, dynamic feature flags. | `outbox_messages`, `idempotency_records`, `system_settings`, `feature_flags` | `IOutboxDispatcher`, `IIdempotencyService`, `IAuditLogger`, `ISettingsService` | **Pub**: Relays all domain events to subscribers<br>**Sub**: All entity mutations |
 
 ---
 
@@ -160,48 +163,73 @@ sequenceDiagram
     Web->>Api: POST /api/v1/checkout/reserve (Idempotency-Key)
     
     Api->>Redis: Acquire RedLock on Variant IDs
-    Api->>PG: Begin Transaction: SELECT ... FOR UPDATE on inventory_items
-    Api->>PG: Verify Available >= Qty; INSERT stock_reservations (TTL = 15m)
+    Api->>PG: Begin Transaction: SELECT ... FOR UPDATE on inventory_items (ORDER BY variant_id ASC, warehouse_id ASC)
+    Api->>PG: Verify Available >= Qty; INSERT stock_reservations & checkout_sessions (snapshot locked totals, TTL = 15m)
     Api->>PG: Commit Transaction
     Api->>Redis: Release RedLock
     
-    Api-->>Web: 200 OK (ReservationToken: res_89a2bc1e)
+    Api-->>Web: 200 OK (ReservationToken: res_89a2bc1e, GrandTotal: 95,050 BDT)
     
     Web->>Api: POST /api/v1/checkout/orders (ReservationToken, PaymentMethod: bkash)
     Api->>PG: Begin Transaction:
-    Api->>PG: Create Parent Order (SV-261029-X7K92M, status: unpaid)
-    Api->>PG: Split into SubOrders per seller (Sub-01: MechWare, Sub-02: Siemens BD)
+    Api->>PG: Load locked checkout_sessions; create Parent Order (SV-261029-X7K92M, status: unpaid)
+    Api->>PG: Split into SubOrders per seller with separate seller_discount & platform_discount
     Api->>PG: Commit Transaction
     
-    Api->>bKash: Create Payment Agreement / Intent (Amount: 95,050 BDT, Callback URL)
-    bKash-->>Api: Payment Redirect URL + PaymentID
+    Api->>bKash: Server-to-Server: Create Payment Agreement / Intent (Amount: 95,050 BDT, Callback URL)
+    bKash-->>Api: Payment Redirect URL + PaymentID (TR00112233)
     Api-->>Web: 201 Created (Redirect URL)
     Web->>Buyer: Redirect to bKash Hosted Gateway
+    
+    Buyer->>bKash: Authenticate Wallet + Enter SMS PIN on bKash Gateway
+    bKash-->>Web: Browser Redirect: /checkout/payment-callback?paymentID=TR00112233&status=success
+    
+    Note over Web,Api: Crucial Security Step: Never trust browser query params
+    Web->>Api: POST /api/v1/payments/bkash/execute (paymentId: TR00112233, orderNumber: SV-261029-X7K92M)
+    Api->>bKash: Server-to-Server POST /tokenized/checkout/execute (paymentId)
+    bKash-->>Api: 200 OK (transactionStatus: "Completed", trxID: "BK98231", amount: 95050.00)
+    
+    Api->>PG: Begin Transaction:
+    Api->>PG: Verify amount & order; UPDATE payments SET status = 'captured', provider_tx_id = 'BK98231'
+    Api->>PG: UPDATE orders SET payment_status = 'paid', status = 'processing'
+    Api->>PG: UPDATE sub_orders SET status = 'confirmed'
+    Api->>PG: Deduct inventory_items.on_hand and mark stock_reservations as 'converted'
+    Api->>PG: Post balanced ledger batch: Debit Escrow, Credit Seller Payable + Platform Commission
+    Api->>PG: INSERT into outbox_messages (PaymentCapturedDomainEvent)
+    Api->>PG: Commit Transaction
+    
+    Api-->>Web: 200 OK (Order Confirmed, OrderNumber: SV-261029-X7K92M)
+    Web->>Buyer: Navigate to /order/confirmed (SV-261029-X7K92M)
 ```
 
-### 3.3 Payment Webhook Flow (bKash / Stripe Capture)
+### 3.3 Payment Webhook / IPN Flow (bKash AWS SNS & Stripe Capture)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Gateway as Payment Gateway (bKash / Stripe)
+    participant Gateway as Payment Gateway (bKash AWS SNS / Stripe)
     participant Api as Webhook Controller (/api/v1/webhooks)
     participant PG as PostgreSQL 16
     participant Worker as ShopVerse.Worker (Outbox Relay)
     participant Client as Buyer / Seller
 
-    Gateway->>Api: POST /api/v1/webhooks/payments (Signature, Payload)
-    Api->>Api: Verify Cryptographic HMAC Signature
+    alt bKash AWS SNS Instant Payment Notification (POST /api/v1/webhooks/bkash/ipn)
+        Gateway->>Api: HTTP POST AWS SNS Notification (SigningCertURL, Signature, Message)
+        Api->>Api: Validate SigningCertURL host (sns.*.amazonaws.com) + Verify X.509 RSA/SHA Signature
+    else Stripe Webhook (POST /api/v1/webhooks/stripe)
+        Gateway->>Api: HTTP POST Webhook (Stripe-Signature header, raw JSON payload)
+        Api->>Api: Verify HMAC-SHA256 signature using Stripe Webhook Secret
+    end
     
-    Api->>PG: Check payments table for Idempotency (provider_tx_id)
-    alt Already processed
-        Api-->>Gateway: 200 OK (Duplicate Ignored)
-    else First Presentation
+    Api->>PG: Check payments table for Idempotency (provider_tx_id / idempotency_records)
+    alt Already processed (e.g., via direct server-to-server /execute)
+        Api-->>Gateway: 200 OK (Duplicate Ignored / Idempotent Ack)
+    else First Presentation / Asynchronous Fallback Capture
         Api->>PG: Begin Transaction:
         Api->>PG: Update payment status to 'captured'
         Api->>PG: Update parent order status to 'paid'
         Api->>PG: Update all child SubOrders to 'confirmed'
-        Api->>PG: Convert stock_reservations to physical deductions (on_hand -= qty)
+        Api->>PG: Convert stock_reservations to physical deductions (on_hand -= qty, status = 'converted')
         Api->>PG: Write balanced entries to double-entry ledger (Escrow Debit, Seller Liability Credit)
         Api->>PG: INSERT into outbox_messages (PaymentCapturedDomainEvent)
         Api->>PG: Commit Transaction
@@ -219,34 +247,47 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Buyer as Buyer (Rahim)
+    actor Buyer as Buyer (Engr. Rahim)
     participant Web as Next.js Storefront
     participant Api as ASP.NET Core API
     participant SMS as SMS Gateway Adapter
     participant PG as PostgreSQL 16
 
     Buyer->>Web: Select Cash on Delivery (Order Value <= 15,000 BDT)
-    Web->>Api: POST /api/v1/checkout/orders (Method: COD)
+    Web->>Api: POST /api/v1/checkout/orders (ReservationToken, PaymentMethod: COD)
     
-    Api->>Api: Validate Delivery Zone & Order Limit <= 15,000 BDT
-    Api->>PG: Generate 6-digit OTP code & save hash to otp_codes (TTL = 5m)
-    Api->>SMS: Dispatch SMS with code "Your MECHWARE order verification code is 849201"
-    Api-->>Web: 200 OK (Requires OTP Challenge)
-    
-    Web->>Buyer: Open Modal: "Enter 6-digit SMS verification code"
-    Buyer->>Web: Submits "849201"
-    Web->>Api: POST /api/v1/payments/cod/verify-otp (orderNumber, otp)
-    
-    Api->>PG: Validate OTP hash & is_consumed == false
+    Api->>Api: Validate Delivery Zone & Order Limit <= 15,000 BDT (Blocked for > 15k BDT)
     Api->>PG: Begin Transaction:
-    Api->>PG: Mark OTP as consumed
-    Api->>PG: Set parent order payment_status to 'cod_verified'
-    Api->>PG: Set child SubOrders status to 'confirmed'
-    Api->>PG: INSERT into outbox_messages (OrderPlacedDomainEvent)
+    Api->>PG: Create Parent Order (SV-261029-X7K92M, payment_status: 'cod_pending_otp', status: 'pending')
+    Api->>PG: Create SubOrders (status: 'pending')
+    Api->>PG: Generate 6-digit OTP; INSERT into otp_codes (recipient: phone, type: 'cod_confirm', reference_id: order.id, code_hash, expires_at: 5m)
     Api->>PG: Commit Transaction
     
-    Api-->>Web: 200 OK (Order Confirmed)
-    Web->>Buyer: Navigate to /order/confirmed (SV-261029-X7K92M)
+    Api->>SMS: Dispatch SMS with code "Your MECHWARE order verification code is 849201 for order SV-261029-X7K92M"
+    Api-->>Web: 200 OK (Requires OTP Challenge, orderNumber: SV-261029-X7K92M, orderId: uuid)
+    
+    Web->>Buyer: Open Modal: "Enter 6-digit SMS verification code sent to +88017..."
+    Buyer->>Web: Submits "849201"
+    Web->>Api: POST /api/v1/payments/cod/verify-otp (orderId, orderNumber, otp: "849201")
+    
+    Api->>PG: Query otp_codes WHERE recipient = order.shipping_phone AND reference_id = order.id AND is_consumed = false
+    Api->>Api: Constant-time HMAC comparison (CryptographicOperations.FixedTimeEquals)
+    
+    alt OTP Valid & Not Expired
+        Api->>PG: Begin Transaction:
+        Api->>PG: UPDATE otp_codes SET is_consumed = true WHERE id = otp.id
+        Api->>PG: UPDATE orders SET payment_status = 'cod_verified', status = 'confirmed' WHERE id = order.id
+        Api->>PG: UPDATE sub_orders SET status = 'confirmed' WHERE order_id = order.id
+        Api->>PG: Convert stock_reservations to physical deductions (on_hand -= qty, status = 'converted')
+        Api->>PG: INSERT into outbox_messages (OrderPlacedDomainEvent)
+        Api->>PG: Commit Transaction
+        
+        Api-->>Web: 200 OK (Order Confirmed)
+        Web->>Buyer: Navigate to /order/confirmed (SV-261029-X7K92M)
+    else Invalid Code / Attempts Exceeded
+        Api->>PG: Increment attempts_count (lock if >= 5)
+        Api-->>Web: 400 Bad Request ("Invalid or expired OTP code")
+    end
 ```
 
 ### 3.5 Courier Webhook & Shipment Progression Flow
@@ -369,9 +410,9 @@ sequenceDiagram
 
 | Route | Path | Rendering Mode | Revalidation / Caching | Rationale |
 |---|---|---|---|---|
-| **Homepage** | `/` | **ISR** (Incremental Static Regen) | `revalidate: 300` (5 mins) | Maximum LCP (< 1.2s), heavy SEO benefits, refreshed via CMS webhook. |
+| **Homepage** | `/` | **ISR** (Incremental Static Regen) | `revalidate: 120` (2 mins) | Maximum LCP (< 1.2s), heavy SEO benefits, refreshed on schedule or via CMS webhook on-demand. |
 | **Category Listing (PLP)** | `/c/[slug]` | **ISR + Dynamic Query** | `revalidate: 60` (1 min) | High-speed SEO crawlability for category head pages with client-side query refinement. |
-| **Product Detail (PDP)** | `/p/[slug]` | **ISR + Dynamic Stock** | `revalidate: 60` (1 min) | Instant static HTML shell + fast client-side live pricing and real-time inventory hydration. |
+| **Product Detail (PDP)** | `/p/[slug]` | **ISR + Dynamic Stock** | `revalidate: 300` (5 mins) | Instant static HTML shell with on-demand tag revalidation (`revalidateTag(product-id)`) on `ProductUpdated` + client-side live pricing and real-time inventory hydration. |
 | **Search Results** | `/search` | **SSR** (Server-Side Rendering) | `no-store` (Dynamic) | Unlimited faceted combinations; powered directly by sub-50ms Meilisearch backend. |
 | **Shopping Cart** | `/cart` | **CSR** (Client-Side Rendering) | Dynamic Client State | Dynamic user-specific data, optimistic quantity steppers, TanStack Query. |
 | **Checkout Portal** | `/checkout` | **CSR** (Client-Side Rendering) | `no-store` (Strictly Dynamic) | Idempotent multi-step wizard, zero caching to prevent stale pricing or stock holds. |

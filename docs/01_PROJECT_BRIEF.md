@@ -125,7 +125,7 @@ live chat, B2B pricing, multi-warehouse routing, flash-sale queueing, marketplac
 
 ```
 shopverse/
-├── backend/                             # C# .NET 8/9 Solution (Clean / Modular Architecture)
+├── backend/                             # C# 13 / .NET 10 Solution (Clean / Modular Architecture)
 │   ├── ShopVerse.sln
 │   ├── src/
 │   │   ├── ShopVerse.Domain/           # Entities, Enums, Value Objects (Money), Domain Events

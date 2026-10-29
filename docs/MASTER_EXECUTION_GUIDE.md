@@ -27,7 +27,7 @@ flowchart TD
 - **Phase 0 (Architecture & Plan)**:
   - Antigravity reads `docs/01_PROJECT_BRIEF.md`, `docs/COMPANY_PROFILE.md`, `docs/02_DESIGN_SYSTEM.md`.
   - Produces `ARCHITECTURE.md`, `DATA_MODEL.md` (PostgreSQL ER schema), `API_CONTRACT.md`, and `PROGRESS.md`.
-- **Phase 1 (C# .NET 8/9 API + Next.js 15 Monorepo)**:
+- **Phase 1 (C# 13 / .NET 10 API + Next.js 15 Monorepo)**:
   - ASP.NET Core Clean Architecture solution + Next.js 15 frontend monorepo.
   - Docker Compose (`docker-compose.yml`: Postgres 16, Redis 7, Meilisearch, MinIO, Mailpit).
   - CI pipeline + strongly-typed Money value object (`decimal` precision).
@@ -144,5 +144,5 @@ Resolve every Critical, High, and Medium issue immediately. Update the code, run
 Open Antigravity and enter this exact kickoff instruction:
 
 ```text
-START PHASE 0: Read docs/01_PROJECT_BRIEF.md, docs/COMPANY_PROFILE.md, and docs/02_DESIGN_SYSTEM.md. Formulate the complete MECHWARE Architecture (C# .NET 8/9 + Next.js 15), PostgreSQL ER diagram, API Contract, and PROGRESS.md task list.
+START PHASE 0: Read docs/01_PROJECT_BRIEF.md, docs/COMPANY_PROFILE.md, and docs/02_DESIGN_SYSTEM.md. Formulate the complete MECHWARE Architecture (C# 13 / .NET 10 + Next.js 15), PostgreSQL ER diagram, API Contract, and PROGRESS.md task list.
 ```

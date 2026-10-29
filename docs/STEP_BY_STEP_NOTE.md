@@ -10,7 +10,7 @@
 - **ট্যাগলাইন**: **YOUR GATEWAY TO INDUSTRY 4.0**
 - **ওয়েবসাইট টাইপ**: B2B & B2C Industrial Machinery, Automation Marketplace & Engineering Platform ($100K Agency Quality)
 - **টেক স্ট্যাক**: 
-  - **কোর ব্যাকএন্ড ও ফিনান্স**: C# 12 / .NET 8 (or 9) ASP.NET Core Clean Architecture, Entity Framework Core, PostgreSQL 16, Redis 7
+  - **কোর ব্যাকএন্ড ও ফিনান্স**: C# 13 / .NET 10 ASP.NET Core Clean Architecture, Entity Framework Core, PostgreSQL 16, Redis 7
   - **ফ্রন্টএন্ড স্টোরফ্রন্ট ও অ্যাডমিন**: Next.js 15 (TypeScript, Tailwind CSS 4, shadcn/ui)
   - **ব্র্যান্ড কালার**: Tech Midnight Navy (`#060B18`), Electric Cyan / Mech Teal (`#00E5FF`), Royal Blue (`#0F3E7D`)
 - **প্রজেক্ট ফোল্ডার**: `F:\CHAT GPT\WEBSIDE`
@@ -103,5 +103,5 @@ Resolve every Critical, High, and Medium issue immediately. Update the code, run
 Antigravity চ্যাটে নিচের লাইনটি পেস্ট করে এন্টার দিন:
 
 ```text
-START PHASE 0: Read docs/01_PROJECT_BRIEF.md, docs/COMPANY_PROFILE.md, and docs/02_DESIGN_SYSTEM.md. Formulate the complete MECHWARE Architecture (C# .NET 8/9 + Next.js 15), PostgreSQL ER diagram, API Contract, and PROGRESS.md task list.
+START PHASE 0: Read docs/01_PROJECT_BRIEF.md, docs/COMPANY_PROFILE.md, and docs/02_DESIGN_SYSTEM.md. Formulate the complete MECHWARE Architecture (C# 13 / .NET 10 + Next.js 15), PostgreSQL ER diagram, API Contract, and PROGRESS.md task list.
 ```

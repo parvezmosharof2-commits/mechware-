@@ -194,7 +194,7 @@ Desktop 3-column layout: gallery (≈45%) · info (≈35%) · sticky buy box (�
   with "Notify me"), size guide modal, key highlights (5 bullets), offers list
   ("10% off with bKash", coupon chips with one-click apply).
 - **Buy box**: price, delivery estimate with location change, stock status ("In stock",
-  "Only 3 left"), quantity, **Add to cart (accent)**, **Buy now (primary)**, wishlist,
+  "Only 3 left"), quantity, **Add to cart (accent)**, **Buy now (primary)**, **Request B2B Quote / Proforma Invoice (RFQ)** (secondary outline button on all high-value machinery > ৳15,000 and B2B categories; opens RFQ drawer with project specs & company VAT details), wishlist,
   share, seller card (name, rating, "Visit store"), return policy, warranty, secure transaction note.
 - **Below the fold** (tabs on desktop, accordions on mobile): description (rich media),
   specifications table (grouped), what's in the box, shipping & returns.
