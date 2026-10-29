@@ -11,11 +11,11 @@ public enum OtpType
 }
 
 /// <summary>
-/// Bound one-time passcode entity (MW-P3-02: binds Recipient + Type + ReferenceId + max 5 attempts).
+/// Bound one-time passcode entity (MW-P3-02 & AUD-P3-06: binds Recipient + Type + ReferenceId + max 3 attempts per DATA_MODEL.md).
 /// </summary>
 public sealed class OtpCode : Entity<Guid>
 {
-    public const int MaxVerificationAttempts = 5;
+    public const int MaxVerificationAttempts = 3;
 
     public string Recipient { get; private set; } = string.Empty;
     public string CodeHash { get; private set; } = string.Empty;

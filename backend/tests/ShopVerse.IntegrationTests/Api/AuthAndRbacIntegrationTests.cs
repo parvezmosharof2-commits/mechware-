@@ -45,7 +45,7 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
     }
 
     [Fact]
-    public async Task AdminLoginWithoutTotp_ShouldReturn202RequiresTwoFactor_AndSucceedWithTotpOrRecoveryCode()
+    public async Task AdminLoginWithoutTotp_ShouldReturn202RequiresTwoFactor_SucceedWithTotp_AndBlockTotpReplayInSameWindow()
     {
         HttpClient client = _factory.CreateClient();
 
@@ -72,10 +72,20 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
         });
 
         step2.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Step 3: Replay the exact same TOTP code in the same 30-second step window -> 401 Unauthorized (RFC 6238 §5.2)
+        HttpResponseMessage replayAttempt = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            identifier = "admin@mechware.com.bd",
+            password = "MechAdmin#2026!",
+            totpCode = currentTotp
+        });
+
+        replayAttempt.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]
-    public async Task SellerIsolation_SellerAlphaCannotReadSellerBetaResources_AndCannotInvokeOrdersRefund()
+    public async Task SellerIsolation_SellerAlphaCannotReadOrModifySellerBetaResources_AndCannotInvokeOrdersRefund()
     {
         HttpClient client = _factory.CreateClient();
 
@@ -91,15 +101,26 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", sellerAlphaToken);
 
-        // 1. Seller Alpha reads own SellerAlphaId resource -> 200 OK
-        HttpResponseMessage ownResp = await client.GetAsync($"/api/v1/sellers/{IdentityService.SellerAlphaId}/resources");
-        ownResp.StatusCode.Should().Be(HttpStatusCode.OK);
+        // 1. Seller Alpha reads & modifies own SellerAlphaId resource -> 200 OK
+        HttpResponseMessage ownGetResp = await client.GetAsync($"/api/v1/sellers/{IdentityService.SellerAlphaId}/resources");
+        ownGetResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 2. Seller Alpha tries to read SellerBetaId resource -> 403 Forbidden
-        HttpResponseMessage crossSellerResp = await client.GetAsync($"/api/v1/sellers/{IdentityService.SellerBetaId}/resources");
-        crossSellerResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        HttpResponseMessage ownPutResp = await client.PutAsJsonAsync(
+            $"/api/v1/sellers/{IdentityService.SellerAlphaId}/resources",
+            new UpdateSellerResourceRequestDto("MW-S7-1200-CPU", 48500m, 15));
+        ownPutResp.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // 3. Seller Alpha tries to invoke [RequirePermission(Permissions.OrdersRefund)] -> 403 Forbidden
+        // 2. Seller Alpha tries to read (GET) SellerBetaId resource -> 403 Forbidden
+        HttpResponseMessage crossSellerGetResp = await client.GetAsync($"/api/v1/sellers/{IdentityService.SellerBetaId}/resources");
+        crossSellerGetResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // 3. Seller Alpha tries to modify (PUT) SellerBetaId resource -> 403 Forbidden
+        HttpResponseMessage crossSellerPutResp = await client.PutAsJsonAsync(
+            $"/api/v1/sellers/{IdentityService.SellerBetaId}/resources",
+            new UpdateSellerResourceRequestDto("MW-VFD-BETA", 100m, 0));
+        crossSellerPutResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // 4. Seller Alpha tries to invoke [RequirePermission(Permissions.OrdersRefund)] -> 403 Forbidden
         HttpResponseMessage refundResp = await client.PostAsync($"/api/v1/sellers/{IdentityService.SellerAlphaId}/resources/refund-audit", null);
         refundResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

@@ -55,6 +55,7 @@ public sealed class ShopVerseDbContext : DbContext
         builder.Property(u => u.TwoFactorEnabled).HasColumnName("two_factor_enabled");
         builder.Property(u => u.TwoFactorSecret).HasColumnName("two_factor_secret");
         builder.Property(u => u.TwoFactorRecoveryCodesJson).HasColumnName("two_factor_recovery_codes_json");
+        builder.Property(u => u.LastUsedTotpTimeStep).HasColumnName("last_used_totp_time_step");
         builder.Property(u => u.GoogleSubjectId).HasColumnName("google_subject_id").HasMaxLength(128);
         builder.Property(u => u.SellerId).HasColumnName("seller_id");
         builder.Property(u => u.FailedLoginAttempts).HasColumnName("failed_login_attempts");

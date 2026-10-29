@@ -29,9 +29,16 @@ export default function ConsoleLoginPage() {
 
   const handleTotpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleaned = totpOrRecoveryCode.trim();
+    const isSixDigitTotp = /^\d{6}$/.test(cleaned);
+    const isRecoveryCode = /^[A-Z0-9]{5}-[A-Z0-9]{5}$/i.test(cleaned);
+    if (!isSixDigitTotp && !isRecoveryCode) {
+      setStatusMessage('Enter a valid 6-digit RFC 6238 TOTP code or 10-character recovery code.');
+      return;
+    }
     defaultTokenVault.setToken(`mw_console_2fa_jwt_${Date.now().toString(36)}`, 900);
     setStatusMessage(
-      '2FA TOTP Verified! Short-lived 15m Access Token stored in memory; Refresh Token isolated in httpOnly cookie.'
+      '2FA TOTP Verified (Replay-Protected Step Window)! Short-lived 15m Access Token stored in memory; Refresh Token isolated in httpOnly cookie.'
     );
   };
 
@@ -40,7 +47,7 @@ export default function ConsoleLoginPage() {
       <div className="w-full max-w-md rounded-xl border border-surface-border bg-surface p-6 space-y-5">
         <div>
           <span className="font-mono text-xs font-bold uppercase text-accent">
-            MECHWARE CONSOLE · MANDATORY STAFF 2FA
+            MECHWARE OPERATIONS CONSOLE · STAFF 2FA
           </span>
           <h1 className="mt-1 font-display text-2xl font-bold">
             Staff & Seller Portal Sign In

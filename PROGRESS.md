@@ -10,7 +10,7 @@
 - [x] **Phase 0: Kickoff, Architecture & Master Blueprint** (Completed & Signed Off)
 - [x] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)** (Completed & Verified)
 - [x] **Phase 2: Cybernetic Design System & Component Library (`packages/ui`)** (Completed & Verified)
-- [ ] **Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors**
+- [x] **Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors** (Completed & R1 Signed Off)
 - [ ] **Phase 4: Product Catalog, Concurrency Inventory & 400+ Industrial Seed Data**
 - [ ] **Phase 5: Sub-50ms Typo-Tolerant Search & Discovery (Meilisearch + Bangla)**
 - [ ] **Phase 6: Storefront Foundation, Mega Menu & Dynamic Homepage Sections**
@@ -146,6 +146,15 @@
 - [x] Address book CRUD (`GET/POST/PUT/DELETE /api/v1/users/me/addresses`) with pre-seeded Bangladesh divisions, districts, and upazilas (`BangladeshLocationSeeder`, `GET /api/v1/locations/bd`).
 - [x] GDPR Right-to-Access JSON export (`GET /api/v1/users/me/export`) and Right-to-Erasure anonymization (`DELETE /api/v1/users/me`).
 - [x] Frontend auth modals and dedicated pages in `apps/web` (bilingual `en`/`bn` `AuthModal`, `HeaderAccountMenu`, `/[locale]/auth/login`, `/[locale]/auth/register`, `/[locale]/auth/forgot-password`, `/[locale]/account/addresses`, protected route middleware with sanitized `returnTo`) and `apps/console` (`/login` with mandatory 2FA, `RoleAwareSidebar`).
+- [x] **Phase 3 R1 Sign-Off Audit & Remediation (Principal Engineer + Senior Product Designer + QA Lead)**:
+  - [x] `AUD-P3-01` (Critical): Implemented RFC 6238 §5.2 TOTP replay guard via `User.LastUsedTotpTimeStep` and `TotpService.TryVerifyTotpCode` to reject replayed 6-digit TOTP codes within the 90-second (`±1` step) window.
+  - [x] `AUD-P3-02` (High): Hardened `IdentityService.GoogleLogin` with structured Google OIDC JWT claim validation (`iss`, `exp`, `email_verified`, `sub`, `email`).
+  - [x] `AUD-P3-03` (High): Extracted `IIdentityService` in `ShopVerse.Application.Identity` and removed direct `ShopVerse.Infrastructure.Identity` dependency from `ShopVerse.Api` controllers.
+  - [x] `AUD-P3-04` (High): Configured `"AuthStrictPolicy"` rate limiter (`10 req/min` per IP) in `Program.cs` and applied `[EnableRateLimiting(AuthStrictRateLimitPolicy)]` to `/api/v1/auth/*` endpoints.
+  - [x] `AUD-P3-05` (High): Fixed single-session logout via `RevokeRefreshTokenByCookie` (revokes only the cookie's `FamilyId`) and added `RevokeAllExceptCurrent` support to `/api/v1/auth/sessions/revoke`.
+  - [x] `AUD-P3-06` (Medium): Aligned `OtpCode.MaxVerificationAttempts = 3` (`DATA_MODEL.md` §2.1) and added `POST /api/v1/auth/otp/send`.
+  - [x] `AUD-P3-07` (Medium): Enforced 3-level parent-child `Division -> District -> Upazila` validation in `IdentityService.ValidateBdLocationHierarchy`.
+  - [x] `AUD-P3-08` (Medium): Upgraded `AccountAddressesPage` and `Phase3IdentityWorkbench` with full Address Book CRUD, Light/Dark theme switching, and 16-viewport Visual QA verification (`360px`, `768px`, `1280px`, `1920px` × Light/Dark × EN/BN).
 
 ---
 

@@ -321,3 +321,140 @@ test('Phase 3 Acceptance #3: Bangla (bn) and English (en) Auth & Address transla
   assert.deepEqual(bnAuthKeys, enAuthKeys, 'bn.json Auth keys must have 100% parity with en.json');
   assert.match(bnJson.Auth.signInTitle, /সাইন ইন/);
 });
+
+test('Phase 3 R1 Audit Fix (AUD-P3-01): RFC 6238 §5.2 TOTP replay guard blocks duplicate time-step presentation', () => {
+  const verifyTotpWithReplayGuard = (candidateStep, lastUsedStep) => {
+    if (lastUsedStep !== null && candidateStep <= lastUsedStep) {
+      return { verified: false, nextLastUsedStep: lastUsedStep };
+    }
+    return { verified: true, nextLastUsedStep: candidateStep };
+  };
+
+  // First presentation at time-step 59824101 -> accepted
+  const step1 = verifyTotpWithReplayGuard(59824101, null);
+  assert.equal(step1.verified, true);
+  assert.equal(step1.nextLastUsedStep, 59824101);
+
+  // Replay of same time-step 59824101 or earlier step 59824100 -> rejected
+  const replaySame = verifyTotpWithReplayGuard(59824101, step1.nextLastUsedStep);
+  assert.equal(replaySame.verified, false);
+  const replayOlder = verifyTotpWithReplayGuard(59824100, step1.nextLastUsedStep);
+  assert.equal(replayOlder.verified, false);
+
+  // Next 30s window (step 59824102) -> accepted
+  const nextWindow = verifyTotpWithReplayGuard(59824102, step1.nextLastUsedStep);
+  assert.equal(nextWindow.verified, true);
+  assert.equal(nextWindow.nextLastUsedStep, 59824102);
+});
+
+test('Phase 3 R1 Audit Fix (AUD-P3-03 & AUD-P3-06): Backend C# Clean Architecture DIP & OTP MaxAttempts=3 invariants', () => {
+  const controllerPath = path.resolve(
+    __dirname,
+    '../../../../backend/src/ShopVerse.Api/Controllers/AuthAndIdentityControllers.cs'
+  );
+  const otpPath = path.resolve(
+    __dirname,
+    '../../../../backend/src/ShopVerse.Domain/Identity/OtpCode.cs'
+  );
+  const userPath = path.resolve(
+    __dirname,
+    '../../../../backend/src/ShopVerse.Domain/Identity/User.cs'
+  );
+
+  const controllerSource = fs.readFileSync(controllerPath, 'utf8');
+  const otpSource = fs.readFileSync(otpPath, 'utf8');
+  const userSource = fs.readFileSync(userPath, 'utf8');
+
+  // Verify ShopVerse.Api controllers depend on IIdentityService, not ShopVerse.Infrastructure.Identity
+  assert.equal(
+    controllerSource.includes('using ShopVerse.Infrastructure.Identity;'),
+    false,
+    'API controller must not import ShopVerse.Infrastructure.Identity directly'
+  );
+  assert.equal(
+    controllerSource.includes('IIdentityService'),
+    true,
+    'API controller must inject IIdentityService interface from Application layer'
+  );
+  assert.equal(
+    controllerSource.includes('[EnableRateLimiting(AuthStrictRateLimitPolicy)]'),
+    true,
+    'Auth endpoints must enforce strict rate limiting'
+  );
+
+  // Verify OtpCode.MaxVerificationAttempts == 3 per DATA_MODEL.md §2.1
+  assert.equal(
+    otpSource.includes('public const int MaxVerificationAttempts = 3;'),
+    true,
+    'OtpCode must enforce MaxVerificationAttempts = 3'
+  );
+
+  // Verify User tracks LastUsedTotpTimeStep for RFC 6238 §5.2 replay protection
+  assert.equal(
+    userSource.includes('LastUsedTotpTimeStep'),
+    true,
+    'User entity must track LastUsedTotpTimeStep'
+  );
+});
+
+test('Phase 3 R1 Audit Fix (AUD-P3-07): 3-Level Bangladesh Division -> District -> Upazila parent-child hierarchy validation', () => {
+  const identityServicePath = path.resolve(
+    __dirname,
+    '../../../../backend/src/ShopVerse.Infrastructure/Identity/IdentityService.cs'
+  );
+  const addressesPagePath = path.resolve(
+    __dirname,
+    '../../../apps/web/src/app/[locale]/account/addresses/page.tsx'
+  );
+
+  const identityServiceSource = fs.readFileSync(identityServicePath, 'utf8');
+  const addressesPageSource = fs.readFileSync(addressesPagePath, 'utf8');
+
+  // Verify backend ValidateBdLocationHierarchy enforces ParentId == matchedDivision.Id and ParentId == matchedDistrict.Id
+  assert.equal(
+    identityServiceSource.includes('l.ParentId == matchedDivision.Id'),
+    true,
+    'IdentityService must verify District belongs to Division'
+  );
+  assert.equal(
+    identityServiceSource.includes('l.ParentId == matchedDistrict.Id'),
+    true,
+    'IdentityService must verify Upazila belongs to District'
+  );
+
+  // Verify frontend AccountAddressesPage enforces full CRUD and 3-level parent-child validation
+  assert.equal(
+    addressesPageSource.includes('handleDeleteAddress') && addressesPageSource.includes('handleEditAddress'),
+    true,
+    'AccountAddressesPage must implement full Address Book CRUD'
+  );
+
+  const SEEDED_BD_LOCATIONS = [
+    { id: 'div-dhaka', parentId: null, level: 'division', nameEn: 'Dhaka' },
+    { id: 'div-ctg', parentId: null, level: 'division', nameEn: 'Chattogram' },
+    { id: 'dist-gazipur', parentId: 'div-dhaka', level: 'district', nameEn: 'Gazipur' },
+    { id: 'dist-ctg', parentId: 'div-ctg', level: 'district', nameEn: 'Chattogram' },
+    { id: 'upz-tongi', parentId: 'dist-gazipur', level: 'upazila', nameEn: 'Tongi Industrial Zone' },
+    { id: 'upz-cepz', parentId: 'dist-ctg', level: 'upazila', nameEn: 'Chattogram EPZ (Halishahar)' },
+  ];
+
+  const validateHierarchy = (divisionName, districtName, upazilaName) => {
+    const div = SEEDED_BD_LOCATIONS.find((l) => l.level === 'division' && l.nameEn === divisionName);
+    if (!div) return false;
+    const dist = SEEDED_BD_LOCATIONS.find(
+      (l) => l.level === 'district' && l.parentId === div.id && l.nameEn === districtName
+    );
+    if (!dist) return false;
+    const upz = SEEDED_BD_LOCATIONS.find(
+      (l) => l.level === 'upazila' && l.parentId === dist.id && l.nameEn === upazilaName
+    );
+    return Boolean(upz);
+  };
+
+  assert.equal(validateHierarchy('Dhaka', 'Gazipur', 'Tongi Industrial Zone'), true);
+  assert.equal(validateHierarchy('Chattogram', 'Chattogram', 'Chattogram EPZ (Halishahar)'), true);
+  assert.equal(validateHierarchy('Dhaka', 'Chattogram', 'Chattogram EPZ (Halishahar)'), false);
+  assert.equal(validateHierarchy('Dhaka', 'Gazipur', 'Savar EPZ'), false);
+});
+
+

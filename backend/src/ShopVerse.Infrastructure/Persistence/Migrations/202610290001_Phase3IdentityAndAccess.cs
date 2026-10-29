@@ -24,6 +24,7 @@ public partial class Phase3IdentityAndAccess : Migration
                 two_factor_enabled = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                 two_factor_secret = table.Column<string>(type: "text", nullable: true),
                 two_factor_recovery_codes_json = table.Column<string>(type: "text", nullable: true),
+                last_used_totp_time_step = table.Column<long>(type: "bigint", nullable: true),
                 google_subject_id = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: true),
                 seller_id = table.Column<Guid>(type: "uuid", nullable: true),
                 failed_login_attempts = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),

@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #060B18;
+    --bg-subtle: #0A1128;
+    --bg-muted: #101B3B;
+    --surface: #0D1635;
+    --border: #1B2B55;
+    --border-strong: #2A4078;
+    --text: #F8FAFC;
+    --text-muted: #94A3B8;
+    --text-subtle: #64748B;
+    --accent: #00E5FF;
+    --accent-hover: #38EFFF;
+    --brand-blue: #1A5CB0;
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  .font-mono-tabular {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ShopVerse.Api.Authorization;
 using ShopVerse.Application.Identity;
 using ShopVerse.Domain.Identity;
-using ShopVerse.Infrastructure.Identity;
 
 namespace ShopVerse.Api.Controllers;
 
@@ -12,17 +12,19 @@ namespace ShopVerse.Api.Controllers;
 public sealed class AuthController : ControllerBase
 {
     public const string RefreshTokenCookieName = "refresh_token";
+    public const string AuthStrictRateLimitPolicy = "AuthStrictPolicy";
 
-    private readonly IdentityService _identityService;
+    private readonly IIdentityService _identityService;
     private readonly ICurrentUserService _currentUser;
 
-    public AuthController(IdentityService identityService, ICurrentUserService currentUser)
+    public AuthController(IIdentityService identityService, ICurrentUserService currentUser)
     {
         _identityService = identityService;
         _currentUser = currentUser;
     }
 
     [HttpPost("register")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public async Task<IActionResult> Register(
         [FromBody] RegisterRequestDto request,
         CancellationToken cancellationToken)
@@ -45,7 +47,31 @@ public sealed class AuthController : ControllerBase
         });
     }
 
+    [HttpPost("otp/send")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
+    public async Task<IActionResult> SendOtp(
+        [FromBody] SendOtpRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        (SendOtpResponseDto response, _) = await _identityService.SendOtpAsync(
+            request,
+            _currentUser.IpAddress,
+            cancellationToken);
+
+        return Ok(new
+        {
+            data = new
+            {
+                recipient = response.Recipient,
+                type = response.Type,
+                referenceId = response.ReferenceId,
+                expiresInSeconds = response.ExpiresInSeconds
+            }
+        });
+    }
+
     [HttpPost("verify-otp")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public IActionResult VerifyOtp([FromBody] VerifyOtpRequestDto request)
     {
         AuthTokenResponseDto result = _identityService.VerifyOtp(
@@ -58,6 +84,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public IActionResult Login([FromBody] LoginRequestDto request)
     {
         AuthTokenResponseDto result = _identityService.Login(
@@ -83,6 +110,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("google")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public IActionResult GoogleLogin([FromBody] GoogleLoginRequestDto request)
     {
         AuthTokenResponseDto result = _identityService.GoogleLogin(
@@ -119,12 +147,16 @@ public sealed class AuthController : ControllerBase
     [HttpPost("logout")]
     public IActionResult Logout()
     {
-        if (_currentUser.UserId.HasValue)
+        string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
+        bool revokedByCookie = _identityService.RevokeRefreshTokenByCookie(rawRefreshToken, _currentUser.IpAddress);
+
+        if (!revokedByCookie && _currentUser.UserId.HasValue)
         {
             _identityService.RevokeSessions(
                 _currentUser.UserId.Value,
                 new RevokeSessionsRequestDto(RevokeAll: false),
-                _currentUser.IpAddress);
+                _currentUser.IpAddress,
+                rawRefreshToken);
         }
 
         Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
@@ -139,6 +171,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("password/forgot")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public IActionResult ForgotPassword([FromBody] ForgotPasswordRequestDto request)
     {
         (string referenceId, _) = _identityService.InitiatePasswordReset(
@@ -157,6 +190,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("password/reset")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
     public IActionResult ResetPassword([FromBody] ResetPasswordRequestDto request)
     {
         _identityService.CompletePasswordReset(request, _currentUser.IpAddress);
@@ -205,7 +239,8 @@ public sealed class AuthController : ControllerBase
     public IActionResult RevokeSessions([FromBody] RevokeSessionsRequestDto request)
     {
         Guid userId = RequireAuthenticatedUserId();
-        int revokedCount = _identityService.RevokeSessions(userId, request, _currentUser.IpAddress);
+        string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
+        int revokedCount = _identityService.RevokeSessions(userId, request, _currentUser.IpAddress, rawRefreshToken);
         return Ok(new { data = new { revokedCount } });
     }
 
@@ -244,10 +279,10 @@ public sealed class AuthController : ControllerBase
 [Route("api/v1/users/me")]
 public sealed class UsersController : ControllerBase
 {
-    private readonly IdentityService _identityService;
+    private readonly IIdentityService _identityService;
     private readonly ICurrentUserService _currentUser;
 
-    public UsersController(IdentityService identityService, ICurrentUserService currentUser)
+    public UsersController(IIdentityService identityService, ICurrentUserService currentUser)
     {
         _identityService = identityService;
         _currentUser = currentUser;
@@ -331,9 +366,9 @@ public sealed class UsersController : ControllerBase
 [Route("api/v1/locations/bd")]
 public sealed class LocationsController : ControllerBase
 {
-    private readonly IdentityService _identityService;
+    private readonly IIdentityService _identityService;
 
-    public LocationsController(IdentityService identityService)
+    public LocationsController(IIdentityService identityService)
     {
         _identityService = identityService;
     }
@@ -385,6 +420,40 @@ public sealed class SellerIsolationResourcesController : ControllerBase
             {
                 sellerId,
                 resourceType = resource.ResourceType,
+                isolationVerified = true
+            }
+        });
+    }
+
+    [HttpPut]
+    [RequirePermission(Permissions.CatalogUpdateOwn)]
+    public async Task<IActionResult> UpdateSellerProtectedResource(Guid sellerId)
+    {
+        var resource = new SellerOwnedResource(Guid.NewGuid(), sellerId, "seller_catalog_listing");
+        AuthorizationResult authResult = await _authorizationService.AuthorizeAsync(
+            User,
+            resource,
+            SellerResourceIsolationRequirement.Instance);
+
+        if (!authResult.Succeeded)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                error = new
+                {
+                    code = "SELLER_ISOLATION_FORBIDDEN",
+                    message = "Cross-seller modification denied. Sellers cannot modify another seller's resources."
+                }
+            });
+        }
+
+        return Ok(new
+        {
+            data = new
+            {
+                sellerId,
+                resourceType = resource.ResourceType,
+                modified = true,
                 isolationVerified = true
             }
         });

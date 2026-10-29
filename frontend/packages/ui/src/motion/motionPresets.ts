@@ -73,25 +73,17 @@ export const cartBadgeBouncePreset: Variants = {
 };
 
 /**
- * Returns variants adapted for prefers-reduced-motion: removes translations/scale and shortens transitions
+ * Returns reduced-motion safe variants when prefersReducedMotion is true
+ * per Design System §2.5 (strips spatial translation/scaling while preserving instant opacity).
  */
 export function getMotionVariants(variants: Variants, prefersReducedMotion = false): Variants {
   if (!prefersReducedMotion) return variants;
-
-  const reduced: Variants = {};
-  for (const [key, variant] of Object.entries(variants)) {
-    if (typeof variant === 'object' && variant !== null) {
-      reduced[key] = {
-        ...variant,
-        x: 0,
-        y: 0,
-        scale: 1,
-        transition: { duration: 0.01 },
-      };
-    } else {
-      reduced[key] = variant;
-    }
-  }
-  return reduced;
+  return {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { duration: 0 } },
+    exit: { opacity: 0, transition: { duration: 0 } },
+    initial: { scale: 1 },
+    bounce: { scale: 1, transition: { duration: 0 } },
+  };
 }
 

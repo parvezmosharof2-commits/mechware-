@@ -39,7 +39,7 @@ const variantConfig: Record<
     icon: <Flame className="h-3 w-3 shrink-0 text-warning" />,
   },
   authentic: {
-    className: 'bg-brand-navy/60 text-accent border-accent/40 font-medium',
+    className: 'bg-brand-navy/15 text-accent border-accent/40 font-medium',
     icon: <ShieldCheck className="h-3 w-3 shrink-0 text-accent" />,
   },
   'low-stock': {
@@ -52,7 +52,7 @@ const variantConfig: Record<
   },
   ai: {
     className:
-      'bg-accent/20 text-accent border-accent/40 font-semibold shadow-glow-cyan-sm',
+      'bg-accent/15 text-accent border-accent/40 font-semibold shadow-glow-cyan-sm',
     icon: <Sparkles className="h-3 w-3 shrink-0 text-accent" />,
   },
   outline: {

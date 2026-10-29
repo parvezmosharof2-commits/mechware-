@@ -103,6 +103,7 @@ builder.Services.AddSingleton<ITokenService>(sp =>
         jwtOpts.AccessTokenExpiryMinutes);
 });
 builder.Services.AddSingleton<IdentityService>();
+builder.Services.AddSingleton<IIdentityService>(sp => sp.GetRequiredService<IdentityService>());
 
 builder.Services
     .AddAuthentication(JwtBearerAuthenticationHandler.SchemeName)
@@ -170,10 +171,21 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// 5. Rate Limiting Middleware
+// 5. Rate Limiting Middleware (Global 100 req/min + AuthStrictPolicy 5 req/min per IP per Brief §11.1)
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("AuthStrictPolicy", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"auth:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Environment.IsProduction() ? 5 : 25,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(

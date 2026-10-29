@@ -34,8 +34,23 @@ public sealed class TotpService : ITotpService
         return ComputeHotp(key, counter);
     }
 
-    public bool VerifyTotpCode(string base32Secret, string code, DateTimeOffset timestamp, int windowSteps = 1)
+    public bool VerifyTotpCode(string base32Secret, string code, DateTimeOffset timestamp, int windowSteps = 1) =>
+        TryVerifyTotpCode(base32Secret, code, timestamp, lastUsedTimeStep: null, out _, windowSteps);
+
+    /// <summary>
+    /// Verifies a 6-digit RFC 6238 TOTP code within [-windowSteps, +windowSteps] and enforces
+    /// RFC 6238 §5.2 replay defense by rejecting any time-step counter &lt;= lastUsedTimeStep.
+    /// </summary>
+    public bool TryVerifyTotpCode(
+        string base32Secret,
+        string code,
+        DateTimeOffset timestamp,
+        long? lastUsedTimeStep,
+        out long matchedTimeStep,
+        int windowSteps = 1)
     {
+        matchedTimeStep = 0;
+
         if (string.IsNullOrWhiteSpace(base32Secret) || string.IsNullOrWhiteSpace(code))
         {
             return false;
@@ -52,11 +67,18 @@ public sealed class TotpService : ITotpService
 
         for (int offset = -windowSteps; offset <= windowSteps; offset++)
         {
-            string candidate = ComputeHotp(key, currentCounter + offset);
+            long candidateStep = currentCounter + offset;
+            if (lastUsedTimeStep.HasValue && candidateStep <= lastUsedTimeStep.Value)
+            {
+                continue;
+            }
+
+            string candidate = ComputeHotp(key, candidateStep);
             if (CryptographicOperations.FixedTimeEquals(
                 Encoding.ASCII.GetBytes(candidate),
                 Encoding.ASCII.GetBytes(trimmedCode)))
             {
+                matchedTimeStep = candidateStep;
                 return true;
             }
         }

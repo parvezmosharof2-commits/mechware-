@@ -31,6 +31,7 @@ public sealed class User : AggregateRoot<Guid>
     public bool TwoFactorEnabled { get; private set; }
     public string? TwoFactorSecret { get; private set; }
     public string? TwoFactorRecoveryCodesJson { get; private set; }
+    public long? LastUsedTotpTimeStep { get; private set; }
 
     public string? GoogleSubjectId { get; private set; }
     public Guid? SellerId { get; private set; }
@@ -177,6 +178,13 @@ public sealed class User : AggregateRoot<Guid>
 
         TwoFactorSecret = base32Secret;
         TwoFactorRecoveryCodesJson = recoveryCodesJson;
+        LastUsedTotpTimeStep = null;
+        UpdatedAtUtc = utcNow;
+    }
+
+    public void RecordTotpTimeStepUsed(long timeStep, DateTime utcNow)
+    {
+        LastUsedTotpTimeStep = timeStep;
         UpdatedAtUtc = utcNow;
     }
 
@@ -243,6 +251,7 @@ public sealed class User : AggregateRoot<Guid>
         TwoFactorEnabled = false;
         TwoFactorSecret = null;
         TwoFactorRecoveryCodesJson = null;
+        LastUsedTotpTimeStep = null;
         Status = UserStatus.Deleted;
         DeletedAtUtc = utcNow;
         UpdatedAtUtc = utcNow;

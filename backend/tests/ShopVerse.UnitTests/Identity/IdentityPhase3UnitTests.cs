@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Text;
+using System.Text.Json;
 using FluentAssertions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -62,7 +64,7 @@ public class IdentityPhase3UnitTests
     }
 
     [Fact]
-    public void TotpService_ShouldGenerateAndVerifyRfc6238SixDigitCode_WithAdjacentWindowTolerance()
+    public void TotpService_ShouldGenerateAndVerifyRfc6238SixDigitCode_AndBlockReplayWithinSameTimeStep()
     {
         string secret = _totpService.GenerateBase32Secret();
         var timestamp = new DateTimeOffset(2026, 10, 29, 12, 0, 0, TimeSpan.Zero);
@@ -70,9 +72,18 @@ public class IdentityPhase3UnitTests
         string currentCode = _totpService.ComputeTotpCode(secret, timestamp);
         currentCode.Should().HaveLength(6);
 
-        _totpService.VerifyTotpCode(secret, currentCode, timestamp).Should().BeTrue();
-        _totpService.VerifyTotpCode(secret, currentCode, timestamp.AddSeconds(25)).Should().BeTrue();
-        _totpService.VerifyTotpCode(secret, "000000", timestamp).Should().BeFalse();
+        // First presentation of currentCode succeeds and returns matchedStep
+        _totpService.TryVerifyTotpCode(secret, currentCode, timestamp, null, out long matchedStep).Should().BeTrue();
+        matchedStep.Should().BeGreaterThan(0);
+
+        // Second presentation of the exact same code within the same or adjacent window is blocked (RFC 6238 §5.2)
+        _totpService.TryVerifyTotpCode(secret, currentCode, timestamp.AddSeconds(10), matchedStep, out _).Should().BeFalse();
+
+        // Next 30-second window produces a fresh time-step > matchedStep -> succeeds
+        var nextWindow = timestamp.AddSeconds(30);
+        string nextCode = _totpService.ComputeTotpCode(secret, nextWindow);
+        _totpService.TryVerifyTotpCode(secret, nextCode, nextWindow, matchedStep, out long nextMatchedStep).Should().BeTrue();
+        nextMatchedStep.Should().Be(matchedStep + 1);
     }
 
     [Fact]
@@ -140,6 +151,145 @@ public class IdentityPhase3UnitTests
     }
 
     [Fact]
+    public void SingleSessionCookieLogout_ShouldRevokeOnlyPresentedCookieFamily_LeavingOtherDeviceSessionsActive()
+    {
+        var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+
+        var t0 = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
+        var device1 = identityService.Login(
+            new LoginRequestDto("buyer@mechware.com.bd", "BuyerPass#2026!", null),
+            "203.112.218.10",
+            "DesktopChrome/1.0",
+            t0);
+
+        var device2 = identityService.Login(
+            new LoginRequestDto("buyer@mechware.com.bd", "BuyerPass#2026!", null),
+            "203.112.218.11",
+            "MobileSafari/1.0",
+            t0.AddSeconds(1));
+
+        // Logout Device 1 via its refresh_token cookie
+        identityService.RevokeRefreshTokenByCookie(device1.RefreshTokenCookieValue!, t0.AddSeconds(5));
+
+        // Device 1 refresh token is now revoked
+        Action act1 = () => identityService.RotateRefreshToken(
+            device1.RefreshTokenCookieValue!,
+            "203.112.218.10",
+            "DesktopChrome/1.0",
+            t0.AddSeconds(10));
+        act1.Should().Throw<UnauthorizedAccessException>();
+
+        // Device 2 refresh token remains active and rotatable
+        var rotatedDevice2 = identityService.RotateRefreshToken(
+            device2.RefreshTokenCookieValue!,
+            "203.112.218.11",
+            "MobileSafari/1.0",
+            t0.AddSeconds(10));
+        rotatedDevice2.AccessToken.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void GoogleOidcLogin_ShouldValidateJwtClaims_AndRejectExpiredOrUntrustedIssuer()
+    {
+        var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+
+        string header = Base64UrlEncode(JsonSerializer.Serialize(new { alg = "RS256", typ = "JWT" }));
+        string validPayload = Base64UrlEncode(JsonSerializer.Serialize(new
+        {
+            iss = "https://accounts.google.com",
+            sub = "google-uid-998877",
+            email = "oidc.engineer@mechware.com.bd",
+            email_verified = true,
+            name = "Engr. OIDC Verified",
+            exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds()
+        }));
+        string validJwt = $"{header}.{validPayload}.sig_verified";
+
+        var session = identityService.GoogleLogin(
+            new GoogleOAuthRequestDto(validJwt, null, null),
+            "203.112.218.10",
+            "Mozilla/5.0");
+        session.AccessToken.Should().NotBeNullOrWhiteSpace();
+
+        // Untrusted issuer must be rejected
+        string badIssuerPayload = Base64UrlEncode(JsonSerializer.Serialize(new
+        {
+            iss = "https://evil-idp.example.com",
+            sub = "evil-1",
+            email = "victim@mechware.com.bd",
+            email_verified = true,
+            exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds()
+        }));
+        Action badIssAct = () => identityService.GoogleLogin(
+            new GoogleOAuthRequestDto($"{header}.{badIssuerPayload}.sig", null, null),
+            "203.112.218.10",
+            "Mozilla/5.0");
+        badIssAct.Should().Throw<UnauthorizedAccessException>().WithMessage("*issuer*");
+    }
+
+    [Fact]
+    public async Task OtpCode_ShouldEnforceMaxThreeAttempts_AndRejectFourthAttempt()
+    {
+        var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+
+        SendOtpResponseDto otpSent = await identityService.SendOtpAsync(
+            new SendOtpRequestDto("+8801711000001", "Login"),
+            "203.112.218.10");
+
+        otpSent.MaxAttempts.Should().Be(3);
+
+        for (int attempt = 1; attempt <= 3; attempt++)
+        {
+            Action wrongAct = () => identityService.VerifyOtp(
+                new VerifyOtpRequestDto("+8801711000001", "000000", "Login", otpSent.ReferenceId),
+                "203.112.218.10",
+                "Mozilla/5.0");
+            wrongAct.Should().Throw<ValidationException>();
+        }
+
+        // 4th attempt must be rejected because MaxVerificationAttempts (3) was reached
+        Action fourthAct = () => identityService.VerifyOtp(
+            new VerifyOtpRequestDto("+8801711000001", "000000", "Login", otpSent.ReferenceId),
+            "203.112.218.10",
+            "Mozilla/5.0");
+        fourthAct.Should().Throw<ValidationException>().WithMessage("*Maximum OTP verification attempts*");
+    }
+
+    [Fact]
+    public void BangladeshAddressBook_ShouldRejectCrossDivisionDistrictUpazilaMismatch()
+    {
+        var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+
+        var buyerProfile = identityService.GetUsersForAudit().First(u => u.Email == "buyer@mechware.com.bd");
+
+        // Division = Dhaka, but District = Chattogram -> must throw ValidationException
+        Action mismatchDistrictAct = () => identityService.CreateAddress(
+            buyerProfile.Id,
+            new UpsertAddressRequestDto(
+                "Invalid Plant",
+                "Engr. Test",
+                "+8801711000001",
+                "Plot 1",
+                null,
+                "Halishahar",
+                "Chattogram",
+                "Dhaka",
+                "Chattogram EPZ (Halishahar)",
+                "4223",
+                false,
+                false,
+                null,
+                null));
+
+        mismatchDistrictAct.Should().Throw<ValidationException>()
+            .WithMessage("*does not belong to division*");
+    }
+
+    [Fact]
     public async Task PermissionHandler_ShouldGrantMatchingClaim_AndDenyMissingClaim()
     {
         var handler = new PermissionAuthorizationHandler();
@@ -191,5 +341,13 @@ public class IdentityPhase3UnitTests
         var crossSellerContext = new AuthorizationHandlerContext([requirement], sellerAlphaPrincipal, betaForeignResource);
         await handler.HandleAsync(crossSellerContext);
         crossSellerContext.HasSucceeded.Should().BeFalse();
+    }
+
+    private static string Base64UrlEncode(string json)
+    {
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
     }
 }

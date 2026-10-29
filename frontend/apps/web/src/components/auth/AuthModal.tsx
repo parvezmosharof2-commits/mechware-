@@ -250,7 +250,7 @@ export function AuthFlowSurface({
       <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-4">
         <div>
           <span className="inline-block rounded-sm bg-bg-elevated px-2 py-0.5 font-mono text-xs font-semibold text-brand-accent">
-            PHASE 3 · IDENTITY & RBAC ({locale.toUpperCase()})
+            {locale === 'bn' ? 'মেকওয়্যার ইন্ডাস্ট্রিয়াল পোর্টাল (BN)' : 'MECHWARE INDUSTRIAL PORTAL (EN)'}
           </span>
           <h2 className="mt-2 font-display text-xl font-bold tracking-tight text-fg-primary">
             {mode === 'signin' && copy.signInTitle}

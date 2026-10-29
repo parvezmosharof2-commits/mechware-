@@ -24,7 +24,6 @@ public sealed class SecurityHeadersMiddleware
         headers.TryAdd("Content-Security-Policy", isSwagger
             ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
             : "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
-
         headers.TryAdd("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
 
         return _next(context);

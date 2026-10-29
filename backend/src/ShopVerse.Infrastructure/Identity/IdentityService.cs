@@ -9,10 +9,10 @@ using ShopVerse.Domain.Identity;
 namespace ShopVerse.Infrastructure.Identity;
 
 /// <summary>
-/// Core Identity, Authentication, Token Rotation/Family Breach Detection, TOTP 2FA,
+/// Core Identity, Authentication, Token Rotation/Family Breach Detection, TOTP 2FA with Replay Guard,
 /// Address Book, Bangladesh Location Hierarchy, and GDPR Export/Erasure service.
 /// </summary>
-public sealed class IdentityService
+public sealed class IdentityService : IIdentityService
 {
     public static readonly Guid SellerAlphaId = Guid.Parse("aaaa0000-0000-0000-0000-000000000001");
     public static readonly Guid SellerBetaId = Guid.Parse("bbbb0000-0000-0000-0000-000000000002");
@@ -175,6 +175,39 @@ public sealed class IdentityService
         return (response, rawCode);
     }
 
+    public async Task<(SendOtpResponseDto Response, string RawOtpForDev)> SendOtpAsync(
+        SendOtpRequestDto request,
+        string? clientIp,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Recipient))
+        {
+            throw new ValidationException("recipient", "OTP recipient phone or email is required.");
+        }
+
+        var now = DateTime.UtcNow;
+        string recipient = request.Recipient.Trim().ToLowerInvariant();
+        if (!Enum.TryParse<OtpType>(request.Type, ignoreCase: true, out OtpType otpType))
+        {
+            otpType = OtpType.PhoneVerify;
+        }
+
+        (OtpCode otp, string rawCode) = CreateOtp(recipient, otpType, now);
+
+        if (recipient.StartsWith('+') || recipient.All(char.IsDigit))
+        {
+            await _smsProvider.SendSmsAsync(
+                recipient,
+                $"MECHWARE Security Code: {rawCode}. Valid for 5 minutes. Ref: {otp.ReferenceId}",
+                cancellationToken);
+        }
+
+        User? user = FindUserByIdentifier(recipient);
+        RecordAudit(user?.Id, clientIp, "user.otp_dispatched", "otp_codes", otp.Id.ToString(), null, new { recipient, otp.Type, otp.ReferenceId });
+
+        return (new SendOtpResponseDto(recipient, otpType.ToString(), otp.ReferenceId, 300), rawCode);
+    }
+
     public AuthTokenResponseDto VerifyOtp(
         VerifyOtpRequestDto request,
         string? clientIp,
@@ -275,7 +308,7 @@ public sealed class IdentityService
             {
                 user.RecordFailedLogin(now);
                 RecordAudit(user.Id, clientIp, "user.2fa_failed", "users", user.Id.ToString(), null, null);
-                throw new UnauthorizedAccessException("Invalid two-factor authentication or recovery code.");
+                throw new UnauthorizedAccessException("Invalid or replayed two-factor authentication / recovery code.");
             }
         }
 
@@ -297,13 +330,7 @@ public sealed class IdentityService
             throw new ValidationException("idToken", "Valid Google OIDC ID token is required.");
         }
 
-        string subjectId = $"google-sub-{ _tokenService.HashToken(request.IdToken)[..24] }";
-        string email = string.IsNullOrWhiteSpace(request.ExpectedEmail)
-            ? $"oauth.{subjectId[..12]}@mechware.com.bd"
-            : request.ExpectedEmail.Trim().ToLowerInvariant();
-        string fullName = string.IsNullOrWhiteSpace(request.FullName)
-            ? "Google Verified Engineer"
-            : request.FullName.Trim();
+        (string subjectId, string email, string fullName) = ValidateAndExtractGoogleOidcClaims(request, now);
 
         User? user = _users.Values.FirstOrDefault(u =>
             u.DeletedAtUtc == null &&
@@ -426,6 +453,44 @@ public sealed class IdentityService
         }
     }
 
+    /// <summary>
+    /// Revokes the specific refresh token family associated with the caller's httpOnly refresh_token cookie
+    /// (AUD-P3-05: supports logout even when the 15-minute Access JWT has expired, without wiping other device sessions).
+    /// </summary>
+    public bool RevokeRefreshTokenByCookie(string? rawRefreshToken, string? clientIp)
+    {
+        if (string.IsNullOrWhiteSpace(rawRefreshToken))
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        string tokenHash = _tokenService.HashToken(rawRefreshToken);
+
+        lock (_tokenLock)
+        {
+            RefreshToken? storedToken = _refreshTokens.Values.FirstOrDefault(rt =>
+                string.Equals(rt.TokenHash, tokenHash, StringComparison.Ordinal));
+
+            if (storedToken is null)
+            {
+                return false;
+            }
+
+            RevokeTokenFamilyInternal(storedToken.FamilyId, now);
+            RecordAudit(
+                storedToken.UserId,
+                clientIp,
+                "user.session_logged_out",
+                "refresh_tokens",
+                storedToken.FamilyId.ToString(),
+                null,
+                new { storedToken.FamilyId });
+
+            return true;
+        }
+    }
+
     public (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp)
     {
         var now = DateTime.UtcNow;
@@ -509,13 +574,14 @@ public sealed class IdentityService
             throw new ValidationException("code", "2FA setup has not been initiated for this user.");
         }
 
-        if (!_totpService.VerifyTotpCode(user.TwoFactorSecret, code, now))
+        if (!_totpService.TryVerifyTotpCode(user.TwoFactorSecret, code, now, user.LastUsedTotpTimeStep, out long matchedStep))
         {
-            throw new ValidationException("code", "Invalid 6-digit TOTP authenticator code.");
+            throw new ValidationException("code", "Invalid or already-used 6-digit TOTP authenticator code.");
         }
 
+        user.RecordTotpTimeStepUsed(matchedStep, now.UtcDateTime);
         user.EnableTwoFactor(now.UtcDateTime);
-        RecordAudit(user.Id, clientIp, "user.2fa_enabled", "users", user.Id.ToString(), null, new { TwoFactorEnabled = true });
+        RecordAudit(user.Id, clientIp, "user.2fa_enabled", "users", user.Id.ToString(), null, new { TwoFactorEnabled = true, MatchedTimeStep = matchedStep });
     }
 
     public IReadOnlyList<ActiveSessionDto> GetActiveSessions(Guid userId, string? currentRawRefreshToken = null)
@@ -540,17 +606,39 @@ public sealed class IdentityService
             .AsReadOnly();
     }
 
-    public int RevokeSessions(Guid userId, RevokeSessionsRequestDto request, string? clientIp)
+    public int RevokeSessions(
+        Guid userId,
+        RevokeSessionsRequestDto request,
+        string? clientIp,
+        string? currentRawRefreshToken = null)
     {
         var now = DateTime.UtcNow;
         int revokedCount = 0;
+        string? currentHash = string.IsNullOrWhiteSpace(currentRawRefreshToken)
+            ? null
+            : _tokenService.HashToken(currentRawRefreshToken);
 
         lock (_tokenLock)
         {
+            Guid? currentFamilyId = currentHash is null
+                ? null
+                : _refreshTokens.Values.FirstOrDefault(rt =>
+                    rt.UserId == userId &&
+                    string.Equals(rt.TokenHash, currentHash, StringComparison.Ordinal))?.FamilyId;
+
             IEnumerable<RefreshToken> targetTokens = _refreshTokens.Values.Where(rt => rt.UserId == userId && !rt.IsRevoked);
-            if (!request.RevokeAll && request.SessionId.HasValue)
+
+            if (request.SessionId.HasValue)
             {
-                targetTokens = targetTokens.Where(rt => rt.Id == request.SessionId.Value);
+                targetTokens = targetTokens.Where(rt => rt.Id == request.SessionId.Value || rt.FamilyId == request.SessionId.Value);
+            }
+            else if (request.RevokeAllExceptCurrent && currentFamilyId.HasValue)
+            {
+                targetTokens = targetTokens.Where(rt => rt.FamilyId != currentFamilyId.Value);
+            }
+            else if (!request.RevokeAll && currentFamilyId.HasValue)
+            {
+                targetTokens = targetTokens.Where(rt => rt.FamilyId == currentFamilyId.Value);
             }
 
             foreach (RefreshToken token in targetTokens)
@@ -560,7 +648,7 @@ public sealed class IdentityService
             }
         }
 
-        RecordAudit(userId, clientIp, "user.sessions_revoked", "refresh_tokens", userId.ToString(), null, new { revokedCount, request.RevokeAll });
+        RecordAudit(userId, clientIp, "user.sessions_revoked", "refresh_tokens", userId.ToString(), null, new { revokedCount, request.RevokeAll, request.RevokeAllExceptCurrent });
         return revokedCount;
     }
 
@@ -576,7 +664,7 @@ public sealed class IdentityService
     public AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp)
     {
         var now = DateTime.UtcNow;
-        ValidateBdLocationHierarchy(request.Division, request.District);
+        ValidateBdLocationHierarchy(request.Division, request.District, request.Upazila);
 
         if (request.IsDefaultShipping || request.IsDefaultBilling)
         {
@@ -615,7 +703,7 @@ public sealed class IdentityService
             throw new KeyNotFoundException("Address not found.");
         }
 
-        ValidateBdLocationHierarchy(request.Division, request.District);
+        ValidateBdLocationHierarchy(request.Division, request.District, request.Upazila);
 
         if (request.IsDefaultShipping || request.IsDefaultBilling)
         {
@@ -700,7 +788,6 @@ public sealed class IdentityService
     {
         var now = DateTime.UtcNow;
         User user = GetUserByIdOrThrow(userId);
-        string previousEmail = user.Email;
 
         user.AnonymizeForGdpr(now);
         RevokeAllUserSessions(userId, now);
@@ -727,6 +814,99 @@ public sealed class IdentityService
     }
 
     public IReadOnlyList<AuditLog> GetAuditLogs() => [.. _auditLogs];
+
+    private (string SubjectId, string Email, string FullName) ValidateAndExtractGoogleOidcClaims(
+        GoogleLoginRequestDto request,
+        DateTime utcNow)
+    {
+        string rawToken = request.IdToken.Trim();
+        string[] segments = rawToken.Split('.');
+
+        if (segments.Length == 3)
+        {
+            try
+            {
+                string payloadJson = Encoding.UTF8.GetString(FromBase64Url(segments[1]));
+                using JsonDocument doc = JsonDocument.Parse(payloadJson);
+                JsonElement root = doc.RootElement;
+
+                string? iss = root.TryGetProperty("iss", out JsonElement issEl) ? issEl.GetString() : null;
+                if (iss is not ("https://accounts.google.com" or "accounts.google.com"))
+                {
+                    throw new ValidationException("idToken", "Invalid Google OIDC token issuer (iss).");
+                }
+
+                if (root.TryGetProperty("exp", out JsonElement expEl) && expEl.TryGetInt64(out long expUnix))
+                {
+                    DateTime expUtc = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
+                    if (expUtc <= utcNow)
+                    {
+                        throw new UnauthorizedAccessException("Google OIDC ID token has expired.");
+                    }
+                }
+                else
+                {
+                    throw new ValidationException("idToken", "Google OIDC ID token is missing required expiration (exp) claim.");
+                }
+
+                if (root.TryGetProperty("email_verified", out JsonElement verifiedEl) &&
+                    verifiedEl.ValueKind == JsonValueKind.False)
+                {
+                    throw new ValidationException("idToken", "Google account email is not verified.");
+                }
+
+                string sub = root.TryGetProperty("sub", out JsonElement subEl) && !string.IsNullOrWhiteSpace(subEl.GetString())
+                    ? subEl.GetString()!
+                    : throw new ValidationException("idToken", "Google OIDC ID token is missing subject (sub) claim.");
+
+                string claimEmail = root.TryGetProperty("email", out JsonElement emailEl) && !string.IsNullOrWhiteSpace(emailEl.GetString())
+                    ? emailEl.GetString()!.Trim().ToLowerInvariant()
+                    : throw new ValidationException("idToken", "Google OIDC ID token is missing email claim.");
+
+                string claimName = root.TryGetProperty("name", out JsonElement nameEl) && !string.IsNullOrWhiteSpace(nameEl.GetString())
+                    ? nameEl.GetString()!.Trim()
+                    : "Google Verified Engineer";
+
+                return (sub, claimEmail, claimName);
+            }
+            catch (FormatException ex)
+            {
+                throw new ValidationException("idToken", $"Malformed Google OIDC JWT payload: {ex.Message}");
+            }
+            catch (JsonException ex)
+            {
+                throw new ValidationException("idToken", $"Invalid Google OIDC JSON claims: {ex.Message}");
+            }
+        }
+
+        // Deterministic mock adapter token support (must start with "google_oidc_" or "ya29.")
+        if (!rawToken.StartsWith("google_oidc_", StringComparison.Ordinal) &&
+            !rawToken.StartsWith("ya29.", StringComparison.Ordinal))
+        {
+            throw new ValidationException("idToken", "Unrecognized Google OIDC ID token format.");
+        }
+
+        string subjectId = $"google-sub-{_tokenService.HashToken(rawToken)[..24]}";
+        string email = string.IsNullOrWhiteSpace(request.ExpectedEmail)
+            ? $"oauth.{subjectId[..12]}@mechware.com.bd"
+            : request.ExpectedEmail.Trim().ToLowerInvariant();
+        string fullName = string.IsNullOrWhiteSpace(request.FullName)
+            ? "Google Verified Engineer"
+            : request.FullName.Trim();
+
+        return (subjectId, email, fullName);
+    }
+
+    private static byte[] FromBase64Url(string input)
+    {
+        string padded = input.Replace('-', '+').Replace('_', '/');
+        switch (padded.Length % 4)
+        {
+            case 2: padded += "=="; break;
+            case 3: padded += "="; break;
+        }
+        return Convert.FromBase64String(padded);
+    }
 
     private AuthTokenResponseDto IssueSessionTokens(
         User user,
@@ -787,8 +967,15 @@ public sealed class IdentityService
             return false;
         }
 
-        if (_totpService.VerifyTotpCode(user.TwoFactorSecret, code, new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc))))
+        var timestamp = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc));
+        if (_totpService.TryVerifyTotpCode(
+            user.TwoFactorSecret,
+            code,
+            timestamp,
+            user.LastUsedTotpTimeStep,
+            out long matchedStep))
         {
+            user.RecordTotpTimeStepUsed(matchedStep, utcNow);
             return true;
         }
 
@@ -843,14 +1030,18 @@ public sealed class IdentityService
         }
     }
 
-    private void ValidateBdLocationHierarchy(string division, string district)
+    /// <summary>
+    /// Validates the full 3-level Bangladesh administrative hierarchy (Division -> District -> Upazila)
+    /// against pre-seeded BD locations (AUD-P3-07).
+    /// </summary>
+    private void ValidateBdLocationHierarchy(string division, string district, string upazila)
     {
-        bool validDivision = _bdLocations.Any(l =>
+        BdLocation? matchedDivision = _bdLocations.FirstOrDefault(l =>
             l.Level == "division" &&
-            (string.Equals(l.NameEn, division.Trim(), StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(l.NameBn, division.Trim(), StringComparison.Ordinal)));
+            (string.Equals(l.NameEn, division?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(l.NameBn, division?.Trim(), StringComparison.Ordinal)));
 
-        if (!validDivision)
+        if (matchedDivision is null)
         {
             throw new ValidationException("division", $"'{division}' is not a recognized Bangladesh division.");
         }
@@ -858,6 +1049,38 @@ public sealed class IdentityService
         if (string.IsNullOrWhiteSpace(district))
         {
             throw new ValidationException("district", "District is required.");
+        }
+
+        BdLocation? matchedDistrict = _bdLocations.FirstOrDefault(l =>
+            l.Level == "district" &&
+            l.ParentId == matchedDivision.Id &&
+            (string.Equals(l.NameEn, district.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(l.NameBn, district.Trim(), StringComparison.Ordinal)));
+
+        if (matchedDistrict is null)
+        {
+            throw new ValidationException("district", $"District '{district}' does not belong to division '{matchedDivision.NameEn}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(upazila))
+        {
+            throw new ValidationException("upazila", "Upazila / Industrial Zone is required.");
+        }
+
+        IReadOnlyList<BdLocation> seededUpazilasForDistrict = _bdLocations
+            .Where(l => l.Level == "upazila" && l.ParentId == matchedDistrict.Id)
+            .ToList();
+
+        if (seededUpazilasForDistrict.Count > 0)
+        {
+            bool validUpazila = seededUpazilasForDistrict.Any(l =>
+                string.Equals(l.NameEn, upazila.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(l.NameBn, upazila.Trim(), StringComparison.Ordinal));
+
+            if (!validUpazila)
+            {
+                throw new ValidationException("upazila", $"Upazila '{upazila}' does not belong to district '{matchedDistrict.NameEn}'.");
+            }
         }
     }
 

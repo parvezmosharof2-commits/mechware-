@@ -93,9 +93,11 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             onChange={(e) => {
               const found = countryCodes.find((c) => c.code === e.target.value) || countryCodes[0];
               setSelectedCountry(found);
-              const isFoundBd = found.code === '+880';
-              const valid = isFoundBd ? validateBdPhone(rawNumber) : rawNumber.replace(/\D/g, '').length >= 7;
-              onChange?.(`${found.code}${rawNumber}`, valid);
+              const nextIsBd = found.code === '+880';
+              const nextValid = nextIsBd
+                ? validateBdPhone(rawNumber)
+                : rawNumber.replace(/\D/g, '').length >= 7;
+              onChange?.(`${found.code}${rawNumber}`, nextValid);
             }}
             disabled={disabled}
             aria-label="Country dial code"
