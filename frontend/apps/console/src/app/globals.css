@@ -25,6 +25,9 @@
   --online: #34D399;
   --warning: #FBBF24;
   --pending: #FBBF24;
+  --status-online: #34D399;
+  --status-pending: #FBBF24;
+  --status-fault: #F87171;
   --focus-ring: #00E5FF;
 }
 
@@ -51,6 +54,9 @@
   --online: #10B981;
   --warning: #B45309;
   --pending: #B45309;
+  --status-online: #10B981;
+  --status-pending: #B45309;
+  --status-fault: #DC2626;
   --focus-ring: #00707D;
 }
 

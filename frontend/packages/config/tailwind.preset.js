@@ -43,6 +43,13 @@ module.exports = {
         online: 'var(--online, #34D399)',
         warning: 'var(--warning, #FBBF24)',
         pending: 'var(--pending, #FBBF24)',
+        status: {
+          online: 'var(--status-online, #34D399)',
+          success: 'var(--status-online, #34D399)',
+          pending: 'var(--status-pending, #FBBF24)',
+          warning: 'var(--status-pending, #FBBF24)',
+          fault: 'var(--status-fault, #F87171)',
+        },
         'focus-ring': 'var(--focus-ring, #00E5FF)',
       },
       boxShadow: {
