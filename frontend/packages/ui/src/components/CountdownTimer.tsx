@@ -55,6 +55,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
         onExpire?.();
       }
     }, 1000);
+    (timer as any).unref?.();
 
     return () => clearInterval(timer);
   }, [targetMs, onExpire]);

@@ -5,7 +5,7 @@ import { Check, AlertCircle } from 'lucide-react';
 import { cn } from '../utils';
 
 export interface StepItem {
-  id: string | number;
+  id?: string | number;
   title: string;
   description?: string;
   status?: 'completed' | 'active' | 'upcoming' | 'error';
@@ -14,6 +14,7 @@ export interface StepItem {
 export interface StepperProps {
   steps: StepItem[];
   activeStep?: number;
+  currentStep?: number;
   orientation?: 'horizontal' | 'vertical';
   className?: string;
   onStepClick?: (index: number) => void;
@@ -21,11 +22,13 @@ export interface StepperProps {
 
 export const Stepper: React.FC<StepperProps> = ({
   steps,
-  activeStep = 0,
+  activeStep: explicitActiveStep,
+  currentStep,
   orientation = 'horizontal',
   className,
   onStepClick,
 }) => {
+  const activeStep = explicitActiveStep ?? currentStep ?? 0;
   return (
     <div
       className={cn(
@@ -48,7 +51,7 @@ export const Stepper: React.FC<StepperProps> = ({
 
         return (
           <div
-            key={step.id}
+            key={step.id ?? idx}
             className={cn(
               'relative flex items-center',
               orientation === 'horizontal' ? 'flex-1 last:flex-none' : 'w-full'

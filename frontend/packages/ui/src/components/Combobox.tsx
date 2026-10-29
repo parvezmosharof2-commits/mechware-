@@ -47,6 +47,8 @@ export const Combobox: React.FC<ComboboxProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const generatedId = React.useId();
+  const labelId = `combobox-label-${generatedId}`;
 
   const currentValue = value !== undefined ? value : internalValue;
   const selectedOption = options.find((opt) => opt.value === currentValue);
@@ -107,21 +109,29 @@ export const Combobox: React.FC<ComboboxProps> = ({
 
   return (
     <div className={cn('relative w-full flex flex-col gap-1.5 font-sans', className)} ref={containerRef}>
-      {label && <label className="text-sm font-medium text-text">{label}</label>}
+      {label && (
+        <label id={labelId} className="text-sm font-medium text-text">
+          {label}
+        </label>
+      )}
 
-      {/* Trigger Button */}
-      <button
-        type="button"
-        disabled={disabled}
+      {/* Trigger Area */}
+      <div
+        role="combobox"
+        tabIndex={disabled ? -1 : 0}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        aria-labelledby={label ? labelId : undefined}
+        aria-label={label ? undefined : placeholder}
         onClick={() => {
+          if (disabled) return;
           setIsOpen(!isOpen);
           if (!isOpen) setTimeout(() => inputRef.current?.focus(), 50);
         }}
         onKeyDown={handleKeyDown}
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
         className={cn(
-          'flex h-11 w-full items-center justify-between rounded-md border bg-bg-muted px-3.5 py-2 text-sm text-text transition-colors duration-fast outline-none select-none disabled:cursor-not-allowed disabled:opacity-50 text-left',
+          'flex h-11 w-full items-center justify-between rounded-md border bg-bg-muted px-3.5 py-2 text-sm text-text transition-colors duration-fast outline-none select-none text-left cursor-pointer',
+          disabled && 'cursor-not-allowed opacity-50',
           error
             ? 'border-fault focus:ring-2 focus:ring-fault'
             : 'border-surface-border-strong hover:border-surface-border focus:border-accent focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-bg'
@@ -146,7 +156,7 @@ export const Combobox: React.FC<ComboboxProps> = ({
           )}
           <ChevronsUpDown className="h-4 w-4 text-text-muted" />
         </div>
-      </button>
+      </div>
 
       {/* Dropdown Panel */}
       {isOpen && (

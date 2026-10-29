@@ -12,6 +12,7 @@ export interface ErrorStateProps extends React.HTMLAttributes<HTMLDivElement> {
   description?: string;
   onRetry?: () => void;
   homeHref?: string;
+  illustration?: React.ReactNode;
 }
 
 export const ErrorState: React.FC<ErrorStateProps> = ({
@@ -20,6 +21,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
   description = 'Our telemetry system encountered an unexpected hardware handshake failure. The incident has been logged for our site reliability engineers.',
   onRetry,
   homeHref = '/',
+  illustration,
   className,
   ...props
 }) => {
@@ -33,7 +35,7 @@ export const ErrorState: React.FC<ErrorStateProps> = ({
       {...props}
     >
       <div className="mb-4 text-fault">
-        <SystemFaultIllustration className="w-40 h-40" />
+        {illustration ?? <SystemFaultIllustration className="w-40 h-40" />}
       </div>
 
       <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm bg-fault/15 border border-fault/30 text-fault text-xs font-mono font-bold uppercase tracking-wider mb-3">

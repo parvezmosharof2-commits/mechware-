@@ -63,7 +63,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
       {current.icon}
 
       <div className="flex-1 flex flex-col gap-1">
-        {title && <h5 className={cn('font-semibold leading-tight', current.text)}>{title}</h5>}
+        {title && <div className={cn('font-semibold leading-tight', current.text)}>{title}</div>}
         <div className="text-text-muted leading-relaxed text-xs sm:text-sm">{children}</div>
         {action && <div className="mt-2">{action}</div>}
       </div>

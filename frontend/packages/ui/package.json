@@ -5,7 +5,8 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "scripts": {
-    "test": "node --test --experimental-strip-types tests/components.test.mjs && node scripts/verify-contrast.mjs",
+    "test": "tsx --test tests/components.test.mjs && tsx --test tests/axe-all-components.test.tsx && node scripts/verify-contrast.mjs",
+    "test:axe": "tsx --test tests/axe-all-components.test.tsx",
     "test:contrast": "node scripts/verify-contrast.mjs",
     "typecheck": "tsc --noEmit"
   },
@@ -36,11 +37,17 @@
   },
   "devDependencies": {
     "@mechware/config": "workspace:*",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",
     "@types/react-dom": "^19.0.3",
+    "axe-core": "^4.14.0",
+    "jsdom": "^30.1.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.3"
   }
 }

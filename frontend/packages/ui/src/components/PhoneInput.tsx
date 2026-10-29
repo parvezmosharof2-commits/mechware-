@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '../utils';
 
 export interface PhoneInputProps {
+  id?: string;
   label?: string;
   helperText?: string;
   error?: string;
@@ -16,7 +17,7 @@ export interface PhoneInputProps {
   className?: string;
 }
 
-const countryCodes = [
+export const countryCodes = [
   { code: '+880', flag: '🇧🇩', name: 'Bangladesh', placeholder: '01712345678' },
   { code: '+1', flag: '🇺🇸', name: 'United States', placeholder: '2025550143' },
   { code: '+44', flag: '🇬🇧', name: 'United Kingdom', placeholder: '7911123456' },
@@ -85,6 +86,7 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
               setSelectedCountry(found);
             }}
             disabled={disabled}
+            aria-label="Country dial code"
             className="bg-transparent text-sm text-text font-medium outline-none cursor-pointer pr-1"
           >
             {countryCodes.map((c) => (

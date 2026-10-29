@@ -99,6 +99,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
           type="file"
           accept={accept}
           multiple={multiple}
+          aria-label={label || 'File Upload'}
           className="hidden"
           onChange={(e) => processFiles(e.target.files)}
         />

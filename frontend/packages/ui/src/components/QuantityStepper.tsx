@@ -43,6 +43,10 @@ export const QuantityStepper: React.FC<QuantityStepperProps> = ({
     if (value === undefined) {
       setInternalValue(newVal);
     }
+    if (debounceMs === 0) {
+      onChange?.(newVal);
+      return;
+    }
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       onChange?.(newVal);
