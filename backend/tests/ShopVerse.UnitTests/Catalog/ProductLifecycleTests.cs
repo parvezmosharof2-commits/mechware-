@@ -74,11 +74,16 @@ public class ProductLifecycleTests
         {
             "approve_from_draft" => () => p.Approve(),
             "reject_from_draft" => () => p.Reject("x"),
-            "submit_twice" => () => { p.SubmitForReview(); p.SubmitForReview(); },
-            "approve_twice" => () => { p.SubmitForReview(); p.Approve(); p.Approve(); },
-            "archive_twice" => () => { p.Archive(); p.Archive(); },
-            "archive_pending" => () => { p.SubmitForReview(); p.Archive(); },
-            "draft_from_active" => () => { p.SubmitForReview(); p.Approve(); p.ReturnToDraft(); },
+            "submit_twice" => () => { p.SubmitForReview(); p.SubmitForReview(); }
+            ,
+            "approve_twice" => () => { p.SubmitForReview(); p.Approve(); p.Approve(); }
+            ,
+            "archive_twice" => () => { p.Archive(); p.Archive(); }
+            ,
+            "archive_pending" => () => { p.SubmitForReview(); p.Archive(); }
+            ,
+            "draft_from_active" => () => { p.SubmitForReview(); p.Approve(); p.ReturnToDraft(); }
+            ,
             _ => throw new ArgumentOutOfRangeException(nameof(scenario))
         };
 
