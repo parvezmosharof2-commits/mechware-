@@ -309,3 +309,17 @@
 - [ ] Production Docker Compose / Kubernetes deployment manifests.
 - [ ] Automated database backup and disaster recovery test (RPO 1h, RTO 4h).
 - [ ] Final launch verification checklist sign-off.
+
+---
+
+### Hardening track (started early, 2026-10-30) — see `docs/HARDCORE_TEST_REPORT.md`
+- [x] Brief v2 (B2B procurement, direct seller first) and USD 100K review plan.
+- [x] Architecture tests (layering, controller dependencies, exception hierarchy).
+- [x] Property-based tests: Money, PricingEngine (20k cases), slug/URL fuzzing, XSS corpus + random markup.
+- [x] JWT attacker-model tests; validator now enforces `alg`, `iss`, `aud`, `nbf`/`iat`, canonical encoding, size cap.
+- [x] Endpoint authorisation coverage + forged-credential sweep + error-leakage tests.
+- [x] Production boot guards: no published JWT secret, Swagger off, brute-force throttling verified.
+- [x] Inventory chaos test (reserve/commit/cancel/expiry race) — found and fixed a sweeper deadlock.
+- [x] CI: CodeQL, NuGet + npm vulnerability gate, Dependabot.
+- [ ] Branch protection + GitHub secret scanning (owner action in GitHub settings).
+- [ ] Playwright E2E journeys and k6 load tests (with checkout, Phase 8+).
