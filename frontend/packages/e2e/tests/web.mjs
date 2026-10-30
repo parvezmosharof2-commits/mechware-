@@ -137,14 +137,25 @@ async function login(page, email, password) {
   const ctxM = await browser.newContext({ viewport: { width: 360, height: 800 } });
   await ctxM.addCookies(await ctxA.cookies());
   const m = await ctxM.newPage();
-  await m.goto(`${WEB}/bn/account/company`);
-  await m.getByText('আমার কোম্পানি').first().waitFor();
-  await m.screenshot({ path: `${SHOTS}/04-bn-list-360.png`, fullPage: true });
-  await m.goto(companyUrl.replace(WEB, WEB + '/bn'));
-  await m.getByText('যাচাইয়ের অপেক্ষায়').first().waitFor();
-  const overflow = await m.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
-  check('Bangla dashboard renders at 360px without horizontal scroll', !overflow);
-  await m.screenshot({ path: `${SHOTS}/05-bn-dashboard-360.png`, fullPage: true });
+  const apiLog = [];
+  m.on('response', (r) => { if (r.url().includes('/api/v1/')) apiLog.push(`${r.status()} ${r.request().method()} ${r.url().replace(/^https?:\/\/[^/]+/, '')}`); });
+  try {
+    await m.goto(`${WEB}/bn/account/company`);
+    // The page title renders without a session, so wait for the signed-in company row instead.
+    await m.getByText('Gazipur Textile Mills Ltd').first().waitFor();
+    await m.screenshot({ path: `${SHOTS}/04-bn-list-360.png`, fullPage: true });
+    await m.goto(companyUrl.replace(WEB, WEB + '/bn'));
+    await m.getByText('যাচাইয়ের অপেক্ষায়').first().waitFor();
+    const overflow = await m.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    check('Bangla dashboard renders at 360px without horizontal scroll', !overflow);
+    await m.screenshot({ path: `${SHOTS}/05-bn-dashboard-360.png`, fullPage: true });
+  } catch (e) {
+    console.log('Bangla step failed. URL:', m.url());
+    console.log('API calls seen:', JSON.stringify(apiLog));
+    console.log('Page text:', (await m.locator('body').innerText().catch(() => '')).slice(0, 400));
+    await m.screenshot({ path: `${SHOTS}/bn-failure-360.png`, fullPage: true }).catch(() => {});
+    throw e;
+  }
   await ctxM.close();
 
   check('no console errors / page errors', errors.length === 0, errors.join(' | ').slice(0, 400));
