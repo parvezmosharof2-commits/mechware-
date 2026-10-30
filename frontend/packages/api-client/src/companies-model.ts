@@ -155,9 +155,12 @@ const BANGLA_DIGITS = '০১২৩৪৫৬৭৮৯';
 
 /** Converts Bangla digits to ASCII and strips spaces / dashes, so BIN and TIN typed in Bangla still validate. */
 export function normalizeDigits(value: string): string {
-  return value
-    .replace(/[০-৯]/g, (d) => String(BANGLA_DIGITS.indexOf(d)))
-    .replace(/[\s-]/g, '');
+  return banglaToAsciiDigits(value).replace(/[\s-]/g, '');
+}
+
+/** Bangla digits to ASCII, nothing else touched (a minus sign must survive for amount checks). */
+export function banglaToAsciiDigits(value: string): string {
+  return value.replace(/[০-৯]/g, (d) => String(BANGLA_DIGITS.indexOf(d)));
 }
 
 export type CompanyFieldError =
@@ -196,4 +199,26 @@ export function toRegisterRequest(input: RegisterCompanyRequest): RegisterCompan
     tin: tin.length > 0 ? tin : null,
     industry: industry.length > 0 ? industry : null
   };
+}
+
+export type CreditFormError = 'terms.invalid' | 'limit.format' | 'limit.mustBeZero' | 'limit.required';
+
+/**
+ * Same rules as the API's Company.SetCredit (limit vs. terms). `limitText` is what the finance user typed, in
+ * major units (BDT). Returns an error code or, when valid, the request to send. The API stays the authority
+ * (it also rejects a limit below the credit already used).
+ */
+export function buildCreditRequest(
+  terms: CreditTermsValue,
+  limitText: string
+): { ok: true; request: SetCreditRequest } | { ok: false; error: CreditFormError } {
+  if (terms !== 0 && terms !== 15 && terms !== 30) return { ok: false, error: 'terms.invalid' };
+  const raw = banglaToAsciiDigits(limitText.replace(/[,\s]/g, ''));
+  const trimmed = raw.trim();
+  const amount = trimmed === '' ? 0 : Number(trimmed);
+  if (!Number.isFinite(amount) || amount < 0) return { ok: false, error: 'limit.format' };
+  const minor = amountToMinor(amount);
+  if (terms === 0) return minor === 0 ? { ok: true, request: { terms, limitMinorUnits: 0 } } : { ok: false, error: 'limit.mustBeZero' };
+  if (minor === 0) return { ok: false, error: 'limit.required' };
+  return { ok: true, request: { terms, limitMinorUnits: minor } };
 }

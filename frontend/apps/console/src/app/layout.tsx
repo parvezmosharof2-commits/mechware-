@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import { ToastProvider } from '@mechware/ui';
+import { AuthProvider } from '../lib/auth';
 import './globals.css';
 
 const inter = Inter({
@@ -27,7 +29,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${inter.variable} ${plusJakarta.variable}`}>
       <body className="font-sans antialiased bg-bg text-text">
-        {children}
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CompanyRoles,
   amountToMinor,
+  buildCreditRequest,
   creditTermsValue,
   creditUsagePercent,
   hasRole,
@@ -82,4 +83,17 @@ test('toRegisterRequest trims, normalises digits and nulls empty optionals', () 
     toRegisterRequest({ legalName: '  Acme Ltd ', tradeLicenceNo: ' TL-9 ', bin: '0012 3456 78901', tin: '  ', industry: '' }),
     { legalName: 'Acme Ltd', tradeLicenceNo: 'TL-9', bin: '0012345678901', tin: null, industry: null }
   );
+});
+
+test('credit form mirrors SetCredit: none needs zero, net terms need a positive limit', () => {
+  assert.deepEqual(buildCreditRequest(0, ''), { ok: true, request: { terms: 0, limitMinorUnits: 0 } });
+  assert.deepEqual(buildCreditRequest(0, '0'), { ok: true, request: { terms: 0, limitMinorUnits: 0 } });
+  assert.deepEqual(buildCreditRequest(0, '500'), { ok: false, error: 'limit.mustBeZero' });
+  assert.deepEqual(buildCreditRequest(30, ''), { ok: false, error: 'limit.required' });
+  assert.deepEqual(buildCreditRequest(15, '0'), { ok: false, error: 'limit.required' });
+  assert.deepEqual(buildCreditRequest(30, '1,25,000'), { ok: true, request: { terms: 30, limitMinorUnits: 12500000 } });
+  assert.deepEqual(buildCreditRequest(30, '১০০০.৫০'), { ok: true, request: { terms: 30, limitMinorUnits: 100050 } });
+  assert.deepEqual(buildCreditRequest(30, '-5'), { ok: false, error: 'limit.format' });
+  assert.deepEqual(buildCreditRequest(30, 'abc'), { ok: false, error: 'limit.format' });
+  assert.deepEqual(buildCreditRequest(7 as never, '100'), { ok: false, error: 'terms.invalid' });
 });
