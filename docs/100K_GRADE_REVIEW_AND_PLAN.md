@@ -48,9 +48,11 @@ plan; the plan is what needs fixing.
 
 ## 2. Planning mistakes (ranked)
 
-### P0-1 — The brief describes the wrong business
-- `01_PROJECT_BRIEF.md` is a lightly renamed B2C template: project name "ShopVerse", the AI example
-  "black running shoes", consumer personas, consumer KPIs.
+### P0-1 — The brief's business context is industrial, but its scope and rules are B2C
+- `01_PROJECT_BRIEF.md` (v1) gets the business context and the 12 industrial categories right, but
+  the parts that drive the build come from a B2C template: repo name "shopverse", the AI example
+  "black running shoes", consumer personas (value buyer, premium buyer), consumer KPIs, consumer
+  promotions, per-seller order splitting as the core flow. (Fixed in brief v2.)
 - `COMPANY_PROFILE.md` says MECHWARE sells automation (Siemens, Mitsubishi, Delta, Omron, Yaskawa),
   builds machines and runs retrofit/ETP projects for 30+ industrial clients. Those clients buy with
   **purchase orders, quotations, approvals, credit terms and VAT invoices**.
@@ -246,8 +248,8 @@ and admin**. Keep a requirement → test → evidence matrix in `docs/security/A
 - **Light theme default for the storefront**, dark as an option; the console can default to dark.
 - Keep the brand: Royal Industrial Navy `#0F3E7D` as primary, Mech Teal `#00A8B5` as accent,
   Electric Cyan only for focus rings, highlights and the hero. Re-check every pair for WCAG 2.2 AA.
-- Typography: Inter or IBM Plex Sans for Latin, **Noto Sans Bengali / Hind Siliguri** for Bangla,
-  **tabular numerals** for prices, quantities and specs.
+- Typography: keep the specified Inter + Plus Jakarta Sans, Hind Siliguri / Noto Sans Bengali for
+  Bangla, and tabular numerals for prices, quantities and specs.
 - Photography: real product photos on a consistent white background (manufacturer assets with
   distributor permission) and real project photos from MECHWARE's installations. Replace generated
   illustrations before launch.
@@ -280,8 +282,8 @@ and admin**. Keep a requirement → test → evidence matrix in `docs/security/A
 
 | Document | Change |
 |---|---|
-| `01_PROJECT_BRIEF.md` | Replace ShopVerse/B2C personas and KPIs with B2B personas (purchase officer, maintenance engineer, plant manager approver, MECHWARE sales engineer); move B2B pricing, quotes, approvals, quick order into Phase 1 scope; defer seller payouts, flash sale, AI chat; add Guideline-2021, Mushak-6.3, PDPO 2025 to §14; Tailwind version aligned with code |
-| `02_DESIGN_SYSTEM.md` | Light default storefront; add product-table, spec-table, price-break, quote and approval components; Bangla font stack; tabular numerals |
+| `01_PROJECT_BRIEF.md` ✅ v2 | Replace ShopVerse/B2C personas and KPIs with B2B personas (purchase officer, maintenance engineer, plant manager approver, MECHWARE sales engineer); move B2B pricing, quotes, approvals, quick order into Phase 1 scope; defer seller payouts, flash sale, AI chat; add Guideline-2021, Mushak-6.3, PDPO 2025 to §14; Tailwind version aligned with code |
+| `02_DESIGN_SYSTEM.md` | Light default storefront; add product-table, spec-table, price-break, quote and approval components (Bangla font stack and tabular numerals are already specified — keep them) |
 | `ARCHITECTURE.md` | Add the new modules (§3.2), inbox, event versioning, architecture tests, right-sized deployment, SLOs, RPO/RTO |
 | `DATA_MODEL.md` | Company, CompanyUser, Role, PriceList, PriceListEntry, Quote, QuoteLine, QuoteVersion, ApprovalRule, ApprovalRequest, Invoice (Mushak-6.3), CreditTerm, InstalledMachine, Consent |
 | `API_CONTRACT.md` | `/companies`, `/quotes`, `/approvals`, `/quick-order/validate`, `/invoices`, `/me/consents`, `/me/data-export` |
@@ -331,11 +333,14 @@ tester (1–2 weeks). AI coding assistants accelerate the engineers; they do not
 
 ## 9. Immediate next actions
 
-1. Decide with MECHWARE management: **direct-seller B2B first, marketplace later** (recommended).
-2. Rewrite `01_PROJECT_BRIEF.md` scope and personas (§6).
-3. Raise `next`/`react` floors in `package.json` to patched versions; enable branch protection on `main`.
-4. Add CodeQL + gitleaks + Dependabot workflows.
-5. Start the Figma pass on PLP (product table), PDP, quick order, quote, approval screens.
+1. ✅ Decided: **direct-seller B2B first, marketplace later** (owner approval, 2026-10-30).
+2. ✅ `01_PROJECT_BRIEF.md` rewritten as v2.
+3. ✅ `next`/`react` floors raised to patched versions; `next-intl` 3 → 4.14 and PostCSS override clear
+   all high/moderate npm advisories. ⏳ Branch protection on `main` (owner, GitHub settings).
+4. ✅ CodeQL + dependency-audit gate + Dependabot. ⏳ Enable GitHub secret scanning and push protection
+   (free for public repos, owner, GitHub settings) — replaces the planned gitleaks job.
+5. ✅ Hard-core test layer (architecture, property/fuzz, JWT attacker model, authorisation coverage,
+   inventory chaos) — results in `docs/HARDCORE_TEST_REPORT.md`.
 6. Draft the threat model for Pricing, Quotes, Approvals and Payments.
 
 ---
