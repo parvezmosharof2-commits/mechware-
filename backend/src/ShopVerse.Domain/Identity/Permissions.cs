@@ -20,6 +20,10 @@ public static class Permissions
     public const string FinancePayouts = "finance.payouts";
     public const string AuditView = "audit.view";
 
+    public const string CompaniesView = "companies.view";
+    public const string CompaniesManage = "companies.manage";
+    public const string CompaniesCredit = "companies.credit";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -39,9 +43,9 @@ public static class Permissions
         {
             Roles.Buyer => [OrdersViewOwn],
             Roles.Seller => [OrdersViewOwn, CatalogCreate, CatalogUpdateOwn, SellersManageOwn],
-            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund],
+            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
-            Roles.Finance => [OrdersViewAll, OrdersRefund, FinancePayouts, AuditView],
+            Roles.Finance => [OrdersViewAll, OrdersRefund, FinancePayouts, AuditView, CompaniesView, CompaniesCredit],
             Roles.Admin =>
             [
                 OrdersViewOwn,
@@ -54,7 +58,10 @@ public static class Permissions
                 SellersKycReview,
                 UsersManage,
                 FinancePayouts,
-                AuditView
+                AuditView,
+                CompaniesView,
+                CompaniesManage,
+                CompaniesCredit
             ],
             _ => []
         };

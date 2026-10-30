@@ -2,9 +2,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShopVerse.Application.Catalog;
 using ShopVerse.Application.Common;
+using ShopVerse.Application.Companies;
 using ShopVerse.Application.Inventory;
 using ShopVerse.Infrastructure.Caching;
 using ShopVerse.Infrastructure.Catalog;
+using ShopVerse.Infrastructure.Companies;
 using ShopVerse.Infrastructure.Inventory;
 using ShopVerse.Infrastructure.Persistence.Outbox;
 using ShopVerse.Infrastructure.Workers;
@@ -22,6 +24,7 @@ public static class DependencyInjection
         services.TryAddSingleton<IStorefrontCacheInvalidator, RedisStorefrontCacheInvalidator>();
         services.TryAddScoped<IInventoryService, InventoryService>();
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
+        services.TryAddScoped<ICompanyService, CompanyService>();
 
         services.AddScoped<IOutboxPublisher, SearchSyncQueuePublisher>();
         services.AddScoped<IOutboxPublisher, StorefrontCacheInvalidationPublisher>();

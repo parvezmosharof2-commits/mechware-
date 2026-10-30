@@ -312,6 +312,16 @@
 
 ---
 
+### B2B track — Company accounts (brief v2 §3.1.3), slice 1 of N — backend (2026-10-30)
+- [x] Domain `Company`, `CompanySite`, `CostCentre`, `CompanyMember` (flag roles Requester/Buyer/Approver/Admin, spend limit, cost centres); BIN (13 digit) / TIN (12 digit) validation.
+- [x] Credit rules (§8.7) in the aggregate: `ReserveCredit` allowed only if `used + total ≤ limit`, only for an active company with net terms; `SetCredit` cannot go below used; DB check constraints + `xmin` token back it up.
+- [x] `ICompanyService` / `CompanyService`: register (registrant = first admin, company `pending`), sites (exactly one default), cost centres (unique code per company), members (last-admin protection under a row lock).
+- [x] Tenancy: access is decided from `company_members` in the database on every call; a company the caller does not belong to answers **404**, a member without the role answers **403** (`ForbiddenException`). Not derived from a JWT claim.
+- [x] API: `/api/v1/companies/**` (members) and `/api/v1/admin/companies/**` (staff: `companies.view` / `companies.manage` / `companies.credit`, credit = finance only).
+- [x] Migration `B2bCompanyAccounts` (4 tables). Tests: 22 unit (incl. 300×200 random credit operations) and 13 integration against PostgreSQL (IDOR matrix over every operation, cross-tenant child ids, last-admin race, 30 racing credit reservations).
+- [ ] Not yet: storefront/console UI, email invites, approval rules (next module), per-user credit use by checkout, global EF query filter (isolation is explicit in the service for now), KYC document upload, notifications (credit 80%).
+- Known gap: identity is still the in-memory store (Phase 3), so `company_members.user_id` has no FK and members are added by user id, not e-mail. Revisit when identity moves to PostgreSQL.
+
 ### Hardening track (started early, 2026-10-30) — see `docs/HARDCORE_TEST_REPORT.md`
 - [x] Brief v2 (B2B procurement, direct seller first) and USD 100K review plan.
 - [x] Architecture tests (layering, controller dependencies, exception hierarchy).
