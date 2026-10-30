@@ -98,6 +98,10 @@ jobs:
         working-directory: frontend
         run: pnpm build
 
+      - name: Check first-load JS budget (170 kB gzip per route)
+        working-directory: frontend
+        run: pnpm check:bundle
+
   e2e:
     name: Browser E2E (API + PostgreSQL + web + console)
     runs-on: ubuntu-latest

@@ -1,17 +1,22 @@
 'use client';
 
 import * as React from 'react';
+import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { AlertBanner, Progress, Tabs, TabsContent, TabsList, TabsTrigger } from '@mechware/ui';
 import { CompanyRoles, creditUsagePercent, hasRole, roleNames } from '@mechware/api-client';
 import { companiesApi } from '../../lib/api';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
-import { CostCentresPanel } from './CostCentresPanel';
-import { MembersPanel } from './MembersPanel';
 import { SitesPanel } from './SitesPanel';
-import { ApprovalsPanel } from './ApprovalsPanel';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath, useMoney } from './shared';
+
+// The sites tab is the default and stays in the page bundle. The other panels are only needed once their tab is
+// opened, so they load on demand instead of weighing down every first visit.
+const panelLoading = () => <ListSkeleton rows={2} />;
+const CostCentresPanel = dynamic(() => import('./CostCentresPanel').then((m) => m.CostCentresPanel), { loading: panelLoading });
+const ApprovalsPanel = dynamic(() => import('./ApprovalsPanel').then((m) => m.ApprovalsPanel), { loading: panelLoading });
+const MembersPanel = dynamic(() => import('./MembersPanel').then((m) => m.MembersPanel), { loading: panelLoading });
 
 function Dashboard({ companyId }: { companyId: string }) {
   const t = useTranslations('Company');

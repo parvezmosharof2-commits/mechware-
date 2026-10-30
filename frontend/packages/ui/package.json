@@ -4,6 +4,7 @@
   "private": true,
   "main": "./index.ts",
   "types": "./index.ts",
+  "sideEffects": false,
   "scripts": {
     "test": "tsx --test tests/components.test.mjs && tsx --test tests/axe-all-components.test.tsx && node scripts/verify-contrast.mjs",
     "test:axe": "tsx --test tests/axe-all-components.test.tsx",
