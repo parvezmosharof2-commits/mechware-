@@ -72,9 +72,9 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("verify-otp")]
     [EnableRateLimiting(AuthStrictRateLimitPolicy)]
-    public IActionResult VerifyOtp([FromBody] VerifyOtpRequestDto request)
+    public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequestDto request)
     {
-        AuthTokenResponseDto result = _identityService.VerifyOtp(
+        AuthTokenResponseDto result = await _identityService.VerifyOtpAsync(
             request,
             _currentUser.IpAddress,
             _currentUser.UserAgent);
@@ -85,9 +85,9 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("login")]
     [EnableRateLimiting(AuthStrictRateLimitPolicy)]
-    public IActionResult Login([FromBody] LoginRequestDto request)
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto request)
     {
-        AuthTokenResponseDto result = _identityService.Login(
+        AuthTokenResponseDto result = await _identityService.LoginAsync(
             request,
             _currentUser.IpAddress,
             _currentUser.UserAgent);
@@ -111,9 +111,9 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("google")]
     [EnableRateLimiting(AuthStrictRateLimitPolicy)]
-    public IActionResult GoogleLogin([FromBody] GoogleLoginRequestDto request)
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequestDto request)
     {
-        AuthTokenResponseDto result = _identityService.GoogleLogin(
+        AuthTokenResponseDto result = await _identityService.GoogleLoginAsync(
             request,
             _currentUser.IpAddress,
             _currentUser.UserAgent);
@@ -123,10 +123,10 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
-    public IActionResult Refresh()
+    public async Task<IActionResult> Refresh()
     {
         string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
-        AuthTokenResponseDto result = _identityService.RotateRefreshToken(
+        AuthTokenResponseDto result = await _identityService.RotateRefreshTokenAsync(
             rawRefreshToken ?? string.Empty,
             _currentUser.IpAddress,
             _currentUser.UserAgent);
@@ -145,14 +145,14 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("logout")]
-    public IActionResult Logout()
+    public async Task<IActionResult> Logout()
     {
         string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
-        bool revokedByCookie = _identityService.RevokeRefreshTokenByCookie(rawRefreshToken, _currentUser.IpAddress);
+        bool revokedByCookie = await _identityService.RevokeRefreshTokenByCookieAsync(rawRefreshToken, _currentUser.IpAddress);
 
         if (!revokedByCookie && _currentUser.UserId.HasValue)
         {
-            _identityService.RevokeSessions(
+            await _identityService.RevokeSessionsAsync(
                 _currentUser.UserId.Value,
                 new RevokeSessionsRequestDto(RevokeAll: false),
                 _currentUser.IpAddress,
@@ -172,9 +172,9 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("password/forgot")]
     [EnableRateLimiting(AuthStrictRateLimitPolicy)]
-    public IActionResult ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
     {
-        (string referenceId, _) = _identityService.InitiatePasswordReset(
+        (string referenceId, _) = await _identityService.InitiatePasswordResetAsync(
             request.Identifier,
             _currentUser.IpAddress);
 
@@ -191,18 +191,18 @@ public sealed class AuthController : ControllerBase
 
     [HttpPost("password/reset")]
     [EnableRateLimiting(AuthStrictRateLimitPolicy)]
-    public IActionResult ResetPassword([FromBody] ResetPasswordRequestDto request)
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
     {
-        _identityService.CompletePasswordReset(request, _currentUser.IpAddress);
+        await _identityService.CompletePasswordResetAsync(request, _currentUser.IpAddress);
         return Ok(new { data = new { passwordReset = true } });
     }
 
     [Authorize]
     [HttpPost("2fa/setup")]
-    public IActionResult SetupTwoFactor()
+    public async Task<IActionResult> SetupTwoFactor()
     {
         Guid userId = RequireAuthenticatedUserId();
-        TotpSetupResponseDto result = _identityService.SetupTwoFactor(userId, _currentUser.IpAddress);
+        TotpSetupResponseDto result = await _identityService.SetupTwoFactorAsync(userId, _currentUser.IpAddress);
 
         return Ok(new
         {
@@ -217,30 +217,30 @@ public sealed class AuthController : ControllerBase
 
     [Authorize]
     [HttpPost("2fa/verify")]
-    public IActionResult VerifyTwoFactor([FromBody] TotpVerifyRequestDto request)
+    public async Task<IActionResult> VerifyTwoFactor([FromBody] TotpVerifyRequestDto request)
     {
         Guid userId = RequireAuthenticatedUserId();
-        _identityService.VerifyAndEnableTwoFactor(userId, request.Code, _currentUser.IpAddress);
+        await _identityService.VerifyAndEnableTwoFactorAsync(userId, request.Code, _currentUser.IpAddress);
         return Ok(new { data = new { twoFactorEnabled = true } });
     }
 
     [Authorize]
     [HttpGet("sessions")]
-    public IActionResult GetSessions()
+    public async Task<IActionResult> GetSessions()
     {
         Guid userId = RequireAuthenticatedUserId();
         string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
-        IReadOnlyList<ActiveSessionDto> sessions = _identityService.GetActiveSessions(userId, rawRefreshToken);
+        IReadOnlyList<ActiveSessionDto> sessions = await _identityService.GetActiveSessionsAsync(userId, rawRefreshToken);
         return Ok(new { data = sessions });
     }
 
     [Authorize]
     [HttpPost("sessions/revoke")]
-    public IActionResult RevokeSessions([FromBody] RevokeSessionsRequestDto request)
+    public async Task<IActionResult> RevokeSessions([FromBody] RevokeSessionsRequestDto request)
     {
         Guid userId = RequireAuthenticatedUserId();
         string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
-        int revokedCount = _identityService.RevokeSessions(userId, request, _currentUser.IpAddress, rawRefreshToken);
+        int revokedCount = await _identityService.RevokeSessionsAsync(userId, request, _currentUser.IpAddress, rawRefreshToken);
         return Ok(new { data = new { revokedCount } });
     }
 
@@ -289,56 +289,56 @@ public sealed class UsersController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult GetMe()
+    public async Task<IActionResult> GetMe()
     {
         Guid userId = RequireAuthenticatedUserId();
-        return Ok(new { data = _identityService.GetUserProfile(userId) });
+        return Ok(new { data = await _identityService.GetUserProfileAsync(userId) });
     }
 
     [HttpGet("addresses")]
-    public IActionResult GetAddresses()
+    public async Task<IActionResult> GetAddresses()
     {
         Guid userId = RequireAuthenticatedUserId();
-        return Ok(new { data = _identityService.GetAddresses(userId) });
+        return Ok(new { data = await _identityService.GetAddressesAsync(userId) });
     }
 
     [HttpPost("addresses")]
-    public IActionResult CreateAddress([FromBody] UpsertAddressRequestDto request)
+    public async Task<IActionResult> CreateAddress([FromBody] UpsertAddressRequestDto request)
     {
         Guid userId = RequireAuthenticatedUserId();
-        AddressDto created = _identityService.CreateAddress(userId, request, _currentUser.IpAddress);
+        AddressDto created = await _identityService.CreateAddressAsync(userId, request, _currentUser.IpAddress);
         return StatusCode(StatusCodes.Status201Created, new { data = created });
     }
 
     [HttpPut("addresses/{addressId:guid}")]
-    public IActionResult UpdateAddress(Guid addressId, [FromBody] UpsertAddressRequestDto request)
+    public async Task<IActionResult> UpdateAddress(Guid addressId, [FromBody] UpsertAddressRequestDto request)
     {
         Guid userId = RequireAuthenticatedUserId();
-        AddressDto updated = _identityService.UpdateAddress(userId, addressId, request, _currentUser.IpAddress);
+        AddressDto updated = await _identityService.UpdateAddressAsync(userId, addressId, request, _currentUser.IpAddress);
         return Ok(new { data = updated });
     }
 
     [HttpDelete("addresses/{addressId:guid}")]
-    public IActionResult DeleteAddress(Guid addressId)
+    public async Task<IActionResult> DeleteAddress(Guid addressId)
     {
         Guid userId = RequireAuthenticatedUserId();
-        _identityService.DeleteAddress(userId, addressId, _currentUser.IpAddress);
+        await _identityService.DeleteAddressAsync(userId, addressId, _currentUser.IpAddress);
         return NoContent();
     }
 
     [HttpGet("export")]
-    public IActionResult ExportGdprBundle()
+    public async Task<IActionResult> ExportGdprBundle()
     {
         Guid userId = RequireAuthenticatedUserId();
-        GdprExportBundleDto bundle = _identityService.ExportUserData(userId, _currentUser.IpAddress);
+        GdprExportBundleDto bundle = await _identityService.ExportUserDataAsync(userId, _currentUser.IpAddress);
         return Ok(new { data = bundle });
     }
 
     [HttpDelete]
-    public IActionResult AnonymizeAccount()
+    public async Task<IActionResult> AnonymizeAccount()
     {
         Guid userId = RequireAuthenticatedUserId();
-        _identityService.AnonymizeAndEraseUser(userId, _currentUser.IpAddress);
+        await _identityService.AnonymizeAndEraseUserAsync(userId, _currentUser.IpAddress);
 
         Response.Cookies.Delete(AuthController.RefreshTokenCookieName, new CookieOptions
         {

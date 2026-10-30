@@ -382,5 +382,26 @@ now provisioned from deployment secrets at startup:
   password-only 202, wrong code 401, correct code 200 with the admin role, demo admin still 401), and a mutation
   check (removing the TOTP secret makes the integration test fail).
 
-Still open: the identity store is in memory, so every user (buyers included) is lost on restart. A database-backed
-identity is the next step and is not part of this change.
+## Identity in PostgreSQL
+
+`IdentityService` no longer keeps users, sessions, OTP codes, addresses or audit events in memory. They live in the
+database, so a restart or a second API instance loses nothing (the `users` table already existed in the model; the
+hand-written `202610290001_Phase3IdentityAndAccess.cs` has no `[Migration]` attribute and never runs, the tables come
+from `20261029190715_Phase4CatalogInventoryOutbox`, so that file is dead code to delete later).
+
+- `IIdentityService` is async and the service is registered per request (it holds the request's `ShopVerseDbContext`).
+- Demo accounts (Development only) and the bootstrap administrator are created by `IdentitySeeder` at startup,
+  idempotently: an existing account is never reset. Nothing touches the database at boot when there is nothing to seed.
+- Refresh-token rotation and OTP checks take a row lock (`SELECT ... FOR UPDATE`) inside a transaction, so two
+  concurrent rotations of one token have exactly one winner and the OTP attempt limit cannot be raced. The reuse
+  revocation, failed-login counters and lockouts are saved before the request fails, so a rollback cannot undo them.
+- Registration races are settled by the unique indexes `ux_users_email` / `ux_users_phone`.
+- `RefreshToken` and `OtpCode` are `[NotAudited]` (row noise); the meaningful events are still written explicitly.
+- Tests: 17 service tests plus seeding and bootstrap tests run against real PostgreSQL (`IdentityServiceTests`,
+  `AccountSeedingTests`), and the API-level tests use `DbBackedFactory`, a host over its own throw-away database.
+  Mutation checks: removing the row lock, the pre-throw save of the breach revocation, or the failed-login save each
+  makes a specific test fail. Checked by hand against a Production-mode API: bootstrap admin signs in with password
+  and TOTP, the API restarts, and the refresh cookie issued before the restart still works.
+
+Still open: `company_members.user_id` has no foreign key to `users` (threat model M2) and `AddMember` does not check
+that the user exists; GDPR erasure still deletes addresses outright.

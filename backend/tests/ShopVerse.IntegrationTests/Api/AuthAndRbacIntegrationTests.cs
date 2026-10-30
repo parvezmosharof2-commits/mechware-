@@ -3,22 +3,23 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using ShopVerse.IntegrationTests.Support;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ShopVerse.Application.Identity;
 using ShopVerse.Infrastructure.Identity;
 
 namespace ShopVerse.IntegrationTests.Api;
 
-public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class AuthAndRbacIntegrationTests : IClassFixture<DefaultApiFactory>
 {
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly DefaultApiFactory _factory;
 
-    public AuthAndRbacIntegrationTests(WebApplicationFactory<Program> factory)
+    public AuthAndRbacIntegrationTests(DefaultApiFactory factory)
     {
         _factory = factory;
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task BuyerLogin_ShouldReturnInMemoryAccessToken_AndSetHttpOnlySecureSameSiteLaxRefreshCookie()
     {
         HttpClient client = _factory.CreateClient();
@@ -44,7 +45,7 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
         data.GetProperty("expiresIn").GetInt32().Should().Be(900);
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task AdminLoginWithoutTotp_ShouldReturn202RequiresTwoFactor_SucceedWithTotp_AndBlockTotpReplayInSameWindow()
     {
         HttpClient client = _factory.CreateClient();
@@ -84,7 +85,7 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
         replayAttempt.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task SellerIsolation_SellerAlphaCannotReadOrModifySellerBetaResources_AndCannotInvokeOrdersRefund()
     {
         HttpClient client = _factory.CreateClient();
@@ -125,7 +126,7 @@ public class AuthAndRbacIntegrationTests : IClassFixture<WebApplicationFactory<P
         refundResp.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task BangladeshLocationsAndAddressBookAndGdprExport_ShouldWorkEndToEnd()
     {
         HttpClient client = _factory.CreateClient();

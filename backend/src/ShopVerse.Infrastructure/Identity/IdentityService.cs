@@ -1,16 +1,19 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ShopVerse.Application.Identity;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Identity;
+using ShopVerse.Infrastructure.Persistence;
 
 namespace ShopVerse.Infrastructure.Identity;
 
 /// <summary>
 /// Core Identity, Authentication, Token Rotation/Family Breach Detection, TOTP 2FA with Replay Guard,
-/// Address Book, Bangladesh Location Hierarchy, and GDPR Export/Erasure service.
+/// Address Book, Bangladesh Location Hierarchy, and GDPR Export/Erasure service. State lives in PostgreSQL, so it
+/// survives restarts and is shared by every API instance. Registered per request (it holds the request's DbContext).
 /// </summary>
 public sealed class IdentityService : IIdentityService
 {
@@ -21,138 +24,22 @@ public sealed class IdentityService : IIdentityService
     private readonly ITokenService _tokenService;
     private readonly ITotpService _totpService;
     private readonly ISmsProvider _smsProvider;
-
-    private readonly ConcurrentDictionary<Guid, User> _users = new();
-    private readonly ConcurrentDictionary<Guid, RefreshToken> _refreshTokens = new();
-    private readonly ConcurrentDictionary<Guid, OtpCode> _otpCodes = new();
-    private readonly ConcurrentDictionary<Guid, Address> _addresses = new();
-    private readonly ConcurrentQueue<AuditLog> _auditLogs = new();
+    private readonly ShopVerseDbContext _db;
     private readonly IReadOnlyList<BdLocation> _bdLocations;
-    private readonly object _tokenLock = new();
 
     public IdentityService(
         IPasswordHasherService passwordHasher,
         ITokenService tokenService,
         ITotpService totpService,
         ISmsProvider smsProvider,
-        IdentitySeedPolicy seedPolicy,
-        BootstrapAdminSettings? bootstrapAdmin = null)
+        ShopVerseDbContext db)
     {
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _totpService = totpService;
         _smsProvider = smsProvider;
+        _db = db;
         _bdLocations = BangladeshLocationSeeder.GetSeedLocations();
-
-        if (seedPolicy.SeedDemoAccounts)
-        {
-            SeedEnterpriseAccounts();
-        }
-
-        if (bootstrapAdmin is not null)
-        {
-            SeedBootstrapAdmin(bootstrapAdmin);
-        }
-    }
-
-    private void SeedBootstrapAdmin(BootstrapAdminSettings settings)
-    {
-        _passwordHasher.ValidatePasswordPolicy(settings.Password);
-
-        if (_users.Values.Any(u => string.Equals(u.Email, settings.Email, StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
-        var now = DateTime.UtcNow;
-        var admin = User.Create(settings.Email, settings.Phone, _passwordHasher.HashPassword(settings.Password), settings.FullName, "en");
-        admin.VerifyEmail(now);
-        if (settings.Phone is not null)
-        {
-            admin.VerifyPhone(now);
-        }
-
-        admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
-        admin.ConfigureTwoFactorSecret(settings.TotpSecret, JsonSerializer.Serialize(Array.Empty<string>()), now);
-        admin.EnableTwoFactor(now);
-        _users[admin.Id] = admin;
-        RecordAudit(admin.Id, null, "user.bootstrap_admin_provisioned", "users", admin.Id.ToString(), null, new { admin.Email });
-    }
-
-    private void SeedEnterpriseAccounts()
-    {
-        var now = DateTime.UtcNow;
-
-        // 1. Admin account (Mandatory 2FA enabled with known deterministic base32 secret for tests/demo)
-        var admin = User.Create(
-            "admin@mechware.com.bd",
-            "+8801711000001",
-            _passwordHasher.HashPassword("MechAdmin#2026!"),
-            "Parvez Mosharof (Principal Admin)",
-            "en");
-        admin.VerifyEmail(now);
-        admin.VerifyPhone(now);
-        admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
-        string adminTotpSecret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
-        var recoveryHashes = new[] { _totpService.HashRecoveryCode("ABCDE-12345") };
-        admin.ConfigureTwoFactorSecret(adminTotpSecret, JsonSerializer.Serialize(recoveryHashes), now);
-        admin.EnableTwoFactor(now);
-        _users[admin.Id] = admin;
-
-        // 2. Seller Alpha (Owns SellerAlphaId)
-        var sellerAlpha = User.Create(
-            "seller.alpha@mechware.com.bd",
-            "+8801711000002",
-            _passwordHasher.HashPassword("SellerAlpha#2026!"),
-            "Dhaka Heavy Pneumatics Ltd.",
-            "en",
-            SellerAlphaId);
-        sellerAlpha.VerifyEmail(now);
-        sellerAlpha.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000002"), Permissions.Roles.Seller);
-        _users[sellerAlpha.Id] = sellerAlpha;
-
-        // 3. Seller Beta (Owns SellerBetaId)
-        var sellerBeta = User.Create(
-            "seller.beta@mechware.com.bd",
-            "+8801711000003",
-            _passwordHasher.HashPassword("SellerBeta#2026!"),
-            "Chattogram Marine Automation",
-            "bn",
-            SellerBetaId);
-        sellerBeta.VerifyEmail(now);
-        sellerBeta.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000002"), Permissions.Roles.Seller);
-        _users[sellerBeta.Id] = sellerBeta;
-
-        // 4. Verified Industrial Buyer
-        var buyer = User.Create(
-            "buyer@mechware.com.bd",
-            "+8801711000004",
-            _passwordHasher.HashPassword("BuyerPass#2026!"),
-            "Gazipur Textile Mills Procurement",
-            "en");
-        buyer.VerifyEmail(now);
-        buyer.VerifyPhone(now);
-        buyer.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
-        _users[buyer.Id] = buyer;
-
-        var defaultAddress = new Address(
-            Guid.NewGuid(),
-            buyer.Id,
-            "Factory Plant #1",
-            "Engr. Tanvir Ahmed",
-            "+8801711000004",
-            "Plot 42, Sector 7, Tongi Industrial Zone",
-            "Gate 3, Receiving Bay B",
-            "Tongi",
-            "Tongi Industrial Zone",
-            "Gazipur",
-            "Dhaka",
-            "1710",
-            true,
-            true,
-            23.8915m,
-            90.4023m);
-        _addresses[defaultAddress.Id] = defaultAddress;
     }
 
     public async Task<(RegisterResponseDto Response, string RawOtpForDev)> RegisterAsync(
@@ -164,7 +51,7 @@ public sealed class IdentityService : IIdentityService
         _passwordHasher.ValidatePasswordPolicy(request.Password);
 
         string normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        if (_users.Values.Any(u => u.DeletedAtUtc == null && string.Equals(u.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase)))
+        if (await _db.Users.AnyAsync(u => u.DeletedAtUtc == null && u.Email == normalizedEmail, cancellationToken))
         {
             throw new ValidationException("email", "An account with this email address already exists.");
         }
@@ -172,22 +59,33 @@ public sealed class IdentityService : IIdentityService
         if (!string.IsNullOrWhiteSpace(request.Phone))
         {
             string normalizedPhone = request.Phone.Trim();
-            if (_users.Values.Any(u => u.DeletedAtUtc == null && string.Equals(u.Phone, normalizedPhone, StringComparison.OrdinalIgnoreCase)))
+            if (await _db.Users.AnyAsync(u => u.DeletedAtUtc == null && u.Phone == normalizedPhone, cancellationToken))
             {
                 throw new ValidationException("phone", "An account with this phone number already exists.");
             }
         }
 
         string passwordHash = _passwordHasher.HashPassword(request.Password);
-        var user = User.Create(normalizedEmail, request.Phone, passwordHash, request.FullName, request.Locale);
+        var user = User.Create(normalizedEmail, request.Phone?.Trim(), passwordHash, request.FullName, request.Locale);
         user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
-        _users[user.Id] = user;
+        _db.Users.Add(user);
 
         bool verifyByPhone = !string.IsNullOrWhiteSpace(user.Phone);
         string recipient = verifyByPhone ? user.Phone! : user.Email;
         OtpType otpType = verifyByPhone ? OtpType.PhoneVerify : OtpType.EmailVerify;
 
         (OtpCode otp, string rawCode) = CreateOtp(recipient, otpType, now);
+        RecordAudit(user.Id, clientIp, "user.registered", "users", user.Id.ToString(), null, new { user.Email, user.Phone, user.Locale });
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Two requests raced past the checks above; the unique index is the real guard.
+            throw new ValidationException("email", "An account with this email address or phone number already exists.");
+        }
 
         if (verifyByPhone)
         {
@@ -196,8 +94,6 @@ public sealed class IdentityService : IIdentityService
                 $"MECHWARE Verification Code: {rawCode}. Valid for 5 minutes. Ref: {otp.ReferenceId}",
                 cancellationToken);
         }
-
-        RecordAudit(user.Id, clientIp, "user.registered", "users", user.Id.ToString(), null, new { user.Email, user.Phone, user.Locale });
 
         var response = new RegisterResponseDto(
             user.Id,
@@ -228,6 +124,10 @@ public sealed class IdentityService : IIdentityService
 
         (OtpCode otp, string rawCode) = CreateOtp(recipient, otpType, now);
 
+        User? user = await FindUserByIdentifierAsync(recipient, cancellationToken);
+        RecordAudit(user?.Id, clientIp, "user.otp_dispatched", "otp_codes", otp.Id.ToString(), null, new { recipient, otp.Type, otp.ReferenceId });
+        await _db.SaveChangesAsync(cancellationToken);
+
         if (recipient.StartsWith('+') || recipient.All(char.IsDigit))
         {
             await _smsProvider.SendSmsAsync(
@@ -236,26 +136,22 @@ public sealed class IdentityService : IIdentityService
                 cancellationToken);
         }
 
-        User? user = FindUserByIdentifier(recipient);
-        RecordAudit(user?.Id, clientIp, "user.otp_dispatched", "otp_codes", otp.Id.ToString(), null, new { recipient, otp.Type, otp.ReferenceId });
-
         return (new SendOtpResponseDto(recipient, otpType.ToString(), otp.ReferenceId, 300, OtpCode.MaxVerificationAttempts), rawCode);
     }
 
-    public AuthTokenResponseDto VerifyOtp(
+    public async Task<AuthTokenResponseDto> VerifyOtpAsync(
         VerifyOtpRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null)
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
         string recipient = request.Recipient.Trim().ToLowerInvariant();
 
-        OtpCode? otp = _otpCodes.Values
-            .OrderByDescending(o => o.CreatedAtUtc)
-            .FirstOrDefault(o =>
-                string.Equals(o.Recipient, recipient, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(o.ReferenceId, request.ReferenceId, StringComparison.Ordinal));
+        // The attempt counter is the brute-force limit, so the row is locked while it is checked and updated.
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, null, cancellationToken);
 
         if (otp is null || !otp.CanVerify(now))
         {
@@ -268,16 +164,15 @@ public sealed class IdentityService : IIdentityService
             Encoding.ASCII.GetBytes(providedHash)))
         {
             otp.IncrementAttempts(now);
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
             throw new ValidationException("code", "Invalid verification code.");
         }
 
         otp.MarkConsumed(now);
 
-        User? user = FindUserByIdentifier(recipient);
-        if (user is null)
-        {
-            throw new KeyNotFoundException("User account for OTP recipient was not found.");
-        }
+        User user = await FindUserByIdentifierAsync(recipient, cancellationToken)
+            ?? throw new KeyNotFoundException("User account for OTP recipient was not found.");
 
         if (otp.Type == OtpType.PhoneVerify)
         {
@@ -291,17 +186,21 @@ public sealed class IdentityService : IIdentityService
         user.RecordSuccessfulLogin(now);
         RecordAudit(user.Id, clientIp, "user.otp_verified", "users", user.Id.ToString(), null, new { otp.Type, otp.ReferenceId });
 
-        return IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return response;
     }
 
-    public AuthTokenResponseDto Login(
+    public async Task<AuthTokenResponseDto> LoginAsync(
         LoginRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null)
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
-        User? user = FindUserByIdentifier(request.Identifier);
+        User? user = await FindUserByIdentifierAsync(request.Identifier, cancellationToken);
 
         if (user is null || user.DeletedAtUtc.HasValue || string.IsNullOrEmpty(user.PasswordHash))
         {
@@ -311,6 +210,7 @@ public sealed class IdentityService : IIdentityService
         if (user.IsLockedOut(now))
         {
             RecordAudit(user.Id, clientIp, "user.login_locked_out", "users", user.Id.ToString(), null, new { user.LockoutUntilUtc });
+            await _db.SaveChangesAsync(cancellationToken);
             throw new UnauthorizedAccessException($"Account is temporarily locked due to multiple failed login attempts until {user.LockoutUntilUtc:O}.");
         }
 
@@ -318,6 +218,7 @@ public sealed class IdentityService : IIdentityService
         {
             user.RecordFailedLogin(now);
             RecordAudit(user.Id, clientIp, "user.login_failed", "users", user.Id.ToString(), null, new { user.FailedLoginAttempts, user.LockoutUntilUtc });
+            await _db.SaveChangesAsync(cancellationToken);
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
@@ -342,6 +243,7 @@ public sealed class IdentityService : IIdentityService
             {
                 user.RecordFailedLogin(now);
                 RecordAudit(user.Id, clientIp, "user.2fa_failed", "users", user.Id.ToString(), null, null);
+                await _db.SaveChangesAsync(cancellationToken);
                 throw new UnauthorizedAccessException("Invalid or replayed two-factor authentication / recovery code.");
             }
         }
@@ -349,14 +251,17 @@ public sealed class IdentityService : IIdentityService
         user.RecordSuccessfulLogin(now);
         RecordAudit(user.Id, clientIp, "user.login_succeeded", "users", user.Id.ToString(), null, new { clientIp });
 
-        return IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        return response;
     }
 
-    public AuthTokenResponseDto GoogleLogin(
+    public async Task<AuthTokenResponseDto> GoogleLoginAsync(
         GoogleLoginRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null)
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
         if (string.IsNullOrWhiteSpace(request.IdToken) || request.IdToken.Length < 10)
@@ -366,16 +271,17 @@ public sealed class IdentityService : IIdentityService
 
         (string subjectId, string email, string fullName) = ValidateAndExtractGoogleOidcClaims(request, now);
 
-        User? user = _users.Values.FirstOrDefault(u =>
-            u.DeletedAtUtc == null &&
-            (string.Equals(u.GoogleSubjectId, subjectId, StringComparison.Ordinal) ||
-             string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)));
+        User? user = await _db.Users
+            .Include(u => u.UserRoles)
+            .FirstOrDefaultAsync(
+                u => u.DeletedAtUtc == null && (u.GoogleSubjectId == subjectId || u.Email == email),
+                cancellationToken);
 
         if (user is null)
         {
             user = User.Create(email, null, null, fullName, "en");
             user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
-            _users[user.Id] = user;
+            _db.Users.Add(user);
         }
 
         user.LinkGoogleAccount(subjectId, now);
@@ -383,19 +289,24 @@ public sealed class IdentityService : IIdentityService
 
         RecordAudit(user.Id, clientIp, "user.google_oauth_login", "users", user.Id.ToString(), null, new { email, subjectId });
 
-        return IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        return response;
     }
 
     /// <summary>
     /// Rotates a refresh token. Implements ADR-0006:
     /// - 10-second multi-tab/SSR race grace window from same IP returns valid access token without revoking family.
-    /// - Any reuse outside the grace window or from a different IP triggers immediate revocation of the entire token family!
+    /// - Any reuse outside the grace window or from a different IP triggers immediate revocation of the entire token family.
+    /// The token row is locked (SELECT ... FOR UPDATE) so two concurrent rotations of one token are serialised: exactly
+    /// one wins, the other is seen as a reuse.
     /// </summary>
-    public AuthTokenResponseDto RotateRefreshToken(
+    public async Task<AuthTokenResponseDto> RotateRefreshTokenAsync(
         string rawRefreshToken,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null)
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawRefreshToken))
         {
@@ -405,96 +316,99 @@ public sealed class IdentityService : IIdentityService
         var now = utcNowOverride ?? DateTime.UtcNow;
         string tokenHash = _tokenService.HashToken(rawRefreshToken);
 
-        lock (_tokenLock)
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        RefreshToken? storedToken = (await _db.RefreshTokens
+            .FromSqlInterpolated($"SELECT * FROM refresh_tokens WHERE token_hash = {tokenHash} FOR UPDATE")
+            .ToListAsync(cancellationToken)).FirstOrDefault();
+
+        if (storedToken is null)
         {
-            RefreshToken? storedToken = _refreshTokens.Values.FirstOrDefault(rt =>
-                string.Equals(rt.TokenHash, tokenHash, StringComparison.Ordinal));
-
-            if (storedToken is null)
-            {
-                throw new UnauthorizedAccessException("Invalid refresh token.");
-            }
-
-            User? user = _users.GetValueOrDefault(storedToken.UserId);
-            if (user is null || user.DeletedAtUtc.HasValue || user.Status == UserStatus.Banned)
-            {
-                throw new UnauthorizedAccessException("User account is no longer active.");
-            }
-
-            if (storedToken.IsUsed)
-            {
-                // Check ADR-0006 10-second multi-tab/SSR grace window
-                if (storedToken.IsWithinGraceWindow(now, clientIp, graceSeconds: 10))
-                {
-                    IReadOnlyList<string> roles = GetUserRoles(user);
-                    IReadOnlyList<string> permissions = GetUserPermissions(roles);
-                    string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, now);
-
-                    return new AuthTokenResponseDto(
-                        accessToken,
-                        900,
-                        "Bearer",
-                        MapUserDto(user),
-                        RefreshTokenCookieValue: null);
-                }
-
-                // BREACH DETECTED: Token reuse outside grace window or from different IP!
-                // Revoke the ENTIRE token family immediately.
-                RevokeTokenFamilyInternal(storedToken.FamilyId, now);
-                RecordAudit(
-                    user.Id,
-                    clientIp,
-                    "security.refresh_token_family_revoked_on_reuse",
-                    "refresh_tokens",
-                    storedToken.FamilyId.ToString(),
-                    new { storedToken.CreatedByIp, storedToken.UsedAtUtc },
-                    new { BreachIp = clientIp, DetectedAtUtc = now });
-
-                throw new UnauthorizedAccessException("Refresh token reuse detected. Entire session family has been revoked for security.");
-            }
-
-            if (storedToken.IsRevoked || storedToken.IsExpired(now))
-            {
-                throw new UnauthorizedAccessException("Refresh token is expired or revoked.");
-            }
-
-            string newRawRefresh = _tokenService.GenerateRawRefreshToken();
-            string newRefreshHash = _tokenService.HashToken(newRawRefresh);
-
-            storedToken.MarkUsed(newRefreshHash, now);
-
-            var nextToken = new RefreshToken(
-                Guid.NewGuid(),
-                user.Id,
-                newRefreshHash,
-                storedToken.FamilyId,
-                clientIp,
-                userAgent,
-                now.AddDays(7));
-
-            _refreshTokens[nextToken.Id] = nextToken;
-
-            IReadOnlyList<string> userRoles = GetUserRoles(user);
-            IReadOnlyList<string> userPermissions = GetUserPermissions(userRoles);
-            string newAccessToken = _tokenService.GenerateAccessToken(user, userRoles, userPermissions, now);
-
-            return new AuthTokenResponseDto(
-                newAccessToken,
-                900,
-                "Bearer",
-                MapUserDto(user),
-                RefreshTokenCookieValue: newRawRefresh);
+            throw new UnauthorizedAccessException("Invalid refresh token.");
         }
+
+        User? user = await _db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == storedToken.UserId, cancellationToken);
+        if (user is null || user.DeletedAtUtc.HasValue || user.Status == UserStatus.Banned)
+        {
+            throw new UnauthorizedAccessException("User account is no longer active.");
+        }
+
+        if (storedToken.IsUsed)
+        {
+            // ADR-0006 10-second multi-tab/SSR grace window
+            if (storedToken.IsWithinGraceWindow(now, clientIp, graceSeconds: 10))
+            {
+                IReadOnlyList<string> roles = GetUserRoles(user);
+                IReadOnlyList<string> permissions = GetUserPermissions(roles);
+                string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, now);
+
+                return new AuthTokenResponseDto(
+                    accessToken,
+                    900,
+                    "Bearer",
+                    MapUserDto(user),
+                    RefreshTokenCookieValue: null);
+            }
+
+            // BREACH DETECTED: token reuse outside the grace window or from a different IP. Revoke the whole family
+            // and persist that before the request fails, otherwise the rollback would undo the protection.
+            await RevokeTokenFamilyAsync(storedToken.FamilyId, now, cancellationToken);
+            RecordAudit(
+                user.Id,
+                clientIp,
+                "security.refresh_token_family_revoked_on_reuse",
+                "refresh_tokens",
+                storedToken.FamilyId.ToString(),
+                new { storedToken.CreatedByIp, storedToken.UsedAtUtc },
+                new { BreachIp = clientIp, DetectedAtUtc = now });
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+
+            throw new UnauthorizedAccessException("Refresh token reuse detected. Entire session family has been revoked for security.");
+        }
+
+        if (storedToken.IsRevoked || storedToken.IsExpired(now))
+        {
+            throw new UnauthorizedAccessException("Refresh token is expired or revoked.");
+        }
+
+        string newRawRefresh = _tokenService.GenerateRawRefreshToken();
+        string newRefreshHash = _tokenService.HashToken(newRawRefresh);
+
+        storedToken.MarkUsed(newRefreshHash, now);
+
+        _db.RefreshTokens.Add(new RefreshToken(
+            Guid.NewGuid(),
+            user.Id,
+            newRefreshHash,
+            storedToken.FamilyId,
+            clientIp,
+            userAgent,
+            now.AddDays(7)));
+
+        IReadOnlyList<string> userRoles = GetUserRoles(user);
+        IReadOnlyList<string> userPermissions = GetUserPermissions(userRoles);
+        string newAccessToken = _tokenService.GenerateAccessToken(user, userRoles, userPermissions, now);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+
+        return new AuthTokenResponseDto(
+            newAccessToken,
+            900,
+            "Bearer",
+            MapUserDto(user),
+            RefreshTokenCookieValue: newRawRefresh);
     }
 
     /// <summary>
     /// Revokes the specific refresh token family associated with the caller's httpOnly refresh_token cookie
     /// (AUD-P3-05: supports logout even when the 15-minute Access JWT has expired, without wiping other device sessions).
     /// </summary>
-    public bool RevokeRefreshTokenByCookie(
+    public async Task<bool> RevokeRefreshTokenByCookieAsync(
         string? rawRefreshToken,
         string? clientIp = null,
-        DateTime? utcNowOverride = null)
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(rawRefreshToken))
         {
@@ -504,34 +418,33 @@ public sealed class IdentityService : IIdentityService
         var now = utcNowOverride ?? DateTime.UtcNow;
         string tokenHash = _tokenService.HashToken(rawRefreshToken);
 
-        lock (_tokenLock)
+        RefreshToken? storedToken = await _db.RefreshTokens.FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
+        if (storedToken is null)
         {
-            RefreshToken? storedToken = _refreshTokens.Values.FirstOrDefault(rt =>
-                string.Equals(rt.TokenHash, tokenHash, StringComparison.Ordinal));
-
-            if (storedToken is null)
-            {
-                return false;
-            }
-
-            RevokeTokenFamilyInternal(storedToken.FamilyId, now);
-            RecordAudit(
-                storedToken.UserId,
-                clientIp,
-                "user.session_logged_out",
-                "refresh_tokens",
-                storedToken.FamilyId.ToString(),
-                null,
-                new { storedToken.FamilyId });
-
-            return true;
+            return false;
         }
+
+        await RevokeTokenFamilyAsync(storedToken.FamilyId, now, cancellationToken);
+        RecordAudit(
+            storedToken.UserId,
+            clientIp,
+            "user.session_logged_out",
+            "refresh_tokens",
+            storedToken.FamilyId.ToString(),
+            null,
+            new { storedToken.FamilyId });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return true;
     }
 
-    public (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp = null)
+    public async Task<(string ReferenceId, string RawOtpForDev)> InitiatePasswordResetAsync(
+        string identifier,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        User? user = FindUserByIdentifier(identifier);
+        User? user = await FindUserByIdentifierAsync(identifier, cancellationToken);
         string recipient = user?.Email ?? identifier.Trim().ToLowerInvariant();
 
         (OtpCode otp, string rawCode) = CreateOtp(recipient, OtpType.PasswordReset, now);
@@ -541,21 +454,22 @@ public sealed class IdentityService : IIdentityService
             RecordAudit(user.Id, clientIp, "user.password_reset_requested", "users", user.Id.ToString(), null, new { otp.ReferenceId });
         }
 
+        await _db.SaveChangesAsync(cancellationToken);
         return (otp.ReferenceId, rawCode);
     }
 
-    public void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp = null)
+    public async Task CompletePasswordResetAsync(
+        ResetPasswordRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         _passwordHasher.ValidatePasswordPolicy(request.NewPassword);
 
         string recipient = request.Recipient.Trim().ToLowerInvariant();
-        OtpCode? otp = _otpCodes.Values
-            .OrderByDescending(o => o.CreatedAtUtc)
-            .FirstOrDefault(o =>
-                o.Type == OtpType.PasswordReset &&
-                string.Equals(o.Recipient, recipient, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(o.ReferenceId, request.ReferenceId, StringComparison.Ordinal));
+
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, OtpType.PasswordReset, cancellationToken);
 
         if (otp is null || !otp.CanVerify(now))
         {
@@ -568,26 +482,33 @@ public sealed class IdentityService : IIdentityService
             Encoding.ASCII.GetBytes(codeHash)))
         {
             otp.IncrementAttempts(now);
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
             throw new ValidationException("otpCode", "Invalid password reset code.");
         }
 
         otp.MarkConsumed(now);
 
-        User? user = FindUserByIdentifier(recipient)
+        User user = await FindUserByIdentifierAsync(recipient, cancellationToken)
             ?? throw new KeyNotFoundException("User account was not found.");
 
-        string newHash = _passwordHasher.HashPassword(request.NewPassword);
-        user.UpdatePasswordHash(newHash, now);
+        user.UpdatePasswordHash(_passwordHasher.HashPassword(request.NewPassword), now);
 
-        // Revoke all existing refresh tokens on password change
-        RevokeAllUserSessions(user.Id, now);
+        // A password change ends every existing session.
+        await RevokeAllUserSessionsAsync(user.Id, now, cancellationToken);
         RecordAudit(user.Id, clientIp, "user.password_reset_completed", "users", user.Id.ToString(), null, null);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
     }
 
-    public TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp = null)
+    public async Task<TotpSetupResponseDto> SetupTwoFactorAsync(
+        Guid userId,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        User user = GetUserByIdOrThrow(userId);
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
 
         string secret = _totpService.GenerateBase32Secret();
         IReadOnlyList<string> rawRecoveryCodes = _totpService.GenerateRecoveryCodes(10);
@@ -597,14 +518,20 @@ public sealed class IdentityService : IIdentityService
         string otpAuthUri = _totpService.BuildOtpAuthUri(user.Email, secret);
 
         RecordAudit(user.Id, clientIp, "user.2fa_setup_initiated", "users", user.Id.ToString(), null, null);
+        await _db.SaveChangesAsync(cancellationToken);
 
         return new TotpSetupResponseDto(secret, otpAuthUri, rawRecoveryCodes);
     }
 
-    public void VerifyAndEnableTwoFactor(Guid userId, string code, string? clientIp = null, DateTimeOffset? timestampOverride = null)
+    public async Task VerifyAndEnableTwoFactorAsync(
+        Guid userId,
+        string code,
+        string? clientIp = null,
+        DateTimeOffset? timestampOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var now = timestampOverride ?? DateTimeOffset.UtcNow;
-        User user = GetUserByIdOrThrow(userId);
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(user.TwoFactorSecret))
         {
@@ -619,18 +546,26 @@ public sealed class IdentityService : IIdentityService
         user.RecordTotpTimeStepUsed(matchedStep, now.UtcDateTime);
         user.EnableTwoFactor(now.UtcDateTime);
         RecordAudit(user.Id, clientIp, "user.2fa_enabled", "users", user.Id.ToString(), null, new { TwoFactorEnabled = true, MatchedTimeStep = matchedStep });
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public IReadOnlyList<ActiveSessionDto> GetActiveSessions(Guid userId, string? currentRawRefreshToken = null)
+    public async Task<IReadOnlyList<ActiveSessionDto>> GetActiveSessionsAsync(
+        Guid userId,
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         string? currentHash = string.IsNullOrWhiteSpace(currentRawRefreshToken)
             ? null
             : _tokenService.HashToken(currentRawRefreshToken);
 
-        return _refreshTokens.Values
-            .Where(rt => rt.UserId == userId && rt.IsActive(now))
+        List<RefreshToken> tokens = await _db.RefreshTokens
+            .AsNoTracking()
+            .Where(rt => rt.UserId == userId && !rt.IsUsed && !rt.IsRevoked && rt.ExpiresAtUtc > now)
             .OrderByDescending(rt => rt.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return tokens
             .Select(rt => new ActiveSessionDto(
                 rt.Id,
                 rt.FamilyId,
@@ -643,69 +578,79 @@ public sealed class IdentityService : IIdentityService
             .AsReadOnly();
     }
 
-    public int RevokeSessions(
+    public async Task<int> RevokeSessionsAsync(
         Guid userId,
         RevokeSessionsRequestDto request,
         string? clientIp = null,
-        string? currentRawRefreshToken = null)
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        int revokedCount = 0;
         string? currentHash = string.IsNullOrWhiteSpace(currentRawRefreshToken)
             ? null
             : _tokenService.HashToken(currentRawRefreshToken);
 
-        lock (_tokenLock)
+        Guid? currentFamilyId = currentHash is null
+            ? null
+            : await _db.RefreshTokens
+                .Where(rt => rt.UserId == userId && rt.TokenHash == currentHash)
+                .Select(rt => (Guid?)rt.FamilyId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        IQueryable<RefreshToken> targets = _db.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked);
+
+        if (request.SessionId.HasValue)
         {
-            Guid? currentFamilyId = currentHash is null
-                ? null
-                : _refreshTokens.Values.FirstOrDefault(rt =>
-                    rt.UserId == userId &&
-                    string.Equals(rt.TokenHash, currentHash, StringComparison.Ordinal))?.FamilyId;
-
-            IEnumerable<RefreshToken> targetTokens = _refreshTokens.Values.Where(rt => rt.UserId == userId && !rt.IsRevoked);
-
-            if (request.SessionId.HasValue)
-            {
-                targetTokens = targetTokens.Where(rt => rt.Id == request.SessionId.Value || rt.FamilyId == request.SessionId.Value);
-            }
-            else if (request.RevokeAllExceptCurrent && currentFamilyId.HasValue)
-            {
-                targetTokens = targetTokens.Where(rt => rt.FamilyId != currentFamilyId.Value);
-            }
-            else if (!request.RevokeAll && currentFamilyId.HasValue)
-            {
-                targetTokens = targetTokens.Where(rt => rt.FamilyId == currentFamilyId.Value);
-            }
-
-            foreach (RefreshToken token in targetTokens)
-            {
-                token.Revoke(now);
-                revokedCount++;
-            }
+            Guid sessionId = request.SessionId.Value;
+            targets = targets.Where(rt => rt.Id == sessionId || rt.FamilyId == sessionId);
+        }
+        else if (request.RevokeAllExceptCurrent && currentFamilyId.HasValue)
+        {
+            Guid family = currentFamilyId.Value;
+            targets = targets.Where(rt => rt.FamilyId != family);
+        }
+        else if (!request.RevokeAll && currentFamilyId.HasValue)
+        {
+            Guid family = currentFamilyId.Value;
+            targets = targets.Where(rt => rt.FamilyId == family);
         }
 
+        List<RefreshToken> tokens = await targets.ToListAsync(cancellationToken);
+        foreach (RefreshToken token in tokens)
+        {
+            token.Revoke(now);
+        }
+
+        int revokedCount = tokens.Count;
         RecordAudit(userId, clientIp, "user.sessions_revoked", "refresh_tokens", userId.ToString(), null, new { revokedCount, request.RevokeAll, request.RevokeAllExceptCurrent });
+        await _db.SaveChangesAsync(cancellationToken);
         return revokedCount;
     }
 
-    public IReadOnlyList<AddressDto> GetAddresses(Guid userId) =>
-        _addresses.Values
+    public async Task<IReadOnlyList<AddressDto>> GetAddressesAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        List<Address> addresses = await _db.Addresses
+            .AsNoTracking()
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.IsDefaultShipping)
             .ThenByDescending(a => a.CreatedAtUtc)
-            .Select(MapAddressDto)
-            .ToList()
-            .AsReadOnly();
+            .ToListAsync(cancellationToken);
 
-    public AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp = null)
+        return addresses.Select(MapAddressDto).ToList().AsReadOnly();
+    }
+
+    public async Task<AddressDto> CreateAddressAsync(
+        Guid userId,
+        UpsertAddressRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
         ValidateBdLocationHierarchy(request.Division, request.District, request.Upazila);
 
         if (request.IsDefaultShipping || request.IsDefaultBilling)
         {
-            ClearConflictingDefaultAddresses(userId, request.IsDefaultShipping, request.IsDefaultBilling, now);
+            await ClearConflictingDefaultAddressesAsync(userId, request.IsDefaultShipping, request.IsDefaultBilling, now, null, cancellationToken);
         }
 
         var address = new Address(
@@ -726,25 +671,29 @@ public sealed class IdentityService : IIdentityService
             request.Latitude,
             request.Longitude);
 
-        _addresses[address.Id] = address;
+        _db.Addresses.Add(address);
         RecordAudit(userId, clientIp, "address.created", "addresses", address.Id.ToString(), null, new { address.Division, address.District, address.Upazila });
+        await _db.SaveChangesAsync(cancellationToken);
 
         return MapAddressDto(address);
     }
 
-    public AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null)
+    public async Task<AddressDto> UpdateAddressAsync(
+        Guid userId,
+        Guid addressId,
+        UpsertAddressRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        if (!_addresses.TryGetValue(addressId, out Address? address) || address.UserId != userId)
-        {
-            throw new KeyNotFoundException("Address not found.");
-        }
+        Address address = await _db.Addresses.FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("Address not found.");
 
         ValidateBdLocationHierarchy(request.Division, request.District, request.Upazila);
 
         if (request.IsDefaultShipping || request.IsDefaultBilling)
         {
-            ClearConflictingDefaultAddresses(userId, request.IsDefaultShipping, request.IsDefaultBilling, now, excludeAddressId: addressId);
+            await ClearConflictingDefaultAddressesAsync(userId, request.IsDefaultShipping, request.IsDefaultBilling, now, addressId, cancellationToken);
         }
 
         address.Update(
@@ -765,19 +714,23 @@ public sealed class IdentityService : IIdentityService
             now);
 
         RecordAudit(userId, clientIp, "address.updated", "addresses", address.Id.ToString(), null, new { address.Division, address.District, address.Upazila });
+        await _db.SaveChangesAsync(cancellationToken);
 
         return MapAddressDto(address);
     }
 
-    public void DeleteAddress(Guid userId, Guid addressId, string? clientIp = null)
+    public async Task DeleteAddressAsync(
+        Guid userId,
+        Guid addressId,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
-        if (!_addresses.TryGetValue(addressId, out Address? address) || address.UserId != userId)
-        {
-            throw new KeyNotFoundException("Address not found.");
-        }
+        Address address = await _db.Addresses.FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("Address not found.");
 
-        _addresses.TryRemove(addressId, out _);
+        _db.Addresses.Remove(address);
         RecordAudit(userId, clientIp, "address.deleted", "addresses", addressId.ToString(), new { address.Label, address.Line1 }, null);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public IReadOnlyList<BdLocationDto> GetBdLocations(string? level = null, Guid? parentId = null)
@@ -800,15 +753,23 @@ public sealed class IdentityService : IIdentityService
             .AsReadOnly();
     }
 
-    public GdprExportBundleDto ExportUserData(Guid userId, string? clientIp = null)
+    public async Task<GdprExportBundleDto> ExportUserDataAsync(
+        Guid userId,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
-        User user = GetUserByIdOrThrow(userId);
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
         RecordAudit(userId, clientIp, "user.gdpr_export", "users", userId.ToString(), null, null);
+        await _db.SaveChangesAsync(cancellationToken);
 
-        IReadOnlyList<AuditLogSummaryDto> auditEvents = _auditLogs
+        List<AuditLog> events = await _db.AuditLogs
+            .AsNoTracking()
             .Where(a => a.ActorId == userId)
             .OrderByDescending(a => a.CreatedAtUtc)
             .Take(100)
+            .ToListAsync(cancellationToken);
+
+        IReadOnlyList<AuditLogSummaryDto> auditEvents = events
             .Select(a => new AuditLogSummaryDto(a.Id, a.Action, a.EntityName, a.EntityId, a.ActorIp, a.CreatedAtUtc))
             .ToList()
             .AsReadOnly();
@@ -816,23 +777,22 @@ public sealed class IdentityService : IIdentityService
         return new GdprExportBundleDto(
             DateTime.UtcNow,
             MapUserDto(user),
-            GetAddresses(userId),
-            GetActiveSessions(userId),
+            await GetAddressesAsync(userId, cancellationToken),
+            await GetActiveSessionsAsync(userId, null, cancellationToken),
             auditEvents);
     }
 
-    public void AnonymizeAndEraseUser(Guid userId, string? clientIp = null)
+    public async Task AnonymizeAndEraseUserAsync(
+        Guid userId,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
-        User user = GetUserByIdOrThrow(userId);
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
 
         user.AnonymizeForGdpr(now);
-        RevokeAllUserSessions(userId, now);
-
-        foreach (Guid addrId in _addresses.Values.Where(a => a.UserId == userId).Select(a => a.Id).ToList())
-        {
-            _addresses.TryRemove(addrId, out _);
-        }
+        await RevokeAllUserSessionsAsync(userId, now, cancellationToken);
+        _db.Addresses.RemoveRange(await _db.Addresses.Where(a => a.UserId == userId).ToListAsync(cancellationToken));
 
         RecordAudit(
             userId,
@@ -842,17 +802,20 @@ public sealed class IdentityService : IIdentityService
             userId.ToString(),
             new { EmailRedacted = true, PreviousStatus = "Active" },
             new { user.Email, Status = user.Status.ToString() });
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public AuthenticatedUserDto GetUserProfile(Guid userId)
+    public async Task<AuthenticatedUserDto> GetUserProfileAsync(Guid userId, CancellationToken cancellationToken = default)
     {
-        User user = GetUserByIdOrThrow(userId);
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
         return MapUserDto(user);
     }
 
-    public IReadOnlyList<User> GetUsersForAudit() => [.. _users.Values];
+    public async Task<IReadOnlyList<User>> GetUsersForAuditAsync(CancellationToken cancellationToken = default) =>
+        await _db.Users.AsNoTracking().Include(u => u.UserRoles).ToListAsync(cancellationToken);
 
-    public IReadOnlyList<AuditLog> GetAuditLogs() => [.. _auditLogs];
+    public async Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(CancellationToken cancellationToken = default) =>
+        await _db.AuditLogs.AsNoTracking().OrderBy(a => a.CreatedAtUtc).ToListAsync(cancellationToken);
 
     private (string SubjectId, string Email, string FullName) ValidateAndExtractGoogleOidcClaims(
         GoogleLoginRequestDto request,
@@ -947,128 +910,6 @@ public sealed class IdentityService : IIdentityService
         return Convert.FromBase64String(padded);
     }
 
-    private AuthTokenResponseDto IssueSessionTokens(
-        User user,
-        Guid familyId,
-        string? clientIp,
-        string? userAgent,
-        DateTime utcNow)
-    {
-        IReadOnlyList<string> roles = GetUserRoles(user);
-        IReadOnlyList<string> permissions = GetUserPermissions(roles);
-
-        string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, utcNow);
-        string rawRefreshToken = _tokenService.GenerateRawRefreshToken();
-        string refreshTokenHash = _tokenService.HashToken(rawRefreshToken);
-
-        var refreshToken = new RefreshToken(
-            Guid.NewGuid(),
-            user.Id,
-            refreshTokenHash,
-            familyId,
-            clientIp,
-            userAgent,
-            utcNow.AddDays(7));
-
-        _refreshTokens[refreshToken.Id] = refreshToken;
-
-        return new AuthTokenResponseDto(
-            accessToken,
-            900,
-            "Bearer",
-            MapUserDto(user),
-            RefreshTokenCookieValue: rawRefreshToken);
-    }
-
-    private (OtpCode Otp, string RawCode) CreateOtp(string recipient, OtpType type, DateTime utcNow)
-    {
-        int numericCode = RandomNumberGenerator.GetInt32(100_000, 1_000_000);
-        string rawCode = numericCode.ToString("D6");
-        string codeHash = _tokenService.HashToken(rawCode);
-        string referenceId = $"ref_{Guid.NewGuid():N}"[..16];
-
-        var otp = new OtpCode(
-            Guid.NewGuid(),
-            recipient,
-            codeHash,
-            type,
-            referenceId,
-            utcNow.AddMinutes(5));
-
-        _otpCodes[otp.Id] = otp;
-        return (otp, rawCode);
-    }
-
-    private bool VerifyUserTwoFactorOrRecoveryCode(User user, string code, DateTime utcNow)
-    {
-        if (string.IsNullOrWhiteSpace(user.TwoFactorSecret))
-        {
-            return false;
-        }
-
-        var timestamp = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc));
-        if (_totpService.TryVerifyTotpCode(
-            user.TwoFactorSecret,
-            code,
-            timestamp,
-            user.LastUsedTotpTimeStep,
-            out long matchedStep))
-        {
-            user.RecordTotpTimeStepUsed(matchedStep, utcNow);
-            return true;
-        }
-
-        if (!string.IsNullOrWhiteSpace(user.TwoFactorRecoveryCodesJson))
-        {
-            List<string>? hashes = JsonSerializer.Deserialize<List<string>>(user.TwoFactorRecoveryCodesJson);
-            if (hashes is not null)
-            {
-                string candidateHash = _totpService.HashRecoveryCode(code);
-                if (hashes.Remove(candidateHash))
-                {
-                    user.UpdateRecoveryCodesJson(JsonSerializer.Serialize(hashes), utcNow);
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private void RevokeTokenFamilyInternal(Guid familyId, DateTime utcNow)
-    {
-        foreach (RefreshToken token in _refreshTokens.Values.Where(rt => rt.FamilyId == familyId && !rt.IsRevoked))
-        {
-            token.Revoke(utcNow);
-        }
-    }
-
-    private void RevokeAllUserSessions(Guid userId, DateTime utcNow)
-    {
-        lock (_tokenLock)
-        {
-            foreach (RefreshToken token in _refreshTokens.Values.Where(rt => rt.UserId == userId && !rt.IsRevoked))
-            {
-                token.Revoke(utcNow);
-            }
-        }
-    }
-
-    private void ClearConflictingDefaultAddresses(
-        Guid userId,
-        bool clearShipping,
-        bool clearBilling,
-        DateTime utcNow,
-        Guid? excludeAddressId = null)
-    {
-        foreach (Address existing in _addresses.Values.Where(a => a.UserId == userId && a.Id != excludeAddressId))
-        {
-            bool nextShipping = clearShipping ? false : existing.IsDefaultShipping;
-            bool nextBilling = clearBilling ? false : existing.IsDefaultBilling;
-            existing.SetDefaultFlags(nextShipping, nextBilling, utcNow);
-        }
-    }
-
     /// <summary>
     /// Validates the full 3-level Bangladesh administrative hierarchy (Division -> District -> Upazila)
     /// against pre-seeded BD locations (AUD-P3-07).
@@ -1123,7 +964,142 @@ public sealed class IdentityService : IIdentityService
         }
     }
 
-    private User? FindUserByIdentifier(string identifier)
+    private AuthTokenResponseDto IssueSessionTokens(
+        User user,
+        Guid familyId,
+        string? clientIp,
+        string? userAgent,
+        DateTime utcNow)
+    {
+        IReadOnlyList<string> roles = GetUserRoles(user);
+        IReadOnlyList<string> permissions = GetUserPermissions(roles);
+
+        string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, utcNow);
+        string rawRefreshToken = _tokenService.GenerateRawRefreshToken();
+        string refreshTokenHash = _tokenService.HashToken(rawRefreshToken);
+
+        _db.RefreshTokens.Add(new RefreshToken(
+            Guid.NewGuid(),
+            user.Id,
+            refreshTokenHash,
+            familyId,
+            clientIp,
+            userAgent,
+            utcNow.AddDays(7)));
+
+        return new AuthTokenResponseDto(
+            accessToken,
+            900,
+            "Bearer",
+            MapUserDto(user),
+            RefreshTokenCookieValue: rawRefreshToken);
+    }
+
+    private (OtpCode Otp, string RawCode) CreateOtp(string recipient, OtpType type, DateTime utcNow)
+    {
+        int numericCode = RandomNumberGenerator.GetInt32(100_000, 1_000_000);
+        string rawCode = numericCode.ToString("D6");
+        string codeHash = _tokenService.HashToken(rawCode);
+        string referenceId = $"ref_{Guid.NewGuid():N}"[..16];
+
+        var otp = new OtpCode(
+            Guid.NewGuid(),
+            recipient,
+            codeHash,
+            type,
+            referenceId,
+            utcNow.AddMinutes(5));
+
+        _db.OtpCodes.Add(otp);
+        return (otp, rawCode);
+    }
+
+    /// <summary>Loads the newest matching OTP and holds a row lock until the surrounding transaction ends.</summary>
+    private async Task<OtpCode?> LockOtpAsync(string recipient, string referenceId, OtpType? type, CancellationToken cancellationToken)
+    {
+        IQueryable<OtpCode> query = type is null
+            ? _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
+                WHERE lower(recipient) = {recipient} AND reference_id = {referenceId}
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE")
+            : _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
+                WHERE lower(recipient) = {recipient} AND reference_id = {referenceId} AND type = {type.Value.ToString()}
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE");
+
+        return (await query.ToListAsync(cancellationToken)).FirstOrDefault();
+    }
+
+    private bool VerifyUserTwoFactorOrRecoveryCode(User user, string code, DateTime utcNow)
+    {
+        if (string.IsNullOrWhiteSpace(user.TwoFactorSecret))
+        {
+            return false;
+        }
+
+        var timestamp = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc));
+        if (_totpService.TryVerifyTotpCode(
+            user.TwoFactorSecret,
+            code,
+            timestamp,
+            user.LastUsedTotpTimeStep,
+            out long matchedStep))
+        {
+            user.RecordTotpTimeStepUsed(matchedStep, utcNow);
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(user.TwoFactorRecoveryCodesJson))
+        {
+            List<string>? hashes = JsonSerializer.Deserialize<List<string>>(user.TwoFactorRecoveryCodesJson);
+            if (hashes is not null)
+            {
+                string candidateHash = _totpService.HashRecoveryCode(code);
+                if (hashes.Remove(candidateHash))
+                {
+                    user.UpdateRecoveryCodesJson(JsonSerializer.Serialize(hashes), utcNow);
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private async Task RevokeTokenFamilyAsync(Guid familyId, DateTime utcNow, CancellationToken cancellationToken)
+    {
+        List<RefreshToken> tokens = await _db.RefreshTokens.Where(rt => rt.FamilyId == familyId && !rt.IsRevoked).ToListAsync(cancellationToken);
+        foreach (RefreshToken token in tokens)
+        {
+            token.Revoke(utcNow);
+        }
+    }
+
+    private async Task RevokeAllUserSessionsAsync(Guid userId, DateTime utcNow, CancellationToken cancellationToken)
+    {
+        List<RefreshToken> tokens = await _db.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked).ToListAsync(cancellationToken);
+        foreach (RefreshToken token in tokens)
+        {
+            token.Revoke(utcNow);
+        }
+    }
+
+    private async Task ClearConflictingDefaultAddressesAsync(
+        Guid userId,
+        bool clearShipping,
+        bool clearBilling,
+        DateTime utcNow,
+        Guid? excludeAddressId,
+        CancellationToken cancellationToken)
+    {
+        List<Address> others = await _db.Addresses.Where(a => a.UserId == userId && a.Id != excludeAddressId).ToListAsync(cancellationToken);
+        foreach (Address existing in others)
+        {
+            bool nextShipping = clearShipping ? false : existing.IsDefaultShipping;
+            bool nextBilling = clearBilling ? false : existing.IsDefaultBilling;
+            existing.SetDefaultFlags(nextShipping, nextBilling, utcNow);
+        }
+    }
+
+    private async Task<User?> FindUserByIdentifierAsync(string identifier, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(identifier))
         {
@@ -1131,21 +1107,20 @@ public sealed class IdentityService : IIdentityService
         }
 
         string trimmed = identifier.Trim();
-        return _users.Values.FirstOrDefault(u =>
-            u.DeletedAtUtc == null &&
-            (string.Equals(u.Email, trimmed, StringComparison.OrdinalIgnoreCase) ||
-             (!string.IsNullOrEmpty(u.Phone) && string.Equals(u.Phone, trimmed, StringComparison.OrdinalIgnoreCase))));
+        string lowered = trimmed.ToLowerInvariant();
+        return await _db.Users
+            .Include(u => u.UserRoles)
+            .FirstOrDefaultAsync(
+                u => u.DeletedAtUtc == null && (u.Email.ToLower() == lowered || (u.Phone != null && u.Phone == trimmed)),
+                cancellationToken);
     }
 
-    private User GetUserByIdOrThrow(Guid userId)
-    {
-        if (!_users.TryGetValue(userId, out User? user) || user.DeletedAtUtc.HasValue)
-        {
-            throw new KeyNotFoundException("User account was not found.");
-        }
+    private async Task<User> GetUserByIdOrThrowAsync(Guid userId, CancellationToken cancellationToken) =>
+        await _db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAtUtc == null, cancellationToken)
+            ?? throw new KeyNotFoundException("User account was not found.");
 
-        return user;
-    }
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     private static IReadOnlyList<string> GetUserRoles(User user)
     {
@@ -1195,6 +1170,7 @@ public sealed class IdentityService : IIdentityService
             a.Latitude,
             a.Longitude);
 
+    /// <summary>Queues a semantic audit event; it is saved together with the change it describes.</summary>
     private void RecordAudit(
         Guid? actorId,
         string? actorIp,
@@ -1204,7 +1180,7 @@ public sealed class IdentityService : IIdentityService
         object? oldValues,
         object? newValues)
     {
-        _auditLogs.Enqueue(new AuditLog(
+        _db.AuditLogs.Add(new AuditLog(
             Guid.NewGuid(),
             actorId,
             actorIp,

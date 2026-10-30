@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using ShopVerse.IntegrationTests.Support;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -24,12 +25,7 @@ namespace ShopVerse.IntegrationTests.Security;
 /// </summary>
 public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTests.SweepFactory>
 {
-    /// <summary>The sweeps send hundreds of requests from one test client, so lift the per-IP global limit.</summary>
-    public sealed class SweepFactory : WebApplicationFactory<Program>
-    {
-        protected override void ConfigureWebHost(IWebHostBuilder builder) =>
-            builder.UseSetting("RateLimiting:GlobalPermitPerMinute", "1000000");
-    }
+    public sealed class SweepFactory : DbBackedFactory;
 
     private readonly SweepFactory _factory;
 
@@ -91,7 +87,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "/" + Regex.Replace(pattern.TrimStart('/'), "{([^}:]+)(:[^}]+)?}", m =>
             m.Groups[2].Value.Contains("guid", StringComparison.OrdinalIgnoreCase) ? Guid.NewGuid().ToString() : "probe");
 
-    [Fact]
+    [PostgresFact]
     public void EveryEndpoint_IsProtectedOrOnTheReviewedPublicAllowList()
     {
         var routes = Routes();
@@ -102,7 +98,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         PublicEndpoints.Except(anonymous).Should().BeEmpty("stale allow-list entries hide mistakes; remove endpoints that are gone or now protected");
     }
 
-    [Fact]
+    [PostgresFact]
     public void CredentialEndpoints_UseTheStrictRateLimitPolicy()
     {
         var routes = Routes().ToDictionary(r => r.Key);
@@ -199,7 +195,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         (await response.Content.ReadAsStringAsync()).Should().NotContainAny("StackTrace", "   at ShopVerse.");
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task Production_RefusesToStart_WithThePublishedDevelopmentJwtSecret()
     {
         await using var factory = ProductionFactory(jwtSecret: "super_secret_mechware_256bit_production_ready_jwt_key_here_for_local_dev");
@@ -207,7 +203,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             .Where(e => e.ToString().Contains("published development value"));
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task Production_RefusesToStart_WithoutAJwtSecret()
     {
         await using var factory = ProductionFactory(jwtSecret: "");
@@ -215,7 +211,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             .Where(e => e.ToString().Contains("JWT Secret is required"));
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task Production_HidesSwagger_AndThrottlesLoginBruteForce()
     {
         await using var factory = ProductionFactory(jwtSecret: "prod-like-secret-" + Guid.NewGuid().ToString("N"));
@@ -255,7 +251,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
     /// C1 in docs/security/THREAT_MODEL_COMPANIES_APPROVALS.md: the demo admin, with a password and TOTP secret
     /// published in this public repository, used to exist in every environment.
     /// </summary>
-    [Fact]
+    [PostgresFact]
     public async Task Production_HasNoDemoAccounts_EveryPublishedCredentialIsRefused()
     {
         await using var factory = ProductionFactory(jwtSecret: "prod-like-secret-" + Guid.NewGuid().ToString("N"));
@@ -267,15 +263,14 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         }
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task Staging_HasNoDemoAccountsEither()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        await using var factory = new DbBackedFactory("Staging", new Dictionary<string, string>
         {
-            b.UseEnvironment("Staging");
-            b.UseSetting("Jwt:Secret", "staging-like-secret-" + Guid.NewGuid().ToString("N"));
-            b.UseSetting("Storage:AccessKey", "test-access-key");
-            b.UseSetting("Storage:SecretKey", "test-secret-key");
+            ["Jwt:Secret"] = "staging-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Storage:AccessKey"] = "test-access-key",
+            ["Storage:SecretKey"] = "test-secret-key"
         });
         var client = factory.CreateClient();
 
@@ -283,10 +278,10 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
     }
 
     /// <summary>The control: without it a broken test could pass because the credentials were never valid.</summary>
-    [Fact]
+    [PostgresFact]
     public async Task Development_SeedsTheDemoAccounts_SoTheProductionCheckIsMeaningful()
     {
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Development"));
+        await using var factory = new DbBackedFactory("Development");
         var client = factory.CreateClient();
 
         (await LoginAsync(client, new LoginRequestDto("buyer@mechware.com.bd", "BuyerPass#2026!"))).Should().Be(HttpStatusCode.OK);
@@ -297,7 +292,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
     /// Production starts with no accounts, so the first administrator comes from deployment secrets. That account
     /// must still demand its second factor: a password alone never opens it.
     /// </summary>
-    [Fact]
+    [PostgresFact]
     public async Task Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp()
     {
         var totp = new TotpService();
@@ -305,15 +300,14 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         string password = "Bs1!" + Guid.NewGuid().ToString("N");
         const string email = "first.admin@example.test";
 
-        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        await using var factory = new DbBackedFactory("Production", new Dictionary<string, string>
         {
-            b.UseEnvironment("Production");
-            b.UseSetting("Jwt:Secret", "prod-like-secret-" + Guid.NewGuid().ToString("N"));
-            b.UseSetting("Storage:AccessKey", "test-access-key");
-            b.UseSetting("Storage:SecretKey", "test-secret-key");
-            b.UseSetting("Identity:BootstrapAdmin:Email", email);
-            b.UseSetting("Identity:BootstrapAdmin:Password", password);
-            b.UseSetting("Identity:BootstrapAdmin:TotpSecret", secret);
+            ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Storage:AccessKey"] = "test-access-key",
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Identity:BootstrapAdmin:Email"] = email,
+            ["Identity:BootstrapAdmin:Password"] = password,
+            ["Identity:BootstrapAdmin:TotpSecret"] = secret
         });
         var client = factory.CreateClient();
 
@@ -331,12 +325,11 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    private static WebApplicationFactory<Program> ProductionFactory(string jwtSecret) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+    private static DbBackedFactory ProductionFactory(string jwtSecret) =>
+        new("Production", new Dictionary<string, string>
         {
-            b.UseEnvironment("Production");
-            b.UseSetting("Jwt:Secret", jwtSecret);
-            b.UseSetting("Storage:AccessKey", "test-access-key");
-            b.UseSetting("Storage:SecretKey", "test-secret-key");
+            ["Jwt:Secret"] = jwtSecret,
+            ["Storage:AccessKey"] = "test-access-key",
+            ["Storage:SecretKey"] = "test-secret-key"
         });
 }

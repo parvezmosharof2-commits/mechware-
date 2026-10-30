@@ -120,14 +120,8 @@ var bootstrapAdmin = BootstrapAdminSettings.FromValues(
     builder.Configuration["Identity:BootstrapAdmin:Phone"],
     builder.Configuration["Identity:BootstrapAdmin:Password"],
     builder.Configuration["Identity:BootstrapAdmin:TotpSecret"]);
-builder.Services.AddSingleton(sp => new IdentityService(
-    sp.GetRequiredService<IPasswordHasherService>(),
-    sp.GetRequiredService<ITokenService>(),
-    sp.GetRequiredService<ITotpService>(),
-    sp.GetRequiredService<ISmsProvider>(),
-    sp.GetRequiredService<IdentitySeedPolicy>(),
-    bootstrapAdmin));
-builder.Services.AddSingleton<IIdentityService>(sp => sp.GetRequiredService<IdentityService>());
+builder.Services.AddScoped<IdentitySeeder>();
+builder.Services.AddScoped<IIdentityService, IdentityService>();
 
 builder.Services
     .AddAuthentication(JwtBearerAuthenticationHandler.SchemeName)
@@ -256,6 +250,17 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 
 var app = builder.Build();
+
+// Accounts an environment starts with live in the database. Nothing is touched when there is nothing to seed, so an
+// environment without demo accounts or a bootstrap administrator starts without needing the database at boot.
+{
+    var seedPolicy = app.Services.GetRequiredService<IdentitySeedPolicy>();
+    if (seedPolicy.SeedDemoAccounts || bootstrapAdmin is not null)
+    {
+        using var seedScope = app.Services.CreateScope();
+        await seedScope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync(seedPolicy, bootstrapAdmin);
+    }
+}
 
 if (app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)
 {
