@@ -46,5 +46,136 @@
     "gdprExportButton": "Export Personal Data (GDPR JSON)",
     "gdprDeleteButton": "Anonymize & Delete Account",
     "signOutButton": "Revoke Session & Sign Out"
+  },
+  "Company": {
+    "title": "Company account",
+    "subtitle": "Manage your company, delivery sites, cost centres and team.",
+    "myCompanies": "My companies",
+    "listEmptyTitle": "No company account yet",
+    "listEmptyBody": "Register your factory or business to unlock company roles, cost centres and credit terms.",
+    "registerCta": "Register a company",
+    "open": "Open",
+    "backToList": "All companies",
+    "yourRoles": "Your roles",
+    "statusLabel": "Status",
+    "status": {
+      "pending": "Awaiting verification",
+      "active": "Active",
+      "suspended": "Suspended"
+    },
+    "statusHelp": {
+      "pending": "MECHWARE is verifying your trade licence and BIN. You can set up sites and your team meanwhile; credit terms are granted after verification.",
+      "suspended": "This account is suspended. You can view it but cannot make changes. Contact your MECHWARE account manager."
+    },
+    "register": {
+      "title": "Register a company",
+      "intro": "Enter the details exactly as on your trade licence and VAT registration. You become the company administrator.",
+      "legalName": "Legal name",
+      "tradeLicenceNo": "Trade licence number",
+      "bin": "BIN (13 digits)",
+      "tin": "TIN (12 digits, optional)",
+      "industry": "Industry (optional)",
+      "binHint": "Business Identification Number from your VAT registration.",
+      "submit": "Register company",
+      "done": "Company registered. It stays pending until MECHWARE verifies it."
+    },
+    "errors": {
+      "legalNameLength": "Legal name must be 2 to 200 characters.",
+      "tradeLicenceNoLength": "Trade licence number must be 3 to 50 characters.",
+      "binFormat": "BIN must be exactly 13 digits.",
+      "tinFormat": "TIN must be exactly 12 digits.",
+      "industryLength": "Industry must be at most 100 characters.",
+      "generic": "Something went wrong. Please try again.",
+      "notFound": "This company was not found, or you are not a member of it.",
+      "forbidden": "Your company role does not allow this action.",
+      "load": "Could not load this information.",
+      "userIdFormat": "Enter a valid user ID (UUID).",
+      "amountFormat": "Enter a valid amount.",
+      "required": "This field is required."
+    },
+    "credit": {
+      "title": "Credit terms",
+      "terms": {
+        "none": "No credit terms",
+        "net15": "Net 15 days",
+        "net30": "Net 30 days"
+      },
+      "limit": "Credit limit",
+      "used": "Used",
+      "available": "Available",
+      "managedByMechware": "Credit terms and limits are set by MECHWARE finance after verification."
+    },
+    "tabs": {
+      "sites": "Sites",
+      "costCentres": "Cost centres",
+      "members": "Members"
+    },
+    "roles": {
+      "Requester": "Requester",
+      "Buyer": "Buyer",
+      "Approver": "Approver",
+      "Admin": "Company admin"
+    },
+    "common": {
+      "add": "Add",
+      "edit": "Edit",
+      "remove": "Remove",
+      "cancel": "Cancel",
+      "save": "Save",
+      "retry": "Try again",
+      "loading": "Loading",
+      "default": "Default",
+      "inactive": "Inactive",
+      "confirmRemoveTitle": "Remove this item?",
+      "confirmRemoveBody": "This cannot be undone.",
+      "saved": "Saved.",
+      "removed": "Removed.",
+      "adminOnly": "Only company admins can change this."
+    },
+    "sites": {
+      "title": "Delivery sites",
+      "empty": "No delivery sites yet",
+      "emptyBody": "Add the plant or branch addresses you want orders delivered to.",
+      "addTitle": "Add site",
+      "editTitle": "Edit site",
+      "name": "Site name",
+      "contactName": "Contact person",
+      "contactPhone": "Contact phone",
+      "line1": "Address line 1",
+      "line2": "Address line 2 (optional)",
+      "upazila": "Upazila",
+      "district": "District",
+      "division": "Division",
+      "postalCode": "Postal code (optional)",
+      "isDefault": "Default delivery site",
+      "defaultRequired": "Choose another default delivery site before removing this one."
+    },
+    "costCentres": {
+      "title": "Cost centres",
+      "empty": "No cost centres yet",
+      "emptyBody": "Cost centres let you split spending and budgets by department or line.",
+      "addTitle": "Add cost centre",
+      "editTitle": "Edit cost centre",
+      "code": "Code",
+      "name": "Name",
+      "budget": "Monthly budget (BDT, optional)",
+      "codeExists": "A cost centre with this code already exists."
+    },
+    "members": {
+      "title": "Team members",
+      "empty": "No members",
+      "addTitle": "Add member",
+      "editTitle": "Edit member",
+      "userId": "User ID",
+      "userIdHint": "Ask the person for the user ID shown in their profile. Invitations by e-mail are coming later.",
+      "roles": "Roles",
+      "spendLimit": "Spend limit per order (BDT, optional)",
+      "costCentres": "Cost centres",
+      "active": "Active member",
+      "adminsOnly": "Only company admins can see the team.",
+      "exists": "This user is already a member.",
+      "lastAdmin": "A company must keep at least one active admin.",
+      "you": "You"
+    }
   }
 }

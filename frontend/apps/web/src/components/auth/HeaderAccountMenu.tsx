@@ -91,6 +91,12 @@ export function HeaderAccountMenu({
             >
               {locale === 'bn' ? 'বাংলাদেশ ডেলিভারি ঠিকানা (Address Book)' : 'Bangladesh Address Book'}
             </a>
+            <a
+              href={`/${locale}/account/company`}
+              className="block rounded-sm px-2 py-1.5 text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary"
+            >
+              {locale === 'bn' ? 'কোম্পানি অ্যাকাউন্ট' : 'Company account'}
+            </a>
             <button
               type="button"
               onClick={handleSignOutClick}
