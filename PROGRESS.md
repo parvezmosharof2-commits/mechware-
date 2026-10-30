@@ -362,3 +362,25 @@
 - [x] CI: CodeQL, NuGet + npm vulnerability gate, Dependabot.
 - [ ] Branch protection + GitHub secret scanning (owner action in GitHub settings).
 - [ ] Playwright E2E journeys and k6 load tests (with checkout, Phase 8+).
+
+## First administrator for environments without demo accounts
+
+Production and Staging start with an empty identity store (C1), so nobody could sign in. The first administrator is
+now provisioned from deployment secrets at startup:
+
+| Setting | Meaning |
+|---|---|
+| `Identity__BootstrapAdmin__Email` | Enables the feature; empty means no bootstrap administrator |
+| `Identity__BootstrapAdmin__Password` | Must satisfy the normal password policy |
+| `Identity__BootstrapAdmin__TotpSecret` | Required, base32, at least 26 characters (16 bytes); `Phone` and `FullName` are optional |
+
+- Partly configured settings, a weak password or a short or malformed TOTP secret stop the API at startup (fail closed).
+- The account always demands the second factor; no password-only administrator can be provisioned.
+- Audited as `user.bootstrap_admin_provisioned` (e-mail only, never a secret). No recovery codes are issued; to
+  recover, change the deployment secret and restart.
+- Verified: unit tests (settings validation, 2FA flow), a `Production` integration test (wrong password 401,
+  password-only 202, wrong code 401, correct code 200 with the admin role, demo admin still 401), and a mutation
+  check (removing the TOTP secret makes the integration test fail).
+
+Still open: the identity store is in memory, so every user (buyers included) is lost on restart. A database-backed
+identity is the next step and is not part of this change.
