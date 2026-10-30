@@ -11,6 +11,26 @@ jobs:
     name: .NET 10 Solution Checks
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shopverse
+          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      MECHWARE_TEST_PG: Host=localhost;Port=5432;Database=postgres;Username=shopverse;Password=shopverse_secret;Maximum Pool Size=150
+      MECHWARE_TEST_REDIS: localhost:6379,abortConnect=false,connectTimeout=2000
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -57,6 +77,10 @@ jobs:
       - name: Verify Semantic Design Token Enforcement
         working-directory: frontend
         run: pnpm lint:tokens
+
+      - name: Lint Frontend (ESLint, Next.js core-web-vitals)
+        working-directory: frontend
+        run: pnpm lint
 
       - name: Typecheck Frontend Monorepo
         working-directory: frontend

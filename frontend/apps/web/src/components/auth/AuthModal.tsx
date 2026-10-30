@@ -56,7 +56,7 @@ export const AUTH_COPY_BY_LOCALE: Record<'en' | 'bn', AuthTranslations> = {
     switchToSignUp: 'New to MECHWARE? Register factory buyer account',
     switchToSignIn: 'Already registered? Sign in',
     inMemoryTokenNotice:
-      'Zero-Storage Security: Access JWT lives strictly in memory (15m TTL); Refresh Token is isolated in an httpOnly, Secure, SameSite=Lax cookie.'
+      'Secure sign-in: your session stays protected and ends when you sign out or close your browser tab.'
   },
   bn: {
     signInTitle: 'প্রকিউরমেন্ট ও ইঞ্জিনিয়ার সাইন ইন',
@@ -82,7 +82,7 @@ export const AUTH_COPY_BY_LOCALE: Record<'en' | 'bn', AuthTranslations> = {
     switchToSignUp: 'মেকওয়্যারে নতুন? ফ্যাক্টরি বায়ার অ্যাকাউন্ট খুলুন',
     switchToSignIn: 'ইতিমধ্যে অ্যাকাউন্ট আছে? সাইন ইন করুন',
     inMemoryTokenNotice:
-      'জিরো-স্টোরেজ নিরাপত্তা: অ্যাক্সেস টোকেন শুধুমাত্র মেমরিতে থাকে (১৫ মিনিট); রিফ্রেশ টোকেন httpOnly, Secure, SameSite=Lax কুকিতে সুরক্ষিত থাকে।'
+      'নিরাপদ সাইন-ইন: আপনার সেশন সুরক্ষিত থাকে এবং সাইন-আউট করলে বা ব্রাউজার ট্যাব বন্ধ করলে শেষ হয়ে যায়।'
   }
 };
 
@@ -111,15 +111,15 @@ export function AuthFlowSurface({
 }: AuthSurfaceProps) {
   const copy = AUTH_COPY_BY_LOCALE[locale];
   const [mode, setMode] = React.useState<AuthViewMode>(initialMode);
-  const [identifier, setIdentifier] = React.useState('buyer@mechware.com.bd');
+  const [identifier, setIdentifier] = React.useState('');
   const [email, setEmail] = React.useState('');
-  const [phone, setPhone] = React.useState('+8801711');
+  const [phone, setPhone] = React.useState('+880');
   const [fullName, setFullName] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [otpCode, setOtpCode] = React.useState('');
   const [totpCode, setTotpCode] = React.useState('');
   const [requiresTwoFactor, setRequiresTwoFactor] = React.useState(false);
-  const [referenceId, setReferenceId] = React.useState('ref_bd_99281a');
+  const [referenceId, setReferenceId] = React.useState('');
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
@@ -245,6 +245,9 @@ export function AuthFlowSurface({
     }
   };
 
+  // A full-page auth screen owns the page's level-one heading; inside a dialog it is a sub-heading.
+  const TitleTag = isModal ? 'h2' : 'h1';
+
   const containerContent = (
     <div className="w-full max-w-md rounded-lg border border-border-subtle bg-bg-surface p-6 text-fg-primary shadow-md">
       <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-4">
@@ -252,12 +255,12 @@ export function AuthFlowSurface({
           <span className="inline-block rounded-sm bg-bg-elevated px-2 py-0.5 font-mono text-xs font-semibold text-brand-accent">
             {locale === 'bn' ? 'মেকওয়্যার ইন্ডাস্ট্রিয়াল পোর্টাল (BN)' : 'MECHWARE INDUSTRIAL PORTAL (EN)'}
           </span>
-          <h2 className="mt-2 font-display text-xl font-bold tracking-tight text-fg-primary">
+          <TitleTag className="mt-2 font-display text-xl font-bold tracking-tight text-fg-primary">
             {mode === 'signin' && copy.signInTitle}
             {mode === 'signup' && copy.signUpTitle}
             {mode === 'otp' && copy.otpTitle}
             {(mode === 'forgot' || mode === 'reset') && copy.forgotTitle}
-          </h2>
+          </TitleTag>
           <p className="mt-1 text-xs text-fg-secondary">
             {mode === 'signin' && copy.signInSubtitle}
             {mode === 'signup' && copy.signUpSubtitle}
@@ -298,10 +301,10 @@ export function AuthFlowSurface({
       {mode === 'signin' && (
         <form onSubmit={handleSignInSubmit} className="mt-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-1" className="block text-xs font-semibold text-fg-secondary">
               {copy.emailOrPhoneLabel}
             </label>
-            <input
+            <input id="auth-1"
               type="text"
               required
               value={identifier}
@@ -311,7 +314,7 @@ export function AuthFlowSurface({
           </div>
           <div>
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-fg-secondary">
+              <label htmlFor="auth-pw" className="block text-xs font-semibold text-fg-secondary">
                 {copy.passwordLabel}
               </label>
               <button
@@ -323,10 +326,12 @@ export function AuthFlowSurface({
               </button>
             </div>
             <input
+              id="auth-pw"
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               placeholder="••••••••••••"
               className="mt-1 w-full rounded-md border border-border-subtle bg-bg-canvas px-3 py-2 text-sm text-fg-primary focus:border-brand-primary focus:outline-none"
             />
@@ -334,10 +339,10 @@ export function AuthFlowSurface({
 
           {requiresTwoFactor && (
             <div>
-              <label className="block text-xs font-semibold text-brand-accent">
+              <label htmlFor="auth-2" className="block text-xs font-semibold text-brand-accent">
                 {copy.totpCodeLabel}
               </label>
-              <input
+              <input id="auth-2"
                 type="text"
                 required
                 value={totpCode}
@@ -378,10 +383,10 @@ export function AuthFlowSurface({
       {mode === 'signup' && (
         <form onSubmit={handleSignUpSubmit} className="mt-5 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-3" className="block text-xs font-semibold text-fg-secondary">
               {copy.fullNameLabel}
             </label>
-            <input
+            <input id="auth-3"
               type="text"
               required
               value={fullName}
@@ -391,10 +396,10 @@ export function AuthFlowSurface({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-4" className="block text-xs font-semibold text-fg-secondary">
               {copy.emailLabel}
             </label>
-            <input
+            <input id="auth-4"
               type="email"
               required
               value={email}
@@ -404,10 +409,10 @@ export function AuthFlowSurface({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-5" className="block text-xs font-semibold text-fg-secondary">
               {copy.phoneLabel}
             </label>
-            <input
+            <input id="auth-5"
               type="tel"
               required
               value={phone}
@@ -417,10 +422,10 @@ export function AuthFlowSurface({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-6" className="block text-xs font-semibold text-fg-secondary">
               {copy.passwordLabel}
             </label>
-            <input
+            <input id="auth-6"
               type="password"
               required
               value={password}
@@ -455,10 +460,10 @@ export function AuthFlowSurface({
             Bound Reference ID: <span className="font-bold text-fg-primary">{referenceId}</span>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-7" className="block text-xs font-semibold text-fg-secondary">
               {copy.otpCodeLabel}
             </label>
-            <input
+            <input id="auth-7"
               type="text"
               required
               maxLength={6}
@@ -500,10 +505,10 @@ export function AuthFlowSurface({
           className="mt-5 space-y-4"
         >
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">
+            <label htmlFor="auth-8" className="block text-xs font-semibold text-fg-secondary">
               {copy.emailOrPhoneLabel}
             </label>
-            <input
+            <input id="auth-8"
               type="text"
               required
               value={identifier}
@@ -514,10 +519,10 @@ export function AuthFlowSurface({
           {mode === 'reset' && (
             <>
               <div>
-                <label className="block text-xs font-semibold text-fg-secondary">
+                <label htmlFor="auth-9" className="block text-xs font-semibold text-fg-secondary">
                   {copy.otpCodeLabel}
                 </label>
-                <input
+                <input id="auth-9"
                   type="text"
                   required
                   value={otpCode}
@@ -527,10 +532,10 @@ export function AuthFlowSurface({
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-fg-secondary">
+                <label htmlFor="auth-10" className="block text-xs font-semibold text-fg-secondary">
                   New {copy.passwordLabel}
                 </label>
-                <input
+                <input id="auth-10"
                   type="password"
                   required
                   value={password}

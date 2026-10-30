@@ -35,3 +35,7 @@ Thumbs.db
 -e 
 # AI Studio internal artifacts
 .aistudio/
+
+
+# Local Redis snapshot
+dump.rdb

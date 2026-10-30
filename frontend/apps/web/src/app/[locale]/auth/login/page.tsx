@@ -1,5 +1,5 @@
-import { AuthFlowSurface } from '../../../components/auth/AuthModal';
-import { sanitizeReturnToPath } from '../../../middleware';
+import { AuthFlowSurface } from '../../../../components/auth/AuthModal';
+import { sanitizeReturnToPath } from '../../../../middleware';
 
 interface LoginPageProps {
   params: Promise<{ locale: string }>;

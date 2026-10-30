@@ -15,8 +15,10 @@ using ShopVerse.Api.Health;
 using ShopVerse.Api.Middleware;
 using ShopVerse.Api.Services;
 using ShopVerse.Application.Identity;
+using ShopVerse.Infrastructure;
 using ShopVerse.Infrastructure.Identity;
 using ShopVerse.Infrastructure.Persistence;
+using ShopVerse.Infrastructure.Persistence.Outbox;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -87,8 +89,13 @@ builder.Services.AddDbContext<ShopVerseDbContext>((sp, options) =>
         ?? "Host=localhost;Port=5432;Database=mechware_db;Username=mechware;Password=mechware_dev_password";
 
     options.UseNpgsql(dbConn)
-        .AddInterceptors(sp.GetRequiredService<AuditLogSaveChangesInterceptor>());
+        .AddInterceptors(
+            sp.GetRequiredService<AuditLogSaveChangesInterceptor>(),
+            sp.GetRequiredService<DomainEventOutboxInterceptor>());
 });
+
+// 2.4 Phase 4 Catalog, Inventory, Outbox and storefront cache (hosted workers live in ShopVerse.Worker)
+builder.Services.AddCatalogServices();
 
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();
@@ -187,8 +194,22 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1)
             }));
 
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    // Public storefront reads are cache-backed and get their own, higher ceiling (the global 100/min would throttle a PDP browse).
+    options.AddPolicy("StorefrontRead", httpContext =>
         RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"sf:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:StorefrontPermitPerMinute") ?? 1200,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+        httpContext.Request.Path.StartsWithSegments("/api/v1/storefront")
+        ? RateLimitPartition.GetNoLimiter("storefront")
+        : RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions
             {

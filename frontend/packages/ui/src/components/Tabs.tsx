@@ -15,7 +15,7 @@ export const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex items-center text-text-muted select-none font-sans',
+      'inline-flex max-w-full items-center overflow-x-auto text-text-muted select-none font-sans',
       variant === 'pill'
         ? 'h-10 rounded-md bg-bg-muted p-1 border border-surface-border'
         : 'h-11 border-b border-surface-border gap-6 w-full justify-start rounded-none bg-transparent p-0',

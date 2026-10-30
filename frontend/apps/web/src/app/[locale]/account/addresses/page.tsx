@@ -29,7 +29,7 @@ export interface SavedIndustrialAddress {
   isDefaultBilling: boolean;
 }
 
-export const SEEDED_BD_LOCATIONS: BdHierarchyNode[] = [
+const SEEDED_BD_LOCATIONS: BdHierarchyNode[] = [
   { id: 'div-dhaka', parentId: null, level: 'division', nameEn: 'Dhaka', nameBn: 'ঢাকা', shippingZone: 'inside_dhaka', postalCodePrefix: '1000' },
   { id: 'div-ctg', parentId: null, level: 'division', nameEn: 'Chattogram', nameBn: 'চট্টগ্রাম', shippingZone: 'outside_dhaka', postalCodePrefix: '4000' },
   { id: 'div-raj', parentId: null, level: 'division', nameEn: 'Rajshahi', nameBn: 'রাজশাহী', shippingZone: 'outside_dhaka', postalCodePrefix: '6000' },
@@ -328,8 +328,8 @@ export default function AccountAddressesPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">Site / Plant Label</label>
-            <input
+            <label htmlFor="addr-1" className="block text-xs font-semibold text-fg-secondary">Site / Plant Label</label>
+            <input id="addr-1"
               type="text"
               required
               value={label}
@@ -338,8 +338,8 @@ export default function AccountAddressesPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">Receiving Engineer Name</label>
-            <input
+            <label htmlFor="addr-2" className="block text-xs font-semibold text-fg-secondary">Receiving Engineer Name</label>
+            <input id="addr-2"
               type="text"
               required
               value={recipientName}
@@ -348,8 +348,8 @@ export default function AccountAddressesPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">BD Mobile (+8801XXXXXXXXX)</label>
-            <input
+            <label htmlFor="addr-3" className="block text-xs font-semibold text-fg-secondary">BD Mobile (+8801XXXXXXXXX)</label>
+            <input id="addr-3"
               type="tel"
               required
               value={phoneNumber}
@@ -361,8 +361,8 @@ export default function AccountAddressesPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">Division (বিভাগ)</label>
-            <select
+            <label htmlFor="addr-4" className="block text-xs font-semibold text-fg-secondary">Division (বিভাগ)</label>
+            <select id="addr-4"
               value={selectedDivisionId}
               onChange={(e) => handleDivisionChange(e.target.value)}
               className="mt-1 w-full rounded-md border border-border-subtle bg-bg-canvas px-3 py-2 text-sm text-fg-primary"
@@ -376,8 +376,8 @@ export default function AccountAddressesPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">District (জেলা)</label>
-            <select
+            <label htmlFor="addr-5" className="block text-xs font-semibold text-fg-secondary">District (জেলা)</label>
+            <select id="addr-5"
               value={selectedDistrictId}
               onChange={(e) => handleDistrictChange(e.target.value)}
               className="mt-1 w-full rounded-md border border-border-subtle bg-bg-canvas px-3 py-2 text-sm text-fg-primary"
@@ -391,8 +391,8 @@ export default function AccountAddressesPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">Upazila / EPZ (উপজেলা)</label>
-            <select
+            <label htmlFor="addr-6" className="block text-xs font-semibold text-fg-secondary">Upazila / EPZ (উপজেলা)</label>
+            <select id="addr-6"
               value={selectedUpazilaId}
               onChange={(e) => setSelectedUpazilaId(e.target.value)}
               className="mt-1 w-full rounded-md border border-border-subtle bg-bg-canvas px-3 py-2 text-sm text-fg-primary"
@@ -408,8 +408,8 @@ export default function AccountAddressesPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div className="md:col-span-2">
-            <label className="block text-xs font-semibold text-fg-secondary">Street / Industrial Plot / Bay</label>
-            <input
+            <label htmlFor="addr-7" className="block text-xs font-semibold text-fg-secondary">Street / Industrial Plot / Bay</label>
+            <input id="addr-7"
               type="text"
               required
               value={streetLine1}
@@ -418,8 +418,8 @@ export default function AccountAddressesPage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-fg-secondary">Postal Code</label>
-            <input
+            <label htmlFor="addr-8" className="block text-xs font-semibold text-fg-secondary">Postal Code</label>
+            <input id="addr-8"
               type="text"
               required
               value={postalCode}
