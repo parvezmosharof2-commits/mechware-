@@ -34,7 +34,8 @@ public sealed class IdentityService : IIdentityService
         IPasswordHasherService passwordHasher,
         ITokenService tokenService,
         ITotpService totpService,
-        ISmsProvider smsProvider)
+        ISmsProvider smsProvider,
+        IdentitySeedPolicy seedPolicy)
     {
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
@@ -42,7 +43,10 @@ public sealed class IdentityService : IIdentityService
         _smsProvider = smsProvider;
         _bdLocations = BangladeshLocationSeeder.GetSeedLocations();
 
-        SeedEnterpriseAccounts();
+        if (seedPolicy.SeedDemoAccounts)
+        {
+            SeedEnterpriseAccounts();
+        }
     }
 
     private void SeedEnterpriseAccounts()

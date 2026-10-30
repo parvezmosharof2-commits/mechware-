@@ -111,6 +111,8 @@ builder.Services.AddSingleton<ITokenService>(sp =>
         jwtOpts.Audience,
         jwtOpts.AccessTokenExpiryMinutes);
 });
+// Demo accounts with published credentials exist only in Development (see IdentitySeedPolicy).
+builder.Services.AddSingleton(IdentitySeedPolicy.ForEnvironment(builder.Environment.EnvironmentName));
 builder.Services.AddSingleton<IdentityService>();
 builder.Services.AddSingleton<IIdentityService>(sp => sp.GetRequiredService<IdentityService>());
 
@@ -241,6 +243,15 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllers();
 
 var app = builder.Build();
+
+if (app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)
+{
+    app.Logger.LogWarning("Demo accounts with PUBLISHED credentials are seeded because the environment is Development. They never exist in any other environment.");
+}
+else
+{
+    app.Logger.LogInformation("No demo accounts are seeded in the {Environment} environment; the identity store starts empty.", app.Environment.EnvironmentName);
+}
 
 // Configure Middleware Pipeline
 app.UseForwardedHeaders();

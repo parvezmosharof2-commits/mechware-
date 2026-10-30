@@ -346,6 +346,11 @@
 - [x] **Budget gate in CI:** `pnpm check:bundle` (`packages/config/check-bundle-budget.mjs`) reads the build manifests and fails any route over 170 kB gzip; the numbers match `next build`'s. Mutation-checked: a 150 kB budget fails it, a missing build fails it. Exempt: `/design-system` (a showcase, 213 kB) and `_not-found`.
 - Headroom is thin on the company dashboard (168.3 of 170 kB); the next feature added to it should lazy-load its heavy parts from the start. The browser E2E (49 checks) passes against the new build.
 
+### Security: threat model for companies, credit and approvals (draft, 2026-10-30)
+- [x] `docs/security/THREAT_MODEL_COMPANIES_APPROVALS.md`: STRIDE per module, findings register with severity, and for every claim how it was checked (RUN / TEST / CODE). Drafted by an AI assistant; **needs a human review**.
+- **C1 (Critical), reproduced, then fixed:** the in-memory identity seeded a known admin (`admin@mechware.com.bd`, password and TOTP secret published in this repo) in **every** environment; a Production-mode API accepted it and returned the `admin` role with `companies.credit`. Now demo accounts exist only when the environment is `Development` (`IdentitySeedPolicy`); the same attack on a Production-mode API answers 401. 11 unit and 3 integration tests, mutation-checked. **Consequence:** Production / Staging start with no accounts until identity is database-backed and a first-administrator provisioning step exists.
+- Other findings: approvals enforce nothing until orders exist and the amount is client-supplied (H1); company registration is unlimited and BIN can be squatted (H2); no step-up or tamper-evident audit for credit (H3); BIN / TIN in clear and in audit values (H4); staff other than admin / finance have no second factor (M1); no CSP on web and console (M5).
+
 ### Hardening track (started early, 2026-10-30) — see `docs/HARDCORE_TEST_REPORT.md`
 - [x] Brief v2 (B2B procurement, direct seller first) and USD 100K review plan.
 - [x] Architecture tests (layering, controller dependencies, exception hierarchy).
