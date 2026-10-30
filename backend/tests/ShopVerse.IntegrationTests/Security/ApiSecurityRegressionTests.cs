@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShopVerse.Application.Identity;
+using ShopVerse.Infrastructure.Identity;
 
 namespace ShopVerse.IntegrationTests.Security;
 
@@ -290,6 +291,44 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
 
         (await LoginAsync(client, new LoginRequestDto("buyer@mechware.com.bd", "BuyerPass#2026!"))).Should().Be(HttpStatusCode.OK);
         (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Accepted, "the admin account asks for its second factor");
+    }
+
+    /// <summary>
+    /// Production starts with no accounts, so the first administrator comes from deployment secrets. That account
+    /// must still demand its second factor: a password alone never opens it.
+    /// </summary>
+    [Fact]
+    public async Task Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp()
+    {
+        var totp = new TotpService();
+        string secret = totp.GenerateBase32Secret(16);
+        string password = "Bs1!" + Guid.NewGuid().ToString("N");
+        const string email = "first.admin@example.test";
+
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment("Production");
+            b.UseSetting("Jwt:Secret", "prod-like-secret-" + Guid.NewGuid().ToString("N"));
+            b.UseSetting("Storage:AccessKey", "test-access-key");
+            b.UseSetting("Storage:SecretKey", "test-secret-key");
+            b.UseSetting("Identity:BootstrapAdmin:Email", email);
+            b.UseSetting("Identity:BootstrapAdmin:Password", password);
+            b.UseSetting("Identity:BootstrapAdmin:TotpSecret", secret);
+        });
+        var client = factory.CreateClient();
+
+        (await LoginAsync(client, new LoginRequestDto(email, "wrong-" + password))).Should().Be(HttpStatusCode.Unauthorized);
+        (await LoginAsync(client, new LoginRequestDto(email, password))).Should().Be(HttpStatusCode.Accepted, "the password alone only reaches the second-factor step");
+        (await LoginAsync(client, new LoginRequestDto(email, password, "000000"))).Should().Be(HttpStatusCode.Unauthorized);
+
+        string code = totp.ComputeTotpCode(secret, DateTimeOffset.UtcNow);
+        using var ok = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDto(email, password, code));
+        ok.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await ok.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        body.GetProperty("data").GetProperty("user").GetProperty("roles").EnumerateArray().Select(r => r.GetString()).Should().Contain("admin");
+
+        // Provisioning one administrator must not bring the published demo accounts back.
+        (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
     private static WebApplicationFactory<Program> ProductionFactory(string jwtSecret) =>

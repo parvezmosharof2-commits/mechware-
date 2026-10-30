@@ -113,7 +113,20 @@ builder.Services.AddSingleton<ITokenService>(sp =>
 });
 // Demo accounts with published credentials exist only in Development (see IdentitySeedPolicy).
 builder.Services.AddSingleton(IdentitySeedPolicy.ForEnvironment(builder.Environment.EnvironmentName));
-builder.Services.AddSingleton<IdentityService>();
+// First administrator for environments without demo accounts; secrets come from deployment configuration only.
+var bootstrapAdmin = BootstrapAdminSettings.FromValues(
+    builder.Configuration["Identity:BootstrapAdmin:Email"],
+    builder.Configuration["Identity:BootstrapAdmin:FullName"],
+    builder.Configuration["Identity:BootstrapAdmin:Phone"],
+    builder.Configuration["Identity:BootstrapAdmin:Password"],
+    builder.Configuration["Identity:BootstrapAdmin:TotpSecret"]);
+builder.Services.AddSingleton(sp => new IdentityService(
+    sp.GetRequiredService<IPasswordHasherService>(),
+    sp.GetRequiredService<ITokenService>(),
+    sp.GetRequiredService<ITotpService>(),
+    sp.GetRequiredService<ISmsProvider>(),
+    sp.GetRequiredService<IdentitySeedPolicy>(),
+    bootstrapAdmin));
 builder.Services.AddSingleton<IIdentityService>(sp => sp.GetRequiredService<IdentityService>());
 
 builder.Services
@@ -248,7 +261,12 @@ if (app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)
 {
     app.Logger.LogWarning("Demo accounts with PUBLISHED credentials are seeded because the environment is Development. They never exist in any other environment.");
 }
-else
+if (bootstrapAdmin is not null)
+{
+    app.Logger.LogInformation("Bootstrap administrator {Email} is provisioned from configuration (two-factor enforced).", bootstrapAdmin.Email);
+}
+
+if (!app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)
 {
     app.Logger.LogInformation("No demo accounts are seeded in the {Environment} environment; the identity store starts empty.", app.Environment.EnvironmentName);
 }

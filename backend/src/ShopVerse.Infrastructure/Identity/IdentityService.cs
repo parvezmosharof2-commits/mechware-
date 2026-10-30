@@ -35,7 +35,8 @@ public sealed class IdentityService : IIdentityService
         ITokenService tokenService,
         ITotpService totpService,
         ISmsProvider smsProvider,
-        IdentitySeedPolicy seedPolicy)
+        IdentitySeedPolicy seedPolicy,
+        BootstrapAdminSettings? bootstrapAdmin = null)
     {
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
@@ -47,6 +48,35 @@ public sealed class IdentityService : IIdentityService
         {
             SeedEnterpriseAccounts();
         }
+
+        if (bootstrapAdmin is not null)
+        {
+            SeedBootstrapAdmin(bootstrapAdmin);
+        }
+    }
+
+    private void SeedBootstrapAdmin(BootstrapAdminSettings settings)
+    {
+        _passwordHasher.ValidatePasswordPolicy(settings.Password);
+
+        if (_users.Values.Any(u => string.Equals(u.Email, settings.Email, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var admin = User.Create(settings.Email, settings.Phone, _passwordHasher.HashPassword(settings.Password), settings.FullName, "en");
+        admin.VerifyEmail(now);
+        if (settings.Phone is not null)
+        {
+            admin.VerifyPhone(now);
+        }
+
+        admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
+        admin.ConfigureTwoFactorSecret(settings.TotpSecret, JsonSerializer.Serialize(Array.Empty<string>()), now);
+        admin.EnableTwoFactor(now);
+        _users[admin.Id] = admin;
+        RecordAudit(admin.Id, null, "user.bootstrap_admin_provisioned", "users", admin.Id.ToString(), null, new { admin.Email });
     }
 
     private void SeedEnterpriseAccounts()
