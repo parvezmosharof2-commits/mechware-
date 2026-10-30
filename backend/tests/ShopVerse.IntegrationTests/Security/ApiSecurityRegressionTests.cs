@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using ShopVerse.Application.Identity;
 
 namespace ShopVerse.IntegrationTests.Security;
 
@@ -241,10 +243,10 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         ("buyer@mechware.com.bd", "BuyerPass#2026!")
     ];
 
-    private static async Task<HttpStatusCode> LoginAsync(HttpClient client, string email, string password)
+    /// <summary>Sends a typed login request (the API's own DTO), not a hand-built JSON string.</summary>
+    private static async Task<HttpStatusCode> LoginAsync(HttpClient client, LoginRequestDto request)
     {
-        using var response = await client.PostAsync("/api/v1/auth/login",
-            new StringContent($"{{\"identifier\":\"{email}\",\"password\":\"{password}\"}}", Encoding.UTF8, "application/json"));
+        using var response = await client.PostAsJsonAsync("/api/v1/auth/login", request);
         return response.StatusCode;
     }
 
@@ -260,7 +262,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
 
         foreach (var (email, password) in PublishedDemoAccounts)
         {
-            (await LoginAsync(client, email, password)).Should().Be(HttpStatusCode.Unauthorized, $"{email} must not exist in Production");
+            (await LoginAsync(client, new LoginRequestDto(email, password))).Should().Be(HttpStatusCode.Unauthorized, $"{email} must not exist in Production");
         }
     }
 
@@ -276,7 +278,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         });
         var client = factory.CreateClient();
 
-        (await LoginAsync(client, "admin@mechware.com.bd", "MechAdmin#2026!")).Should().Be(HttpStatusCode.Unauthorized);
+        (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
     /// <summary>The control: without it a broken test could pass because the credentials were never valid.</summary>
@@ -286,8 +288,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Development"));
         var client = factory.CreateClient();
 
-        (await LoginAsync(client, "buyer@mechware.com.bd", "BuyerPass#2026!")).Should().Be(HttpStatusCode.OK);
-        (await LoginAsync(client, "admin@mechware.com.bd", "MechAdmin#2026!")).Should().Be(HttpStatusCode.Accepted, "the admin account asks for its second factor");
+        (await LoginAsync(client, new LoginRequestDto("buyer@mechware.com.bd", "BuyerPass#2026!"))).Should().Be(HttpStatusCode.OK);
+        (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Accepted, "the admin account asks for its second factor");
     }
 
     private static WebApplicationFactory<Program> ProductionFactory(string jwtSecret) =>
