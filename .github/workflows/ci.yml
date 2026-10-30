@@ -142,6 +142,9 @@ jobs:
         with:
           version: 10
 
+      - name: Restore backend dependencies
+        run: dotnet restore backend/ShopVerse.sln
+
       - name: Create database and apply migrations
         run: |
           psql -h localhost -U shopverse -d postgres -c "CREATE DATABASE shopverse"
