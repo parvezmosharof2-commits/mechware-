@@ -38,8 +38,10 @@ export default function middleware(request: NextRequest) {
   );
 
   if (isProtectedRoute) {
-    const hasRefreshCookie = request.cookies.has('refresh_token');
-    if (!hasRefreshCookie) {
+    // The refresh cookie is scoped to the API path and never reaches this route, so we read the
+    // credential-free marker set by AuthProvider. This is a UX redirect only; the API authorises.
+    const hasSessionMarker = request.cookies.has('mw_session');
+    if (!hasSessionMarker) {
       const isBangla = pathname === '/bn' || pathname.startsWith('/bn/');
       const loginPath = isBangla ? '/bn/auth/login' : '/auth/login';
       const returnTo = sanitizeReturnToPath(`${pathname}${search}`);

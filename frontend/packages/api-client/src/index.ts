@@ -262,6 +262,15 @@ export class MechWareApiClient {
     return this.refreshPromise;
   }
 
+  /** Silent session restore from the httpOnly refresh cookie. True when a fresh access token is now in memory. */
+  public async restoreSession(): Promise<boolean> {
+    return (await this.tryRefreshAccessToken()) !== null;
+  }
+
+  public async getMe(): Promise<{ data: AuthenticatedUser }> {
+    return this.fetch('/api/v1/users/me');
+  }
+
   // Phase 3 Auth & Identity Endpoints
   public async register(payload: RegisterRequest): Promise<{ data: RegisterResponse }> {
     return this.fetch<{ data: RegisterResponse }>('/api/v1/auth/register', {
@@ -404,3 +413,6 @@ export class MechWareApiClient {
 }
 
 export { createInMemoryTokenVault };
+
+export * from "./companies-model";
+export * from "./companies";

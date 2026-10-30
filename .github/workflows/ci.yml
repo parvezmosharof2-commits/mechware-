@@ -90,6 +90,10 @@ jobs:
         working-directory: frontend
         run: pnpm --filter @mechware/ui test
 
+      - name: Run API Client Unit Tests
+        working-directory: frontend
+        run: pnpm --filter @mechware/api-client test
+
       - name: Build Frontend Apps
         working-directory: frontend
         run: pnpm build
