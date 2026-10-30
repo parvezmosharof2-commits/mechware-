@@ -45,6 +45,8 @@ builder.Services.AddOptions<RedisOptions>()
 builder.Services.AddOptions<JwtOptions>()
     .BindConfiguration(JwtOptions.SectionName)
     .ValidateDataAnnotations()
+    .Validate(o => builder.Environment.IsDevelopment() || !JwtOptions.PublishedDevelopmentSecrets.Contains(o.Secret),
+        "JWT Secret is a published development value; set Jwt__Secret from the secret store.")
     .ValidateOnStart();
 
 builder.Services.AddOptions<StorageOptions>()
@@ -214,7 +216,7 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = 100,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:GlobalPermitPerMinute") ?? 100,
                 QueueLimit = 10,
                 Window = TimeSpan.FromMinutes(1)
             }));
@@ -256,13 +258,16 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Swagger Documentation UI
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// Swagger Documentation UI — Development only unless explicitly enabled (do not publish the API map in production).
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "MECHWARE API v1");
-    c.RoutePrefix = "swagger";
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "MECHWARE API v1");
+        c.RoutePrefix = "swagger";
+    });
+}
 
 // Health Check Endpoints
 app.MapHealthChecks("/health/live", new HealthCheckOptions

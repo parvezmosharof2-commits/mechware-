@@ -16,6 +16,11 @@ public sealed class JwtTokenService : ITokenService
     public const string PermissionClaimType = "permission";
     public const string SellerIdClaimType = "seller_id";
 
+    /// <summary>Tokens longer than this are rejected before any decoding (resource-exhaustion guard).</summary>
+    public const int MaxTokenLength = 8192;
+
+    private const long ClockSkewSeconds = 60;
+
     private readonly byte[] _signingKey;
     private readonly string _issuer;
     private readonly string _audience;
@@ -87,110 +92,142 @@ public sealed class JwtTokenService : ITokenService
 
     public ClaimsPrincipal? ValidateAccessToken(string token, DateTime utcNow)
     {
-        if (string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(token) || token.Length > MaxTokenLength)
         {
             return null;
         }
 
         string[] parts = token.Trim().Split('.');
-        if (parts.Length != 3)
+        if (parts.Length != 3 || parts.Any(p => p.Length == 0))
         {
             return null;
         }
 
-        string signingInput = $"{parts[0]}.{parts[1]}";
-        byte[] expectedSignature = HMACSHA256.HashData(_signingKey, Encoding.ASCII.GetBytes(signingInput));
-
-        byte[] providedSignature;
+        byte[] headerBytes;
         byte[] payloadBytes;
+        byte[] providedSignature;
         try
         {
-            providedSignature = Base64UrlDecode(parts[2]);
-            payloadBytes = Base64UrlDecode(parts[1]);
+            headerBytes = Base64UrlDecodeCanonical(parts[0]);
+            payloadBytes = Base64UrlDecodeCanonical(parts[1]);
+            providedSignature = Base64UrlDecodeCanonical(parts[2]);
         }
         catch (FormatException)
         {
             return null;
         }
 
+        string signingInput = $"{parts[0]}.{parts[1]}";
+        byte[] expectedSignature = HMACSHA256.HashData(_signingKey, Encoding.ASCII.GetBytes(signingInput));
         if (!CryptographicOperations.FixedTimeEquals(expectedSignature, providedSignature))
         {
             return null;
         }
 
+        // Even with a valid MAC, the header must name exactly the algorithm we issue (no alg confusion,
+        // no critical extensions we do not understand) and the payload must be well-formed.
+        try
+        {
+            return IsAcceptedHeader(headerBytes) ? BuildPrincipal(payloadBytes, utcNow) : null;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or ArgumentException or FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsAcceptedHeader(byte[] headerBytes)
+    {
+        using var doc = JsonDocument.Parse(headerBytes);
+        JsonElement header = doc.RootElement;
+        if (header.ValueKind != JsonValueKind.Object) return false;
+        if (!header.TryGetProperty("alg", out JsonElement alg) || alg.ValueKind != JsonValueKind.String || alg.GetString() != "HS256") return false;
+        if (header.TryGetProperty("typ", out JsonElement typ) && (typ.ValueKind != JsonValueKind.String || typ.GetString() != "JWT")) return false;
+        return !header.TryGetProperty("crit", out _);
+    }
+
+    private ClaimsPrincipal? BuildPrincipal(byte[] payloadBytes, DateTime utcNow)
+    {
         using var doc = JsonDocument.Parse(payloadBytes);
         JsonElement root = doc.RootElement;
-
-        if (!root.TryGetProperty("exp", out JsonElement expEl) || !expEl.TryGetInt64(out long expUnix))
-        {
-            return null;
-        }
+        if (root.ValueKind != JsonValueKind.Object) return null;
 
         long nowUnix = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc)).ToUnixTimeSeconds();
-        if (nowUnix >= expUnix)
+
+        if (!root.TryGetProperty("exp", out JsonElement expEl) || expEl.ValueKind != JsonValueKind.Number || !expEl.TryGetInt64(out long expUnix) || nowUnix >= expUnix)
         {
             return null;
         }
 
-        if (root.TryGetProperty("iss", out JsonElement issEl) &&
-            !string.Equals(issEl.GetString(), _issuer, StringComparison.Ordinal))
+        if (root.TryGetProperty("nbf", out JsonElement nbfEl) && (!nbfEl.TryGetInt64(out long nbf) || nowUnix + ClockSkewSeconds < nbf))
         {
             return null;
         }
 
-        if (root.TryGetProperty("aud", out JsonElement audEl) &&
-            !string.Equals(audEl.GetString(), _audience, StringComparison.Ordinal))
+        if (root.TryGetProperty("iat", out JsonElement iatEl) && (!iatEl.TryGetInt64(out long iat) || iat > nowUnix + ClockSkewSeconds))
+        {
+            return null;
+        }
+
+        if (StringClaim(root, "iss") != _issuer || StringClaim(root, "aud") != _audience)
         {
             return null;
         }
 
         var claims = new List<Claim>();
 
-        if (root.TryGetProperty("sub", out JsonElement subEl) && subEl.GetString() is string sub)
+        if (StringClaim(root, "sub") is string sub)
         {
             claims.Add(new Claim(ClaimTypes.NameIdentifier, sub));
             claims.Add(new Claim("sub", sub));
         }
 
-        if (root.TryGetProperty("email", out JsonElement emailEl) && emailEl.GetString() is string email)
+        if (StringClaim(root, "email") is string email)
         {
             claims.Add(new Claim(ClaimTypes.Email, email));
         }
 
-        if (root.TryGetProperty("name", out JsonElement nameEl) && nameEl.GetString() is string name)
+        if (StringClaim(root, "name") is string name)
         {
             claims.Add(new Claim(ClaimTypes.Name, name));
         }
 
-        if (root.TryGetProperty(SellerIdClaimType, out JsonElement sellerEl) && sellerEl.GetString() is string sellerId)
+        if (StringClaim(root, SellerIdClaimType) is string sellerId)
         {
             claims.Add(new Claim(SellerIdClaimType, sellerId));
         }
 
-        if (root.TryGetProperty("roles", out JsonElement rolesEl) && rolesEl.ValueKind == JsonValueKind.Array)
+        foreach (string role in StringArrayClaim(root, "roles"))
         {
-            foreach (JsonElement roleItem in rolesEl.EnumerateArray())
-            {
-                if (roleItem.GetString() is string role && !string.IsNullOrWhiteSpace(role))
-                {
-                    claims.Add(new Claim(ClaimTypes.Role, role));
-                }
-            }
+            claims.Add(new Claim(ClaimTypes.Role, role));
         }
 
-        if (root.TryGetProperty(PermissionClaimType, out JsonElement permsEl) && permsEl.ValueKind == JsonValueKind.Array)
+        foreach (string perm in StringArrayClaim(root, PermissionClaimType))
         {
-            foreach (JsonElement permItem in permsEl.EnumerateArray())
-            {
-                if (permItem.GetString() is string perm && !string.IsNullOrWhiteSpace(perm))
-                {
-                    claims.Add(new Claim(PermissionClaimType, perm));
-                }
-            }
+            claims.Add(new Claim(PermissionClaimType, perm));
         }
 
         var identity = new ClaimsIdentity(claims, "Bearer");
         return new ClaimsPrincipal(identity);
+    }
+
+    private static string? StringClaim(JsonElement root, string name) =>
+        root.TryGetProperty(name, out JsonElement el) && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
+
+    private static IEnumerable<string> StringArrayClaim(JsonElement root, string name)
+    {
+        if (!root.TryGetProperty(name, out JsonElement el) || el.ValueKind != JsonValueKind.Array)
+        {
+            yield break;
+        }
+
+        foreach (JsonElement item in el.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String && item.GetString() is string value && !string.IsNullOrWhiteSpace(value))
+            {
+                yield return value;
+            }
+        }
     }
 
     public string GenerateRawRefreshToken()
@@ -210,6 +247,18 @@ public sealed class JwtTokenService : ITokenService
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
+
+    /// <summary>Decodes base64url and rejects non-canonical encodings (padding, stray bits), so a token has exactly one valid spelling.</summary>
+    private static byte[] Base64UrlDecodeCanonical(string input)
+    {
+        byte[] bytes = Base64UrlDecode(input);
+        if (!string.Equals(Base64UrlEncode(bytes), input, StringComparison.Ordinal))
+        {
+            throw new FormatException("Non-canonical base64url.");
+        }
+
+        return bytes;
+    }
 
     private static byte[] Base64UrlDecode(string input)
     {

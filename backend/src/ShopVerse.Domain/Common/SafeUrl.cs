@@ -13,9 +13,18 @@ public static class SafeUrl
     public static bool IsSafe(string? url)
     {
         if (string.IsNullOrWhiteSpace(url) || url.Length > MaxLength) return false;
-        if (url.Any(c => char.IsControl(c) || c == '\\' || char.IsWhiteSpace(c))) return false;
+        // Printable ASCII only: IDN hosts must be punycoded and paths percent-encoded. This also rejects
+        // bidi/format characters (U+200E, U+202E, U+FEFF) used for link spoofing.
+        if (url.Any(c => c is < '!' or > '~' || c == '\\')) return false;
         if (url.StartsWith('/')) return !url.StartsWith("//", StringComparison.Ordinal);
-        return Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host);
+        try
+        {
+            return Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && !string.IsNullOrEmpty(uri.Host);
+        }
+        catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or FormatException)
+        {
+            return false; // Uri.TryCreate can throw on some malformed inputs (found by fuzzing)
+        }
     }
 
     public static string Require(string? url, string field)

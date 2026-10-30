@@ -213,17 +213,35 @@ public sealed class InventoryService : IInventoryService
 
     public async Task<int> ReleaseExpiredAsync(DateTime nowUtc, int batchSize = 500, CancellationToken ct = default)
     {
-        // Set-based sweep from ADR 0004, extended to lock inventory rows in deterministic order first.
-        // Executed as raw ADO.NET: EF would wrap a query in a sub-select, and PostgreSQL requires
-        // data-modifying CTEs to be top-level.
-        const string sql = """
-            WITH expired_holds AS (
-                SELECT id, variant_id, warehouse_id, quantity
+        // Lock order must match reserve/commit/cancel: inventory rows first, then reservation rows. Locking
+        // reservations first (as a single CTE would) deadlocks against a concurrent commit (found by the
+        // inventory chaos test). The sweeper uses SKIP LOCKED on inventory, so it never waits on checkout
+        // traffic: busy balances are simply retried on the next sweep.
+        const string lockSql = """
+            SELECT i.variant_id, i.warehouse_id
+            FROM inventory_items i
+            WHERE (i.variant_id, i.warehouse_id) IN (
+                SELECT variant_id, warehouse_id
                 FROM stock_reservations
                 WHERE status = 'active' AND expires_at <= @now
-                ORDER BY variant_id ASC, warehouse_id ASC
-                FOR UPDATE SKIP LOCKED
+                ORDER BY expires_at
+                LIMIT @batch)
+            ORDER BY i.variant_id ASC, i.warehouse_id ASC
+            FOR UPDATE OF i SKIP LOCKED
+            """;
+
+        // Executed as raw ADO.NET: EF would wrap a query in a sub-select, and PostgreSQL requires
+        // data-modifying CTEs to be top-level.
+        const string releaseSql = """
+            WITH expired_holds AS (
+                SELECT sr.id, sr.variant_id, sr.warehouse_id, sr.quantity
+                FROM stock_reservations sr
+                JOIN UNNEST(@variants, @warehouses) AS locked(variant_id, warehouse_id)
+                  ON locked.variant_id = sr.variant_id AND locked.warehouse_id = sr.warehouse_id
+                WHERE sr.status = 'active' AND sr.expires_at <= @now
+                ORDER BY sr.expires_at
                 LIMIT @batch
+                FOR UPDATE OF sr
             ),
             released_reservations AS (
                 UPDATE stock_reservations sr
@@ -237,37 +255,60 @@ public sealed class InventoryService : IInventoryService
                 FROM released_reservations
                 GROUP BY variant_id, warehouse_id
             ),
-            locked_inv AS (
-                SELECT i.id, agg.total_qty
-                FROM inventory_items i
-                JOIN agg ON agg.variant_id = i.variant_id AND agg.warehouse_id = i.warehouse_id
-                ORDER BY i.variant_id ASC, i.warehouse_id ASC
-                FOR UPDATE OF i
-            ),
             updated_inv AS (
                 UPDATE inventory_items inv
-                SET reserved = inv.reserved - l.total_qty, updated_at = @now
-                FROM locked_inv l
-                WHERE inv.id = l.id
+                SET reserved = inv.reserved - agg.total_qty, updated_at = @now
+                FROM agg
+                WHERE inv.variant_id = agg.variant_id AND inv.warehouse_id = agg.warehouse_id
                 RETURNING inv.id
             )
             SELECT (SELECT COUNT(*) FROM released_reservations)::int
             """;
 
+        var now = DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc);
         var connection = (NpgsqlConnection)_db.Database.GetDbConnection();
         var openedHere = connection.State != System.Data.ConnectionState.Open;
         if (openedHere) await connection.OpenAsync(ct);
+        var ambient = _db.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction;
+        var tx = ambient ?? await connection.BeginTransactionAsync(ct);
         try
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = sql;
-            cmd.Transaction = _db.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction;
-            cmd.Parameters.AddWithValue("now", NpgsqlTypes.NpgsqlDbType.TimestampTz, DateTime.SpecifyKind(nowUtc, DateTimeKind.Utc));
-            cmd.Parameters.AddWithValue("batch", batchSize);
-            return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+            var variants = new List<Guid>();
+            var warehouses = new List<Guid>();
+            await using (var lockCmd = new NpgsqlCommand(lockSql, connection, tx))
+            {
+                lockCmd.Parameters.AddWithValue("now", NpgsqlTypes.NpgsqlDbType.TimestampTz, now);
+                lockCmd.Parameters.AddWithValue("batch", batchSize);
+                await using var reader = await lockCmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    variants.Add(reader.GetGuid(0));
+                    warehouses.Add(reader.GetGuid(1));
+                }
+            }
+
+            var released = 0;
+            if (variants.Count > 0)
+            {
+                await using var cmd = new NpgsqlCommand(releaseSql, connection, tx);
+                cmd.Parameters.AddWithValue("now", NpgsqlTypes.NpgsqlDbType.TimestampTz, now);
+                cmd.Parameters.AddWithValue("batch", batchSize);
+                cmd.Parameters.AddWithValue("variants", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid, variants.ToArray());
+                cmd.Parameters.AddWithValue("warehouses", NpgsqlTypes.NpgsqlDbType.Array | NpgsqlTypes.NpgsqlDbType.Uuid, warehouses.ToArray());
+                released = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+            }
+
+            if (ambient is null) await tx.CommitAsync(ct);
+            return released;
+        }
+        catch
+        {
+            if (ambient is null) await tx.RollbackAsync(CancellationToken.None);
+            throw;
         }
         finally
         {
+            if (ambient is null) await tx.DisposeAsync();
             if (openedHere) await connection.CloseAsync();
         }
     }

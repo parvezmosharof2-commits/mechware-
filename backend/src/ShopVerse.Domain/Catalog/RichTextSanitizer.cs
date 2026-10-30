@@ -18,6 +18,14 @@ public static class RichTextSanitizer
         s.AllowedSchemes.Clear();
         foreach (var scheme in new[] { "https", "mailto", "tel" }) s.AllowedSchemes.Add(scheme);
         s.AllowDataAttributes = false;
+        // Relative URLs pass the scheme allow-list, so block the forms browsers resolve off-site:
+        // protocol-relative (//host) and backslash variants (\\host, /\host).
+        s.FilterUrl += (_, e) =>
+        {
+            var url = e.SanitizedUrl?.Trim();
+            if (url is null) return;
+            if (url.StartsWith("//", StringComparison.Ordinal) || url.Contains('\\')) e.SanitizedUrl = null;
+        };
         return s;
     }
 

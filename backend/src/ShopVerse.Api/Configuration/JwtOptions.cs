@@ -18,4 +18,13 @@ public sealed class JwtOptions
 
     public int AccessTokenExpiryMinutes { get; set; } = 15;
     public int RefreshTokenExpiryDays { get; set; } = 7;
+
+    /// <summary>
+    /// Secrets that have been published in this (public) repository. Anyone can forge tokens with them,
+    /// so the API refuses to start with one outside Development.
+    /// </summary>
+    public static readonly IReadOnlySet<string> PublishedDevelopmentSecrets = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "super_secret_mechware_256bit_production_ready_jwt_key_here_for_local_dev",
+    };
 }
