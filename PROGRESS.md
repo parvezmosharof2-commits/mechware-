@@ -348,7 +348,7 @@
 
 ### Security: threat model for companies, credit and approvals (draft, 2026-10-30)
 - [x] `docs/security/THREAT_MODEL_COMPANIES_APPROVALS.md`: STRIDE per module, findings register with severity, and for every claim how it was checked (RUN / TEST / CODE). Drafted by an AI assistant; **needs a human review**.
-- **C1 (Critical, blocks any deployment), reproduced:** the in-memory identity seeds a known admin (`admin@mechware.com.bd`, password and TOTP secret published in this repo) in **every** environment. A Production-mode API accepted it and returned the `admin` role with `companies.credit`. No test covers it. Not fixed yet.
+- **C1 (Critical), reproduced, then fixed:** the in-memory identity seeded a known admin (`admin@mechware.com.bd`, password and TOTP secret published in this repo) in **every** environment; a Production-mode API accepted it and returned the `admin` role with `companies.credit`. Now demo accounts exist only when the environment is `Development` (`IdentitySeedPolicy`); the same attack on a Production-mode API answers 401. 11 unit and 3 integration tests, mutation-checked. **Consequence:** Production / Staging start with no accounts until identity is database-backed and a first-administrator provisioning step exists.
 - Other findings: approvals enforce nothing until orders exist and the amount is client-supplied (H1); company registration is unlimited and BIN can be squatted (H2); no step-up or tamper-evident audit for credit (H3); BIN / TIN in clear and in audit values (H4); staff other than admin / finance have no second factor (M1); no CSP on web and console (M5).
 
 ### Hardening track (started early, 2026-10-30) — see `docs/HARDCORE_TEST_REPORT.md`

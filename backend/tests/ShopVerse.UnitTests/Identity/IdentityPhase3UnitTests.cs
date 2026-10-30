@@ -96,7 +96,7 @@ public class IdentityPhase3UnitTests
     public async Task RefreshTokenRotation_ShouldTolerate10SecondSameIpGraceWindow_AndRevokeEntireFamilyOnBreach()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         var (regResp, rawOtp) = await identityService.RegisterAsync(
             new RegisterRequestDto("rotation@mechware.com.bd", "+8801711888777", "RotatePass#2026!", "Rotation Tester"),
@@ -160,7 +160,7 @@ public class IdentityPhase3UnitTests
     public void SingleSessionCookieLogout_ShouldRevokeOnlyPresentedCookieFamily_LeavingOtherDeviceSessionsActive()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         var t0 = new DateTime(2026, 10, 29, 12, 0, 0, DateTimeKind.Utc);
         var device1 = identityService.Login(
@@ -200,7 +200,7 @@ public class IdentityPhase3UnitTests
     public void GoogleOidcLogin_ShouldValidateJwtClaims_AndRejectExpiredOrUntrustedIssuer()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         string header = Base64UrlEncode(JsonSerializer.Serialize(new { alg = "RS256", typ = "JWT" }));
         string validPayload = Base64UrlEncode(JsonSerializer.Serialize(new
@@ -240,7 +240,7 @@ public class IdentityPhase3UnitTests
     public async Task OtpCode_ShouldEnforceMaxThreeAttempts_AndRejectFourthAttempt()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         (SendOtpResponseDto otpSent, _) = await identityService.SendOtpAsync(
             new SendOtpRequestDto("+8801711000001", "Login"),
@@ -269,7 +269,7 @@ public class IdentityPhase3UnitTests
     public async Task EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         // 1. Register user with email only -> triggers EmailVerify OTP channel
         var (regResp, emailOtp) = await identityService.RegisterAsync(
@@ -307,7 +307,7 @@ public class IdentityPhase3UnitTests
     public void BangladeshAddressBook_ShouldRejectCrossDivisionDistrictUpazilaMismatch()
     {
         var smsProvider = new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance);
-        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider);
+        var identityService = new IdentityService(_passwordHasher, _tokenService, _totpService, smsProvider, new IdentitySeedPolicy(true));
 
         var buyerProfile = identityService.GetUsersForAudit().First(u => u.Email == "buyer@mechware.com.bd");
 

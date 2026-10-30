@@ -25,7 +25,7 @@ unusual conditions. **Low / Info**: hardening or a rule for future work.
 
 ## 1. Findings register (read this first)
 
-### C1. Known admin account exists in every environment (Critical, blocks any deployment) [RUN]
+### C1. Known admin account exists in every environment (Critical) [RUN] — **FIXED**, see "Fix" below
 `IdentityService` calls `SeedEnterpriseAccounts()` unconditionally in its constructor
 (`backend/src/ShopVerse.Infrastructure/Identity/IdentityService.cs`). It creates, with passwords and secrets that
 are **in this public repository**: `admin@mechware.com.bd` / `MechAdmin#2026!` with TOTP secret
@@ -37,7 +37,25 @@ rejects the published *JWT secret*; it does not touch these accounts.
 Impact: anyone can verify companies, suspend them and grant credit on any deployment built from this code.
 Fix direction: seed only in Development / Test (and refuse to boot if a seeded e-mail exists in Production),
 move staff provisioning to a one-time out-of-band step, add a test that Production has no seeded accounts.
-Until identity is database-backed this is the single most important item. **No test covers it today.**
+
+**Fix (same day):** demo accounts are now created only when the environment is `Development`
+(`IdentitySeedPolicy.ForEnvironment`, decided from the environment name alone; no setting can switch them on in
+Production or Staging). `IdentityService` takes the policy as a required constructor argument. The startup log states
+which case applies.
+**Evidence:** (1) the same attack re-run on a Production-mode API now answers HTTP 401 at both steps (password,
+then password + TOTP from the public secret) [RUN]; (2) tests `DemoAccountSeedingTests` (unit, 11) and
+`Production_HasNoDemoAccounts_*`, `Staging_HasNoDemoAccountsEither`, with the control
+`Development_SeedsTheDemoAccounts_*` (integration) [TEST]; (3) **mutation-checked:** with the old unconditional
+seeding restored, 2 unit and 2 integration tests fail, with the fix they pass.
+**Consequences and what is still open:**
+- Production and Staging now start with **no staff or buyer accounts at all**, so nobody can sign in to the console
+  there until identity is database-backed and there is a provisioning step for the first administrator. That is
+  deliberate (fail closed) but it is a task to schedule.
+- The environment name is now the only switch. A public host started with `ASPNETCORE_ENVIRONMENT=Development`
+  would re-create the accounts (and also enables Swagger and accepts the published development JWT secret).
+  Deployment configuration must never use that value; an optional extra guard would refuse to listen on non-loopback
+  addresses in Development.
+- The browser E2E and CI run the API in Development, so they are unaffected.
 
 ### H1. Approvals enforce nothing yet, and the amount is client-supplied (High, design rule for Phase 8) [CODE]
 `ApprovalService.SubmitAsync` trusts `amountMinor` from the caller, and when no rule matches it only returns
@@ -180,17 +198,16 @@ use a company id from a token claim.
 | I | Token theft from storage | Access token only in memory; refresh token httpOnly, path-scoped | CODE; H-class risk M5 for injected script |
 | D | Refresh-token reuse | Family revocation (ADR-0006) | existing tests |
 | E | Staff without 2FA | admin / finance only | M1 |
-| – | Known staff account | See **C1** | RUN |
+| S/E | Known staff account | **C1 fixed**: no demo accounts outside Development | RUN + TEST (mutation-checked) |
 
 ## 4. What the automated tests do not cover
-- No test that Production has **no seeded accounts** (C1) or that Production refuses known credentials.
 - No negative test that `support` cannot change credit via a forged request beyond the generic "every route protected" sweep; the per-permission mapping is only read, not tested.
 - No test for registration abuse (per-user cap, BIN squatting).
 - No test that audit rows redact BIN / TIN (they do not).
 - The browser E2E uses Development seed accounts; it proves flows, not Production hardening.
 
 ## 5. Suggested order of work
-1. **C1** before anything is deployed or shown to a customer (small change, plus the missing test).
+1. ~~C1~~ done. Still needed before any deployment: database-backed identity and a way to create the first administrator (Production starts empty now).
 2. Phase 8 rules **H1** and **L1** written into the checkout design before coding it.
 3. **H2** (registration cap, reject / release BIN) and **H4** (encrypt identifiers, mask audit values).
 4. **H3** (step-up for credit, tamper-evident audit) and **M1** (second factor for all staff).

@@ -233,6 +233,63 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         statuses.Skip(5).Should().OnlyContain(s => s == HttpStatusCode.TooManyRequests, "production allows 5 credential attempts per minute per IP");
     }
 
+    private static readonly (string Email, string Password)[] PublishedDemoAccounts =
+    [
+        ("admin@mechware.com.bd", "MechAdmin#2026!"),
+        ("seller.alpha@mechware.com.bd", "SellerAlpha#2026!"),
+        ("seller.beta@mechware.com.bd", "SellerBeta#2026!"),
+        ("buyer@mechware.com.bd", "BuyerPass#2026!")
+    ];
+
+    private static async Task<HttpStatusCode> LoginAsync(HttpClient client, string email, string password)
+    {
+        using var response = await client.PostAsync("/api/v1/auth/login",
+            new StringContent($"{{\"identifier\":\"{email}\",\"password\":\"{password}\"}}", Encoding.UTF8, "application/json"));
+        return response.StatusCode;
+    }
+
+    /// <summary>
+    /// C1 in docs/security/THREAT_MODEL_COMPANIES_APPROVALS.md: the demo admin, with a password and TOTP secret
+    /// published in this public repository, used to exist in every environment.
+    /// </summary>
+    [Fact]
+    public async Task Production_HasNoDemoAccounts_EveryPublishedCredentialIsRefused()
+    {
+        await using var factory = ProductionFactory(jwtSecret: "prod-like-secret-" + Guid.NewGuid().ToString("N"));
+        var client = factory.CreateClient();
+
+        foreach (var (email, password) in PublishedDemoAccounts)
+        {
+            (await LoginAsync(client, email, password)).Should().Be(HttpStatusCode.Unauthorized, $"{email} must not exist in Production");
+        }
+    }
+
+    [Fact]
+    public async Task Staging_HasNoDemoAccountsEither()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment("Staging");
+            b.UseSetting("Jwt:Secret", "staging-like-secret-" + Guid.NewGuid().ToString("N"));
+            b.UseSetting("Storage:AccessKey", "test-access-key");
+            b.UseSetting("Storage:SecretKey", "test-secret-key");
+        });
+        var client = factory.CreateClient();
+
+        (await LoginAsync(client, "admin@mechware.com.bd", "MechAdmin#2026!")).Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    /// <summary>The control: without it a broken test could pass because the credentials were never valid.</summary>
+    [Fact]
+    public async Task Development_SeedsTheDemoAccounts_SoTheProductionCheckIsMeaningful()
+    {
+        await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.UseEnvironment("Development"));
+        var client = factory.CreateClient();
+
+        (await LoginAsync(client, "buyer@mechware.com.bd", "BuyerPass#2026!")).Should().Be(HttpStatusCode.OK);
+        (await LoginAsync(client, "admin@mechware.com.bd", "MechAdmin#2026!")).Should().Be(HttpStatusCode.Accepted, "the admin account asks for its second factor");
+    }
+
     private static WebApplicationFactory<Program> ProductionFactory(string jwtSecret) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
