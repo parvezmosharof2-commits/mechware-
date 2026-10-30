@@ -417,3 +417,5 @@ export { createInMemoryTokenVault };
 export * from "./companies-model";
 export * from "./companies";
 export * from "./problems";
+export * from "./approvals-model";
+export * from "./approvals";

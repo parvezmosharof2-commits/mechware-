@@ -159,6 +159,9 @@ jobs:
           dotnet publish backend/src/ShopVerse.Api -c Release -o "$RUNNER_TEMP/api"
           cd "$RUNNER_TEMP/api"
           # Development turns on the seeded staff / buyer accounts and the published dev TOTP secret.
+          # One E2E run sends ~150 requests a minute from a single IP; the default global limit (100 a minute)
+          # would queue them. Production keeps its own configuration.
+          RateLimiting__GlobalPermitPerMinute=2000 \
           ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5000 \
             nohup dotnet ShopVerse.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 60); do

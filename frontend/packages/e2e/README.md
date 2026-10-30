@@ -16,7 +16,8 @@ They rely on the Development seed accounts of the in-memory identity store and o
 SHOPVERSE_DESIGN_DB="Host=localhost;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
   dotnet ef database update --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
 # 2. API (Development) on :5000, web on :3000, console on :3001
-ASPNETCORE_ENVIRONMENT=Development dotnet run --project backend/src/ShopVerse.Api --urls http://localhost:5000
+RateLimiting__GlobalPermitPerMinute=2000 ASPNETCORE_ENVIRONMENT=Development \
+  dotnet run --project backend/src/ShopVerse.Api --urls http://localhost:5000
 cd frontend && pnpm --filter @mechware/web build && pnpm --filter @mechware/web start
 cd frontend && pnpm --filter @mechware/console build && pnpm --filter @mechware/console start
 # 3. browsers once, then the tests
@@ -24,4 +25,5 @@ cd frontend && pnpm --filter @mechware/e2e exec playwright install chromium
 cd frontend/packages/e2e && pnpm test
 ```
 Override `E2E_WEB_URL`, `E2E_CONSOLE_URL`, `E2E_API_URL`, `E2E_SHOTS_DIR`; set `PW_CHROMIUM_PATH` to use a
-browser installed outside Playwright's own cache. Truncate `companies` (cascade) between local runs.
+browser installed outside Playwright's own cache.
+The API needs `RateLimiting__GlobalPermitPerMinute` raised for a run: the suites send about 150 requests a minute from one IP, and the default limit (100 a minute) queues the rest, which shows up as 30 s stalls. Truncate `companies` (cascade) between local runs.

@@ -176,6 +176,105 @@
       "exists": "This user is already a member.",
       "lastAdmin": "A company must keep at least one active admin.",
       "you": "You"
+    },
+    "approvals": {
+      "tab": "Approvals",
+      "intro": "Orders and purchase requests that match a rule wait for the approvers you choose, in order.",
+      "statusLabel": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "cancelled": "Cancelled"
+      },
+      "decision": {
+        "pending": "Waiting",
+        "approved": "Approved",
+        "rejected": "Rejected"
+      },
+      "inbox": {
+        "title": "Waiting for your decision",
+        "empty": "Nothing is waiting for you",
+        "emptyBody": "Requests appear here when it is your turn in an approval chain."
+      },
+      "mine": {
+        "title": "My requests",
+        "empty": "You have not sent any request",
+        "emptyBody": "Requests that match an approval rule are listed here with their progress.",
+        "new": "New purchase request"
+      },
+      "request": {
+        "amount": "Amount",
+        "rule": "Rule",
+        "requester": "Requested by",
+        "waitingFor": "Waiting for",
+        "chain": "Approval chain",
+        "subject": "Purchase request",
+        "noComment": "No comment",
+        "by": "by",
+        "you": "you"
+      },
+      "actions": {
+        "approve": "Approve",
+        "reject": "Reject",
+        "cancel": "Cancel request",
+        "decideTitle": "Your decision",
+        "comment": "Comment",
+        "commentRequired": "A comment is required when rejecting.",
+        "commentTooLong": "The comment can be at most 500 characters.",
+        "approved": "Request approved.",
+        "rejected": "Request rejected.",
+        "cancelled": "Request cancelled.",
+        "confirmApprove": "Approve this request",
+        "confirmReject": "Reject this request"
+      },
+      "submit": {
+        "title": "New purchase request",
+        "intro": "Describe the amount. If a rule matches, the approvers are asked in order; otherwise no approval is needed.",
+        "amount": "Amount (BDT)",
+        "costCentre": "Cost centre (optional)",
+        "none": "None",
+        "submit": "Send",
+        "notRequired": "No approval is needed for this amount.",
+        "created": "Sent for approval."
+      },
+      "rules": {
+        "title": "Approval rules",
+        "adminOnly": "Only company admins can manage approval rules.",
+        "add": "Add rule",
+        "edit": "Edit rule",
+        "empty": "No approval rules yet",
+        "emptyBody": "Without a rule nothing needs approval. Add one to require sign-off above an amount.",
+        "name": "Rule name",
+        "minAmount": "Applies from amount (BDT)",
+        "minAmountHint": "Leave empty or 0 to apply to every amount.",
+        "costCentre": "Only for cost centre (optional)",
+        "anyCostCentre": "Any cost centre",
+        "chain": "Approvers, in order",
+        "chainHint": "Each approver decides in this order. The requester is skipped in their own requests.",
+        "addApprover": "Add approver",
+        "chooseApprover": "Choose a member",
+        "noApprovers": "No members with the Approver or Admin role yet. Add one under Members first.",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
+        "removeApprover": "Remove from chain",
+        "active": "Rule is active",
+        "inactive": "Inactive",
+        "appliesFrom": "From",
+        "anyAmount": "any amount",
+        "ctx": "Cost centre",
+        "errors": {
+          "nameRequired": "Enter a rule name.",
+          "nameLength": "The name can be at most 100 characters.",
+          "amountFormat": "Enter a valid, non-negative amount.",
+          "chainEmpty": "Add at least one approver.",
+          "chainTooLong": "A chain can have at most 5 approvers.",
+          "chainDuplicate": "An approver can appear only once."
+        }
+      },
+      "errors": {
+        "alreadyPending": "An approval for this item is already pending.",
+        "noApprover": "No approver can decide on this request. Ask a company admin to update the rule."
+      }
     }
   }
 }

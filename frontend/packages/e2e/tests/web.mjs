@@ -1,4 +1,4 @@
-import { WEB, SHOTS, USERS, launch, uniqueBin } from './lib.mjs';
+import { WEB, SHOTS, USERS, apiCall, apiLogin, launch, uniqueBin } from './lib.mjs';
 
 const results = [];
 const check = (name, ok, extra = '') => { results.push([ok, name, extra]); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  -> ' + extra : ''}`); };
@@ -118,6 +118,99 @@ async function login(page, email, password) {
   await a.reload();
   await a.getByText('Gazipur Textile Mills Ltd').first().waitFor();
   check('page reload restores the session', true);
+
+  // 11b. approvals: admin makes the buyer an approver, sets a rule, sends requests; the buyer decides in another browser
+  const buyerToken = await apiLogin(USERS.buyer);
+  const buyerId = (await apiCall(buyerToken, 'GET', '/api/v1/users/me')).json.data.id;
+  await a.getByRole('tab', { name: 'Members' }).click();
+  await a.getByRole('button', { name: 'Add' }).first().click();
+  await a.getByLabel('User ID').fill(buyerId);
+  await a.getByRole('dialog').getByLabel('Approver').check();
+  await a.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await a.getByText(buyerId, { exact: false }).first().waitFor();
+  check('admin adds the buyer as an Approver member', true);
+
+  await a.getByRole('tab', { name: 'Approvals' }).click();
+  await a.getByText('No approval rules yet').waitFor();
+  await a.getByRole('button', { name: 'Add rule' }).click();
+  await a.getByLabel('Rule name').fill('Over 10,000');
+  await a.getByLabel('Applies from amount (BDT)').fill('10000');
+  await a.getByLabel('Choose a member').selectOption(buyerId);
+  await a.getByRole('dialog').getByRole('button', { name: 'Add approver' }).click();
+  await a.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await a.getByText('Over 10,000').first().waitFor();
+  check('admin saves an approval rule with the buyer in the chain', true);
+
+  // a rule with no approver is refused in the form
+  await a.getByRole('button', { name: 'Add rule' }).click();
+  await a.getByLabel('Rule name').fill('Broken');
+  await a.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await a.getByText('Add at least one approver.').waitFor();
+  check('a rule without approvers is refused in the form', true);
+  await a.keyboard.press('Escape');
+
+  // below the threshold: nothing to approve
+  await a.getByRole('button', { name: 'New purchase request' }).click();
+  await a.getByLabel('Amount (BDT)').fill('5000');
+  await a.getByRole('dialog').getByRole('button', { name: 'Send' }).click();
+  await a.getByText('No approval is needed for this amount.').waitFor();
+  check('an amount below the threshold needs no approval', true);
+
+  // above the threshold: a request waits for the buyer
+  await a.getByRole('button', { name: 'New purchase request' }).click();
+  await a.getByLabel('Amount (BDT)').fill('25000');
+  await a.getByRole('dialog').getByRole('button', { name: 'Send' }).click();
+  await a.getByText('Sent for approval.').waitFor();
+  await a.getByText('Pending', { exact: true }).first().waitFor();
+  check('an amount above the threshold creates a pending request', true);
+  await a.getByRole('button', { name: 'New purchase request' }).click();
+  await a.getByLabel('Amount (BDT)').fill('30000');
+  await a.getByRole('dialog').getByRole('button', { name: 'Send' }).click();
+  await a.getByText('Sent for approval.').waitFor();
+
+  // the requester has no inbox and cannot decide
+  await a.getByText('Pending', { exact: true }).nth(1).waitFor(); // both requests are listed before checking what is absent
+  check('the requester (admin, not in the chain) sees no decision buttons for own requests', (await a.getByRole('button', { name: 'Reject' }).count()) === 0);
+
+  // the buyer decides in a separate browser
+  const ctxAp = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ap = await ctxAp.newPage();
+  ap.on('pageerror', (e) => errors.push('Approver pageerror: ' + e.message));
+  await ap.goto(`${WEB}/auth/login`);
+  await login(ap, USERS.buyer.email, USERS.buyer.password);
+  await ap.waitForURL(`${WEB}/`);
+  await ap.goto(companyUrl);
+  await ap.getByRole('tab', { name: 'Approvals' }).click();
+  await ap.getByText('Waiting for your decision').waitFor();
+  // The heading renders before the list has loaded, so wait for the second request instead of counting at once.
+  await ap.getByRole('button', { name: 'Approve', exact: true }).nth(1).waitFor();
+  check('the approver sees two requests waiting for them', (await ap.getByRole('button', { name: 'Approve', exact: true }).count()) === 2);
+  check('a non-admin approver does not see rule management', (await ap.getByText('Approval rules').count()) === 0);
+
+  // reject needs a comment
+  await ap.getByRole('button', { name: 'Reject', exact: true }).first().click();
+  await ap.getByRole('dialog').getByRole('button', { name: 'Reject', exact: true }).click();
+  await ap.getByText('A comment is required when rejecting.').waitFor();
+  check('rejecting without a comment is refused', true);
+  await ap.getByRole('dialog').getByLabel('Comment').fill('Over budget this month');
+  await ap.getByRole('dialog').getByRole('button', { name: 'Reject', exact: true }).click();
+  await ap.getByText('Request rejected.').waitFor();
+  await ap.getByRole('button', { name: 'Approve', exact: true }).first().click();
+  await ap.getByRole('dialog').getByRole('button', { name: 'Approve', exact: true }).click();
+  await ap.getByText('Request approved.').waitFor();
+  check('the approver rejects one request with a comment and approves the other', true);
+  await ap.getByText('Nothing is waiting for you').waitFor();
+  check('the inbox is empty afterwards', true);
+  await ap.screenshot({ path: `${SHOTS}/06-approvals-approver-1280.png`, fullPage: true });
+  await ctxAp.close();
+
+  // the requester sees the outcome
+  await a.reload();
+  await a.getByRole('tab', { name: 'Approvals' }).click();
+  await a.getByText('Approved', { exact: true }).first().waitFor();
+  await a.getByText('Rejected', { exact: true }).first().waitFor();
+  check('the requester sees one approved and one rejected request (with the comment)', (await a.getByText('Over budget this month').count()) >= 1);
+  await a.screenshot({ path: `${SHOTS}/07-approvals-requester-1280.png`, fullPage: true });
 
   // 12. another user (different tenant) cannot see this company
   const ctxB = await browser.newContext({ viewport: { width: 1280, height: 900 } });

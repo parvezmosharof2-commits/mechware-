@@ -10,6 +10,7 @@ import { StatusBadge } from './CompanyListView';
 import { CostCentresPanel } from './CostCentresPanel';
 import { MembersPanel } from './MembersPanel';
 import { SitesPanel } from './SitesPanel';
+import { ApprovalsPanel } from './ApprovalsPanel';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath, useMoney } from './shared';
 
 function Dashboard({ companyId }: { companyId: string }) {
@@ -97,6 +98,7 @@ function Dashboard({ companyId }: { companyId: string }) {
         <TabsList>
           <TabsTrigger value="sites">{t('tabs.sites')}</TabsTrigger>
           <TabsTrigger value="costCentres">{t('tabs.costCentres')}</TabsTrigger>
+          <TabsTrigger value="approvals">{t('approvals.tab')}</TabsTrigger>
           {isAdmin && <TabsTrigger value="members">{t('tabs.members')}</TabsTrigger>}
         </TabsList>
         <TabsContent value="sites">
@@ -104,6 +106,9 @@ function Dashboard({ companyId }: { companyId: string }) {
         </TabsContent>
         <TabsContent value="costCentres">
           <CostCentresPanel companyId={companyId} canWrite={canWrite} />
+        </TabsContent>
+        <TabsContent value="approvals">
+          <ApprovalsPanel companyId={companyId} roles={roles} suspended={suspended} />
         </TabsContent>
         {isAdmin && (
           <TabsContent value="members">
