@@ -28,6 +28,10 @@ function setMarker(on: boolean) {
     : `${SESSION_MARKER_COOKIE}=; Path=/; SameSite=Lax; Max-Age=0${secure}`;
 }
 
+function hasMarker(): boolean {
+  return document.cookie.split('; ').some((c) => c.startsWith(`${SESSION_MARKER_COOKIE}=`));
+}
+
 const AuthContext = React.createContext<AuthContextValue>({
   status: 'anonymous',
   user: null,
@@ -43,6 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
+        // No marker and no token means this browser has no session: skip the refresh call (it would only 401).
+        if (!defaultTokenVault.getToken() && !hasMarker()) throw new Error('no session');
         if (!defaultTokenVault.getToken() && !(await api.restoreSession())) throw new Error('no session');
         const me = await api.getMe();
         if (cancelled) return;

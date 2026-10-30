@@ -576,3 +576,42 @@
 - **Response**: `201 Created` `{ "disputeTicketNumber": "DSP-261029-X7K", "status": "under_investigation" }`
 
 ---
+
+### 2.16 B2B Company Accounts (`/companies`, `/admin/companies`)
+
+Implemented (brief v2 §3.1.3). Responses are wrapped as `{ "data": ... }`. Money is `{ "minorUnits": 12500000, "currency": "BDT" }` (1 BDT = 100 minor units).
+Access inside a company is decided from the caller's `company_members` row in the database, never from a token claim.
+**A company the caller does not belong to answers `404` (existence is not revealed); a member without the needed role answers `403`.**
+`CompanyRoles` is a bit-flag integer: `Requester=1, Buyer=2, Approver=4, Admin=8` (a member may hold several).
+
+#### Company members (`Bearer`)
+| Method & path | Role needed | Notes |
+|---|---|---|
+| `POST /companies` | any signed-in user | Body `{ legalName, tradeLicenceNo, bin (13 digits), tin? (12 digits), industry? }`. Caller becomes first Company Admin; company starts `pending`. `409 COMPANY_BIN_EXISTS` on duplicate BIN. |
+| `GET /companies` | – | Companies the caller belongs to, each with the caller's `roles`. |
+| `GET /companies/{companyId}` | any member | Profile, status, credit terms / limit / used / available. |
+| `GET /companies/{companyId}/sites` | any member | |
+| `POST /companies/{companyId}/sites` | Admin | First site is always the default delivery site. |
+| `PUT /companies/{companyId}/sites/{siteId}` | Admin | `isDefaultDelivery=true` moves the default. |
+| `DELETE /companies/{companyId}/sites/{siteId}` | Admin | `409 DEFAULT_SITE_REQUIRED` while others exist. |
+| `GET/POST /companies/{companyId}/cost-centres` | member / Admin | `{ code, name, monthlyBudgetMinor? }`; code upper-cased, unique per company (`409 COST_CENTRE_CODE_EXISTS`). |
+| `PUT/DELETE /companies/{companyId}/cost-centres/{id}` | Admin | Delete also strips the id from members. |
+| `GET /companies/{companyId}/members` | Admin | |
+| `POST /companies/{companyId}/members` | Admin | `{ userId, roles, spendLimitMinor?, costCentreIds? }`. `409 MEMBER_EXISTS`. Cost centres must belong to the same company (`400`). |
+| `PUT /companies/{companyId}/members/{memberId}` | Admin | `{ roles, spendLimitMinor?, costCentreIds?, isActive }`. |
+| `DELETE /companies/{companyId}/members/{memberId}` | Admin | `409 LAST_ADMIN` for the last active admin (also on demotion / deactivation). |
+
+Writes on a suspended company answer `409 COMPANY_SUSPENDED`.
+
+#### MECHWARE staff (`Bearer`, permission-based)
+| Method & path | Permission | Notes |
+|---|---|---|
+| `GET /admin/companies?status=&page=&pageSize=` | `companies.view` | Paged `{ items, page, pageSize, totalCount }`; `pageSize` capped at 100. |
+| `GET /admin/companies/{companyId}` | `companies.view` | |
+| `POST /admin/companies/{companyId}/activate` | `companies.manage` | |
+| `POST /admin/companies/{companyId}/suspend` | `companies.manage` | |
+| `PUT /admin/companies/{companyId}/credit` | `companies.credit` (finance) | `{ terms: 0 \| 15 \| 30, limitMinorUnits }`. Limit cannot be below credit already used (`409 CREDIT_LIMIT_BELOW_USED`); `terms=0` requires limit 0. |
+
+Credit consumption (`used + total <= limit`, active company, net terms) is enforced in the `Company` aggregate and called by checkout (Phase 8); there is no public endpoint to change `creditUsed`.
+
+---
