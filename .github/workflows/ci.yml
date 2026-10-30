@@ -97,3 +97,110 @@ jobs:
       - name: Build Frontend Apps
         working-directory: frontend
         run: pnpm build
+
+  e2e:
+    name: Browser E2E (API + PostgreSQL + web + console)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shopverse
+          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      PGPASSWORD: shopverse_secret
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:5000
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Create database and apply migrations
+        run: |
+          psql -h localhost -U shopverse -d postgres -c "CREATE DATABASE shopverse"
+          dotnet tool install --global dotnet-ef --version 10.*
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          SHOPVERSE_DESIGN_DB="Host=localhost;Port=5432;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
+            dotnet ef database update \
+              --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
+
+      - name: Start the API
+        run: |
+          dotnet publish backend/src/ShopVerse.Api -c Release -o "$RUNNER_TEMP/api"
+          cd "$RUNNER_TEMP/api"
+          # Development turns on the seeded staff / buyer accounts and the published dev TOTP secret.
+          ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5000 \
+            nohup dotnet ShopVerse.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:5000/health/live > /dev/null && exit 0
+            sleep 2
+          done
+          echo "API did not become healthy"; cat "$RUNNER_TEMP/api.log"; exit 1
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build web and console
+        working-directory: frontend
+        run: pnpm --filter @mechware/web build && pnpm --filter @mechware/console build
+
+      - name: Start web and console
+        working-directory: frontend
+        run: |
+          nohup pnpm --filter @mechware/web start > "$RUNNER_TEMP/web.log" 2>&1 &
+          nohup pnpm --filter @mechware/console start > "$RUNNER_TEMP/console.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs -o /dev/null http://localhost:3000/en/auth/login && curl -fs -o /dev/null http://localhost:3001/login && exit 0
+            sleep 2
+          done
+          echo "Web or console did not start"; tail -n 40 "$RUNNER_TEMP/web.log" "$RUNNER_TEMP/console.log"; exit 1
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: pnpm --filter @mechware/e2e exec playwright install --with-deps chromium
+
+      - name: Run browser E2E
+        working-directory: frontend/packages/e2e
+        env:
+          E2E_SHOTS_DIR: ${{ runner.temp }}/e2e-shots
+        run: pnpm test
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/e2e-shots
+            ${{ runner.temp }}/api.log
+            ${{ runner.temp }}/web.log
+            ${{ runner.temp }}/console.log
