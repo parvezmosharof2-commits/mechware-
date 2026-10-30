@@ -615,3 +615,31 @@ Writes on a suspended company answer `409 COMPANY_SUSPENDED`.
 Credit consumption (`used + total <= limit`, active company, net terms) is enforced in the `Company` aggregate and called by checkout (Phase 8); there is no public endpoint to change `creditUsed`.
 
 ---
+
+### 2.17 Approvals (`/companies/{companyId}/approvals`)
+
+Implemented (brief v2 §8.3). `Bearer`; same tenancy rule as §2.16 (a company the caller does not belong to answers `404`, a member without the needed role `403`). Amounts are minor units of the company currency.
+`subjectType` + `subjectId` point at the thing being approved (an order, once checkout exists); nothing in this module creates or changes orders yet.
+
+#### Rules (Company Admin)
+| Method & path | Notes |
+|---|---|
+| `GET /approvals/rules` | |
+| `POST /approvals/rules` | `{ name, minAmountMinor, costCentreId?, categoryIds?, approverUserIds (1-5, ordered, distinct), isActive }`. Every approver must be an active member with the Approver or Admin role (`400`); cost centre must belong to the company (`400`). |
+| `PUT /approvals/rules/{ruleId}` / `DELETE` | Open requests keep their own snapshot of the rule name and chain. |
+
+**Which rule applies:** among active rules that match (`amount >= minAmountMinor`, cost centre equal or unset, category overlap or unset) the one with the highest threshold wins, then the one with more conditions, then the oldest. No match means no approval is needed.
+
+#### Requests
+| Method & path | Who | Notes |
+|---|---|---|
+| `POST /approvals/requests` | any member | `{ subjectType, subjectId, amountMinor, costCentreId?, categoryIds? }`. `201` with `{ approvalRequired: true, request }`, or `200` `{ approvalRequired: false }` when no rule matches (nothing stored). `409 APPROVAL_ALREADY_PENDING` for an item that already has an open request; `409 NO_ELIGIBLE_APPROVER` when nobody in the matching rule can decide. The requester is skipped in the chain; approvers who left the company are skipped. |
+| `GET /approvals/requests/mine` | any member | Requests the caller submitted. |
+| `GET /approvals/requests/inbox` | Approver / Admin | Requests waiting for the caller's decision now (their step is the current one). |
+| `GET /approvals/requests/{id}` | requester, chain members, company admins | Others get `404`. |
+| `POST /approvals/requests/{id}/decision` | Approver / Admin in the chain | `{ approve, comment? }`. Rejecting needs a comment (`400`). Steps are decided in order (`403 NOT_CURRENT_APPROVER`); the requester can never decide (`403 SELF_APPROVAL`); `409 APPROVAL_NOT_PENDING` once finished. A concurrent decision on the same request answers `409 CONCURRENT_MODIFICATION`. |
+| `POST /approvals/requests/{id}/cancel` | requester | Only while pending. |
+
+Statuses: `pending`, `approved` (every step approved), `rejected` (any rejection), `cancelled`. Not yet: `Idempotency-Key` on these endpoints, outbox events (`ApprovalRequested` / `Granted`), notifications, and the 24 h soft stock hold.
+
+---

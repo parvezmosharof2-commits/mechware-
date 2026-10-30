@@ -291,23 +291,13 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
     /// Resolves the actor's active membership in the company. Not a member → 404 (existence is not revealed);
     /// member without the needed role → 403.
     /// </summary>
-    private async Task<CompanyMember> RequireMemberAsync(Guid actorUserId, Guid companyId, CompanyRoles? role, CancellationToken ct)
-    {
-        var member = await db.CompanyMembers.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.CompanyId == companyId && m.UserId == actorUserId && m.IsActive, ct)
-            ?? throw new KeyNotFoundException("Company not found.");
-        if (role is { } needed && !member.Has(needed))
-            throw new ForbiddenException("COMPANY_ROLE_REQUIRED", "Your company role does not allow this action.");
-        return member;
-    }
+    private Task<CompanyMember> RequireMemberAsync(Guid actorUserId, Guid companyId, CompanyRoles? role, CancellationToken ct) =>
+        CompanyAccess.RequireMemberAsync(db, actorUserId, companyId, role, ct);
 
     private async Task RequireAdminWritableAsync(Guid actorUserId, Guid companyId, CancellationToken ct)
     {
         await RequireMemberAsync(actorUserId, companyId, CompanyRoles.Admin, ct);
-        var status = await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => (CompanyStatus?)c.Status).FirstOrDefaultAsync(ct)
-                     ?? throw new KeyNotFoundException("Company not found.");
-        if (status == CompanyStatus.Suspended)
-            throw new ConflictException("COMPANY_SUSPENDED", "The company account is suspended.");
+        await CompanyAccess.RequireNotSuspendedAsync(db, companyId, ct);
     }
 
     private async Task<Company> LoadCompanyAsync(Guid companyId, CancellationToken ct, bool track = false)

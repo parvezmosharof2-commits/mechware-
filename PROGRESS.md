@@ -330,6 +330,13 @@
 - [ ] Backend, not yet: approval rules (next module), credit use by checkout, global EF query filter (isolation is explicit in the service for now).
 - Known gap: identity is still the in-memory store (Phase 3), so `company_members.user_id` has no FK and members are added by user id, not e-mail. Revisit when identity moves to PostgreSQL.
 
+### B2B track, slice 4: Approvals, backend (brief v2 §8.3), same branch
+- [x] `ApprovalRule` (amount threshold, optional cost centre and categories, ordered chain of 1-5 approvers) and `ApprovalRequest` with ordered `ApprovalStep`s. Rule choice is deterministic (highest threshold, then more conditions, then oldest). The requester is never an approver on their own request; rejecting needs a comment; finished requests never change; approvers who left the company are skipped.
+- [x] `IApprovalService` / `ApprovalService` and `/api/v1/companies/{id}/approvals/**` (rules for admins; submit, mine, inbox, decide, cancel). Tenancy as before (404 / 403) through the new shared `CompanyAccess`, which `CompanyService` now uses too.
+- [x] Migration `ApprovalRulesAndRequests` (3 tables). `xmin` token on the request plus a unique index on one open request per item. Mutation-checked: removing `xmin` makes the concurrent-decision test fail.
+- [x] Tests: 19 unit (incl. 300x40 random state-machine runs) and 13 integration on PostgreSQL (full two-step chain, rejection, self-approval, IDOR over every operation, visibility inside the company, 8 racing submits create one request, 6 racing decisions count once over 8 rounds, suspended company, foreign approvers and cost centres refused).
+- [ ] Not yet: approvals UI (company dashboard and an approver inbox), `Idempotency-Key`, outbox events and notifications, hooking checkout / orders in (Phase 8; until then `subjectType`/`subjectId` is generic), spend limits per member and budgets per cost centre are stored but not yet checked.
+
 ### Hardening track (started early, 2026-10-30) — see `docs/HARDCORE_TEST_REPORT.md`
 - [x] Brief v2 (B2B procurement, direct seller first) and USD 100K review plan.
 - [x] Architecture tests (layering, controller dependencies, exception hierarchy).

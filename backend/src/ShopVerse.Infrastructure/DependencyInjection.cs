@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShopVerse.Application.Catalog;
+using ShopVerse.Application.Approvals;
 using ShopVerse.Application.Common;
 using ShopVerse.Application.Companies;
 using ShopVerse.Application.Inventory;
+using ShopVerse.Infrastructure.Approvals;
 using ShopVerse.Infrastructure.Caching;
 using ShopVerse.Infrastructure.Catalog;
 using ShopVerse.Infrastructure.Companies;
@@ -25,6 +27,7 @@ public static class DependencyInjection
         services.TryAddScoped<IInventoryService, InventoryService>();
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
         services.TryAddScoped<ICompanyService, CompanyService>();
+        services.TryAddScoped<IApprovalService, ApprovalService>();
 
         services.AddScoped<IOutboxPublisher, SearchSyncQueuePublisher>();
         services.AddScoped<IOutboxPublisher, StorefrontCacheInvalidationPublisher>();

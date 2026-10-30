@@ -23,6 +23,204 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.PrimitiveCollection<List<Guid>>("CategoryIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("category_ids");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<Guid?>("CostCentreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_centre_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("RequesterUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requester_user_id");
+
+                    b.Property<Guid>("RuleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rule_id");
+
+                    b.Property<string>("RuleName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("rule_name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("SubjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("subject_id");
+
+                    b.Property<string>("SubjectType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("subject_type");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId", "RequesterUserId")
+                        .HasDatabaseName("ix_approval_requests_requester");
+
+                    b.HasIndex("CompanyId", "Status")
+                        .HasDatabaseName("ix_approval_requests_company_status");
+
+                    b.HasIndex("CompanyId", "SubjectType", "SubjectId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_approval_requests_pending_subject")
+                        .HasFilter("status = 'Pending'");
+
+                    b.ToTable("approval_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_approval_requests_amount", "amount > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<List<Guid>>("ApproverUserIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("approver_user_ids");
+
+                    b.PrimitiveCollection<List<Guid>>("CategoryIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("category_ids");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<Guid?>("CostCentreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_centre_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<long>("MinAmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("min_amount");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId")
+                        .HasDatabaseName("ix_approval_rules_company");
+
+                    b.ToTable("approval_rules", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_approval_rules_chain", "cardinality(approver_user_ids) BETWEEN 1 AND 5");
+
+                            t.HasCheckConstraint("ck_approval_rules_min_amount", "min_amount >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ApproverUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approver_user_id");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("decision");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApproverUserId")
+                        .HasDatabaseName("ix_approval_steps_approver");
+
+                    b.HasIndex("RequestId", "Position")
+                        .IsUnique()
+                        .HasDatabaseName("ux_approval_steps_position");
+
+                    b.ToTable("approval_steps", (string)null);
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Catalog.AttributeDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2027,6 +2225,33 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("outbox_messages", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalRequest", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalRule", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalStep", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Approvals.ApprovalRequest", null)
+                        .WithMany("Steps")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Catalog.AttributeValue", b =>
                 {
                     b.HasOne("ShopVerse.Domain.Catalog.AttributeDefinition", null)
@@ -2246,6 +2471,11 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Approvals.ApprovalRequest", b =>
+                {
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.AttributeDefinition", b =>
