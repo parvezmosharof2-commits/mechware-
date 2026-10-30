@@ -1,0 +1,13 @@
+{
+  "name": "@mechware/e2e",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser end-to-end checks against a running API (PostgreSQL) plus the web and console apps.",
+  "scripts": {
+    "test": "node tests/web.mjs && node tests/console.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

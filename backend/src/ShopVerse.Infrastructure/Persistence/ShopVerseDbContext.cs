@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ShopVerse.Domain.Approvals;
 using ShopVerse.Domain.Catalog;
+using ShopVerse.Domain.Companies;
 using ShopVerse.Domain.Identity;
 using ShopVerse.Domain.Inventory;
 using ShopVerse.Domain.Reviews;
@@ -49,6 +51,17 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<Answer> Answers => Set<Answer>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    // B2B company accounts
+    public DbSet<Company> Companies => Set<Company>();
+    public DbSet<CompanySite> CompanySites => Set<CompanySite>();
+    public DbSet<CostCentre> CostCentres => Set<CostCentre>();
+    public DbSet<CompanyMember> CompanyMembers => Set<CompanyMember>();
+
+    // Approvals
+    public DbSet<ApprovalRule> ApprovalRules => Set<ApprovalRule>();
+    public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

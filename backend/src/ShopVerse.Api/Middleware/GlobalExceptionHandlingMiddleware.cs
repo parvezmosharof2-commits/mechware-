@@ -56,6 +56,12 @@ public sealed class GlobalExceptionHandlingMiddleware
                 "The record was modified by someone else. Reload and retry.",
                 Array.Empty<object>()
             ),
+            ForbiddenException forbiddenEx => (
+                HttpStatusCode.Forbidden,
+                forbiddenEx.Code,
+                forbiddenEx.Message,
+                Array.Empty<object>()
+            ),
             ConflictException conflictEx => (
                 HttpStatusCode.Conflict,
                 conflictEx.Code,

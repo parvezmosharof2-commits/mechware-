@@ -6,7 +6,8 @@
   "types": "./src/index.ts",
   "scripts": {
     "build": "tsc",
-    "generate:types": "openapi-typescript http://localhost:5000/swagger/v1/swagger.json -o src/schema.d.ts"
+    "generate:types": "openapi-typescript http://localhost:5000/swagger/v1/swagger.json -o src/schema.d.ts",
+    "test": "node --test \"tests/*.test.ts\""
   },
   "devDependencies": {
     "@mechware/config": "workspace:*",

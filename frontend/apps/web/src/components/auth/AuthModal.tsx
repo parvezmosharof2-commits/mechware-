@@ -1,7 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { defaultTokenVault } from '@mechware/api-client';
+import { useRouter } from 'next/navigation';
+import type { AuthTokenEnvelope } from '@mechware/api-client';
+import { api, problemFieldErrors, problemMessage } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
 
 export type AuthViewMode = 'signin' | 'signup' | 'otp' | 'forgot' | 'reset';
 
@@ -123,52 +126,90 @@ export function AuthFlowSurface({
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
 
-  const handleSignInSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
+  const router = useRouter();
+  const auth = useAuth();
+  const [submitting, setSubmitting] = React.useState(false);
+  const [otpTarget, setOtpTarget] = React.useState<{ recipient: string; type: 'PhoneVerify' | 'EmailVerify' }>({
+    recipient: '',
+    type: 'PhoneVerify'
+  });
 
-    if (!identifier.trim() || password.length < 8) {
-      setErrorMessage(
-        locale === 'bn'
-          ? 'সঠিক ইমেইল/ফোন এবং ন্যূনতম ৮ অক্ষরের পাসওয়ার্ড প্রয়োজন।'
-          : 'Valid identifier and minimum 8-character password are required.'
-      );
-      return;
-    }
+  const t = (en: string, bn: string) => (locale === 'bn' ? bn : en);
+  const homePath = locale === 'bn' ? '/bn' : '/';
 
-    if (identifier.toLowerCase().includes('admin') && !requiresTwoFactor) {
-      setRequiresTwoFactor(true);
-      setStatusMessage(
-        locale === 'bn'
-          ? 'অ্যাডমিন রোলের জন্য ২-ফ্যাক্টর TOTP কোড আবশ্যক।'
-          : 'Mandatory 2FA Role detected: Please enter your 6-digit TOTP or recovery code.'
-      );
-      return;
-    }
-
-    const issuedJwt = `mw_mem_jwt_${Date.now().toString(36)}`;
-    defaultTokenVault.setToken(issuedJwt, 900);
-
-    setStatusMessage(
-      locale === 'bn'
-        ? `সেশন সক্রিয় হয়েছে। রিটার্ন পাথ: ${returnTo}`
-        : `Authenticated in memory (15m TTL). Redirecting to ${returnTo}`
+  /** Shows the API's own message (already safe and localised-neutral) or a generic fallback. */
+  const showApiError = (err: unknown) => {
+    const fields = Object.values(problemFieldErrors(err));
+    const base = problemMessage(
+      err,
+      t('Something went wrong. Please try again.', 'কিছু ভুল হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।')
     );
+    setErrorMessage(fields.length > 0 ? `${base} ${fields.join(' ')}` : base);
+  };
 
+  /** Finishes a successful authentication: shares the session with the app, then leaves the auth screen. */
+  const completeAuthentication = (envelope: AuthTokenEnvelope) => {
+    const user = envelope.user;
+    if (user) auth.establishSession(user);
+    const target = returnTo === '/' ? homePath : returnTo;
     if (onAuthenticated) {
       onAuthenticated({
-        accessToken: issuedJwt,
-        email: identifier.trim(),
-        fullName: fullName || 'Gazipur Textile Mills Procurement',
-        roles: identifier.toLowerCase().includes('seller') ? ['seller'] : ['buyer'],
-        returnTo
+        accessToken: envelope.accessToken,
+        email: user?.email ?? '',
+        fullName: user?.fullName ?? '',
+        roles: user?.roles ?? [],
+        returnTo: target
       });
+    } else {
+      router.replace(target);
     }
   };
 
-  const handleSignUpSubmit = (e: React.FormEvent) => {
+  const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setStatusMessage(null);
+
+    if (!identifier.trim() || password.length < 8) {
+      setErrorMessage(
+        t(
+          'Valid identifier and minimum 8-character password are required.',
+          'সঠিক ইমেইল/ফোন এবং ন্যূনতম ৮ অক্ষরের পাসওয়ার্ড প্রয়োজন।'
+        )
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await api.login({
+        identifier: identifier.trim(),
+        password,
+        totpCode: requiresTwoFactor ? totpCode.trim() : undefined
+      });
+      if (res.data.requiresTwoFactor) {
+        setRequiresTwoFactor(true);
+        setStatusMessage(
+          t(
+            'Two-factor authentication is required for this role. Enter your 6-digit TOTP or recovery code.',
+            'এই রোলের জন্য ২-ফ্যাক্টর অথেনটিকেশন আবশ্যক। ৬-ডিজিট TOTP বা রিকভারি কোড দিন।'
+          )
+        );
+        return;
+      }
+      setPassword('');
+      completeAuthentication(res.data);
+    } catch (err) {
+      showApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setStatusMessage(null);
 
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
@@ -177,72 +218,108 @@ export function AuthFlowSurface({
 
     if (password.length < 8 || !hasUpper || !hasLower || !hasDigit || !hasSpecial) {
       setErrorMessage(
-        locale === 'bn'
-          ? 'পাসওয়ার্ডে ন্যূনতম ৮ অক্ষর, বড় হাতের অক্ষর, ছোট হাতের অক্ষর, সংখ্যা এবং বিশেষ চিহ্ন থাকতে হবে।'
-          : 'Password policy: min 8 chars with uppercase, lowercase, digit, and special character.'
+        t(
+          'Password policy: min 8 chars with uppercase, lowercase, digit, and special character.',
+          'পাসওয়ার্ডে ন্যূনতম ৮ অক্ষর, বড় হাতের অক্ষর, ছোট হাতের অক্ষর, সংখ্যা এবং বিশেষ চিহ্ন থাকতে হবে।'
+        )
       );
       return;
     }
 
-    const nextRef = `ref_${Math.random().toString(36).slice(2, 10)}`;
-    setReferenceId(nextRef);
-    setMode('otp');
-    setStatusMessage(
-      locale === 'bn'
-        ? `${phone || email}-এ ৬-ডিজিট ওটিপি পাঠানো হয়েছে (Ref: ${nextRef})`
-        : `Dispatched 6-digit OTP to ${phone || email} (Bound Ref: ${nextRef})`
-    );
+    setSubmitting(true);
+    try {
+      const res = await api.register({
+        email: email.trim(),
+        phone: phone.trim() || undefined,
+        password,
+        fullName: fullName.trim(),
+        locale
+      });
+      const viaPhone = res.data.verificationChannel === 'phone_otp';
+      setOtpTarget({ recipient: viaPhone ? phone.trim() : email.trim(), type: viaPhone ? 'PhoneVerify' : 'EmailVerify' });
+      setReferenceId(res.data.referenceId);
+      setOtpCode('');
+      setMode('otp');
+      setStatusMessage(
+        t(
+          `A 6-digit code was sent to ${viaPhone ? phone.trim() : email.trim()}.`,
+          `${viaPhone ? phone.trim() : email.trim()}-এ ৬-ডিজিট কোড পাঠানো হয়েছে।`
+        )
+      );
+    } catch (err) {
+      showApiError(err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleVerifyOtpSubmit = (e: React.FormEvent) => {
+  const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setStatusMessage(null);
 
     if (!/^\d{6}$/.test(otpCode.trim())) {
-      setErrorMessage(
-        locale === 'bn'
-          ? '৬-ডিজিট সংখ্যার ওটিপি কোড প্রদান করুন।'
-          : 'Please enter a valid 6-digit numeric OTP code.'
-      );
+      setErrorMessage(t('Please enter a valid 6-digit numeric OTP code.', '৬-ডিজিট সংখ্যার ওটিপি কোড প্রদান করুন।'));
       return;
     }
 
-    const issuedJwt = `mw_mem_jwt_otp_${Date.now().toString(36)}`;
-    defaultTokenVault.setToken(issuedJwt, 900);
-    setStatusMessage(
-      locale === 'bn'
-        ? 'ওটিপি যাচাই সফল হয়েছে! অ্যাকাউন্ট সক্রিয়।'
-        : 'Phone/Email OTP verified! Session activated in memory.'
-    );
-
-    if (onAuthenticated) {
-      onAuthenticated({
-        accessToken: issuedJwt,
-        email: email || identifier,
-        fullName: fullName || 'Verified Industrial Buyer',
-        roles: ['buyer'],
-        returnTo
+    setSubmitting(true);
+    try {
+      const res = await api.verifyOtp({
+        recipient: otpTarget.recipient,
+        code: otpCode.trim(),
+        type: otpTarget.type,
+        referenceId
       });
+      setPassword('');
+      completeAuthentication(res.data);
+    } catch (err) {
+      showApiError(err);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleGoogleOAuth = () => {
-    const issuedJwt = `mw_mem_jwt_google_${Date.now().toString(36)}`;
-    defaultTokenVault.setToken(issuedJwt, 900);
-    setStatusMessage(
-      locale === 'bn'
-        ? 'Google OIDC টোকেন যাচাই সম্পন্ন হয়েছে।'
-        : 'Google OIDC ID token validated. In-memory session established.'
-    );
-    if (onAuthenticated) {
-      onAuthenticated({
-        accessToken: issuedJwt,
-        email: 'oauth.engineer@mechware.com.bd',
-        fullName: 'Google Verified Engineer',
-        roles: ['buyer'],
-        returnTo
-      });
+  const handleRecoverySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setStatusMessage(null);
+    setSubmitting(true);
+    try {
+      if (mode === 'forgot') {
+        const res = await api.forgotPassword(identifier.trim());
+        setReferenceId(res.data.referenceId);
+        setOtpCode('');
+        setPassword('');
+        setMode('reset');
+        setStatusMessage(
+          t('If the account exists, a reset code has been sent.', 'অ্যাকাউন্ট থাকলে একটি রিসেট কোড পাঠানো হয়েছে।')
+        );
+      } else {
+        await api.resetPassword(identifier.trim(), referenceId, otpCode.trim(), password);
+        setPassword('');
+        setOtpCode('');
+        setMode('signin');
+        setStatusMessage(
+          t(
+            'Password updated. All previous sessions were signed out; sign in with the new password.',
+            'পাসওয়ার্ড পরিবর্তন হয়েছে। আগের সব সেশন বাতিল; নতুন পাসওয়ার্ডে সাইন ইন করুন।'
+          )
+        );
+      }
+    } catch (err) {
+      showApiError(err);
+    } finally {
+      setSubmitting(false);
     }
+  };
+
+  /** Google sign-in needs a configured OAuth client. Until then it is disabled instead of faking a session. */
+  const googleConfigured = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
+  const handleGoogleOAuth = () => {
+    setErrorMessage(
+      t('Google sign-in is not configured for this environment.', 'এই পরিবেশে Google সাইন-ইন কনফিগার করা নেই।')
+    );
   };
 
   // A full-page auth screen owns the page's level-one heading; inside a dialog it is a sub-heading.
@@ -355,7 +432,8 @@ export function AuthFlowSurface({
 
           <button
             type="submit"
-            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent transition-colors hover:bg-brand-primary-hover"
+            disabled={submitting}
+            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent transition-colors hover:bg-brand-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {copy.signInButton}
           </button>
@@ -363,7 +441,9 @@ export function AuthFlowSurface({
           <button
             type="button"
             onClick={handleGoogleOAuth}
-            className="w-full rounded-md border border-border-strong bg-bg-elevated px-4 py-2 text-xs font-semibold text-fg-primary transition-colors hover:bg-bg-canvas"
+            disabled={!googleConfigured}
+            title={googleConfigured ? undefined : t('Not configured', 'কনফিগার করা নেই')}
+            className="w-full rounded-md border border-border-strong bg-bg-elevated px-4 py-2 text-xs font-semibold text-fg-primary transition-colors hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copy.googleSignInButton}
           </button>
@@ -437,7 +517,8 @@ export function AuthFlowSurface({
 
           <button
             type="submit"
-            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent transition-colors hover:bg-brand-primary-hover"
+            disabled={submitting}
+            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent transition-colors hover:bg-brand-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
             {copy.signUpButton}
           </button>
@@ -475,7 +556,8 @@ export function AuthFlowSurface({
           </div>
           <button
             type="submit"
-            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent"
+            disabled={submitting}
+            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {copy.verifyOtpButton}
           </button>
@@ -484,24 +566,7 @@ export function AuthFlowSurface({
 
       {(mode === 'forgot' || mode === 'reset') && (
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (mode === 'forgot') {
-              setMode('reset');
-              setStatusMessage(
-                locale === 'bn'
-                  ? 'পাসওয়ার্ড রিসেট ওটিপি পাঠানো হয়েছে।'
-                  : 'Password reset OTP dispatched with bound reference ID.'
-              );
-            } else {
-              setMode('signin');
-              setStatusMessage(
-                locale === 'bn'
-                  ? 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে এবং পূর্বের সকল সেশন বাতিল করা হয়েছে।'
-                  : 'Password updated and all prior refresh token families revoked.'
-              );
-            }
-          }}
+          onSubmit={handleRecoverySubmit}
           className="mt-5 space-y-4"
         >
           <div>
@@ -547,7 +612,8 @@ export function AuthFlowSurface({
           )}
           <button
             type="submit"
-            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent"
+            disabled={submitting}
+            className="w-full rounded-md bg-brand-primary px-4 py-2.5 text-sm font-semibold text-fg-on-accent disabled:cursor-not-allowed disabled:opacity-60"
           >
             {mode === 'forgot' ? 'Send Recovery OTP' : 'Verify OTP & Reset Password'}
           </button>
