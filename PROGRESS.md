@@ -420,3 +420,13 @@ validity windows and global / per-user limits (the counters are supplied by the 
 discount. 16 unit tests, including 500 random baskets that must balance to the poisha, input-order independence, and
 mutation checks (half-up rounding, no largest-remainder step, ignored cap and ignored exclusivity each fail a test).
 Not built yet: cart (Redis), order and atomic checkout, payment providers and webhooks, the frontend.
+
+## Phase 8 slice a: cart rules (pure domain)
+
+`ShopVerse.Domain.Cart.CartEngine`: add / set / remove with stock, minimum order quantity, pack size and line limits;
+merge of a guest cart into the signed-in buyer's cart on login (quantities add up, capped, the buyer's order kept);
+re-validation against the catalog that returns a notice for every drift (price changed, stock reduced, sold out,
+withdrawn, below the minimum order, adjusted to the pack size) and is idempotent. 12 unit tests; five mutations
+(replace instead of add, no stock check, uncapped merge, stale price, no pack snapping) each make a test fail.
+The catalog has no minimum-order or pack-size columns yet, so the engine takes them as inputs that default to 1.
+Not built yet: the Redis cart store with its signed guest token, the HTTP endpoints, the frontend.
