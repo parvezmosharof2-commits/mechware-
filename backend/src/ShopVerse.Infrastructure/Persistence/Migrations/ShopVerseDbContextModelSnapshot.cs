@@ -1905,6 +1905,357 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Orders.IdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_hash");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_idempotency_user_key");
+
+                    b.ToTable("idempotency_keys", (string)null);
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.Order", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<long>("DiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discount_total");
+
+                    b.Property<long>("GrandTotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("grand_total");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("order_number");
+
+                    b.Property<DateTime>("PlacedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("placed_at");
+
+                    b.Property<string>("ShipToJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ship_to");
+
+                    b.Property<long>("ShippingMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("shipping_total");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<long>("SubtotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("subtotal");
+
+                    b.Property<long>("TaxMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tax_total");
+
+                    b.Property<string>("TaxMode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("tax_mode");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_orders_number");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_orders_status");
+
+                    b.HasIndex("UserId", "PlacedAtUtc")
+                        .HasDatabaseName("ix_orders_user_placed");
+
+                    b.ToTable("orders", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_orders_discount", "discount_total <= subtotal");
+
+                            t.HasCheckConstraint("ck_orders_money", "subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0 AND shipping_total >= 0 AND grand_total >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.OrderEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTime>("AtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FromStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("from_status");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("to_status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId", "AtUtc")
+                        .HasDatabaseName("ix_order_events_order_at");
+
+                    b.ToTable("order_events", (string)null);
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.OrderItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discount");
+
+                    b.Property<long>("GrossMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("gross");
+
+                    b.Property<long>("NetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("net");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sku");
+
+                    b.Property<Guid>("SubOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sub_order_id");
+
+                    b.Property<long>("TaxMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tax");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title");
+
+                    b.Property<long>("TotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total");
+
+                    b.Property<long>("UnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_price");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.Property<decimal>("VatRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("vat_rate");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubOrderId");
+
+                    b.HasIndex("VariantId")
+                        .HasDatabaseName("ix_order_items_variant");
+
+                    b.ToTable("order_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_order_items_money", "unit_price >= 0 AND gross >= 0 AND discount >= 0 AND discount <= gross AND net >= 0 AND tax >= 0 AND total = net + tax");
+
+                            t.HasCheckConstraint("ck_order_items_qty", "quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.SubOrder", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("CommissionMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("commission");
+
+                    b.Property<decimal>("CommissionRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("commission_rate");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discount_total");
+
+                    b.Property<long>("GoodsNetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("goods_net");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<long>("SellerEarningMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seller_earning");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_id");
+
+                    b.Property<long>("ShippingMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("shipping_total");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("SubOrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sub_order_number");
+
+                    b.Property<long>("TaxMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tax_total");
+
+                    b.Property<long>("TotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("SubOrderNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sub_orders_number");
+
+                    b.HasIndex("SellerId", "Status")
+                        .HasDatabaseName("ix_sub_orders_seller_status");
+
+                    b.ToTable("sub_orders", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sub_orders_commission", "commission_rate BETWEEN 0 AND 1 AND commission >= 0 AND seller_earning >= 0 AND commission + seller_earning = goods_net");
+
+                            t.HasCheckConstraint("ck_sub_orders_money", "goods_net >= 0 AND discount_total >= 0 AND tax_total >= 0 AND shipping_total >= 0 AND total >= 0");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Reviews.Answer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2416,6 +2767,51 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Orders.IdempotencyRecord", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.Order", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.OrderEventRecord", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Orders.Order", null)
+                        .WithMany("Events")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.OrderItem", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Orders.SubOrder", null)
+                        .WithMany("Items")
+                        .HasForeignKey("SubOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.SubOrder", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Orders.Order", null)
+                        .WithMany("SubOrders")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Reviews.Answer", b =>
                 {
                     b.HasOne("ShopVerse.Domain.Reviews.Question", null)
@@ -2503,6 +2899,18 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.Navigation("Addresses");
 
                     b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.Order", b =>
+                {
+                    b.Navigation("Events");
+
+                    b.Navigation("SubOrders");
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Orders.SubOrder", b =>
+                {
+                    b.Navigation("Items");
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Reviews.Question", b =>

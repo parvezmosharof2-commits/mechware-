@@ -472,3 +472,28 @@ discount) each fail a test.
 Not built yet: the order tables and migration, the atomic `PlaceOrder` transaction (re-price from the database, reserve
 stock through `IInventoryService`, insert order + sub-orders + outbox event, idempotency key), the tamper test against
 the HTTP endpoint, payment adapters, the inbox, the frontend.
+
+## Phase 8 slice c (part 3): atomic PlaceOrder, order tables, idempotency
+
+`IOrderService.PlaceAsync` (`ShopVerse.Infrastructure.Orders.OrderService`) turns a request that carries **only variant ids
+and quantities** (no price, tax, discount or total field exists) into an order:
+re-prices every line from the database (`PricingEngine` + `OrderPricing`), checks the products are live, reserves stock
+through `IInventoryService` under the order id, and writes the order, one sub-order per seller, frozen line snapshots,
+its first `order_events` row, the idempotency record and the `OrderPlacedEvent` outbox message. Tables: `orders`,
+`sub_orders`, `order_items`, `order_events`, `idempotency_keys` (migration `OrdersAndSubOrders`), with CHECK constraints
+that make the database itself refuse an order whose money does not add up (`ck_order_items_money`, `ck_sub_orders_commission`).
+
+- Same `Idempotency-Key` and same request: the original order is returned (`Replayed = true`), stock is held once. Same key,
+  different request: `IDEMPOTENCY_KEY_REUSED`. Eight parallel retries of one key give one order: they queue behind a
+  session-level Postgres advisory lock. (Found by a test: without the lock, retries lost the stock race and were told
+  "insufficient stock" instead of getting their own order back.)
+- 20 buyers for 5 units: exactly 5 orders, the rest `INSUFFICIENT_STOCK`, stock never negative.
+- If saving fails after stock was reserved, the hold is released; an order-number clash is retried with a fresh number.
+- 14 integration tests against PostgreSQL. Mutations: no advisory lock, replay ignoring the request hash, no release on a
+  number clash, no release on a generic failure, and duplicate lines not merged each fail a test. One mutation survives on
+  purpose: removing the service's own "product is live" check changes nothing because `InventoryService` already refuses
+  non-live products with the same error; the service check is a second layer, not a missing test.
+
+Open: promotions are not yet fed into the order (the engine exists, no promotion store yet); shipping is 0 until zones are
+built; approval routing (`pending_approval`) and the credit-terms check (`creditUsed + total <= creditLimit`, brief §8.7)
+are not wired; the HTTP endpoint with the tamper test, payment adapters and the inbox, the frontend.
