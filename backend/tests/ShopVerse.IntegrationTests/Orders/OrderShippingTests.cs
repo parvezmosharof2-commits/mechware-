@@ -200,4 +200,33 @@ public class OrderShippingTests(PostgresDatabaseFixture fixture) : IClassFixture
         var order = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == placed.OrderId);
         (order.ShippingMinor, order.DiscountMinor).Should().Be((7_777, 0));
     }
+
+    [PostgresFact]
+    public async Task StartingFees_FillAnEmptyTable_AndNeverOverwriteWhatTheBusinessSet()
+    {
+        await using (var db = fixture.CreateContext()) await new ShippingRateSeeder(db).SeedAsync();
+        await using (var db = fixture.CreateContext())
+        {
+            var rows = await db.ShippingRates.AsNoTracking().ToListAsync();
+            rows.ToDictionary(r => r.Zone, r => r.BaseMinor).Should().Equal(new Dictionary<ShippingZone, long>
+            {
+                [ShippingZone.InsideDhaka] = 20_000,
+                [ShippingZone.DhakaSuburbs] = 50_000,
+                [ShippingZone.OutsideDhaka] = 100_000,
+            });
+            rows.Should().OnlyContain(r => r.PerKgMinor == 0);
+        }
+
+        await using (var db = fixture.CreateContext())
+        {
+            await db.Database.ExecuteSqlRawAsync("UPDATE shipping_rates SET base_amount = 99999");
+            await new ShippingRateSeeder(db).SeedAsync();
+        }
+
+        await using (var db = fixture.CreateContext())
+        {
+            (await db.ShippingRates.AsNoTracking().CountAsync()).Should().Be(3);
+            (await db.ShippingRates.AsNoTracking().AllAsync(r => r.BaseMinor == 99_999)).Should().BeTrue();
+        }
+    }
 }

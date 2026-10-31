@@ -633,11 +633,14 @@ out the zone itself, and writes the delivery snapshot into the order. Nothing th
 A place that cannot be matched is treated as the dearest zone, never the cheapest. The fee is stored on each seller's part of
 the order, and the idempotency hash includes the address.
 
-**No rate numbers have been entered.** The table is empty, and while it is empty the shipping fee is 0 and no address is
-demanded. Once any row exists, an address is required and a zone with no row is refused. The real tariff must be supplied by the
-business; nothing here is invented.
+**Starting fees (given by the owner, flat, per-kg left at 0):** Tk 200 inside Dhaka, Tk 500 around Dhaka, Tk 1,000 outside
+Dhaka (stored as 20,000 / 50,000 / 100,000 poisha). `ShippingRateSeeder` puts them into an EMPTY table at startup when
+`Shipping__SeedStartingRates=true` is set (off by default, so tests and a bare boot are unaffected); it never overwrites rows the
+business has changed. The owner will raise or lower them later; there is no staff screen yet, so today that is a database edit.
+With an empty table (flag off) the fee is 0 and no address is demanded. Once any row exists an address is required and a zone
+with no row is refused.
 
-14 unit tests and 9 integration tests. Mutations that each fail a named test: zone read from client text, unknown place priced
+14 unit tests and 10 integration tests. Mutations that each fail a named test (seeder: overwrite-when-not-empty, wrong fee): zone read from client text, unknown place priced
 cheapest, anyone's address accepted, quote-only parcel given a fee, address not required once a tariff exists, fee not written to
 the seller.
 
