@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ShopVerse.Application.Inventory;
+using ShopVerse.Application.Orders;
 using ShopVerse.Infrastructure.Persistence.Outbox;
 
 namespace ShopVerse.Infrastructure.Workers;
@@ -42,6 +43,53 @@ public sealed class ReservationExpiryWorker : BackgroundService
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Reservation expiry sweep failed");
+            }
+        } while (await WaitAsync(timer, stoppingToken));
+    }
+
+    private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken ct)
+    {
+        try { return await timer.WaitForNextTickAsync(ct); }
+        catch (OperationCanceledException) { return false; }
+    }
+}
+
+/// <summary>Cancels orders still unpaid 30 minutes after they were placed and frees their stock, once a minute (brief §8.6).</summary>
+public sealed class UnpaidOrderExpiryWorker : BackgroundService
+{
+    public static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
+    private const int Batch = 200;
+
+    private readonly IServiceScopeFactory _scopes;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<UnpaidOrderExpiryWorker> _logger;
+
+    public UnpaidOrderExpiryWorker(IServiceScopeFactory scopes, TimeProvider clock, ILogger<UnpaidOrderExpiryWorker> logger)
+    {
+        _scopes = scopes;
+        _clock = clock;
+        _logger = logger;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(Interval);
+        do
+        {
+            try
+            {
+                int cancelled;
+                do
+                {
+                    await using var scope = _scopes.CreateAsyncScope();
+                    var orders = scope.ServiceProvider.GetRequiredService<IOrderService>();
+                    cancelled = await orders.ExpireUnpaidAsync(_clock.GetUtcNow().UtcDateTime, Batch, stoppingToken);
+                    if (cancelled > 0) _logger.LogInformation("Cancelled {Count} unpaid orders after 30 minutes", cancelled);
+                } while (cancelled == Batch && !stoppingToken.IsCancellationRequested);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Unpaid order sweep failed");
             }
         } while (await WaitAsync(timer, stoppingToken));
     }

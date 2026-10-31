@@ -117,6 +117,60 @@ public sealed partial class OrderService(
             throw new ConflictException("COMPANY_NOT_VERIFIED", "The company has not been verified by MECHWARE yet.");
     }
 
+    public static readonly TimeSpan UnpaidOrderLifetime = TimeSpan.FromMinutes(30);
+
+    public async Task<OrderDto> CancelAsync(Guid userId, Guid orderId, string reason, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) throw new ValidationException("reason", "A reason is required to cancel an order.");
+        var now = clock.GetUtcNow().UtcDateTime;
+
+        if (!await CancelOneAsync(orderId, userId, reason.Trim(), now, onlyIfUnpaidSince: null, ct))
+            throw new KeyNotFoundException("Order not found.");
+        return await GetAsync(userId, orderId, ct);
+    }
+
+    public async Task<int> ExpireUnpaidAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default)
+    {
+        var cutoff = nowUtc - UnpaidOrderLifetime;
+        var ids = await db.Orders.AsNoTracking()
+            .Where(o => o.Status == OrderStatus.PendingPayment && o.PlacedAtUtc <= cutoff)
+            .OrderBy(o => o.PlacedAtUtc).Select(o => o.Id).Take(batchSize).ToListAsync(ct);
+
+        var cancelled = 0;
+        foreach (var id in ids)
+            if (await CancelOneAsync(id, null, "Payment was not received within 30 minutes", nowUtc, cutoff, ct)) cancelled++;
+        return cancelled;
+    }
+
+    /// <returns>False when the order is not found (or not the caller's) or, for a sweep, is no longer an overdue unpaid order.</returns>
+    private async Task<bool> CancelOneAsync(Guid orderId, Guid? ownerUserId, string reason, DateTime now, DateTime? onlyIfUnpaidSince, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            // Lock the order row so a payment confirmation and a cancellation cannot both win.
+            var order = (await db.Orders
+                .FromSqlInterpolated($"SELECT o.*, o.xmin FROM orders o WHERE o.id = {orderId} FOR UPDATE")
+                .Include(o => o.SubOrders)
+                .ToListAsync(ct)).SingleOrDefault();
+
+            if (order is null || (ownerUserId is not null && order.UserId != ownerUserId)) return false;
+            if (onlyIfUnpaidSince is { } cutoff && (order.Status != OrderStatus.PendingPayment || order.PlacedAtUtc > cutoff)) return false;
+
+            // Until stock can be returned to the shelf, only an order whose stock is still merely held may be cancelled.
+            if (order.Status is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
+                throw new ConflictException("ORDER_NOT_CANCELLABLE", $"An order that is {ToWire(order.Status)} can no longer be cancelled here.");
+
+            order.Transition(OrderStatus.Cancelled, ownerUserId, reason, now);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        // Releasing is idempotent; if the process dies right here the hold simply expires and the sweeper frees it.
+        await inventory.CancelAsync(orderId, ct);
+        return true;
+    }
+
     public async Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default)
     {
         var order = await db.Orders.AsNoTracking().Include(o => o.SubOrders).ThenInclude(s => s.Items)
@@ -170,10 +224,9 @@ public sealed partial class OrderService(
 
         var order = await db.Orders.AsNoTracking().FirstAsync(o => o.Id == record.OrderId, ct);
         return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor,
-            order.PlacedAtUtc + StockReservationTtl, true);
+            order.PlacedAtUtc + UnpaidOrderLifetime, true);
     }
 
-    private static readonly TimeSpan StockReservationTtl = TimeSpan.FromMinutes(15);
 
     private async Task<PricedOrder> PriceAsync(List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
     {
@@ -226,8 +279,8 @@ public sealed partial class OrderService(
     private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, CancellationToken ct)
     {
         var result = await inventory.ReserveAsync(
-            new ReserveStockRequest(orderId, lines.Select(l => new ReservationLine(l.VariantId, l.Quantity)).ToList()), ct);
-        if (result.Succeeded) return result.ExpiresAtUtc ?? clock.GetUtcNow().UtcDateTime + StockReservationTtl;
+            new ReserveStockRequest(orderId, lines.Select(l => new ReservationLine(l.VariantId, l.Quantity)).ToList(), UnpaidOrderLifetime), ct);
+        if (result.Succeeded) return result.ExpiresAtUtc ?? clock.GetUtcNow().UtcDateTime + UnpaidOrderLifetime;
 
         if (result.UnavailableVariants is { Count: > 0 })
             throw new ConflictException("VARIANT_UNAVAILABLE", "Some items are not available.");

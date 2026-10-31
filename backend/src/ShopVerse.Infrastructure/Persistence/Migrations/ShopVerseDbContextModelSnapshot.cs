@@ -1968,6 +1968,10 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("discount_total");
 
+                    b.Property<int>("EventSequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("event_seq");
+
                     b.Property<long>("GrandTotalMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("grand_total");
@@ -2078,6 +2082,10 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("reason");
 
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer")
+                        .HasColumnName("seq");
+
                     b.Property<string>("ToStatus")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -2086,8 +2094,9 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OrderId", "AtUtc")
-                        .HasDatabaseName("ix_order_events_order_at");
+                    b.HasIndex("OrderId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ux_order_events_order_seq");
 
                     b.ToTable("order_events", (string)null);
                 });

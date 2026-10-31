@@ -42,6 +42,7 @@ public static class DependencyInjection
     public static IServiceCollection AddCatalogWorkers(this IServiceCollection services)
     {
         services.AddHostedService<ReservationExpiryWorker>();
+        services.AddHostedService<UnpaidOrderExpiryWorker>();
         services.AddHostedService<OutboxRelayWorker>();
         return services;
     }

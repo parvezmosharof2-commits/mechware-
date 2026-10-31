@@ -30,6 +30,7 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         b.Property(o => o.GrandTotalMinor).HasColumnName("grand_total");
         b.Property(o => o.ShipToJson).HasColumnName("ship_to").HasColumnType("jsonb");
         b.Property(o => o.PlacedAtUtc).HasColumnName("placed_at");
+        b.Property(o => o.EventSequence).HasColumnName("event_seq");
 
         b.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(o => o.SubOrders).WithOne().HasForeignKey(s => s.OrderId).OnDelete(DeleteBehavior.Cascade);
@@ -106,12 +107,13 @@ internal sealed class OrderEventRecordConfiguration : IEntityTypeConfiguration<O
         b.ToTable("order_events");
         b.MapAudit(updated: false);
         b.Property(e => e.OrderId).HasColumnName("order_id");
+        b.Property(e => e.Sequence).HasColumnName("seq");
         b.Property(e => e.FromStatus).HasColumnName("from_status").HasConversion<string>().HasMaxLength(30);
         b.Property(e => e.ToStatus).HasColumnName("to_status").HasConversion<string>().HasMaxLength(30);
         b.Property(e => e.ActorId).HasColumnName("actor_id");
         b.Property(e => e.Reason).HasColumnName("reason").HasMaxLength(500);
         b.Property(e => e.AtUtc).HasColumnName("at");
-        b.HasIndex(e => new { e.OrderId, e.AtUtc }).HasDatabaseName("ix_order_events_order_at");
+        b.HasIndex(e => new { e.OrderId, e.Sequence }).IsUnique().HasDatabaseName("ux_order_events_order_seq");
     }
 }
 

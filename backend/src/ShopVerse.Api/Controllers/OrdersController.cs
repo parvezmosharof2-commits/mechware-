@@ -12,6 +12,8 @@ namespace ShopVerse.Api.Controllers;
 /// </summary>
 public sealed record PlaceOrderBody(IReadOnlyList<PlaceOrderLine> Lines, string? ShipToJson = null, Guid? CompanyId = null, bool PayOnCredit = false);
 
+public sealed record CancelOrderBody(string? Reason);
+
 [ApiController]
 [Authorize]
 [Route("api/v1/orders")]
@@ -35,6 +37,11 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
             ? Ok(new { data = placed })
             : Created($"/api/v1/orders/{placed.OrderId}", new { data = placed });
     }
+
+    /// <summary>Cancels the caller's own order while it is still pending.</summary>
+    [HttpPost("{orderId:guid}/cancel")]
+    public async Task<IActionResult> Cancel(Guid orderId, [FromBody] CancelOrderBody body, CancellationToken ct) =>
+        Ok(new { data = await orders.CancelAsync(Actor, orderId, body?.Reason ?? string.Empty, ct) });
 
     [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> Get(Guid orderId, CancellationToken ct) =>

@@ -28,6 +28,15 @@ public sealed record OrderDto(
 
 public interface IOrderService
 {
+    /// <summary>
+    /// The buyer cancels their own order while it is still pending (payment or approval): the order is cancelled, the event
+    /// recorded with the reason, and the held stock released. Anything further along is refused until stock can be returned.
+    /// </summary>
+    Task<OrderDto> CancelAsync(Guid userId, Guid orderId, string reason, CancellationToken ct = default);
+
+    /// <summary>Cancels orders still unpaid 30 minutes after placement (brief §8.6) and frees their stock. Returns how many.</summary>
+    Task<int> ExpireUnpaidAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default);
+
     /// <summary>The buyer's own order. Someone else's order answers "not found", never "forbidden", so ids reveal nothing.</summary>
     Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default);
 

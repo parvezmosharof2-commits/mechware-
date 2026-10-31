@@ -88,6 +88,9 @@ public sealed class SubOrder : Entity<Guid>
 public sealed class OrderEventRecord : Entity<Guid>
 {
     public Guid OrderId { get; private set; }
+
+    /// <summary>1, 2, 3 ... per order. Timestamps can tie (two changes in one request); this never does.</summary>
+    public int Sequence { get; private set; }
     public OrderStatus FromStatus { get; private set; }
     public OrderStatus ToStatus { get; private set; }
     public Guid? ActorId { get; private set; }
@@ -96,9 +99,10 @@ public sealed class OrderEventRecord : Entity<Guid>
 
     private OrderEventRecord() { }
 
-    internal OrderEventRecord(OrderEvent e) : base(Guid.NewGuid())
+    internal OrderEventRecord(OrderEvent e, int sequence) : base(Guid.NewGuid())
     {
         OrderId = e.OrderId;
+        Sequence = sequence;
         FromStatus = e.From;
         ToStatus = e.To;
         ActorId = e.ActorId;
@@ -128,6 +132,9 @@ public sealed class Order : AggregateRoot<Guid>
     public long ShippingMinor { get; private set; }
     public long GrandTotalMinor { get; private set; }
     public string ShipToJson { get; private set; } = "{}";
+
+    /// <summary>How many events this order has had. Kept on the order itself so a change never has to load the event list.</summary>
+    public int EventSequence { get; private set; }
     public DateTime PlacedAtUtc { get; private set; }
 
     public IReadOnlyCollection<SubOrder> SubOrders => _subOrders.AsReadOnly();
@@ -167,7 +174,7 @@ public sealed class Order : AggregateRoot<Guid>
             order._subOrders.Add(new SubOrder(Guid.NewGuid(), id, $"{orderNumber}-{n:D2}", initialStatus, sub));
         }
 
-        order._events.Add(new OrderEventRecord(new OrderEvent(id, initialStatus, initialStatus, userId, "Order placed", nowUtc)));
+        order._events.Add(new OrderEventRecord(new OrderEvent(id, initialStatus, initialStatus, userId, "Order placed", nowUtc), ++order.EventSequence));
         order.AddDomainEvent(new OrderPlacedEvent(id, orderNumber, userId, priced.GrandTotalMinor));
         return order;
     }
@@ -178,7 +185,7 @@ public sealed class Order : AggregateRoot<Guid>
         var e = OrderStateMachine.Transition(Id, Status, to, actorId, reason, nowUtc);
         Status = to;
         foreach (var sub in _subOrders) sub.SetStatus(to);
-        _events.Add(new OrderEventRecord(e));
+        _events.Add(new OrderEventRecord(e, ++EventSequence));
         UpdatedAtUtc = nowUtc;
     }
 

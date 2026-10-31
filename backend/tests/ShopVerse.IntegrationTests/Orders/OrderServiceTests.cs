@@ -345,7 +345,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         (reserved, onHand).Should().Be((0, 8), "credit orders deduct stock on confirmation");
 
         await using var db = fixture.CreateContext();
-        var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.AtUtc).ToListAsync();
+        var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.Sequence).ToListAsync();
         events.Select(e => e.ToStatus).Should().Equal(OrderStatus.PendingPayment, OrderStatus.Confirmed);
     }
 
@@ -417,6 +417,141 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         again.Status.Should().Be("confirmed");
         again.Replayed.Should().BeTrue();
         (await CreditUsedAsync(company)).Should().Be(105_000);
+    }
+
+    [PostgresFact]
+    public async Task EveryEventGetsItsOwnSequenceNumber_EvenWhenTwoShareATimestamp()
+    {
+        var (company, buyer) = await CreditCompanyAsync(500_000);
+        var v = await SeedAsync(10, 100_000);
+        var placed = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId)));   // "placed" and "confirmed" happen in one request
+
+        await using var db = fixture.CreateContext();
+        var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.Sequence).ToListAsync();
+        events.Select(e => e.Sequence).Should().Equal(1, 2);
+        events.Select(e => e.ToStatus).Should().Equal(OrderStatus.PendingPayment, OrderStatus.Confirmed);
+
+        var clash = () => db.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO order_events (id, order_id, seq, from_status, to_status, at, created_at) VALUES ({Guid.NewGuid()}, {placed.OrderId}, 2, 'confirmed', 'processing', now(), now())");
+        (await clash.Should().ThrowAsync<Npgsql.PostgresException>()).Which.ConstraintName.Should().Be("ux_order_events_order_seq");
+    }
+
+    [PostgresFact]
+    public async Task TheStockHold_LastsAsLongAsTheOrderCanBePaid()
+    {
+        var buyer = await NewBuyerAsync();
+        var v = await SeedAsync(5);
+        var before = DateTime.UtcNow;
+
+        var placed = await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 1))));
+
+        // If the hold expired earlier than the unpaid-order cutoff, a payment arriving in between would find no stock.
+        await using var db = fixture.CreateContext();
+        var hold = await db.StockReservations.AsNoTracking().SingleAsync(r => r.ReferenceId == placed.OrderId);
+        hold.ExpiresAtUtc.Should().BeCloseTo(before + OrderService.UnpaidOrderLifetime, TimeSpan.FromSeconds(30));
+        placed.ReservationExpiresAtUtc.Should().BeCloseTo(hold.ExpiresAtUtc, TimeSpan.FromSeconds(1));
+    }
+
+    [PostgresFact]
+    public async Task ABuyerCancelsAPendingOrder_StockIsReleased_AndTheReasonIsRecorded()
+    {
+        var buyer = await NewBuyerAsync();
+        var v = await SeedAsync(5);
+        var placed = await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 3))));
+        (await StockAsync(v.VariantId)).Reserved.Should().Be(3);
+
+        var cancelled = await With(s => s.CancelAsync(buyer, placed.OrderId, "  Ordered by mistake  "));
+
+        cancelled.Status.Should().Be("cancelled");
+        cancelled.SubOrders.Should().OnlyContain(s => s.Status == "cancelled");
+        (await StockAsync(v.VariantId)).Should().Be((0, 5));
+        await using var db = fixture.CreateContext();
+        var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.Sequence).ToListAsync();
+        events.Select(e => e.ToStatus).Should().Equal(OrderStatus.PendingPayment, OrderStatus.Cancelled);
+        events.Last().Reason.Should().Be("Ordered by mistake");
+        events.Last().ActorId.Should().Be(buyer);
+    }
+
+    [PostgresFact]
+    public async Task CancelRefusals_AReasonIsNeeded_AStrangersOrderIsNotFound_AndCancellingTwiceConflicts()
+    {
+        var buyer = await NewBuyerAsync();
+        var stranger = await NewBuyerAsync();
+        var v = await SeedAsync(5);
+        var placed = await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 1))));
+
+        await Assert.ThrowsAsync<ValidationException>(() => With(s => s.CancelAsync(buyer, placed.OrderId, "  ")));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => With(s => s.CancelAsync(stranger, placed.OrderId, "not mine")));
+        await Assert.ThrowsAsync<KeyNotFoundException>(() => With(s => s.CancelAsync(buyer, Guid.NewGuid(), "no such order")));
+        (await StockAsync(v.VariantId)).Reserved.Should().Be(1, "refused cancellations change nothing");
+
+        await With(s => s.CancelAsync(buyer, placed.OrderId, "first"));
+        (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.CancelAsync(buyer, placed.OrderId, "second")))).Code.Should().Be("ORDER_NOT_CANCELLABLE");
+    }
+
+    [PostgresFact]
+    public async Task AConfirmedCreditOrder_CannotBeCancelledYet_AndKeepsItsCreditAndStock()
+    {
+        var (company, buyer) = await CreditCompanyAsync(500_000);
+        var v = await SeedAsync(10, 100_000);
+        var placed = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId)));
+
+        (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.CancelAsync(buyer, placed.OrderId, "changed my mind")))).Code.Should().Be("ORDER_NOT_CANCELLABLE");
+
+        (await CreditUsedAsync(company)).Should().Be(105_000);
+        (await StockAsync(v.VariantId)).Should().Be((0, 9));
+    }
+
+    [PostgresFact]
+    public async Task TheSweep_CancelsOnlyOrdersUnpaidForThirtyMinutes_AndFreesTheirStock()
+    {
+        var buyer = await NewBuyerAsync();
+        var stale = await SeedAsync(5);
+        var fresh = await SeedAsync(5);
+        var staleOrder = await With(s => s.PlaceAsync(Req(buyer, Key(), (stale.VariantId, 2))));
+
+        // Age the first order by moving its placement time back; the second is placed "now".
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '31 minutes' WHERE id = {staleOrder.OrderId}");
+        var freshOrder = await With(s => s.PlaceAsync(Req(buyer, Key(), (fresh.VariantId, 2))));
+
+        var cancelled = await With(s => s.ExpireUnpaidAsync(DateTime.UtcNow));
+
+        cancelled.Should().BeGreaterThanOrEqualTo(1);
+        await using var check = fixture.CreateContext();
+        (await check.Orders.AsNoTracking().SingleAsync(o => o.Id == staleOrder.OrderId)).Status.Should().Be(OrderStatus.Cancelled);
+        (await check.Orders.AsNoTracking().SingleAsync(o => o.Id == freshOrder.OrderId)).Status.Should().Be(OrderStatus.PendingPayment);
+        (await StockAsync(stale.VariantId)).Reserved.Should().Be(0);
+        (await StockAsync(fresh.VariantId)).Reserved.Should().Be(2);
+        var reason = (await check.OrderEvents.AsNoTracking().Where(e => e.OrderId == staleOrder.OrderId && e.ToStatus == OrderStatus.Cancelled).SingleAsync());
+        reason.ActorId.Should().BeNull("the system cancelled it");
+        reason.Reason.Should().Contain("30 minutes");
+    }
+
+    [PostgresFact]
+    public async Task TheSweep_SkipsPaidAndCreditOrders_AndParallelSweepsCancelEachOrderOnce()
+    {
+        var buyer = await NewBuyerAsync();
+        var (company, creditBuyer) = await CreditCompanyAsync(500_000);
+        var v = await SeedAsync(20, 100_000);
+        var unpaid = new List<Guid>();
+        for (var i = 0; i < 4; i++) unpaid.Add((await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 1))))).OrderId);
+        var creditOrder = await With(s => s.PlaceAsync(OnCredit(creditBuyer, company, v.VariantId)));
+
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '2 hours' WHERE user_id IN ({buyer}, {creditBuyer})");
+
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Task.Run(() => With(s => s.ExpireUnpaidAsync(DateTime.UtcNow)))));
+
+        await using var check = fixture.CreateContext();
+        foreach (var id in unpaid)
+        {
+            (await check.Orders.AsNoTracking().SingleAsync(o => o.Id == id)).Status.Should().Be(OrderStatus.Cancelled);
+            (await check.OrderEvents.CountAsync(e => e.OrderId == id && e.ToStatus == OrderStatus.Cancelled)).Should().Be(1, "cancelled once, never twice");
+        }
+
+        (await check.Orders.AsNoTracking().SingleAsync(o => o.Id == creditOrder.OrderId)).Status.Should().Be(OrderStatus.Confirmed, "a confirmed order is not 'unpaid'");
+        (await StockAsync(v.VariantId)).Should().Be((0, 19));
     }
 
     [PostgresFact]

@@ -537,3 +537,28 @@ Known window: if the process dies between the committed order and the stock `Com
 the reservation expires and is released while the order is confirmed. A reconciliation sweep (confirmed order with an
 active reservation) belongs with the payment slice and is not built yet. Cancelling a credit order must also call
 `ReleaseCredit`; that belongs with the cancel flow.
+
+## Phase 8 slice c (part 6): cancelling orders and the 30-minute unpaid sweep (brief §8.6)
+
+`POST /api/v1/orders/{id}/cancel` lets a buyer cancel their own order while it is still pending (payment or approval): the
+order row is locked, the state machine validates the move, the event is recorded with the reason, and the held stock is
+released. A confirmed order is refused (`ORDER_NOT_CANCELLABLE`) because the inventory has no way to return stock to the
+shelf yet. `UnpaidOrderExpiryWorker` runs `ExpireUnpaidAsync` every minute and cancels orders still `pending_payment` 30
+minutes after placement; parallel sweeps cancel each order once.
+
+Three defects found by tests and by reading the code while writing this, all fixed:
+- **The stock hold was shorter than the order's payment window.** Reservations default to 15 minutes, orders stay payable
+  for 30, so a payment arriving between minutes 15 and 30 would have found no stock. The order now reserves for the full
+  30 minutes (`TheStockHold_LastsAsLongAsTheOrderCanBePaid`).
+- **Order events could tie on their timestamp** (the "placed" and "confirmed" events of a credit order share one instant), so
+  their order was undefined. Each event now has a per-order sequence number, kept as a counter on the order row so no
+  event list has to be loaded, and `(order_id, seq)` is unique.
+- **My first version computed the sequence from the loaded event list**, which the cancel path does not load; the unique
+  index rejected the duplicate on the first run. Hence the counter on the order row.
+
+Mutations that each fail a test: cancel without releasing stock, sweep ignoring the cutoff, any user cancelling any order,
+confirmed orders cancellable, no row lock on the order, no reason required, reservation back to 15 minutes.
+
+Not built yet: restocking (so a confirmed order can be cancelled and its credit released), the reconciliation sweep for
+the credit-order crash window, payment adapters and the inbox, promotions and shipping in the order, approval routing,
+the frontend.

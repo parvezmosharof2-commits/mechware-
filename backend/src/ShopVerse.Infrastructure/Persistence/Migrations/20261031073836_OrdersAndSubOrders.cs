@@ -50,6 +50,7 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     shipping_total = table.Column<long>(type: "bigint", nullable: false),
                     grand_total = table.Column<long>(type: "bigint", nullable: false),
                     ship_to = table.Column<string>(type: "jsonb", nullable: false),
+                    event_seq = table.Column<int>(type: "integer", nullable: false),
                     placed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     xmin = table.Column<uint>(type: "xid", rowVersion: true, nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -74,6 +75,7 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     order_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    seq = table.Column<int>(type: "integer", nullable: false),
                     from_status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     to_status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     actor_id = table.Column<Guid>(type: "uuid", nullable: true),
@@ -164,9 +166,10 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_order_events_order_at",
+                name: "ux_order_events_order_seq",
                 table: "order_events",
-                columns: new[] { "order_id", "at" });
+                columns: new[] { "order_id", "seq" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_order_items_sub_order_id",
