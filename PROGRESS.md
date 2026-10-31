@@ -409,3 +409,14 @@ exist, rather than deleting a company's admins silently; checked against a datab
 
 Still open: invitation and consent when a user is added to a company (the rest of M2); GDPR erasure still deletes
 addresses outright.
+
+
+## Phase 8 slice b: promotion engine (pure domain)
+
+`ShopVerse.Domain.Pricing.PromotionEngine` prices a basket's promotions with no I/O: percent off, fixed off, volume tiers
+per line, spend tiers, scoped by everything / category / seller / variant, with priority order, exclusivity, caps,
+validity windows and global / per-user limits (the counters are supplied by the caller). A discount is rounded once
+(banker's, ADR-0002) and allocated to lines by largest remainder, so the line discounts add up to exactly the promotion's
+discount. 16 unit tests, including 500 random baskets that must balance to the poisha, input-order independence, and
+mutation checks (half-up rounding, no largest-remainder step, ignored cap and ignored exclusivity each fail a test).
+Not built yet: cart (Redis), order and atomic checkout, payment providers and webhooks, the frontend.
