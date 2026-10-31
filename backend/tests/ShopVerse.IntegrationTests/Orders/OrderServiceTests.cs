@@ -307,6 +307,118 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         (await StockAsync(v.VariantId)).Reserved.Should().Be(0, "no refused order may hold stock");
     }
 
+    private async Task<(Guid Company, Guid Buyer)> CreditCompanyAsync(long limitMinor, CreditTerms terms = CreditTerms.Net30)
+    {
+        var admin = await NewBuyerAsync();
+        var buyer = await NewBuyerAsync();
+        var company = await CompanyAsync(admin, activate: true, CompanyRoles.Buyer, buyer);
+        if (terms != CreditTerms.None)
+        {
+            await using var db = fixture.CreateContext();
+            await new ShopVerse.Infrastructure.Companies.CompanyService(db).AdminSetCreditAsync(company, new ShopVerse.Application.Companies.SetCreditRequest(terms, limitMinor));
+        }
+
+        return (company, buyer);
+    }
+
+    private static PlaceOrderRequest OnCredit(Guid user, Guid company, Guid variant, int qty = 1, string? key = null) =>
+        new(user, key ?? Key(), [new PlaceOrderLine(variant, qty)], null, company, PayOnCredit: true);
+
+    private async Task<long> CreditUsedAsync(Guid company)
+    {
+        await using var db = fixture.CreateContext();
+        return (await db.Companies.AsNoTracking().SingleAsync(c => c.Id == company)).CreditUsedMinor;
+    }
+
+    [PostgresFact]
+    public async Task AnOrderOnCredit_IsConfirmedAtOnce_UsesTheCreditLimit_AndDeductsStock()
+    {
+        var (company, buyer) = await CreditCompanyAsync(limitMinor: 500_000);
+        var v = await SeedAsync(onHand: 10, price: 100_000);
+
+        var placed = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 2)));
+
+        placed.Status.Should().Be("confirmed");
+        placed.GrandTotalMinor.Should().Be(210_000);                    // 2 x 1,000.00 plus 5 % VAT on top
+        (await CreditUsedAsync(company)).Should().Be(210_000);
+        var (reserved, onHand) = await StockAsync(v.VariantId);
+        (reserved, onHand).Should().Be((0, 8), "credit orders deduct stock on confirmation");
+
+        await using var db = fixture.CreateContext();
+        var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.AtUtc).ToListAsync();
+        events.Select(e => e.ToStatus).Should().Equal(OrderStatus.PendingPayment, OrderStatus.Confirmed);
+    }
+
+    [PostgresFact]
+    public async Task AnOrderThatBreaksTheCreditLimit_IsRefused_LeavesCreditAndStockUntouched()
+    {
+        var (company, buyer) = await CreditCompanyAsync(limitMinor: 250_000);
+        var v = await SeedAsync(10, 100_000);
+
+        await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 2)));       // 210,000 of 250,000 used
+        var act = () => With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 1)));   // +105,000 would be 315,000
+
+        (await act.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("CREDIT_LIMIT_EXCEEDED");
+        (await CreditUsedAsync(company)).Should().Be(210_000);
+        (await StockAsync(v.VariantId)).Should().Be((0, 8), "the refused order gave its stock back");
+        await using var db = fixture.CreateContext();
+        (await db.Orders.CountAsync(o => o.CompanyId == company)).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task TwelveParallelCreditOrders_NeverPassTheLimit_ExactlyTheAffordableOnesSucceed()
+    {
+        var (company, buyer) = await CreditCompanyAsync(limitMinor: 320_000);   // room for exactly three 105,000 orders
+
+        // One variant per order: nothing in the inventory serialises them, so only the credit check stands in the way.
+        var variants = new List<SeededVariant>();
+        for (var i = 0; i < 12; i++) variants.Add(await SeedAsync(5, 100_000));
+
+        using var gate = new ManualResetEventSlim(false);
+        var tasks = variants.Select(v => Task.Run(async () =>
+        {
+            gate.Wait();
+            try { await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId))); return "ok"; }
+            catch (ConflictException ex) { return ex.Code; }
+        })).ToList();
+        gate.Set();
+        var outcomes = await Task.WhenAll(tasks);
+
+        outcomes.Count(o => o == "ok").Should().Be(3);
+        outcomes.Where(o => o != "ok").Should().OnlyContain(o => o == "CREDIT_LIMIT_EXCEEDED");
+        (await CreditUsedAsync(company)).Should().Be(315_000).And.BeLessThanOrEqualTo(320_000);
+        foreach (var v in variants) (await StockAsync(v.VariantId)).Reserved.Should().Be(0, "refused orders hold no stock");
+    }
+
+    [PostgresFact]
+    public async Task CreditNeedsTermsAndACompany()
+    {
+        var (noTermsCompany, buyer) = await CreditCompanyAsync(0, CreditTerms.None);
+        var v = await SeedAsync(10, 100_000);
+
+        (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.PlaceAsync(OnCredit(buyer, noTermsCompany, v.VariantId))))).Code.Should().Be("NO_CREDIT_TERMS");
+
+        var personal = new PlaceOrderRequest(buyer, Key(), [new PlaceOrderLine(v.VariantId, 1)], null, null, PayOnCredit: true);
+        await Assert.ThrowsAsync<ValidationException>(() => With(s => s.PlaceAsync(personal)));
+        (await StockAsync(v.VariantId)).Reserved.Should().Be(0);
+    }
+
+    [PostgresFact]
+    public async Task ReplayingACreditOrder_ReturnsConfirmed_AndSpendsTheCreditOnce()
+    {
+        var (company, buyer) = await CreditCompanyAsync(500_000);
+        var v = await SeedAsync(10, 100_000);
+        var key = Key();
+
+        var first = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, key: key)));
+        var again = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, key: key)));
+
+        again.OrderId.Should().Be(first.OrderId);
+        again.Status.Should().Be("confirmed");
+        again.Replayed.Should().BeTrue();
+        (await CreditUsedAsync(company)).Should().Be(105_000);
+    }
+
     [PostgresFact]
     public async Task BadRequests_AreRefusedBeforeAnythingHappens()
     {

@@ -66,8 +66,18 @@ public sealed partial class OrderService(
 
             try
             {
-                await db.SaveChangesAsync(ct);
-                return new PlacedOrder(order.Id, order.OrderNumber, "pending_payment", order.GrandTotalMinor, reserved, false);
+                if (request.PayOnCredit)
+                {
+                    await SaveOnCreditAsync(order, request.CompanyId!.Value, now, ct);
+                    // Credit orders are confirmed at once (brief §8.5): the held stock becomes a real deduction.
+                    await inventory.CommitAsync(orderId, ct);
+                }
+                else
+                {
+                    await db.SaveChangesAsync(ct);
+                }
+
+                return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor, reserved, false);
             }
             catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg)
             {
@@ -129,6 +139,7 @@ public sealed partial class OrderService(
     {
         if (!KeyPattern().IsMatch(r.IdempotencyKey ?? string.Empty))
             throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
+        if (r.PayOnCredit && r.CompanyId is null) throw new ValidationException("payOnCredit", "Credit terms apply to company orders only.");
         if (r.Lines is null || r.Lines.Count == 0) throw new ValidationException("lines", "An order needs at least one line.");
         if (r.Lines.Any(l => l.Quantity is <= 0 or > PlaceOrderRequest.MaxQuantityPerLine))
             throw new ValidationException("quantity", $"Each quantity must be between 1 and {PlaceOrderRequest.MaxQuantityPerLine}.");
@@ -146,7 +157,7 @@ public sealed partial class OrderService(
 
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}";
+        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -158,7 +169,7 @@ public sealed partial class OrderService(
             throw new ConflictException("IDEMPOTENCY_KEY_REUSED", "This Idempotency-Key was already used for a different request.");
 
         var order = await db.Orders.AsNoTracking().FirstAsync(o => o.Id == record.OrderId, ct);
-        return new PlacedOrder(order.Id, order.OrderNumber, "pending_payment", order.GrandTotalMinor,
+        return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor,
             order.PlacedAtUtc + StockReservationTtl, true);
     }
 
@@ -194,6 +205,22 @@ public sealed partial class OrderService(
         }
 
         return OrderPricing.Price(drafts, terms.Values.ToList(), mode);
+    }
+
+    /// <summary>
+    /// Brief §8.7: <c>creditUsed + orderTotal &lt;= creditLimit</c>, checked in the transaction that places the order, with the
+    /// company's row locked so two orders cannot both pass the check. The order is confirmed in the same step.
+    /// </summary>
+    private async Task SaveOnCreditAsync(Order order, Guid companyId, DateTime now, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {companyId} FOR UPDATE").ToListAsync(ct)).Single();
+
+        company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
+        order.Transition(OrderStatus.Confirmed, order.UserId, "Placed on credit terms", now);
+
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
     }
 
     private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, CancellationToken ct)

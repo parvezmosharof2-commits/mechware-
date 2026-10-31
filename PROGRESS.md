@@ -519,3 +519,21 @@ request, 400 for a bad body, 409 `INSUFFICIENT_STOCK` / `VARIANT_UNAVAILABLE` wh
 Still open for Phase 8: promotions fed into the order, shipping zones, approval routing and the credit-terms check,
 payment adapters (SSLCommerz, bKash, Stripe, COD) and the webhook inbox, auto-cancel of unpaid orders after 30 minutes,
 and the whole frontend (cart, checkout, confirmation).
+
+## Phase 8 slice c (part 5): credit terms on orders (brief §8.7)
+
+A company order may set `payOnCredit`. The company's row is locked (`SELECT ... FOR UPDATE`, with `xmin` selected explicitly
+because EF needs it as a concurrency token and a bare `SELECT *` omits system columns), `Company.ReserveCredit` checks
+`creditUsed + orderTotal <= creditLimit`, the order moves to `confirmed` with an event, and everything is saved in one
+transaction; the held stock is then converted into a real deduction. A refused order releases its stock and leaves the
+credit untouched. Errors: `NO_CREDIT_TERMS`, `CREDIT_LIMIT_EXCEEDED`, 400 for `payOnCredit` without a company; a replay
+reports the real status (`confirmed`).
+
+Lesson recorded: my first parallel test (10 orders for one variant) passed with the lock removed, because the inventory
+lock serialised the orders and the credit race never happened. The test now gives each order its own variant and releases
+them together; with the lock it passes 3 of 3 runs, without it it fails 3 of 3.
+
+Known window: if the process dies between the committed order and the stock `CommitAsync`, the stock stays reserved until
+the reservation expires and is released while the order is confirmed. A reconciliation sweep (confirmed order with an
+active reservation) belongs with the payment slice and is not built yet. Cancelling a credit order must also call
+`ReleaseCredit`; that belongs with the cancel flow.

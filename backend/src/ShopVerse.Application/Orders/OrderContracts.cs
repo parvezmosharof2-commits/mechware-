@@ -8,7 +8,8 @@ public sealed record PlaceOrderRequest(
     string IdempotencyKey,
     IReadOnlyList<PlaceOrderLine> Lines,
     string? ShipToJson = null,
-    Guid? CompanyId = null)
+    Guid? CompanyId = null,
+    bool PayOnCredit = false)
 {
     public const int MaxLines = 50;
     public const int MaxQuantityPerLine = 10_000;
