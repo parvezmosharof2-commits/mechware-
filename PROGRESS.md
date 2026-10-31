@@ -430,3 +430,18 @@ withdrawn, below the minimum order, adjusted to the pack size) and is idempotent
 (replace instead of add, no stock check, uncapped merge, stale price, no pack snapping) each make a test fail.
 The catalog has no minimum-order or pack-size columns yet, so the engine takes them as inputs that default to 1.
 Not built yet: the Redis cart store with its signed guest token, the HTTP endpoints, the frontend.
+
+## Phase 8 slice c (part 1): order state machine and order number (pure domain)
+
+`ShopVerse.Domain.Orders.OrderStateMachine` is the single place that says which state may follow which (brief §8.6):
+`pending_approval -> pending_payment -> confirmed -> processing -> packed -> shipped -> out_for_delivery -> delivered
+-> completed`, plus cancelled, delivery_failed, returned, return_requested, return_approved and refunded. Every change
+is an `OrderEvent` (who, when, why); a reason is mandatory for cancelling, a failed delivery and a return approval.
+`OrderNumber` generates `MW-YYMMDD-XXXXXX` with six random base32 characters. 22 unit tests: every pair of states is
+checked against an independently written table, every state is reachable, terminal states have no exit, and five
+mutations (shipped orders cancellable, completed reopens, no reason, stock held after shipping, lower-case numbers)
+each fail a test.
+
+Note: ADR-0003 still shows the old `SV-` order-number prefix. The brief (v2) says `MW-` and is the source of truth;
+the ADR should be updated when the order tables are built. Not built yet: the order tables, the atomic
+`PlaceOrder` transaction with idempotency, payment providers and webhooks, the frontend.
