@@ -76,6 +76,7 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<PromotionDefinition> Promotions => Set<PromotionDefinition>();
     public DbSet<PromotionUserUsage> PromotionUserUsage => Set<PromotionUserUsage>();
     public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
+    public DbSet<ShopVerse.Domain.Shipping.ShippingRate> ShippingRates => Set<ShopVerse.Domain.Shipping.ShippingRate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

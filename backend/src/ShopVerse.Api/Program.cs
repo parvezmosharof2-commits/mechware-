@@ -128,6 +128,7 @@ var bootstrapAdmin = BootstrapAdminSettings.FromValues(
     builder.Configuration["Identity:BootstrapAdmin:Password"],
     builder.Configuration["Identity:BootstrapAdmin:TotpSecret"]);
 builder.Services.AddScoped<IdentitySeeder>();
+builder.Services.AddScoped<ShopVerse.Infrastructure.Orders.ShippingRateSeeder>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 
 builder.Services
@@ -267,6 +268,14 @@ var app = builder.Build();
         using var seedScope = app.Services.CreateScope();
         await seedScope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync(seedPolicy, bootstrapAdmin);
     }
+}
+
+// Starting delivery fees (Tk 200 / 500 / 1,000) go into an EMPTY rate table only, and only when asked for
+// (Shipping:SeedStartingRates=true), so a rate the business edits is never overwritten and a bare boot needs no database.
+if (app.Configuration.GetValue<bool>("Shipping:SeedStartingRates"))
+{
+    using var shippingScope = app.Services.CreateScope();
+    await shippingScope.ServiceProvider.GetRequiredService<ShopVerse.Infrastructure.Orders.ShippingRateSeeder>().SeedAsync();
 }
 
 if (app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)

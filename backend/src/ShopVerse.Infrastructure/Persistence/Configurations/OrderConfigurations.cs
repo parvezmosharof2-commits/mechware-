@@ -233,3 +233,24 @@ internal sealed class PromotionRedemptionConfiguration : IEntityTypeConfiguratio
         b.HasIndex(r => new { r.OrderId, r.PromotionId }).IsUnique().HasDatabaseName("ux_promotion_redemptions_order_promo");
     }
 }
+
+internal sealed class ShippingRateConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Shipping.ShippingRate>
+{
+    public void Configure(EntityTypeBuilder<ShopVerse.Domain.Shipping.ShippingRate> b)
+    {
+        b.ToTable("shipping_rates", t =>
+        {
+            t.HasCheckConstraint("ck_shipping_rates_money", "base_amount >= 0 AND per_kg_amount >= 0");
+            t.HasCheckConstraint("ck_shipping_rates_units", "volumetric_divisor > 0 AND weight_step_grams > 0 AND (max_parcel_grams IS NULL OR max_parcel_grams > 0) AND (max_dimension_mm IS NULL OR max_dimension_mm > 0)");
+        });
+        b.MapAudit();
+        b.Property(r => r.Zone).HasColumnName("zone").HasConversion<string>().HasMaxLength(20);
+        b.Property(r => r.BaseMinor).HasColumnName("base_amount");
+        b.Property(r => r.PerKgMinor).HasColumnName("per_kg_amount");
+        b.Property(r => r.VolumetricDivisor).HasColumnName("volumetric_divisor");
+        b.Property(r => r.WeightStepGrams).HasColumnName("weight_step_grams");
+        b.Property(r => r.MaxParcelGrams).HasColumnName("max_parcel_grams");
+        b.Property(r => r.MaxDimensionMm).HasColumnName("max_dimension_mm");
+        b.HasIndex(r => r.Zone).IsUnique().HasDatabaseName("ux_shipping_rates_zone");
+    }
+}

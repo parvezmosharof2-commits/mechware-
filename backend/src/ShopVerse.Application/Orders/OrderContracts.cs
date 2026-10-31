@@ -10,7 +10,8 @@ public sealed record PlaceOrderRequest(
     string? ShipToJson = null,
     Guid? CompanyId = null,
     bool PayOnCredit = false,
-    IReadOnlyList<string>? CouponCodes = null)
+    IReadOnlyList<string>? CouponCodes = null,
+    Guid? ShippingAddressId = null)
 {
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;
