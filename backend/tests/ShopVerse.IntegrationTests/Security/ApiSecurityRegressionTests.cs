@@ -46,6 +46,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "GET api/v1/locations/bd",
         "GET api/v1/storefront/products/{slug}",
         "GET api/v1/storefront/categories",
+        "POST api/v1/payments/webhooks/{provider}",   // provider-to-server; its authority is the HMAC signature over the raw body, checked in PaymentService
         "GET api/v1/storefront/categories/{slug}/products",
         "* /health/live",
         "* /health/ready",

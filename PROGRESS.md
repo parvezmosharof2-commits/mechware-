@@ -409,3 +409,190 @@ exist, rather than deleting a company's admins silently; checked against a datab
 
 Still open: invitation and consent when a user is added to a company (the rest of M2); GDPR erasure still deletes
 addresses outright.
+
+
+## Phase 8 slice b: promotion engine (pure domain)
+
+`ShopVerse.Domain.Pricing.PromotionEngine` prices a basket's promotions with no I/O: percent off, fixed off, volume tiers
+per line, spend tiers, scoped by everything / category / seller / variant, with priority order, exclusivity, caps,
+validity windows and global / per-user limits (the counters are supplied by the caller). A discount is rounded once
+(banker's, ADR-0002) and allocated to lines by largest remainder, so the line discounts add up to exactly the promotion's
+discount. 16 unit tests, including 500 random baskets that must balance to the poisha, input-order independence, and
+mutation checks (half-up rounding, no largest-remainder step, ignored cap and ignored exclusivity each fail a test).
+Not built yet: cart (Redis), order and atomic checkout, payment providers and webhooks, the frontend.
+
+## Phase 8 slice a: cart rules (pure domain)
+
+`ShopVerse.Domain.Cart.CartEngine`: add / set / remove with stock, minimum order quantity, pack size and line limits;
+merge of a guest cart into the signed-in buyer's cart on login (quantities add up, capped, the buyer's order kept);
+re-validation against the catalog that returns a notice for every drift (price changed, stock reduced, sold out,
+withdrawn, below the minimum order, adjusted to the pack size) and is idempotent. 12 unit tests; five mutations
+(replace instead of add, no stock check, uncapped merge, stale price, no pack snapping) each make a test fail.
+The catalog has no minimum-order or pack-size columns yet, so the engine takes them as inputs that default to 1.
+Not built yet: the Redis cart store with its signed guest token, the HTTP endpoints, the frontend.
+
+## Phase 8 slice c (part 1): order state machine and order number (pure domain)
+
+`ShopVerse.Domain.Orders.OrderStateMachine` is the single place that says which state may follow which (brief §8.6):
+`pending_approval -> pending_payment -> confirmed -> processing -> packed -> shipped -> out_for_delivery -> delivered
+-> completed`, plus cancelled, delivery_failed, returned, return_requested, return_approved and refunded. Every change
+is an `OrderEvent` (who, when, why); a reason is mandatory for cancelling, a failed delivery and a return approval.
+`OrderNumber` generates `MW-YYMMDD-XXXXXX` with six random base32 characters. 22 unit tests: every pair of states is
+checked against an independently written table, every state is reachable, terminal states have no exit, and five
+mutations (shipped orders cancellable, completed reopens, no reason, stock held after shipping, lower-case numbers)
+each fail a test.
+
+Note: ADR-0003 still shows the old `SV-` order-number prefix. The brief (v2) says `MW-` and is the source of truth;
+the ADR should be updated when the order tables are built. Not built yet: the order tables, the atomic
+`PlaceOrder` transaction with idempotency, payment providers and webhooks, the frontend.
+
+## Phase 8 slice d (part 1): webhook verification (pure domain)
+
+`ShopVerse.Domain.Payments.WebhookVerifier` checks a provider webhook the way brief §8.7 requires: HMAC-SHA256 over
+`{timestamp}.{rawBody}` compared in constant time, and a time window (default 5 minutes, small clock skew tolerated,
+requests from the future refused). The timestamp is part of the signed message, so a captured request cannot be
+replayed with a fresh timestamp. Deduplication by provider event id needs storage and stays with the inbox (not built
+yet). 19 unit tests; five mutations (timestamp not signed, no expiry, future allowed, signature unchecked, prefix not
+stripped) each fail a test. Not built yet: the `IPaymentProvider` adapters (SSLCommerz, bKash, Stripe, COD), the
+inbox, the HTTP webhook endpoints, and "confirmed only by server-side verification, never by the browser redirect"
+wiring.
+
+## Phase 8 slice c (part 2): order pricing (pure domain)
+
+`ShopVerse.Domain.Orders.OrderPricing.Price` turns server-resolved lines into the order's money: per-line VAT
+(inclusive prices are split, exclusive prices get VAT added), one sub-order per seller with its own shipping, the
+marketplace commission on the seller's discounted net goods, and the seller's earning. Rounding happens once per line
+in whole poisha (banker's); every higher total is a sum, so `GrandTotal = sum of line totals + shipping` holds exactly.
+The input type has no field for a client-supplied price, tax or total, and a discount larger than its line, a negative
+price, an impossible VAT rate, a zero quantity, or missing / duplicate seller terms are refused: this is the arithmetic
+half of "no price can be changed from the client". 9 unit tests including 800 random orders in both tax modes that must
+reconcile to the poisha; five mutations (VAT added twice, commission on gross, shipping dropped, half-up VAT, oversized
+discount) each fail a test.
+
+Not built yet: the order tables and migration, the atomic `PlaceOrder` transaction (re-price from the database, reserve
+stock through `IInventoryService`, insert order + sub-orders + outbox event, idempotency key), the tamper test against
+the HTTP endpoint, payment adapters, the inbox, the frontend.
+
+## Phase 8 slice c (part 3): atomic PlaceOrder, order tables, idempotency
+
+`IOrderService.PlaceAsync` (`ShopVerse.Infrastructure.Orders.OrderService`) turns a request that carries **only variant ids
+and quantities** (no price, tax, discount or total field exists) into an order:
+re-prices every line from the database (`PricingEngine` + `OrderPricing`), checks the products are live, reserves stock
+through `IInventoryService` under the order id, and writes the order, one sub-order per seller, frozen line snapshots,
+its first `order_events` row, the idempotency record and the `OrderPlacedEvent` outbox message. Tables: `orders`,
+`sub_orders`, `order_items`, `order_events`, `idempotency_keys` (migration `OrdersAndSubOrders`), with CHECK constraints
+that make the database itself refuse an order whose money does not add up (`ck_order_items_money`, `ck_sub_orders_commission`).
+
+- Same `Idempotency-Key` and same request: the original order is returned (`Replayed = true`), stock is held once. Same key,
+  different request: `IDEMPOTENCY_KEY_REUSED`. Eight parallel retries of one key give one order: they queue behind a
+  session-level Postgres advisory lock. (Found by a test: without the lock, retries lost the stock race and were told
+  "insufficient stock" instead of getting their own order back.)
+- 20 buyers for 5 units: exactly 5 orders, the rest `INSUFFICIENT_STOCK`, stock never negative.
+- If saving fails after stock was reserved, the hold is released; an order-number clash is retried with a fresh number.
+- 14 integration tests against PostgreSQL. Mutations: no advisory lock, replay ignoring the request hash, no release on a
+  number clash, no release on a generic failure, and duplicate lines not merged each fail a test. One mutation survives on
+  purpose: removing the service's own "product is live" check changes nothing because `InventoryService` already refuses
+  non-live products with the same error; the service check is a second layer, not a missing test.
+
+Open: promotions are not yet fed into the order (the engine exists, no promotion store yet); shipping is 0 until zones are
+built; approval routing (`pending_approval`) and the credit-terms check (`creditUsed + total <= creditLimit`, brief §8.7)
+are not wired; the HTTP endpoint with the tamper test, payment adapters and the inbox, the frontend.
+
+## Phase 8 slice c (part 4): the order endpoint
+
+`POST /api/v1/orders` (authenticated; `Idempotency-Key` header; body = variant ids and quantities, optional `companyId`)
+and `GET /api/v1/orders/{id}` (the buyer's own order; anyone else's answers 404, the same as an unknown id).
+201 for the request that creates the order, 200 with the original order for a replay, 409 for the same key with a different
+request, 400 for a bad body, 409 `INSUFFICIENT_STOCK` / `VARIANT_UNAVAILABLE` when it cannot be fulfilled.
+
+- **Tamper test (acceptance criterion of Phase 8):** a request that also sends `unitPriceMinor: 1`, `total: 1`,
+  `grandTotalMinor: 1`, a 999,999,999 discount and `vatRate: 0` is charged the server's price (2 x 2,500.00), and the stored
+  order has no discount. There is no field in the request type for any of them.
+- **Company orders:** an order in a company's name needs a Buyer of that company; a non-member gets 404, a Requester-only
+  member 403 `COMPANY_ROLE_REQUIRED`, an unverified company 409 `COMPANY_NOT_VERIFIED`, a suspended one 409
+  `COMPANY_SUSPENDED`. Company orders are VAT-exclusive (VAT added on top), guest/personal orders VAT-inclusive (brief §8.1).
+- 8 more integration tests (22 for orders in all). Mutations: client price trusted, membership check skipped, verified
+  check skipped, any user able to read any order, replay answering 201 each fail a test. Equivalent mutants left alone and
+  recorded: dropping the controller's "header required" check (the service rejects a missing key with the same 400), and
+  dropping the service's "product is live" check (`InventoryService` refuses non-live products with the same error).
+
+Still open for Phase 8: promotions fed into the order, shipping zones, approval routing and the credit-terms check,
+payment adapters (SSLCommerz, bKash, Stripe, COD) and the webhook inbox, auto-cancel of unpaid orders after 30 minutes,
+and the whole frontend (cart, checkout, confirmation).
+
+## Phase 8 slice c (part 5): credit terms on orders (brief §8.7)
+
+A company order may set `payOnCredit`. The company's row is locked (`SELECT ... FOR UPDATE`, with `xmin` selected explicitly
+because EF needs it as a concurrency token and a bare `SELECT *` omits system columns), `Company.ReserveCredit` checks
+`creditUsed + orderTotal <= creditLimit`, the order moves to `confirmed` with an event, and everything is saved in one
+transaction; the held stock is then converted into a real deduction. A refused order releases its stock and leaves the
+credit untouched. Errors: `NO_CREDIT_TERMS`, `CREDIT_LIMIT_EXCEEDED`, 400 for `payOnCredit` without a company; a replay
+reports the real status (`confirmed`).
+
+Lesson recorded: my first parallel test (10 orders for one variant) passed with the lock removed, because the inventory
+lock serialised the orders and the credit race never happened. The test now gives each order its own variant and releases
+them together; with the lock it passes 3 of 3 runs, without it it fails 3 of 3.
+
+Known window: if the process dies between the committed order and the stock `CommitAsync`, the stock stays reserved until
+the reservation expires and is released while the order is confirmed. A reconciliation sweep (confirmed order with an
+active reservation) belongs with the payment slice and is not built yet. Cancelling a credit order must also call
+`ReleaseCredit`; that belongs with the cancel flow.
+
+## Phase 8 slice c (part 6): cancelling orders and the 30-minute unpaid sweep (brief §8.6)
+
+`POST /api/v1/orders/{id}/cancel` lets a buyer cancel their own order while it is still pending (payment or approval): the
+order row is locked, the state machine validates the move, the event is recorded with the reason, and the held stock is
+released. A confirmed order is refused (`ORDER_NOT_CANCELLABLE`) because the inventory has no way to return stock to the
+shelf yet. `UnpaidOrderExpiryWorker` runs `ExpireUnpaidAsync` every minute and cancels orders still `pending_payment` 30
+minutes after placement; parallel sweeps cancel each order once.
+
+Three defects found by tests and by reading the code while writing this, all fixed:
+- **The stock hold was shorter than the order's payment window.** Reservations default to 15 minutes, orders stay payable
+  for 30, so a payment arriving between minutes 15 and 30 would have found no stock. The order now reserves for the full
+  30 minutes (`TheStockHold_LastsAsLongAsTheOrderCanBePaid`).
+- **Order events could tie on their timestamp** (the "placed" and "confirmed" events of a credit order share one instant), so
+  their order was undefined. Each event now has a per-order sequence number, kept as a counter on the order row so no
+  event list has to be loaded, and `(order_id, seq)` is unique.
+- **My first version computed the sequence from the loaded event list**, which the cancel path does not load; the unique
+  index rejected the duplicate on the first run. Hence the counter on the order row.
+
+Mutations that each fail a test: cancel without releasing stock, sweep ignoring the cutoff, any user cancelling any order,
+confirmed orders cancellable, no row lock on the order, no reason required, reservation back to 15 minutes.
+
+Not built yet: restocking (so a confirmed order can be cancelled and its credit released), the reconciliation sweep for
+the credit-order crash window, payment adapters and the inbox, promotions and shipping in the order, approval routing,
+the frontend.
+
+## Phase 8 slice d (part 2): payments, the webhook inbox and server-side confirmation (brief §8.7)
+
+`IPaymentProvider` (create a session, query the provider directly, parse a webhook's ids) with an in-process
+`MockPaymentProvider`; `IPaymentService.StartAsync` / `HandleWebhookAsync`; tables `payments` and `payment_events`
+(migration `Payments`); `POST /api/v1/orders/{id}/payments` (owner only, body names only the provider, the amount is the
+order's own total) and `POST /api/v1/payments/webhooks/{provider}` (anonymous, authority is the signature, on the reviewed
+public list in the security regression test).
+
+The order is confirmed only when: the signature over the raw body is valid and fresh (`WebhookVerifier`); the event id is
+new (unique `(provider, event_id)` inbox); the **provider itself**, asked server to server, says the payment is paid for
+exactly the amount and currency recorded when the payment started; and the order is still pending. What a webhook body says
+about money is never read. A browser redirect confirms nothing: no call exists that does.
+- Different amount: the order stays pending and the payment is flagged `NeedsRefund`.
+- Paid after the order was cancelled: not confirmed, flagged `NeedsRefund`, stock untouched.
+- The same event twice, or eight at once: confirmed once (`Duplicate` for the rest), stock deducted once. Two different
+  events for one payment: confirmed once (`AlreadyConfirmed`). Both under row locks on the payment and the order.
+- Providers retry anything that is not 2xx, so every handled event is answered 200, including duplicates and unknown ids;
+  only a bad signature or stale timestamp is 401.
+
+Safety decision recorded: the mock gateway, whose secret is published, is registered only where demo accounts are (the
+Development environment). Registering it everywhere by default would have left a payment gateway with a known secret in
+production; with no real adapter configured, no provider exists there.
+
+13 tests (service and HTTP). Mutations that each fail a test: trusting the webhook instead of asking the provider, not
+comparing the amount, not verifying the signature, no inbox dedupe, confirming a cancelled order, and (after adding a test
+for it) no row lock on the payment; a first parallel test did not catch that last one and was replaced with one that does.
+
+Not built yet: real adapters (SSLCommerz, bKash, Stripe) and COD with its phone OTP and order cap, the nightly
+reconciliation job, refunds, restocking, the frontend payment pages.
+
+Interim security review of the order and payment slices: `docs/reviews/R3_ORDERS_AND_PAYMENTS.md` (20 attacks with their
+tests; it found and fixed an unbounded webhook body, an error message that named the failed check, and the mock gateway
+being registered everywhere).

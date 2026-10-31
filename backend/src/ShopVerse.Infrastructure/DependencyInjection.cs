@@ -1,3 +1,7 @@
+using ShopVerse.Infrastructure.Payments;
+using ShopVerse.Application.Payments;
+using ShopVerse.Infrastructure.Orders;
+using ShopVerse.Application.Orders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShopVerse.Application.Catalog;
@@ -28,6 +32,8 @@ public static class DependencyInjection
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
+        services.TryAddScoped<IOrderService, OrderService>();
+        services.TryAddScoped<IPaymentService, PaymentService>();
 
         services.AddScoped<IOutboxPublisher, SearchSyncQueuePublisher>();
         services.AddScoped<IOutboxPublisher, StorefrontCacheInvalidationPublisher>();
@@ -39,6 +45,7 @@ public static class DependencyInjection
     public static IServiceCollection AddCatalogWorkers(this IServiceCollection services)
     {
         services.AddHostedService<ReservationExpiryWorker>();
+        services.AddHostedService<UnpaidOrderExpiryWorker>();
         services.AddHostedService<OutboxRelayWorker>();
         return services;
     }

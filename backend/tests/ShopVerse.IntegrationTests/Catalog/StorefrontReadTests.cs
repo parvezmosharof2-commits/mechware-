@@ -16,6 +16,11 @@ using Xunit.Abstractions;
 
 namespace ShopVerse.IntegrationTests.Catalog;
 
+/// <summary>
+/// Contains a wall-clock latency check (p95 under 50 ms across 3,200 requests). Such a test measures the machine as much as
+/// the code, so this class never runs beside other test classes: they would compete for the same CPU.
+/// </summary>
+[Collection(ExclusiveTimingCollection.Name)]
 public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLifetime
 {
     private readonly CatalogSeedFixture _seed;
