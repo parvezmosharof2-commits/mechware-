@@ -50,7 +50,27 @@ jobs:
         run: dotnet build backend/ShopVerse.sln --no-restore --configuration Release
 
       - name: Run Unit & Integration Tests
-        run: dotnet test backend/ShopVerse.sln --no-build --configuration Release --verbosity normal
+        run: >
+          dotnet test backend/ShopVerse.sln --no-build --configuration Release --verbosity normal
+          --logger "trx;LogFilePrefix=results" --results-directory "$RUNNER_TEMP/test-results"
+
+      # The console log buries failed test names under thousands of lines; print them plainly.
+      - name: Show failed tests
+        if: failure()
+        run: |
+          python3 - <<'PY'
+          import glob, os, xml.etree.ElementTree as ET
+          ns = {"t": "http://microsoft.com/schemas/VisualStudio/TeamTest/2010"}
+          for f in glob.glob(os.path.join(os.environ["RUNNER_TEMP"], "test-results", "*.trx")):
+              for r in ET.parse(f).getroot().iterfind(".//t:UnitTestResult", ns):
+                  if r.get("outcome") == "Failed":
+                      print("FAILED:", r.get("testName"))
+                      msg = r.find(".//t:ErrorInfo/t:Message", ns)
+                      trace = r.find(".//t:ErrorInfo/t:StackTrace", ns)
+                      print((msg.text or "")[:1500] if msg is not None else "")
+                      print((trace.text or "")[:800] if trace is not None else "")
+                      print("-" * 60)
+          PY
 
   frontend-checks:
     name: Next.js 15 Monorepo Checks
