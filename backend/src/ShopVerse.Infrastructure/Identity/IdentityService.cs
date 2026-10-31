@@ -204,6 +204,9 @@ public sealed class IdentityService : IIdentityService
 
         if (user is null || user.DeletedAtUtc.HasValue || string.IsNullOrEmpty(user.PasswordHash))
         {
+            // Hash anyway: an unknown account must cost the same time as a wrong password, or the response time
+            // tells an attacker which addresses have accounts.
+            _passwordHasher.VerifyPassword(request.Password, DummyPasswordHash());
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
@@ -1019,10 +1022,10 @@ public sealed class IdentityService : IIdentityService
     {
         IQueryable<OtpCode> query = type is null
             ? _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
-                WHERE lower(recipient) = {recipient} AND reference_id = {referenceId}
+                WHERE recipient = {recipient} AND reference_id = {referenceId}
                 ORDER BY created_at DESC LIMIT 1 FOR UPDATE")
             : _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
-                WHERE lower(recipient) = {recipient} AND reference_id = {referenceId} AND type = {type.Value.ToString()}
+                WHERE recipient = {recipient} AND reference_id = {referenceId} AND type = {type.Value.ToString()}
                 ORDER BY created_at DESC LIMIT 1 FOR UPDATE");
 
         return (await query.ToListAsync(cancellationToken)).FirstOrDefault();
@@ -1099,6 +1102,12 @@ public sealed class IdentityService : IIdentityService
         }
     }
 
+    private static string? _dummyPasswordHash;
+
+    /// <summary>A real hash of a throw-away password, made once, so a missing account still pays the full hashing cost.</summary>
+    private string DummyPasswordHash() =>
+        _dummyPasswordHash ??= _passwordHasher.HashPassword("Dummy#Password-" + Guid.NewGuid().ToString("N"));
+
     private async Task<User?> FindUserByIdentifierAsync(string identifier, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(identifier))
@@ -1111,7 +1120,7 @@ public sealed class IdentityService : IIdentityService
         return await _db.Users
             .Include(u => u.UserRoles)
             .FirstOrDefaultAsync(
-                u => u.DeletedAtUtc == null && (u.Email.ToLower() == lowered || (u.Phone != null && u.Phone == trimmed)),
+                u => u.DeletedAtUtc == null && (u.Email == lowered || (u.Phone != null && u.Phone == trimmed)),
                 cancellationToken);
     }
 

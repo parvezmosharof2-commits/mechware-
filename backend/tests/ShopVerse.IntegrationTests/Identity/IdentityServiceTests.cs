@@ -21,10 +21,10 @@ public static class IdentityTestKit
     private static readonly JwtTokenService Tokens =
         new("mechware-test-high-entropy-secret-key-256bit-2026!!", "https://api.example.test", "https://example.test", 15);
 
-    public static (ShopVerseDbContext Db, IdentityService Service) Open(PostgresDatabaseFixture fixture)
+    public static (ShopVerseDbContext Db, IdentityService Service) Open(PostgresDatabaseFixture fixture, IPasswordHasherService? hasher = null, ShopVerseDbContext? db = null)
     {
-        var db = fixture.CreateContext();
-        var service = new IdentityService(Hasher, Tokens, Totp, new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance), db);
+        db ??= fixture.CreateContext();
+        var service = new IdentityService(hasher ?? Hasher, Tokens, Totp, new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance), db);
         return (db, service);
     }
 
@@ -46,6 +46,31 @@ public static class IdentityTestKit
         await using var db = fixture.CreateContext();
         await new IdentitySeeder(db, Hasher, Totp).SeedAsync(policy, bootstrap);
     }
+}
+
+/// <summary>Counts how many times a password was checked, to prove unknown and known accounts cost the same.</summary>
+public sealed class CountingHasher(IPasswordHasherService inner) : IPasswordHasherService
+{
+    public int Verifications { get; private set; }
+    public void ValidatePasswordPolicy(string password) => inner.ValidatePasswordPolicy(password);
+    public string HashPassword(string password) => inner.HashPassword(password);
+    public bool VerifyPassword(string password, string passwordHash) { Verifications++; return inner.VerifyPassword(password, passwordHash); }
+}
+
+/// <summary>Records every SQL command text, so a test can assert what the code actually sends to the database.</summary>
+public sealed class SqlRecorder : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+{
+    public List<string> Commands { get; } = [];
+
+    public override Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> ReaderExecuting(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result)
+    { Commands.Add(command.CommandText); return result; }
+
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+        System.Data.Common.DbCommand command, Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+    { Commands.Add(command.CommandText); return ValueTask.FromResult(result); }
 }
 
 public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<PostgresDatabaseFixture>, IAsyncLifetime
@@ -153,6 +178,49 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         (await Task.WhenAll(attempts)).Count(ok => ok).Should().Be(1);
         await using var db = fixture.CreateContext();
         (await db.Users.CountAsync(u => u.Email == email)).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task LoginLookup_UsesTheUniqueIndexes_AndStillIgnoresCase()
+    {
+        var (email, _, password, _) = await RegisterAndVerifyAsync();
+        var upper = email.ToUpperInvariant();
+
+        var recorder = new SqlRecorder();
+        var options = new DbContextOptionsBuilder<ShopVerseDbContext>().UseNpgsql(fixture.ConnectionString).AddInterceptors(recorder).Options;
+        await using var db = new ShopVerseDbContext(options);
+        var (_, service) = IdentityTestKit.Open(fixture, null, db);
+
+        var session = await service.LoginAsync(new LoginRequestDto(upper, password));
+
+        session.AccessToken.Should().NotBeNullOrWhiteSpace("e-mail is case-insensitive for the person typing it");
+        recorder.Commands.Where(c => c.Contains("FROM users", StringComparison.OrdinalIgnoreCase))
+            .Should().OnlyContain(c => !c.Contains("lower(", StringComparison.OrdinalIgnoreCase),
+                "wrapping the column in lower() defeats ux_users_email and turns every login into a full table scan");
+    }
+
+    [PostgresFact]
+    public async Task UnknownAndKnownAccounts_CostTheSameNumberOfPasswordChecks()
+    {
+        var (email, _, _, _) = await RegisterAndVerifyAsync();
+        var counting = new CountingHasher(IdentityTestKit.Hasher);
+
+        async Task Attempt(string identifier)
+        {
+            var (db, service) = IdentityTestKit.Open(fixture, counting);
+            await using (db)
+            {
+                var act = () => service.LoginAsync(new LoginRequestDto(identifier, "Wrong#Guess2026!"));
+                await act.Should().ThrowAsync<UnauthorizedAccessException>();
+            }
+        }
+
+        await Attempt(email);
+        var known = counting.Verifications;
+        await Attempt("nobody." + Guid.NewGuid().ToString("N") + "@example.test");
+
+        known.Should().Be(1);
+        counting.Verifications.Should().Be(2, "a missing account must hash too, or response time reveals which e-mails are registered");
     }
 
     [PostgresFact]
