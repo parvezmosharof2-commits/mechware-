@@ -445,3 +445,14 @@ each fail a test.
 Note: ADR-0003 still shows the old `SV-` order-number prefix. The brief (v2) says `MW-` and is the source of truth;
 the ADR should be updated when the order tables are built. Not built yet: the order tables, the atomic
 `PlaceOrder` transaction with idempotency, payment providers and webhooks, the frontend.
+
+## Phase 8 slice d (part 1): webhook verification (pure domain)
+
+`ShopVerse.Domain.Payments.WebhookVerifier` checks a provider webhook the way brief §8.7 requires: HMAC-SHA256 over
+`{timestamp}.{rawBody}` compared in constant time, and a time window (default 5 minutes, small clock skew tolerated,
+requests from the future refused). The timestamp is part of the signed message, so a captured request cannot be
+replayed with a fresh timestamp. Deduplication by provider event id needs storage and stays with the inbox (not built
+yet). 19 unit tests; five mutations (timestamp not signed, no expiry, future allowed, signature unchecked, prefix not
+stripped) each fail a test. Not built yet: the `IPaymentProvider` adapters (SSLCommerz, bKash, Stripe, COD), the
+inbox, the HTTP webhook endpoints, and "confirmed only by server-side verification, never by the browser redirect"
+wiring.
