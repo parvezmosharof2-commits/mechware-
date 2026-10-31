@@ -596,3 +596,23 @@ reconciliation job, refunds, restocking, the frontend payment pages.
 Interim security review of the order and payment slices: `docs/reviews/R3_ORDERS_AND_PAYMENTS.md` (20 attacks with their
 tests; it found and fixed an unbounded webhook body, an error message that named the failed check, and the mock gateway
 being registered everywhere).
+
+## Phase 8 slice a: promotions feed the order (coupon codes and usage limits)
+
+Tables `promotions`, `promotion_user_usage`, `promotion_redemptions` (migration `Promotions`). `PlaceOrder` now loads the
+active automatic promotions and the coupon codes the buyer entered (`couponCodes`, at most 3, case-insensitive), runs the
+pure `PromotionEngine`, and writes each line's discount into the order. An entered code that does not exist, is inactive, or
+that the engine rejects (no eligible line, below the minimum spend, expired, limit reached) is an error the buyer is told
+about (`COUPON_INVALID`, `COUPON_<REASON>`), never silently dropped.
+
+Usage limits are enforced where it cannot be raced: when the order is saved, in one transaction, each promotion is claimed
+with an atomic conditional `UPDATE ... WHERE redeemed_count < global_limit` and an upsert guarded by `per_user_limit`; a
+failed claim rolls the order back and the stock hold is released. A cancelled order gives its uses back and removes its
+redemptions. The earlier pre-check from the engine only gives a clear message early; it is not the guard.
+
+10 integration tests, including 20 buyers racing for the last 5 uses (exactly 5 win, the rest hold no stock) and one buyer
+racing their own per-user limit across 8 requests. Mutations that each fail a test: no global-limit guard, no per-user
+guard, cancel not returning the use, unknown coupon ignored, rejected coupon ignored. The 49 earlier order and payment tests
+still pass after the credit path was folded into the same single save transaction.
+
+Not built yet: a staff screen or API to create and edit promotions (today they are rows), so the console cannot manage them.

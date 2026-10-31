@@ -6,6 +6,7 @@ using ShopVerse.Domain.Companies;
 using ShopVerse.Domain.Identity;
 using ShopVerse.Domain.Orders;
 using ShopVerse.Domain.Payments;
+using ShopVerse.Domain.Pricing;
 using ShopVerse.Domain.Inventory;
 using ShopVerse.Domain.Reviews;
 using ShopVerse.Domain.Sellers;
@@ -72,6 +73,9 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<IdempotencyRecord> IdempotencyKeys => Set<IdempotencyRecord>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
+    public DbSet<PromotionDefinition> Promotions => Set<PromotionDefinition>();
+    public DbSet<PromotionUserUsage> PromotionUserUsage => Set<PromotionUserUsage>();
+    public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

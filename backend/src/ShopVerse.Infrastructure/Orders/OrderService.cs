@@ -51,7 +51,7 @@ public sealed partial class OrderService(
 
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var priced = await PriceAsync(lines, mode, now, ct);
+        var (priced, applied) = await PriceAsync(request, lines, mode, now, ct);
 
         // A rare clash of two random order numbers is retried with a fresh one rather than shown to the buyer.
         for (var attempt = 0; ; attempt++)
@@ -66,16 +66,9 @@ public sealed partial class OrderService(
 
             try
             {
-                if (request.PayOnCredit)
-                {
-                    await SaveOnCreditAsync(order, request.CompanyId!.Value, now, ct);
-                    // Credit orders are confirmed at once (brief §8.5): the held stock becomes a real deduction.
-                    await inventory.CommitAsync(orderId, ct);
-                }
-                else
-                {
-                    await db.SaveChangesAsync(ct);
-                }
+                await SaveAsync(order, request, applied, now, ct);
+                // Credit orders are confirmed at once (brief §8.5): the held stock becomes a real deduction.
+                if (request.PayOnCredit) await inventory.CommitAsync(orderId, ct);
 
                 return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor, reserved, false);
             }
@@ -162,6 +155,12 @@ public sealed partial class OrderService(
                 throw new ConflictException("ORDER_NOT_CANCELLABLE", $"An order that is {ToWire(order.Status)} can no longer be cancelled here.");
 
             order.Transition(OrderStatus.Cancelled, ownerUserId, reason, now);
+
+            // A cancelled order gives its promotion uses back.
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotions p SET redeemed_count = p.redeemed_count - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = p.id", ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotion_user_usage u SET uses = u.uses - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = u.promotion_id AND u.user_id = r.user_id", ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM promotion_redemptions WHERE order_id = {orderId}", ct);
+
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
         }
@@ -189,10 +188,15 @@ public sealed partial class OrderService(
     private static string ToWire(OrderStatus status) =>
         string.Concat(status.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
+    private static List<string> NormalisedCodes(PlaceOrderRequest r) =>
+        (r.CouponCodes ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim().ToUpperInvariant()).Distinct().ToList();
+
     private static List<PlaceOrderLine> Normalise(PlaceOrderRequest r)
     {
         if (!KeyPattern().IsMatch(r.IdempotencyKey ?? string.Empty))
             throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
+        if ((r.CouponCodes?.Count ?? 0) > PlaceOrderRequest.MaxCoupons)
+            throw new ValidationException("couponCodes", $"At most {PlaceOrderRequest.MaxCoupons} coupon codes per order.");
         if (r.PayOnCredit && r.CompanyId is null) throw new ValidationException("payOnCredit", "Credit terms apply to company orders only.");
         if (r.Lines is null || r.Lines.Count == 0) throw new ValidationException("lines", "An order needs at least one line.");
         if (r.Lines.Any(l => l.Quantity is <= 0 or > PlaceOrderRequest.MaxQuantityPerLine))
@@ -211,7 +215,7 @@ public sealed partial class OrderService(
 
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}";
+        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -228,7 +232,8 @@ public sealed partial class OrderService(
     }
 
 
-    private async Task<PricedOrder> PriceAsync(List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
+    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied)> PriceAsync(
+        PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
     {
         var ids = lines.Select(l => l.VariantId).ToList();
         var rows = await (from v in db.ProductVariants.AsNoTracking()
@@ -246,31 +251,91 @@ public sealed partial class OrderService(
             throw new ConflictException("VARIANT_UNAVAILABLE", $"These items are not available: {string.Join(", ", unavailable)}.");
 
         var drafts = new List<OrderLineDraft>();
+        var categoryOf = new Dictionary<Guid, Guid>();
         var terms = new Dictionary<Guid, SellerTerms>();
         foreach (var line in lines)
         {
             var r = byId[line.VariantId];
             var quote = PricingEngine.Quote(PricingInput.From(r.Variant, r.Category.VatRate), now, mode);
-            drafts.Add(new OrderLineDraft(Guid.NewGuid(), r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
+            var lineId = Guid.NewGuid();
+            categoryOf[lineId] = r.Product.CategoryId;
+            drafts.Add(new OrderLineDraft(lineId, r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
                 line.Quantity, quote.Display.ToMinorUnits(), r.Category.VatRate, 0));
             // Shipping zones and seller-specific commission tiers arrive with their own slices; until then shipping is 0.
             terms.TryAdd(r.Seller.Id, new SellerTerms(r.Seller.Id, 0, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate));
         }
 
-        return OrderPricing.Price(drafts, terms.Values.ToList(), mode);
+        var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
+        var discounted = applied.Lines.Select((d, i) => drafts[i] with { DiscountMinor = d.DiscountMinor }).ToList();
+        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied);
     }
 
     /// <summary>
-    /// Brief §8.7: <c>creditUsed + orderTotal &lt;= creditLimit</c>, checked in the transaction that places the order, with the
-    /// company's row locked so two orders cannot both pass the check. The order is confirmed in the same step.
+    /// Automatic promotions apply on their own; coupon codes the buyer entered apply if they exist and the engine accepts them.
+    /// An entered code that cannot be used is an error the buyer is told about, never silently dropped. Usage limits are checked
+    /// here only to give a clear message early; the binding check is the atomic claim made when the order is saved.
     /// </summary>
-    private async Task SaveOnCreditAsync(Order order, Guid companyId, DateTime now, CancellationToken ct)
+    private async Task<PromotionResult> ApplyPromotionsAsync(
+        PlaceOrderRequest request, List<OrderLineDraft> drafts, Dictionary<Guid, Guid> categoryOf, DateTime now, CancellationToken ct)
+    {
+        var codes = NormalisedCodes(request);
+        var candidates = await db.Promotions.AsNoTracking()
+            .Where(p => p.IsActive && (p.Code == null || codes.Contains(p.Code)))
+            .ToListAsync(ct);
+
+        var unknown = codes.Where(c => !candidates.Any(p => p.Code == c)).ToList();
+        if (unknown.Count > 0) throw new ConflictException("COUPON_INVALID", $"This code is not valid: {string.Join(", ", unknown)}.");
+
+        var ids = candidates.Select(p => p.Id).ToList();
+        var userUses = await db.PromotionUserUsage.AsNoTracking()
+            .Where(u => u.UserId == request.UserId && ids.Contains(u.PromotionId))
+            .ToDictionaryAsync(u => u.PromotionId, u => u.Uses, ct);
+        var usage = candidates.ToDictionary(p => p.Id, p => new PromotionUsage(p.RedeemedCount, userUses.GetValueOrDefault(p.Id)));
+
+        var cart = drafts.Select(d => new CartLine(d.LineId, d.VariantId, d.SellerId, categoryOf[d.LineId], d.Quantity, d.UnitPriceMinor)).ToList();
+        var result = PromotionEngine.Apply(cart, candidates.Select(p => p.ToPromotion()).ToList(), now, usage);
+
+        foreach (var code in codes)
+        {
+            var promo = candidates.First(p => p.Code == code);
+            if (result.Rejected.FirstOrDefault(r => r.PromotionId == promo.Id) is { } rejected)
+                throw new ConflictException("COUPON_" + rejected.Reason, $"The code {code} cannot be used on this order ({rejected.Reason}).");
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Saves the order in one transaction: for a credit order the company's credit is checked and held first; every promotion
+    /// the order uses is claimed with an atomic conditional update, so two orders can never both take the last use.
+    /// </summary>
+    private async Task SaveAsync(Order order, PlaceOrderRequest request, IReadOnlyList<AppliedPromotion> applied, DateTime now, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {companyId} FOR UPDATE").ToListAsync(ct)).Single();
 
-        company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
-        order.Transition(OrderStatus.Confirmed, order.UserId, "Placed on credit terms", now);
+        if (request.PayOnCredit)
+        {
+            var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {request.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
+            company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
+            order.Transition(OrderStatus.Confirmed, order.UserId, "Placed on credit terms", now);
+        }
+
+        // A fixed order avoids two orders waiting on each other's promotion rows.
+        foreach (var a in applied.OrderBy(x => x.PromotionId))
+        {
+            var global = await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE promotions SET redeemed_count = redeemed_count + 1 WHERE id = {a.PromotionId} AND (global_limit IS NULL OR redeemed_count < global_limit)", ct);
+            if (global == 0) throw new ConflictException("COUPON_GLOBAL_LIMIT_REACHED", $"{a.Name} has no uses left.");
+
+            var user = await db.Database.ExecuteSqlInterpolatedAsync($@"
+                INSERT INTO promotion_user_usage (promotion_id, user_id, uses) VALUES ({a.PromotionId}, {order.UserId}, 1)
+                ON CONFLICT (promotion_id, user_id) DO UPDATE SET uses = promotion_user_usage.uses + 1
+                WHERE (SELECT per_user_limit FROM promotions WHERE id = {a.PromotionId}) IS NULL
+                   OR promotion_user_usage.uses < (SELECT per_user_limit FROM promotions WHERE id = {a.PromotionId})", ct);
+            if (user == 0) throw new ConflictException("COUPON_PER_USER_LIMIT_REACHED", $"You have already used {a.Name} the allowed number of times.");
+
+            db.PromotionRedemptions.Add(new PromotionRedemption(order.Id, a.PromotionId, order.UserId, a.DiscountMinor));
+        }
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
