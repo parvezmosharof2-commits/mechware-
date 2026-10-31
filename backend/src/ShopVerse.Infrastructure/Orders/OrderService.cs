@@ -1,3 +1,6 @@
+using ShopVerse.Infrastructure.Identity;
+using ShopVerse.Domain.Shipping;
+using ShopVerse.Domain.Identity;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -51,7 +54,7 @@ public sealed partial class OrderService(
 
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, applied) = await PriceAsync(request, lines, mode, now, ct);
+        var (priced, applied, shipTo) = await PriceAsync(request, lines, mode, now, ct);
 
         // A rare clash of two random order numbers is retried with a fresh one rather than shown to the buyer.
         for (var attempt = 0; ; attempt++)
@@ -60,7 +63,7 @@ public sealed partial class OrderService(
             var reserved = await ReserveAsync(orderId, lines, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                request.ShipToJson ?? "{}", OrderStatus.PendingPayment, now);
+                shipTo ?? request.ShipToJson ?? "{}", OrderStatus.PendingPayment, now);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
@@ -215,7 +218,7 @@ public sealed partial class OrderService(
 
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
+        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}|{r.ShippingAddressId:N}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -232,7 +235,7 @@ public sealed partial class OrderService(
     }
 
 
-    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied)> PriceAsync(
+    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, string? ShipTo)> PriceAsync(
         PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
     {
         var ids = lines.Select(l => l.VariantId).ToList();
@@ -253,6 +256,7 @@ public sealed partial class OrderService(
         var drafts = new List<OrderLineDraft>();
         var categoryOf = new Dictionary<Guid, Guid>();
         var terms = new Dictionary<Guid, SellerTerms>();
+        var itemsBySeller = new Dictionary<Guid, List<ShippingItem>>();
         foreach (var line in lines)
         {
             var r = byId[line.VariantId];
@@ -261,14 +265,87 @@ public sealed partial class OrderService(
             categoryOf[lineId] = r.Product.CategoryId;
             drafts.Add(new OrderLineDraft(lineId, r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
                 line.Quantity, quote.Display.ToMinorUnits(), r.Category.VatRate, 0));
-            // Shipping zones and seller-specific commission tiers arrive with their own slices; until then shipping is 0.
             terms.TryAdd(r.Seller.Id, new SellerTerms(r.Seller.Id, 0, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate));
+
+            if (!itemsBySeller.TryGetValue(r.Seller.Id, out var items)) itemsBySeller[r.Seller.Id] = items = [];
+            items.Add(new ShippingItem(line.Quantity, (int)Math.Ceiling(r.Variant.WeightKg * 1000m),
+                (int)Math.Ceiling(r.Product.LengthCm * 10m), (int)Math.Ceiling(r.Product.WidthCm * 10m), (int)Math.Ceiling(r.Product.HeightCm * 10m)));
         }
+
+        var shipTo = await PriceShippingAsync(request, itemsBySeller, terms, ct);
 
         var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
         var discounted = applied.Lines.Select((d, i) => drafts[i] with { DiscountMinor = d.DiscountMinor }).ToList();
-        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied);
+        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied, shipTo);
     }
+
+    /// <summary>
+    /// Shipping is priced per seller from the saved address the buyer named. The zone comes from that address's place in the
+    /// location table, never from text the client typed, so a buyer cannot claim "Dhaka" to get the cheaper tariff. With no tariff
+    /// configured at all, shipping stays 0 (nothing to price against); once any tariff exists an address is required, and a
+    /// zone without a tariff, or a parcel too heavy or too large to price, is refused instead of being given a guessed fee.
+    /// </summary>
+    private async Task<string?> PriceShippingAsync(
+        PlaceOrderRequest request, Dictionary<Guid, List<ShippingItem>> itemsBySeller, Dictionary<Guid, SellerTerms> terms, CancellationToken ct)
+    {
+        var cards = await db.ShippingRates.AsNoTracking().ToListAsync(ct);
+
+        Address? address = null;
+        if (request.ShippingAddressId is { } addressId)
+        {
+            address = await db.Addresses.AsNoTracking().FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == request.UserId, ct)
+                      ?? throw new ValidationException("shippingAddressId", "That address is not one of yours.");
+        }
+
+        if (cards.Count == 0) return address is null ? null : SnapshotOf(address);
+        if (address is null) throw new ValidationException("shippingAddressId", "A delivery address is required to price shipping.");
+
+        var zone = ZoneOf(address);
+        var card = cards.FirstOrDefault(c => c.Zone == zone)
+                   ?? throw new ConflictException("SHIPPING_NOT_AVAILABLE", $"We do not ship to this area yet ({zone}).");
+
+        foreach (var (sellerId, items) in itemsBySeller)
+        {
+            var quote = ShippingCalculator.Quote(card.ToCard(), items);
+            if (quote.QuoteRequired)
+                throw new ConflictException("SHIPPING_QUOTE_REQUIRED", $"This shipment needs a custom quote ({quote.Reason}); please request a quote.");
+            terms[sellerId] = terms[sellerId] with { ShippingMinor = quote.AmountMinor };
+        }
+
+        return SnapshotOf(address);
+    }
+
+    /// <summary>
+    /// The location hierarchy lives in code (<see cref="BangladeshLocationSeeder"/>), the same list that validates an address when
+    /// it is saved; the <c>bd_locations</c> table is not populated. Using one source means the zone can never disagree with the
+    /// check that accepted the address. An unknown place falls to the dearest zone, never the cheapest.
+    /// </summary>
+    private static ShippingZone ZoneOf(Address address)
+    {
+        var all = BangladeshLocationSeeder.GetSeedLocations();
+        bool Is(BdLocation l, string name) => string.Equals(l.NameEn, name?.Trim(), StringComparison.OrdinalIgnoreCase) || l.NameBn == name?.Trim();
+
+        var district = all.FirstOrDefault(l => l.Level == "district" && Is(l, address.District));
+        if (district is null) return ShippingZone.OutsideDhaka;
+
+        var upazila = all.FirstOrDefault(l => l.Level == "upazila" && l.ParentId == district.Id && Is(l, address.Upazila));
+        return ShippingRate.ZoneFromLocation((upazila ?? district).ShippingZone);
+    }
+
+    /// <summary>The frozen delivery destination, built by the server from the saved address.</summary>
+    private static string SnapshotOf(Address a) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        a.RecipientName,
+        a.Phone,
+        a.Line1,
+        a.Line2,
+        a.Area,
+        a.Upazila,
+        a.District,
+        a.Division,
+        a.PostalCode,
+        a.Country
+    });
 
     /// <summary>
     /// Automatic promotions apply on their own; coupon codes the buyer entered apply if they exist and the engine accepts them.

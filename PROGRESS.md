@@ -616,3 +616,31 @@ guard, cancel not returning the use, unknown coupon ignored, rejected coupon ign
 still pass after the credit path was folded into the same single save transaction.
 
 Not built yet: a staff screen or API to create and edit promotions (today they are rows), so the console cannot manage them.
+
+## Phase 8 slice e: shipping fee from a rate table (brief §8.9)
+
+Table `shipping_rates` (migration `ShippingRates`): one row per zone (`inside_dhaka`, `dhaka_suburb`, `outside_dhaka`), with
+base fee, per-kg fee, volumetric divisor, weight step, and optional parcel weight and dimension limits. Check constraints and a
+unique index on the zone keep the table from holding a contradictory tariff.
+
+The fee is computed by the pure `ShippingCalculator`: chargeable weight is the larger of real and volumetric weight (L x W x H /
+divisor), summed over the lines, rounded **up** to the weight step; amount = base + chargeable x per-kg (half-up on poisha).
+A parcel over the weight or size limit is not given a made-up price: it needs a quote, and the order is refused without holding
+stock. The fee is added as is: promotions do not discount it and it is not taxed.
+
+At checkout the buyer sends only `shippingAddressId`. The server loads that saved address (it must belong to the buyer), works
+out the zone itself, and writes the delivery snapshot into the order. Nothing the client types can change the zone or the fee.
+A place that cannot be matched is treated as the dearest zone, never the cheapest. The fee is stored on each seller's part of
+the order, and the idempotency hash includes the address.
+
+**No rate numbers have been entered.** The table is empty, and while it is empty the shipping fee is 0 and no address is
+demanded. Once any row exists, an address is required and a zone with no row is refused. The real tariff must be supplied by the
+business; nothing here is invented.
+
+14 unit tests and 9 integration tests. Mutations that each fail a named test: zone read from client text, unknown place priced
+cheapest, anyone's address accepted, quote-only parcel given a fee, address not required once a tariff exists, fee not written to
+the seller.
+
+Known gaps: no staff screen or API to edit rates (rows only); zone is derived from the static seed location list because the
+`bd_locations` table is never populated; DATA_MODEL says `dhaka_suburbs` while the code uses `dhaka_suburb` (the reader accepts
+both); ADR-0003 still shows the old `SV-` order prefix while the brief says `MW-`.

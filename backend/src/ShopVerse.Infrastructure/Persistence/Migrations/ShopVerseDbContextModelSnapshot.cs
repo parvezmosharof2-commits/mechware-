@@ -2836,6 +2836,64 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("sellers", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Shipping.ShippingRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("BaseMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_amount");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("MaxDimensionMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_dimension_mm");
+
+                    b.Property<int?>("MaxParcelGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_parcel_grams");
+
+                    b.Property<long>("PerKgMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("per_kg_amount");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("VolumetricDivisor")
+                        .HasColumnType("integer")
+                        .HasColumnName("volumetric_divisor");
+
+                    b.Property<int>("WeightStepGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("weight_step_grams");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Zone")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shipping_rates_zone");
+
+                    b.ToTable("shipping_rates", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_shipping_rates_money", "base_amount >= 0 AND per_kg_amount >= 0");
+
+                            t.HasCheckConstraint("ck_shipping_rates_units", "volumetric_divisor > 0 AND weight_step_grams > 0 AND (max_parcel_grams IS NULL OR max_parcel_grams > 0) AND (max_dimension_mm IS NULL OR max_dimension_mm > 0)");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Infrastructure.Persistence.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
