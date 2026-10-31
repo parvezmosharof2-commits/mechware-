@@ -167,3 +167,69 @@ internal sealed class PaymentEventConfiguration : IEntityTypeConfiguration<Payme
         b.HasIndex(e => new { e.Provider, e.EventId }).IsUnique().HasDatabaseName("ux_payment_events_provider_event");
     }
 }
+
+internal sealed class PromotionDefinitionConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Pricing.PromotionDefinition>
+{
+    public void Configure(EntityTypeBuilder<ShopVerse.Domain.Pricing.PromotionDefinition> b)
+    {
+        b.ToTable("promotions", t =>
+        {
+            t.HasCheckConstraint("ck_promotions_percent", "percent BETWEEN 0 AND 100");
+            t.HasCheckConstraint("ck_promotions_limits", "(global_limit IS NULL OR global_limit >= 1) AND (per_user_limit IS NULL OR per_user_limit >= 1)");
+            t.HasCheckConstraint("ck_promotions_redeemed", "redeemed_count >= 0");
+        });
+        b.MapAudit();
+        b.Property(p => p.Name).HasColumnName("name").HasMaxLength(150).IsRequired();
+        b.Property(p => p.Code).HasColumnName("code").HasMaxLength(40);
+        b.Property(p => p.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(20);
+        b.Property(p => p.ScopeKind).HasColumnName("scope_kind").HasConversion<string>().HasMaxLength(20);
+        b.Property(p => p.ScopeTargetId).HasColumnName("scope_target_id");
+        b.Property(p => p.Priority).HasColumnName("priority");
+        b.Property(p => p.Exclusive).HasColumnName("exclusive");
+        b.Property(p => p.Percent).HasColumnName("percent").HasPrecision(5, 2);
+        b.Property(p => p.FixedMinor).HasColumnName("fixed_amount");
+        b.Property(p => p.MaxDiscountMinor).HasColumnName("max_discount");
+        b.Property(p => p.MinSubtotalMinor).HasColumnName("min_subtotal");
+        b.Property(p => p.VolumeBreaksJson).HasColumnName("volume_breaks").HasColumnType("jsonb");
+        b.Property(p => p.SpendBreaksJson).HasColumnName("spend_breaks").HasColumnType("jsonb");
+        b.Property(p => p.StartsAtUtc).HasColumnName("starts_at");
+        b.Property(p => p.EndsAtUtc).HasColumnName("ends_at");
+        b.Property(p => p.GlobalLimit).HasColumnName("global_limit");
+        b.Property(p => p.PerUserLimit).HasColumnName("per_user_limit");
+        b.Property(p => p.IsActive).HasColumnName("is_active");
+        b.Property(p => p.RedeemedCount).HasColumnName("redeemed_count");
+        b.Ignore(p => p.IsAutomatic);
+        b.HasIndex(p => p.Code).IsUnique().HasFilter("code IS NOT NULL").HasDatabaseName("ux_promotions_code");
+        b.HasIndex(p => new { p.IsActive, p.Code }).HasDatabaseName("ix_promotions_active");
+    }
+}
+
+internal sealed class PromotionUserUsageConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Pricing.PromotionUserUsage>
+{
+    public void Configure(EntityTypeBuilder<ShopVerse.Domain.Pricing.PromotionUserUsage> b)
+    {
+        b.ToTable("promotion_user_usage", t => t.HasCheckConstraint("ck_promotion_user_usage_uses", "uses >= 0"));
+        b.HasKey(u => new { u.PromotionId, u.UserId });
+        b.Property(u => u.PromotionId).HasColumnName("promotion_id");
+        b.Property(u => u.UserId).HasColumnName("user_id");
+        b.Property(u => u.Uses).HasColumnName("uses");
+        b.HasOne<ShopVerse.Domain.Pricing.PromotionDefinition>().WithMany().HasForeignKey(u => u.PromotionId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<User>().WithMany().HasForeignKey(u => u.UserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class PromotionRedemptionConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Pricing.PromotionRedemption>
+{
+    public void Configure(EntityTypeBuilder<ShopVerse.Domain.Pricing.PromotionRedemption> b)
+    {
+        b.ToTable("promotion_redemptions", t => t.HasCheckConstraint("ck_promotion_redemptions_discount", "discount > 0"));
+        b.MapAudit(updated: false);
+        b.Property(r => r.OrderId).HasColumnName("order_id");
+        b.Property(r => r.PromotionId).HasColumnName("promotion_id");
+        b.Property(r => r.UserId).HasColumnName("user_id");
+        b.Property(r => r.DiscountMinor).HasColumnName("discount");
+        b.HasOne<Order>().WithMany().HasForeignKey(r => r.OrderId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<ShopVerse.Domain.Pricing.PromotionDefinition>().WithMany().HasForeignKey(r => r.PromotionId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(r => new { r.OrderId, r.PromotionId }).IsUnique().HasDatabaseName("ux_promotion_redemptions_order_promo");
+    }
+}

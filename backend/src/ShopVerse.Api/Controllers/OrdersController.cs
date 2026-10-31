@@ -10,7 +10,7 @@ namespace ShopVerse.Api.Controllers;
 /// What the buyer asks for: items and quantities. Every price, tax, discount and total is the server's own; JSON members
 /// that look like money are not bound to anything and are ignored.
 /// </summary>
-public sealed record PlaceOrderBody(IReadOnlyList<PlaceOrderLine> Lines, string? ShipToJson = null, Guid? CompanyId = null, bool PayOnCredit = false);
+public sealed record PlaceOrderBody(IReadOnlyList<PlaceOrderLine> Lines, string? ShipToJson = null, Guid? CompanyId = null, bool PayOnCredit = false, IReadOnlyList<string>? CouponCodes = null);
 
 public sealed record CancelOrderBody(string? Reason);
 
@@ -30,7 +30,7 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
         if (string.IsNullOrWhiteSpace(idempotencyKey))
             throw new ValidationException("Idempotency-Key", "The Idempotency-Key header is required.");
 
-        var placed = await orders.PlaceAsync(new PlaceOrderRequest(Actor, idempotencyKey, body.Lines ?? [], body.ShipToJson, body.CompanyId, body.PayOnCredit), ct);
+        var placed = await orders.PlaceAsync(new PlaceOrderRequest(Actor, idempotencyKey, body.Lines ?? [], body.ShipToJson, body.CompanyId, body.PayOnCredit, body.CouponCodes), ct);
 
         // A replay is not a new resource: 200 with the original order, 201 only for the request that created it.
         return placed.Replayed

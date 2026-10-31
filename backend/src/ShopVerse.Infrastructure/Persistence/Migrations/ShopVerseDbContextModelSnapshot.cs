@@ -2384,6 +2384,190 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("payment_events", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionDefinition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("EndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<bool>("Exclusive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("exclusive");
+
+                    b.Property<long>("FixedMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fixed_amount");
+
+                    b.Property<int?>("GlobalLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("global_limit");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<long?>("MaxDiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("max_discount");
+
+                    b.Property<long>("MinSubtotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("min_subtotal");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<int?>("PerUserLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("per_user_limit");
+
+                    b.Property<decimal>("Percent")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("percent");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer")
+                        .HasColumnName("priority");
+
+                    b.Property<int>("RedeemedCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("redeemed_count");
+
+                    b.Property<string>("ScopeKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scope_kind");
+
+                    b.Property<Guid?>("ScopeTargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_target_id");
+
+                    b.Property<string>("SpendBreaksJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("spend_breaks");
+
+                    b.Property<DateTime?>("StartsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VolumeBreaksJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("volume_breaks");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_promotions_code")
+                        .HasFilter("code IS NOT NULL");
+
+                    b.HasIndex("IsActive", "Code")
+                        .HasDatabaseName("ix_promotions_active");
+
+                    b.ToTable("promotions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_promotions_limits", "(global_limit IS NULL OR global_limit >= 1) AND (per_user_limit IS NULL OR per_user_limit >= 1)");
+
+                            t.HasCheckConstraint("ck_promotions_percent", "percent BETWEEN 0 AND 100");
+
+                            t.HasCheckConstraint("ck_promotions_redeemed", "redeemed_count >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionRedemption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discount");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("PromotionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("promotion_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PromotionId");
+
+                    b.HasIndex("OrderId", "PromotionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_promotion_redemptions_order_promo");
+
+                    b.ToTable("promotion_redemptions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_promotion_redemptions_discount", "discount > 0");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionUserUsage", b =>
+                {
+                    b.Property<Guid>("PromotionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("promotion_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Uses")
+                        .HasColumnType("integer")
+                        .HasColumnName("uses");
+
+                    b.HasKey("PromotionId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("promotion_user_usage", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_promotion_user_usage_uses", "uses >= 0");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Reviews.Answer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2945,6 +3129,36 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.HasOne("ShopVerse.Domain.Orders.Order", null)
                         .WithMany()
                         .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionRedemption", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Pricing.PromotionDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("PromotionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionUserUsage", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Pricing.PromotionDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("PromotionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
