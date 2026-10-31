@@ -456,3 +456,19 @@ yet). 19 unit tests; five mutations (timestamp not signed, no expiry, future all
 stripped) each fail a test. Not built yet: the `IPaymentProvider` adapters (SSLCommerz, bKash, Stripe, COD), the
 inbox, the HTTP webhook endpoints, and "confirmed only by server-side verification, never by the browser redirect"
 wiring.
+
+## Phase 8 slice c (part 2): order pricing (pure domain)
+
+`ShopVerse.Domain.Orders.OrderPricing.Price` turns server-resolved lines into the order's money: per-line VAT
+(inclusive prices are split, exclusive prices get VAT added), one sub-order per seller with its own shipping, the
+marketplace commission on the seller's discounted net goods, and the seller's earning. Rounding happens once per line
+in whole poisha (banker's); every higher total is a sum, so `GrandTotal = sum of line totals + shipping` holds exactly.
+The input type has no field for a client-supplied price, tax or total, and a discount larger than its line, a negative
+price, an impossible VAT rate, a zero quantity, or missing / duplicate seller terms are refused: this is the arithmetic
+half of "no price can be changed from the client". 9 unit tests including 800 random orders in both tax modes that must
+reconcile to the poisha; five mutations (VAT added twice, commission on gross, shipping dropped, half-up VAT, oversized
+discount) each fail a test.
+
+Not built yet: the order tables and migration, the atomic `PlaceOrder` transaction (re-price from the database, reserve
+stock through `IInventoryService`, insert order + sub-orders + outbox event, idempotency key), the tamper test against
+the HTTP endpoint, payment adapters, the inbox, the frontend.
