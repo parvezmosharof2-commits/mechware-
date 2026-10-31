@@ -12,7 +12,7 @@ tests, fix). Every status below names its evidence. Nothing is "Done" without it
 | 3 | The first administrator can be created without a published secret, and always needs a second factor | Done | `BootstrapAdministratorTests`, `Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp`; mutation: removing the TOTP secret fails a test |
 | 4 | Refresh-token reuse revokes the whole family (ADR-0006) and survives the failed request | Done | `RefreshTokenRotation_...`; mutation: dropping the save before the throw fails it |
 | 5 | Two concurrent rotations of one token have one winner | Done | `ConcurrentRotationOfOneToken_HasExactlyOneWinner`; mutation: removing `FOR UPDATE` fails it |
-| 6 | OTP attempts cannot be raced past 3 (brief §11.1) | Partial | Row lock in place and `OtpCode_ShouldEnforceMaxThreeAttempts...` passes sequentially; **no concurrent OTP test yet** (open item A) |
+| 6 | OTP attempts cannot be raced past 3 (brief §11.1) | Done | `OtpCode_ShouldEnforceMaxThreeAttempts...` (sequential) and `ConcurrentWrongGuesses_CannotOutrunTheAttemptLimit` (12 parallel guesses leave exactly 3 counted attempts and the right code is then refused); mutation: removing `FOR UPDATE` from the OTP read fails it 3 times out of 3 |
 | 7 | Concurrent registration of one e-mail makes one account | Done | `ConcurrentRegistrationWithOneEmail_CreatesExactlyOneAccount` (unique index is the guard) |
 | 8 | Failed logins are counted and lock the account, even though the request fails | Done | `FailedLogins_AreCounted_...`, `SecurityEvents_ArePersistedInTheAuditTable`; mutation: dropping the save fails both |
 | 9 | A membership names a live account (threat model M2, existence part) | Done | FK `FK_company_members_users_user_id`; `AddMember_RefusesAnIdThatIsNotAnAccount...`, `TheDatabaseItselfRefusesAMembershipWithoutAnAccount`; migration refuses old orphan rows with a clear message (checked against a database that had one) |
@@ -40,11 +40,10 @@ recorded under Phase 3 (AUD-P3-08) and the E2E suite (49 checks, including reloa
 
 ## 4. Tests
 
-Unit 272, integration 119 (Redis on, nothing skipped), E2E 49 checks, CodeQL clean. Run with no default database to
+Unit 272, integration 120 (Redis on, nothing skipped), E2E 49 checks, CodeQL clean. Run with no default database to
 match CI. `dotnet format --verify-no-changes` clean.
 
 ## 5. Open items
 
-A. A concurrent OTP-verification test (row lock exists, only sequential behaviour is tested).
-B. Invitation and consent for new members (threat model M2).
-C. H1 to H4 and M1, M3 to M6 in the threat model are unchanged by this PR.
+A. Invitation and consent for new members (threat model M2).
+B. H1 to H4 and M1, M3 to M6 in the threat model are unchanged by this PR.

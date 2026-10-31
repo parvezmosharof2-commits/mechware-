@@ -303,6 +303,29 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
     }
 
     [PostgresFact]
+    public async Task ConcurrentWrongGuesses_CannotOutrunTheAttemptLimit()
+    {
+        string phone = "+88018" + Random.Shared.Next(10_000_000, 99_999_999);
+        (SendOtpResponseDto sent, string realCode) = await IdentityTestKit.With(fixture, s => s.SendOtpAsync(new SendOtpRequestDto(phone, "Login"), "203.112.218.10"));
+        realCode.Should().NotBe("000000");
+
+        // Twelve guesses at once. Without the row lock, two requests read "0 attempts" together and both write "1".
+        await Task.WhenAll(Enumerable.Range(0, 12).Select(_ => Task.Run(async () =>
+        {
+            try { await IdentityTestKit.With(fixture, s => s.VerifyOtpAsync(new VerifyOtpRequestDto(phone, "000000", "Login", sent.ReferenceId))); }
+            catch (ValidationException) { /* expected: wrong code or attempts exhausted */ }
+        })));
+
+        await using var db = fixture.CreateContext();
+        (await db.OtpCodes.SingleAsync(o => o.ReferenceId == sent.ReferenceId)).Attempts.Should().Be(OtpCode.MaxVerificationAttempts,
+            "exactly the allowed number of wrong guesses may be counted, never fewer (lost updates) and never more");
+
+        // The right code no longer works: the limit really was reached.
+        Func<Task> right = () => IdentityTestKit.With(fixture, s => s.VerifyOtpAsync(new VerifyOtpRequestDto(phone, realCode, "Login", sent.ReferenceId)));
+        (await right.Should().ThrowAsync<ValidationException>()).WithMessage("*Maximum OTP verification attempts*");
+    }
+
+    [PostgresFact]
     public async Task EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset()
     {
         string email = Unique("emailonly") + "@mechware.com.bd";
