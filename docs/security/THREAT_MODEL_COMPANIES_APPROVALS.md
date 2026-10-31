@@ -89,8 +89,9 @@ them in audit values, restrict who can read `audit_logs`.
 `RequiresMandatoryTwoFactor` covers admin and finance only. `support` holds `companies.view` and can read every
 company's legal name, BIN and TIN with a password alone. Brief §11.1 asks for passkeys for all staff.
 
-### M2. Members are added without consent or existence checks (Medium) [CODE]
-`AddMemberAsync` takes a raw user id: it does not check that the user exists and there is no invitation to accept.
+### M2. Members are added without consent (Medium) [CODE] (existence part fixed)
+*Fixed:* a membership must name a live account: `company_members.user_id` has a foreign key to `users` and `RegisterCompany` / `AddMember` refuse an unknown or erased id (tests `AddMember_RefusesAnIdThatIsNotAnAccount_AndAnErasedAccount`, `TheDatabaseItselfRefusesAMembershipWithoutAnAccount`).
+*Still open:* there is no invitation to accept.
 A company admin can attach any user to their company, or name an arbitrary person as an approver so requests
 stall on them (a form of denial of approvals). The invited user cannot decline.
 

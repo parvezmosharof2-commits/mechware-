@@ -27,8 +27,8 @@ public class ApprovalServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
 
     private async Task<Team> SeedTeamAsync()
     {
-        var admin = Guid.NewGuid();
-        var (requester, a1, a2) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var admin = await TestUsers.CreateAsync(fixture);
+        var (requester, a1, a2) = (await TestUsers.CreateAsync(fixture), await TestUsers.CreateAsync(fixture), await TestUsers.CreateAsync(fixture));
         await using var db = fixture.CreateContext();
         var companies = new CompanyService(db);
         var company = (await companies.RegisterAsync(admin, new RegisterCompanyRequest("Approvals Ltd", "TL-A-1", NextBin(), null, null))).Id;
@@ -227,7 +227,7 @@ public class ApprovalServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
     public async Task InsideTheCompany_RolesAndVisibilityAreEnforced()
     {
         var t = await SeedTeamAsync();
-        var bystander = Guid.NewGuid();
+        var bystander = await TestUsers.CreateAsync(fixture);
         await using (var dbm = fixture.CreateContext())
             await new CompanyService(dbm).AddMemberAsync(t.Admin, t.Company, new AddMemberRequest(bystander, CompanyRoles.Buyer, null, null));
         await AddRuleAsync(t, 0, t.Approver1);

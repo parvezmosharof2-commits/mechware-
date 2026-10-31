@@ -3,6 +3,7 @@ using ShopVerse.Application.Companies;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.ValueObjects;
 using ShopVerse.Domain.Companies;
+using ShopVerse.Domain.Identity;
 using ShopVerse.Infrastructure.Persistence;
 
 namespace ShopVerse.Infrastructure.Companies;
@@ -15,6 +16,7 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
 
     public async Task<CompanyDto> RegisterAsync(Guid actorUserId, RegisterCompanyRequest request, CancellationToken ct = default)
     {
+        await EnsureUserExistsAsync(actorUserId, ct);
         var company = Company.Register(Guid.NewGuid(), request.LegalName, request.TradeLicenceNo, request.Bin, request.Tin, request.Industry);
 
         if (await db.Companies.AnyAsync(c => c.Bin == company.Bin, ct))
@@ -182,9 +184,17 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         return rows.Select(ToDto).ToList();
     }
 
+    /// <summary>A membership must name a live account: not a made-up id, and not one that was erased.</summary>
+    private async Task EnsureUserExistsAsync(Guid userId, CancellationToken ct)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == userId && u.DeletedAtUtc == null, ct))
+            throw new ValidationException("userId", "No active account exists for this user ID.");
+    }
+
     public async Task<MemberDto> AddMemberAsync(Guid actorUserId, Guid companyId, AddMemberRequest r, CancellationToken ct = default)
     {
         await RequireAdminWritableAsync(actorUserId, companyId, ct);
+        await EnsureUserExistsAsync(r.UserId, ct);
         if (await db.CompanyMembers.AnyAsync(m => m.CompanyId == companyId && m.UserId == r.UserId, ct))
             throw new ConflictException("MEMBER_EXISTS", "This user is already a member of the company.");
 

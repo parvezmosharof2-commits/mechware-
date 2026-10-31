@@ -127,7 +127,7 @@
 ---
 
 ### Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors
-- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`, `202610290001_Phase3IdentityAndAccess`).
+- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`; the tables are created by `20261029190715_Phase4CatalogInventoryOutbox`).
 - [x] Authentication flows:
   - [x] Email + Password registration and login with 210,000-iteration PBKDF2-SHA512 / Argon2id-equivalent hashing and NIST password policy enforcement.
   - [x] Phone SMS OTP registration and login with bound `reference_id` and `ISmsProvider` adapter (`LoggingSmsProvider`).
@@ -385,9 +385,8 @@ now provisioned from deployment secrets at startup:
 ## Identity in PostgreSQL
 
 `IdentityService` no longer keeps users, sessions, OTP codes, addresses or audit events in memory. They live in the
-database, so a restart or a second API instance loses nothing (the `users` table already existed in the model; the
-hand-written `202610290001_Phase3IdentityAndAccess.cs` has no `[Migration]` attribute and never runs, the tables come
-from `20261029190715_Phase4CatalogInventoryOutbox`, so that file is dead code to delete later).
+database, so a restart or a second API instance loses nothing (the tables come from `20261029190715_Phase4CatalogInventoryOutbox`;
+the old hand-written `202610290001_Phase3IdentityAndAccess.cs` had no `[Migration]` attribute, never ran, and is removed).
 
 - `IIdentityService` is async and the service is registered per request (it holds the request's `ShopVerseDbContext`).
 - Demo accounts (Development only) and the bootstrap administrator are created by `IdentitySeeder` at startup,
@@ -403,5 +402,10 @@ from `20261029190715_Phase4CatalogInventoryOutbox`, so that file is dead code to
   makes a specific test fail. Checked by hand against a Production-mode API: bootstrap admin signs in with password
   and TOTP, the API restarts, and the refresh cookie issued before the restart still works.
 
-Still open: `company_members.user_id` has no foreign key to `users` (threat model M2) and `AddMember` does not check
-that the user exists; GDPR erasure still deletes addresses outright.
+`company_members.user_id` now has a foreign key to `users` (`OnDelete.Restrict`: users are soft-deleted and
+anonymised, never removed), and `RegisterCompany` / `AddMember` refuse an id that is not a live account (threat model
+M2, existence part). The migration `CompanyMembersUserFk` stops with a clear message if old rows name users that do not
+exist, rather than deleting a company's admins silently; checked against a database that had such a row.
+
+Still open: invitation and consent when a user is added to a company (the rest of M2); GDPR erasure still deletes
+addresses outright.
