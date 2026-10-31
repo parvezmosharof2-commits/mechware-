@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShopVerse.Domain.Common.Enums;
 using ShopVerse.Domain.Companies;
+using ShopVerse.Domain.Identity;
 
 namespace ShopVerse.Infrastructure.Persistence.Configurations;
 
@@ -99,6 +100,8 @@ internal sealed class CompanyMemberConfiguration : IEntityTypeConfiguration<Comp
         b.Property(m => m.CostCentreIds).HasColumnName("cost_centre_ids").HasColumnType("uuid[]");
 
         b.HasOne<Company>().WithMany().HasForeignKey(m => m.CompanyId).OnDelete(DeleteBehavior.Cascade);
+        // Users are soft-deleted and anonymised, never removed, so a membership can never point at nothing.
+        b.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(m => new { m.CompanyId, m.UserId }).IsUnique().HasDatabaseName("ux_company_members_company_user");
         b.HasIndex(m => m.UserId).HasDatabaseName("ix_company_members_user");
     }

@@ -2,21 +2,21 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
-using Microsoft.AspNetCore.Mvc.Testing;
+using ShopVerse.IntegrationTests.Support;
 using Xunit;
 
 namespace ShopVerse.IntegrationTests.Api;
 
-public class ApiStartupIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
+public class ApiStartupIntegrationTests : IClassFixture<DefaultApiFactory>
 {
     private readonly HttpClient _client;
 
-    public ApiStartupIntegrationTests(WebApplicationFactory<Program> factory)
+    public ApiStartupIntegrationTests(DefaultApiFactory factory)
     {
         _client = factory.CreateClient();
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task GetHealthLive_ShouldReturn200Healthy()
     {
         var response = await _client.GetAsync("/health/live");
@@ -26,7 +26,7 @@ public class ApiStartupIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         content.Should().Be("Healthy");
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task Request_ShouldIncludeCorrelationIdAndSecurityHeaders()
     {
         var customCorrelationId = "test-correlation-uuid-12345";
@@ -48,7 +48,7 @@ public class ApiStartupIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         response.Headers.GetValues("Content-Security-Policy").First().Should().Contain("default-src 'none'");
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task MaliciousCorrelationId_ShouldBeSanitizedToNewGuid()
     {
         var request = new HttpRequestMessage(HttpMethod.Get, "/health/live");
@@ -62,7 +62,7 @@ public class ApiStartupIntegrationTests : IClassFixture<WebApplicationFactory<Pr
         returnedId.Should().MatchRegex("^[a-f0-9]{32}$");
     }
 
-    [Fact]
+    [PostgresFact]
     public async Task NonExistentRoute_ShouldReturn404()
     {
         var response = await _client.GetAsync("/api/v1/non-existent-endpoint");

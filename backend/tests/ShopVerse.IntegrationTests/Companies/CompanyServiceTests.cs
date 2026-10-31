@@ -28,7 +28,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
 
     private async Task<(Guid Company, Guid Admin)> SeedCompanyAsync()
     {
-        var admin = Guid.NewGuid();
+        var admin = await TestUsers.CreateAsync(fixture);
         var (db, svc) = Open();
         await using (db)
         {
@@ -39,10 +39,42 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
 
     private async Task<Guid> AddMemberAsync(Guid company, Guid admin, CompanyRoles roles)
     {
-        var user = Guid.NewGuid();
+        var user = await TestUsers.CreateAsync(fixture);
         var (db, svc) = Open();
         await using (db) await svc.AddMemberAsync(admin, company, new AddMemberRequest(user, roles, null, null));
         return user;
+    }
+
+    [PostgresFact]
+    public async Task AddMember_RefusesAnIdThatIsNotAnAccount_AndAnErasedAccount()
+    {
+        var (company, admin) = await SeedCompanyAsync();
+        var (db, svc) = Open();
+        await using var _ = db;
+
+        var ghost = () => svc.AddMemberAsync(admin, company, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Buyer, null, null));
+        await ghost.Should().ThrowAsync<ValidationException>();
+
+        var erased = await TestUsers.CreateAsync(fixture);
+        await using (var edit = fixture.CreateContext())
+        {
+            (await edit.Users.FindAsync(erased))!.AnonymizeForGdpr(DateTime.UtcNow);
+            await edit.SaveChangesAsync();
+        }
+
+        var gone = () => svc.AddMemberAsync(admin, company, new AddMemberRequest(erased, CompanyRoles.Buyer, null, null));
+        await gone.Should().ThrowAsync<ValidationException>();
+    }
+
+    [PostgresFact]
+    public async Task TheDatabaseItselfRefusesAMembershipWithoutAnAccount()
+    {
+        var (company, _) = await SeedCompanyAsync();
+        await using var raw = fixture.CreateContext();
+        raw.CompanyMembers.Add(new CompanyMember(Guid.NewGuid(), company, Guid.NewGuid(), CompanyRoles.Buyer, null, null));
+        var act = () => raw.SaveChangesAsync();
+        (await act.Should().ThrowAsync<DbUpdateException>()).Which.InnerException.Should().BeOfType<Npgsql.PostgresException>()
+            .Which.SqlState.Should().Be("23503");
     }
 
     [PostgresFact]
@@ -62,11 +94,12 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         string bin = NextBin();
         var (db, svc) = Open();
         await using var _ = db;
-        await svc.RegisterAsync(Guid.NewGuid(), new RegisterCompanyRequest("First Ltd", "TL-1", bin, null, null));
+        await svc.RegisterAsync(await TestUsers.CreateAsync(fixture), new RegisterCompanyRequest("First Ltd", "TL-1", bin, null, null));
 
         var (db2, svc2) = Open();
         await using var __ = db2;
-        var act = () => svc2.RegisterAsync(Guid.NewGuid(), new RegisterCompanyRequest("Second Ltd", "TL-2", bin, null, null));
+        var secondRegistrant = await TestUsers.CreateAsync(fixture);
+        var act = () => svc2.RegisterAsync(secondRegistrant, new RegisterCompanyRequest("Second Ltd", "TL-2", bin, null, null));
         (await act.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("COMPANY_BIN_EXISTS");
     }
 
@@ -149,7 +182,8 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         await using var _ = db;
         var ccB = await svc.AddCostCentreAsync(adminB, companyB, new CostCentreRequest("B1", "B", null));
 
-        var act = () => svc.AddMemberAsync(adminA, companyA, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Buyer, null, [ccB.Id]));
+        var someone = await TestUsers.CreateAsync(fixture);
+        var act = () => svc.AddMemberAsync(adminA, companyA, new AddMemberRequest(someone, CompanyRoles.Buyer, null, [ccB.Id]));
         await act.Should().ThrowAsync<ValidationException>();
     }
 
@@ -268,7 +302,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         (await Assert.ThrowsAsync<ConflictException>(() => svc.AddCostCentreAsync(admin, company, new CostCentreRequest("PROD", "Dup", null)))).Code.Should().Be("COST_CENTRE_CODE_EXISTS");
         await svc.AddCostCentreAsync(otherAdmin, otherCompany, new CostCentreRequest("PROD", "Other tenant, same code is fine", null));
 
-        var user = Guid.NewGuid();
+        var user = await TestUsers.CreateAsync(fixture);
         await svc.AddMemberAsync(admin, company, new AddMemberRequest(user, CompanyRoles.Buyer, 25000, [cc.Id]));
         await svc.RemoveCostCentreAsync(admin, company, cc.Id);
         (await svc.ListMembersAsync(admin, company)).Single(m => m.UserId == user).CostCentreIds.Should().BeEmpty();

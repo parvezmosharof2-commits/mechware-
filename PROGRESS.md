@@ -127,7 +127,7 @@
 ---
 
 ### Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors
-- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`, `202610290001_Phase3IdentityAndAccess`).
+- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`; the tables are created by `20261029190715_Phase4CatalogInventoryOutbox`).
 - [x] Authentication flows:
   - [x] Email + Password registration and login with 210,000-iteration PBKDF2-SHA512 / Argon2id-equivalent hashing and NIST password policy enforcement.
   - [x] Phone SMS OTP registration and login with bound `reference_id` and `ISmsProvider` adapter (`LoggingSmsProvider`).
@@ -362,3 +362,50 @@
 - [x] CI: CodeQL, NuGet + npm vulnerability gate, Dependabot.
 - [ ] Branch protection + GitHub secret scanning (owner action in GitHub settings).
 - [ ] Playwright E2E journeys and k6 load tests (with checkout, Phase 8+).
+
+## First administrator for environments without demo accounts
+
+Production and Staging start with an empty identity store (C1), so nobody could sign in. The first administrator is
+now provisioned from deployment secrets at startup:
+
+| Setting | Meaning |
+|---|---|
+| `Identity__BootstrapAdmin__Email` | Enables the feature; empty means no bootstrap administrator |
+| `Identity__BootstrapAdmin__Password` | Must satisfy the normal password policy |
+| `Identity__BootstrapAdmin__TotpSecret` | Required, base32, at least 26 characters (16 bytes); `Phone` and `FullName` are optional |
+
+- Partly configured settings, a weak password or a short or malformed TOTP secret stop the API at startup (fail closed).
+- The account always demands the second factor; no password-only administrator can be provisioned.
+- Audited as `user.bootstrap_admin_provisioned` (e-mail only, never a secret). No recovery codes are issued; to
+  recover, change the deployment secret and restart.
+- Verified: unit tests (settings validation, 2FA flow), a `Production` integration test (wrong password 401,
+  password-only 202, wrong code 401, correct code 200 with the admin role, demo admin still 401), and a mutation
+  check (removing the TOTP secret makes the integration test fail).
+
+## Identity in PostgreSQL
+
+`IdentityService` no longer keeps users, sessions, OTP codes, addresses or audit events in memory. They live in the
+database, so a restart or a second API instance loses nothing (the tables come from `20261029190715_Phase4CatalogInventoryOutbox`;
+the old hand-written `202610290001_Phase3IdentityAndAccess.cs` had no `[Migration]` attribute, never ran, and is removed).
+
+- `IIdentityService` is async and the service is registered per request (it holds the request's `ShopVerseDbContext`).
+- Demo accounts (Development only) and the bootstrap administrator are created by `IdentitySeeder` at startup,
+  idempotently: an existing account is never reset. Nothing touches the database at boot when there is nothing to seed.
+- Refresh-token rotation and OTP checks take a row lock (`SELECT ... FOR UPDATE`) inside a transaction, so two
+  concurrent rotations of one token have exactly one winner and the OTP attempt limit cannot be raced. The reuse
+  revocation, failed-login counters and lockouts are saved before the request fails, so a rollback cannot undo them.
+- Registration races are settled by the unique indexes `ux_users_email` / `ux_users_phone`.
+- `RefreshToken` and `OtpCode` are `[NotAudited]` (row noise); the meaningful events are still written explicitly.
+- Tests: 17 service tests plus seeding and bootstrap tests run against real PostgreSQL (`IdentityServiceTests`,
+  `AccountSeedingTests`), and the API-level tests use `DbBackedFactory`, a host over its own throw-away database.
+  Mutation checks: removing the row lock, the pre-throw save of the breach revocation, or the failed-login save each
+  makes a specific test fail. Checked by hand against a Production-mode API: bootstrap admin signs in with password
+  and TOTP, the API restarts, and the refresh cookie issued before the restart still works.
+
+`company_members.user_id` now has a foreign key to `users` (`OnDelete.Restrict`: users are soft-deleted and
+anonymised, never removed), and `RegisterCompany` / `AddMember` refuse an id that is not a live account (threat model
+M2, existence part). The migration `CompanyMembersUserFk` stops with a clear message if old rows name users that do not
+exist, rather than deleting a company's admins silently; checked against a database that had such a row.
+
+Still open: invitation and consent when a user is added to a company (the rest of M2); GDPR erasure still deletes
+addresses outright.

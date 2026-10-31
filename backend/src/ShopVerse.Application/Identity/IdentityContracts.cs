@@ -235,72 +235,88 @@ public interface IIdentityService
         string? clientIp = null,
         CancellationToken cancellationToken = default);
 
-    AuthTokenResponseDto VerifyOtp(
+    Task<AuthTokenResponseDto> VerifyOtpAsync(
         VerifyOtpRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null);
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
 
-    AuthTokenResponseDto Login(
+    Task<AuthTokenResponseDto> LoginAsync(
         LoginRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null);
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
 
-    AuthTokenResponseDto GoogleLogin(
+    Task<AuthTokenResponseDto> GoogleLoginAsync(
         GoogleLoginRequestDto request,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null);
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
 
-    AuthTokenResponseDto RotateRefreshToken(
+    Task<AuthTokenResponseDto> RotateRefreshTokenAsync(
         string rawRefreshToken,
         string? clientIp = null,
         string? userAgent = null,
-        DateTime? utcNowOverride = null);
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
 
-    bool RevokeRefreshTokenByCookie(
+    Task<bool> RevokeRefreshTokenByCookieAsync(
         string? rawRefreshToken,
         string? clientIp = null,
-        DateTime? utcNowOverride = null);
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
 
-    (string ReferenceId, string RawOtpForDev) InitiatePasswordReset(string identifier, string? clientIp = null);
+    Task<(string ReferenceId, string RawOtpForDev)> InitiatePasswordResetAsync(
+        string identifier,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
 
-    void CompletePasswordReset(ResetPasswordRequestDto request, string? clientIp = null);
+    Task CompletePasswordResetAsync(
+        ResetPasswordRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
 
-    TotpSetupResponseDto SetupTwoFactor(Guid userId, string? clientIp = null);
+    Task<TotpSetupResponseDto> SetupTwoFactorAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
 
-    void VerifyAndEnableTwoFactor(
+    Task VerifyAndEnableTwoFactorAsync(
         Guid userId,
         string code,
         string? clientIp = null,
-        DateTimeOffset? timestampOverride = null);
+        DateTimeOffset? timestampOverride = null,
+        CancellationToken cancellationToken = default);
 
-    IReadOnlyList<ActiveSessionDto> GetActiveSessions(Guid userId, string? currentRawRefreshToken = null);
+    Task<IReadOnlyList<ActiveSessionDto>> GetActiveSessionsAsync(
+        Guid userId,
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default);
 
-    int RevokeSessions(
+    Task<int> RevokeSessionsAsync(
         Guid userId,
         RevokeSessionsRequestDto request,
         string? clientIp = null,
-        string? currentRawRefreshToken = null);
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default);
 
-    IReadOnlyList<AddressDto> GetAddresses(Guid userId);
+    Task<IReadOnlyList<AddressDto>> GetAddressesAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    AddressDto CreateAddress(Guid userId, UpsertAddressRequestDto request, string? clientIp = null);
+    Task<AddressDto> CreateAddressAsync(Guid userId, UpsertAddressRequestDto request, string? clientIp = null, CancellationToken cancellationToken = default);
 
-    AddressDto UpdateAddress(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null);
+    Task<AddressDto> UpdateAddressAsync(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null, CancellationToken cancellationToken = default);
 
-    void DeleteAddress(Guid userId, Guid addressId, string? clientIp = null);
+    Task DeleteAddressAsync(Guid userId, Guid addressId, string? clientIp = null, CancellationToken cancellationToken = default);
 
     IReadOnlyList<BdLocationDto> GetBdLocations(string? level = null, Guid? parentId = null);
 
-    GdprExportBundleDto ExportUserData(Guid userId, string? clientIp = null);
+    Task<GdprExportBundleDto> ExportUserDataAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
 
-    void AnonymizeAndEraseUser(Guid userId, string? clientIp = null);
+    Task AnonymizeAndEraseUserAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
 
-    AuthenticatedUserDto GetUserProfile(Guid userId);
+    Task<AuthenticatedUserDto> GetUserProfileAsync(Guid userId, CancellationToken cancellationToken = default);
 
-    IReadOnlyList<User> GetUsersForAudit();
+    Task<IReadOnlyList<User>> GetUsersForAuditAsync(CancellationToken cancellationToken = default);
 
-    IReadOnlyList<AuditLog> GetAuditLogs();
+    Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(CancellationToken cancellationToken = default);
 }

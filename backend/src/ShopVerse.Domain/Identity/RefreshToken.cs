@@ -5,6 +5,7 @@ namespace ShopVerse.Domain.Identity;
 /// <summary>
 /// Represents a rotating refresh token with family tracking and 10-second multi-tab grace window (ADR-0006).
 /// </summary>
+[NotAudited]
 public sealed class RefreshToken : Entity<Guid>
 {
     public Guid UserId { get; private set; }

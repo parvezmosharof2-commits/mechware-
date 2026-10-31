@@ -465,7 +465,7 @@ test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1
     'utf8'
   );
   const migrationSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/Migrations/202610290001_Phase3IdentityAndAccess.cs'),
+    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/Migrations/20261029190715_Phase4CatalogInventoryOutbox.cs'),
     'utf8'
   );
 
@@ -478,11 +478,12 @@ test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1
     'ix_otp_codes_expires_at'
   ]) {
     assert.ok(dbContextSrc.includes(idxName), `ShopVerseDbContext missing index ${idxName}`);
-    assert.ok(migrationSrc.includes(idxName), `Phase3IdentityAndAccess migration missing index ${idxName}`);
+    assert.ok(migrationSrc.includes(idxName), `identity migration missing index ${idxName}`);
   }
-  assert.ok(migrationSrc.includes('ix_bd_locations_level_parent'));
-  assert.ok(migrationSrc.includes('ux_refresh_tokens_hash'));
-  assert.ok(migrationSrc.includes('ix_refresh_tokens_family_id'));
+  // EF's default names for the indexes the model declares without an explicit name.
+  assert.ok(migrationSrc.includes('IX_bd_locations_level_parent_id'));
+  assert.ok(migrationSrc.includes('IX_refresh_tokens_token_hash'));
+  assert.ok(migrationSrc.includes('IX_refresh_tokens_family_id'));
 });
 
 // 25. Pass 2 Brute-Force Progressive Delay & Email Verification / Password Reset Session Revocation
@@ -499,7 +500,12 @@ test('25. User entity computes progressive login delay and unit tests cover emai
 
   assert.ok(userSrc.includes('GetProgressiveLoginDelayMilliseconds()'));
   assert.ok(unitTestsSrc.includes('GetProgressiveLoginDelayMilliseconds()'));
-  assert.ok(unitTestsSrc.includes('EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset'));
+  // The service flow runs against PostgreSQL, so it lives with the integration tests.
+  const identityDbTestsSrc = fs.readFileSync(
+    path.join(repoRoot, 'backend/tests/ShopVerse.IntegrationTests/Identity/IdentityServiceTests.cs'),
+    'utf8'
+  );
+  assert.ok(identityDbTestsSrc.includes('EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset'));
 });
 
 // 26. Pass 2 Zero `any` Types and Canonical Semantic Tokens in Console Sidebar & Web Auth
