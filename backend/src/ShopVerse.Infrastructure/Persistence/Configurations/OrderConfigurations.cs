@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using ShopVerse.Domain.Identity;
 using ShopVerse.Domain.Orders;
+using ShopVerse.Domain.Payments;
 
 namespace ShopVerse.Infrastructure.Persistence.Configurations;
 
@@ -129,5 +130,40 @@ internal sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<
         b.Property(r => r.OrderId).HasColumnName("order_id");
         b.HasOne<User>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(r => new { r.UserId, r.Key }).IsUnique().HasDatabaseName("ux_idempotency_user_key");
+    }
+}
+
+internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
+{
+    public void Configure(EntityTypeBuilder<Payment> b)
+    {
+        b.ToTable("payments", t => t.HasCheckConstraint("ck_payments_amount", "amount > 0"));
+        b.MapAudit();
+        b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+        b.Property(p => p.OrderId).HasColumnName("order_id");
+        b.Property(p => p.Provider).HasColumnName("provider").HasMaxLength(30).IsRequired();
+        b.Property(p => p.ProviderRef).HasColumnName("provider_ref").HasMaxLength(150).IsRequired();
+        b.Property(p => p.AmountMinor).HasColumnName("amount");
+        b.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3);
+        b.Property(p => p.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
+        b.Property(p => p.Note).HasColumnName("note").HasMaxLength(500);
+        b.Property(p => p.CapturedAtUtc).HasColumnName("captured_at");
+        b.HasOne<Order>().WithMany().HasForeignKey(p => p.OrderId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(p => new { p.Provider, p.ProviderRef }).IsUnique().HasDatabaseName("ux_payments_provider_ref");
+        b.HasIndex(p => p.OrderId).HasDatabaseName("ix_payments_order");
+    }
+}
+
+internal sealed class PaymentEventConfiguration : IEntityTypeConfiguration<PaymentEvent>
+{
+    public void Configure(EntityTypeBuilder<PaymentEvent> b)
+    {
+        b.ToTable("payment_events");
+        b.MapAudit(updated: false);
+        b.Property(e => e.Provider).HasColumnName("provider").HasMaxLength(30).IsRequired();
+        b.Property(e => e.EventId).HasColumnName("event_id").HasMaxLength(150).IsRequired();
+        b.Property(e => e.ProviderRef).HasColumnName("provider_ref").HasMaxLength(150).IsRequired();
+        b.Property(e => e.Outcome).HasColumnName("outcome").HasMaxLength(30);
+        b.HasIndex(e => new { e.Provider, e.EventId }).IsUnique().HasDatabaseName("ux_payment_events_provider_event");
     }
 }

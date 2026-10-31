@@ -1,3 +1,5 @@
+using ShopVerse.Infrastructure.Payments;
+using ShopVerse.Application.Payments;
 using ShopVerse.Infrastructure.Orders;
 using ShopVerse.Application.Orders;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +33,7 @@ public static class DependencyInjection
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
+        services.TryAddScoped<IPaymentService, PaymentService>();
 
         services.AddScoped<IOutboxPublisher, SearchSyncQueuePublisher>();
         services.AddScoped<IOutboxPublisher, StorefrontCacheInvalidationPublisher>();

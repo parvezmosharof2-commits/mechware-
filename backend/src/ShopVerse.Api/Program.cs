@@ -113,6 +113,13 @@ builder.Services.AddSingleton<ITokenService>(sp =>
 });
 // Demo accounts with published credentials exist only in Development (see IdentitySeedPolicy).
 builder.Services.AddSingleton(IdentitySeedPolicy.ForEnvironment(builder.Environment.EnvironmentName));
+
+// The in-process mock gateway exists only where demo accounts do. In any other environment no provider is registered
+// until a real adapter is configured, so there is no way to "pay" through a gateway with a published secret.
+if (IdentitySeedPolicy.ForEnvironment(builder.Environment.EnvironmentName).SeedDemoAccounts)
+{
+    builder.Services.AddSingleton<ShopVerse.Application.Payments.IPaymentProvider, ShopVerse.Infrastructure.Payments.MockPaymentProvider>();
+}
 // First administrator for environments without demo accounts; secrets come from deployment configuration only.
 var bootstrapAdmin = BootstrapAdminSettings.FromValues(
     builder.Configuration["Identity:BootstrapAdmin:Email"],

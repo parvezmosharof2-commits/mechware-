@@ -562,3 +562,33 @@ confirmed orders cancellable, no row lock on the order, no reason required, rese
 Not built yet: restocking (so a confirmed order can be cancelled and its credit released), the reconciliation sweep for
 the credit-order crash window, payment adapters and the inbox, promotions and shipping in the order, approval routing,
 the frontend.
+
+## Phase 8 slice d (part 2): payments, the webhook inbox and server-side confirmation (brief §8.7)
+
+`IPaymentProvider` (create a session, query the provider directly, parse a webhook's ids) with an in-process
+`MockPaymentProvider`; `IPaymentService.StartAsync` / `HandleWebhookAsync`; tables `payments` and `payment_events`
+(migration `Payments`); `POST /api/v1/orders/{id}/payments` (owner only, body names only the provider, the amount is the
+order's own total) and `POST /api/v1/payments/webhooks/{provider}` (anonymous, authority is the signature, on the reviewed
+public list in the security regression test).
+
+The order is confirmed only when: the signature over the raw body is valid and fresh (`WebhookVerifier`); the event id is
+new (unique `(provider, event_id)` inbox); the **provider itself**, asked server to server, says the payment is paid for
+exactly the amount and currency recorded when the payment started; and the order is still pending. What a webhook body says
+about money is never read. A browser redirect confirms nothing: no call exists that does.
+- Different amount: the order stays pending and the payment is flagged `NeedsRefund`.
+- Paid after the order was cancelled: not confirmed, flagged `NeedsRefund`, stock untouched.
+- The same event twice, or eight at once: confirmed once (`Duplicate` for the rest), stock deducted once. Two different
+  events for one payment: confirmed once (`AlreadyConfirmed`). Both under row locks on the payment and the order.
+- Providers retry anything that is not 2xx, so every handled event is answered 200, including duplicates and unknown ids;
+  only a bad signature or stale timestamp is 401.
+
+Safety decision recorded: the mock gateway, whose secret is published, is registered only where demo accounts are (the
+Development environment). Registering it everywhere by default would have left a payment gateway with a known secret in
+production; with no real adapter configured, no provider exists there.
+
+13 tests (service and HTTP). Mutations that each fail a test: trusting the webhook instead of asking the provider, not
+comparing the amount, not verifying the signature, no inbox dedupe, confirming a cancelled order, and (after adding a test
+for it) no row lock on the payment; a first parallel test did not catch that last one and was replaced with one that does.
+
+Not built yet: real adapters (SSLCommerz, bKash, Stripe) and COD with its phone OTP and order cap, the nightly
+reconciliation job, refunds, restocking, the frontend payment pages.

@@ -5,6 +5,7 @@ using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Companies;
 using ShopVerse.Domain.Identity;
 using ShopVerse.Domain.Orders;
+using ShopVerse.Domain.Payments;
 using ShopVerse.Domain.Inventory;
 using ShopVerse.Domain.Reviews;
 using ShopVerse.Domain.Sellers;
@@ -69,6 +70,8 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderEventRecord> OrderEvents => Set<OrderEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyKeys => Set<IdempotencyRecord>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -5,6 +5,10 @@ using System.Text;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using ShopVerse.Application.Payments;
+using ShopVerse.Domain.Payments;
+using ShopVerse.Infrastructure.Payments;
 using ShopVerse.Infrastructure.Persistence;
 using ShopVerse.IntegrationTests.Support;
 
@@ -150,5 +154,51 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
         using var response = await client.SendAsync(Post($$"""{ "companyId": "{{someoneElsesCompany}}", "lines": [ { "variantId": "{{v.VariantId}}", "quantity": 1 } ] }""", NewKey()));
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound, "a company the caller does not belong to is simply not found");
+    }
+
+    [PostgresFact]
+    public async Task PayingThroughTheMockGateway_ConfirmsTheOrderOnlyAfterAVerifiedSignedWebhook()
+    {
+        var v = await SeedAsync(onHand: 5, price: 100_000);
+        var client = await BuyerAsync();
+        using var placed = await client.SendAsync(Post(Body(v.VariantId, 1), NewKey()));
+        var orderId = (await placed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("orderId").GetGuid();
+
+        // A caller cannot choose the amount: the body names only the provider.
+        using var started = await client.PostAsJsonAsync($"/api/v1/orders/{orderId}/payments", new { provider = "mock", amountMinor = 1 });
+        started.StatusCode.Should().Be(HttpStatusCode.Created);
+        var session = (await started.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        session.GetProperty("amountMinor").GetInt64().Should().Be(100_000);
+        var providerRef = session.GetProperty("redirectUrl").GetString()![(session.GetProperty("redirectUrl").GetString()!.LastIndexOf('/') + 1)..];
+
+        // The customer finishes on the hosted page; the browser coming back changes nothing by itself.
+        _factory.Services.GetServices<IPaymentProvider>().OfType<MockPaymentProvider>().Single().SimulatePayment(providerRef);
+        var before = (await (await client.GetAsync($"/api/v1/orders/{orderId}")).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("status").GetString();
+        before.Should().Be("pending_payment");
+
+        var body = $$"""{ "id": "evt_{{Guid.NewGuid():N}}", "providerRef": "{{providerRef}}" }""";
+        var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        using var anonymous = _factory.CreateClient();
+        using var forged = await anonymous.SendAsync(Webhook(body, ts, WebhookVerifier.Sign("wrong-secret", ts, body)));
+        forged.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        using var good = await anonymous.SendAsync(Webhook(body, ts, WebhookVerifier.Sign(MockPaymentProvider.DefaultSecret, ts, body)));
+        good.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var after = (await (await client.GetAsync($"/api/v1/orders/{orderId}")).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("status").GetString();
+        after.Should().Be("confirmed");
+
+        using var again = await anonymous.SendAsync(Webhook(body, ts, WebhookVerifier.Sign(MockPaymentProvider.DefaultSecret, ts, body)));
+        again.StatusCode.Should().Be(HttpStatusCode.OK, "a retried delivery is acknowledged, not an error");
+        (await again.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("outcome").GetString().Should().Be("Duplicate");
+    }
+
+    private static HttpRequestMessage Webhook(string body, long timestamp, string signature)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/payments/webhooks/mock") { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        request.Headers.Add("X-Timestamp", timestamp.ToString());
+        request.Headers.Add("X-Signature", signature);
+        return request;
     }
 }
