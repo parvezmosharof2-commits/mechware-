@@ -11,6 +11,8 @@ public sealed record StartPaymentBody(string Provider);
 [Route("api/v1")]
 public sealed class PaymentsController(IPaymentService payments, ICurrentUserService currentUser) : ControllerBase
 {
+    private const int MaxWebhookBytes = 64 * 1024;
+
     /// <summary>Starts paying the caller's pending order. The amount is the order's own total; it cannot be chosen here.</summary>
     [Authorize]
     [HttpPost("orders/{orderId:guid}/payments")]
@@ -29,8 +31,19 @@ public sealed class PaymentsController(IPaymentService payments, ICurrentUserSer
     [HttpPost("payments/webhooks/{provider}")]
     public async Task<IActionResult> Webhook(string provider, CancellationToken ct)
     {
-        using var reader = new StreamReader(Request.Body);
-        var raw = await reader.ReadToEndAsync(ct);
+        // A webhook is a few hundred bytes. Read at most the cap plus one byte so an oversized or endless body is refused
+        // instead of being buffered, whether or not the client declared a length.
+        var buffer = new byte[MaxWebhookBytes + 1];
+        var read = 0;
+        while (read < buffer.Length)
+        {
+            var n = await Request.Body.ReadAsync(buffer.AsMemory(read, buffer.Length - read), ct);
+            if (n == 0) break;
+            read += n;
+        }
+
+        if (read > MaxWebhookBytes) return StatusCode(StatusCodes.Status413PayloadTooLarge);
+        var raw = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
 
         var outcome = await payments.HandleWebhookAsync(
             provider, Request.Headers["X-Signature"].FirstOrDefault(), Request.Headers["X-Timestamp"].FirstOrDefault(), raw, ct);

@@ -592,3 +592,7 @@ for it) no row lock on the payment; a first parallel test did not catch that las
 
 Not built yet: real adapters (SSLCommerz, bKash, Stripe) and COD with its phone OTP and order cap, the nightly
 reconciliation job, refunds, restocking, the frontend payment pages.
+
+Interim security review of the order and payment slices: `docs/reviews/R3_ORDERS_AND_PAYMENTS.md` (20 attacks with their
+tests; it found and fixed an unbounded webhook body, an error message that named the failed check, and the mock gateway
+being registered everywhere).

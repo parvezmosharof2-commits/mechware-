@@ -201,4 +201,55 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
         request.Headers.Add("X-Signature", signature);
         return request;
     }
+
+    [PostgresFact]
+    public async Task AnOversizedWebhookBody_IsRefusedWithoutBeingBuffered_AndFailureReasonsAreNotRevealed()
+    {
+        using var anonymous = _factory.CreateClient();
+        var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+        var huge = new string('x', 1024 * 1024);
+        using var tooBig = await anonymous.SendAsync(Webhook(huge, ts, "00"));
+        tooBig.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
+
+        // Bad signature, stale timestamp and missing signature all look the same from outside.
+        var body = """{ "id": "evt_x", "providerRef": "mock_x" }""";
+        var stale = ts - 7200;
+        var replies = new List<string>();
+        foreach (var (t, sig) in new[] { (ts, "deadbeef"), (stale, WebhookVerifier.Sign(MockPaymentProvider.DefaultSecret, stale, body)) })
+        {
+            using var r = await anonymous.SendAsync(Webhook(body, t, sig));
+            r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+            replies.Add(await r.Content.ReadAsStringAsync());
+        }
+
+        replies.Should().NotContain(r => r.Contains("Expired") || r.Contains("BadSignature") || r.Contains("MissingSignature"));
+    }
+
+    [PostgresFact]
+    public async Task MalformedAndOversizedOrderBodies_GetCleanClientErrors_NeverAServerError()
+    {
+        var v = await SeedAsync(5, 100_000);
+        var client = await BuyerAsync();
+
+        var tooManyLines = "{ \"lines\": [" + string.Join(",", Enumerable.Range(0, 60).Select(_ => $"{{ \"variantId\": \"{Guid.NewGuid()}\", \"quantity\": 1 }}")) + "] }";
+        var cases = new Dictionary<string, string>
+        {
+            ["not json"] = "this is not json",
+            ["null body"] = "null",
+            ["lines is null"] = "{ \"lines\": null }",
+            ["lines is a string"] = "{ \"lines\": \"x\" }",
+            ["bad guid"] = "{ \"lines\": [ { \"variantId\": \"nope\", \"quantity\": 1 } ] }",
+            ["quantity is text"] = $"{{ \"lines\": [ {{ \"variantId\": \"{v.VariantId}\", \"quantity\": \"many\" }} ] }}",
+            ["quantity overflows"] = $"{{ \"lines\": [ {{ \"variantId\": \"{v.VariantId}\", \"quantity\": 99999999999999999999 }} ] }}",
+            ["sixty lines"] = tooManyLines,
+            ["unknown company id format"] = $"{{ \"companyId\": \"x\", \"lines\": [ {{ \"variantId\": \"{v.VariantId}\", \"quantity\": 1 }} ] }}"
+        };
+
+        foreach (var (name, json) in cases)
+        {
+            using var response = await client.SendAsync(Post(json, NewKey()));
+            ((int)response.StatusCode).Should().BeInRange(400, 499, $"'{name}' must be the client's error, not a crash");
+        }
+    }
 }

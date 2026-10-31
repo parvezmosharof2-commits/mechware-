@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using ShopVerse.Application.Inventory;
 using ShopVerse.Application.Payments;
@@ -10,8 +11,11 @@ using ShopVerse.Infrastructure.Persistence;
 namespace ShopVerse.Infrastructure.Payments;
 
 public sealed class PaymentService(
-    ShopVerseDbContext db, IEnumerable<IPaymentProvider> providers, IInventoryService inventory, TimeProvider clock) : IPaymentService
+    ShopVerseDbContext db, IEnumerable<IPaymentProvider> providers, IInventoryService inventory, TimeProvider clock,
+    ILogger<PaymentService>? log = null) : IPaymentService
 {
+    private readonly ILogger<PaymentService> logger = log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PaymentService>.Instance;
+
     private IPaymentProvider Provider(string name) =>
         providers.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
         ?? throw new ValidationException("provider", $"Unknown payment provider '{name}'.");
@@ -39,7 +43,11 @@ public sealed class PaymentService(
 
         var verdict = WebhookVerifier.Verify(provider.WebhookSecret, signature, timestamp, rawBody, now);
         if (verdict != WebhookVerdict.Accepted)
-            throw new UnauthorizedAccessException($"Webhook rejected: {verdict}.");
+        {
+            // The caller learns nothing about which check failed; the reason is for the logs.
+            logger.LogWarning("Payment webhook from {Provider} rejected: {Verdict}", provider.Name, verdict);
+            throw new UnauthorizedAccessException("Webhook rejected.");
+        }
 
         var parsed = provider.Parse(rawBody) ?? throw new ValidationException("body", "The webhook body is not understood.");
 
