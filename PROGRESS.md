@@ -497,3 +497,25 @@ that make the database itself refuse an order whose money does not add up (`ck_o
 Open: promotions are not yet fed into the order (the engine exists, no promotion store yet); shipping is 0 until zones are
 built; approval routing (`pending_approval`) and the credit-terms check (`creditUsed + total <= creditLimit`, brief §8.7)
 are not wired; the HTTP endpoint with the tamper test, payment adapters and the inbox, the frontend.
+
+## Phase 8 slice c (part 4): the order endpoint
+
+`POST /api/v1/orders` (authenticated; `Idempotency-Key` header; body = variant ids and quantities, optional `companyId`)
+and `GET /api/v1/orders/{id}` (the buyer's own order; anyone else's answers 404, the same as an unknown id).
+201 for the request that creates the order, 200 with the original order for a replay, 409 for the same key with a different
+request, 400 for a bad body, 409 `INSUFFICIENT_STOCK` / `VARIANT_UNAVAILABLE` when it cannot be fulfilled.
+
+- **Tamper test (acceptance criterion of Phase 8):** a request that also sends `unitPriceMinor: 1`, `total: 1`,
+  `grandTotalMinor: 1`, a 999,999,999 discount and `vatRate: 0` is charged the server's price (2 x 2,500.00), and the stored
+  order has no discount. There is no field in the request type for any of them.
+- **Company orders:** an order in a company's name needs a Buyer of that company; a non-member gets 404, a Requester-only
+  member 403 `COMPANY_ROLE_REQUIRED`, an unverified company 409 `COMPANY_NOT_VERIFIED`, a suspended one 409
+  `COMPANY_SUSPENDED`. Company orders are VAT-exclusive (VAT added on top), guest/personal orders VAT-inclusive (brief §8.1).
+- 8 more integration tests (22 for orders in all). Mutations: client price trusted, membership check skipped, verified
+  check skipped, any user able to read any order, replay answering 201 each fail a test. Equivalent mutants left alone and
+  recorded: dropping the controller's "header required" check (the service rejects a missing key with the same 400), and
+  dropping the service's "product is live" check (`InventoryService` refuses non-live products with the same error).
+
+Still open for Phase 8: promotions fed into the order, shipping zones, approval routing and the credit-terms check,
+payment adapters (SSLCommerz, bKash, Stripe, COD) and the webhook inbox, auto-cancel of unpaid orders after 30 minutes,
+and the whole frontend (cart, checkout, confirmation).

@@ -17,8 +17,19 @@ public sealed record PlaceOrderRequest(
 public sealed record PlacedOrder(
     Guid OrderId, string OrderNumber, string Status, long GrandTotalMinor, DateTime ReservationExpiresAtUtc, bool Replayed);
 
+public sealed record OrderItemDto(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor);
+
+public sealed record SubOrderDto(Guid Id, string SubOrderNumber, Guid SellerId, string Status, long ShippingMinor, long TotalMinor, IReadOnlyList<OrderItemDto> Items);
+
+public sealed record OrderDto(
+    Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
+    long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders);
+
 public interface IOrderService
 {
+    /// <summary>The buyer's own order. Someone else's order answers "not found", never "forbidden", so ids reveal nothing.</summary>
+    Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default);
+
     /// <summary>
     /// Re-prices the lines from the database, reserves stock, and writes the order, its sub-orders, its first event and
     /// the idempotency record in one transaction. Retrying the same <c>IdempotencyKey</c> with the same request returns

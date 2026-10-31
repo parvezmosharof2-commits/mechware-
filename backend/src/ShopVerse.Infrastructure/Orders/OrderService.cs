@@ -47,6 +47,8 @@ public sealed partial class OrderService(
     {
         if (await ReplayAsync(request.UserId, request.IdempotencyKey, hash, ct) is { } replay) return replay;
 
+        if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
+
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
         var priced = await PriceAsync(lines, mode, now, ct);
@@ -91,6 +93,37 @@ public sealed partial class OrderService(
             }
         }
     }
+
+    /// <summary>
+    /// An order in a company's name needs a buyer of that company and a verified, unsuspended company. A user who is not
+    /// a member gets "not found", the same as for any other company they cannot see.
+    /// </summary>
+    private async Task RequireCompanyMayBuyAsync(Guid userId, Guid companyId, CancellationToken ct)
+    {
+        await Companies.CompanyAccess.RequireMemberAsync(db, userId, companyId, Domain.Companies.CompanyRoles.Buyer, ct);
+        await Companies.CompanyAccess.RequireNotSuspendedAsync(db, companyId, ct);
+        var status = await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.Status).FirstAsync(ct);
+        if (status != Domain.Companies.CompanyStatus.Active)
+            throw new ConflictException("COMPANY_NOT_VERIFIED", "The company has not been verified by MECHWARE yet.");
+    }
+
+    public async Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default)
+    {
+        var order = await db.Orders.AsNoTracking().Include(o => o.SubOrders).ThenInclude(s => s.Items)
+                        .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct)
+                    ?? throw new KeyNotFoundException("Order not found.");
+
+        return new OrderDto(order.Id, order.OrderNumber, ToWire(order.Status), order.Currency, order.SubtotalMinor, order.DiscountMinor,
+            order.TaxMinor, order.ShippingMinor, order.GrandTotalMinor, order.PlacedAtUtc,
+            order.SubOrders.OrderBy(s => s.SubOrderNumber).Select(s => new SubOrderDto(s.Id, s.SubOrderNumber, s.SellerId, ToWire(s.Status),
+                s.ShippingMinor, s.TotalMinor,
+                s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
+                    i.DiscountMinor, i.TaxMinor, i.TotalMinor)).ToList())).ToList());
+    }
+
+    /// <summary>The snake_case name the API and the database use for a state.</summary>
+    private static string ToWire(OrderStatus status) =>
+        string.Concat(status.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
     private static List<PlaceOrderLine> Normalise(PlaceOrderRequest r)
     {

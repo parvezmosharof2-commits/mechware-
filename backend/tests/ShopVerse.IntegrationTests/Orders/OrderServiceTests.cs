@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using ShopVerse.Application.Orders;
 using ShopVerse.Domain.Common.Exceptions;
+using ShopVerse.Domain.Companies;
 using ShopVerse.Domain.Orders;
 using ShopVerse.Infrastructure.Inventory;
 using ShopVerse.Infrastructure.Orders;
@@ -248,6 +249,62 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
             await using var db = fixture.CreateContext();
             await db.Database.ExecuteSqlRawAsync("DROP TRIGGER IF EXISTS test_block_orders ON orders; DROP FUNCTION IF EXISTS test_block_orders();");
         }
+    }
+
+    private async Task<Guid> CompanyAsync(Guid admin, bool activate, CompanyRoles buyerRoles, Guid? buyer = null)
+    {
+        await using var db = fixture.CreateContext();
+        var svc = new ShopVerse.Infrastructure.Companies.CompanyService(db);
+        var bin = (9_000_000_000_000L + Random.Shared.NextInt64(0, 999_999_999_999L)).ToString("D13");
+        var company = await svc.RegisterAsync(admin, new ShopVerse.Application.Companies.RegisterCompanyRequest("Orders Ltd", "TL-O-1", bin, null, null));
+        if (buyer is { } b) await svc.AddMemberAsync(admin, company.Id, new ShopVerse.Application.Companies.AddMemberRequest(b, buyerRoles, null, null));
+        if (activate) await svc.AdminActivateAsync(company.Id);
+        return company.Id;
+    }
+
+    private static PlaceOrderRequest ForCompany(Guid user, Guid company, Guid variant) =>
+        new(user, Key(), [new PlaceOrderLine(variant, 1)], null, company);
+
+    [PostgresFact]
+    public async Task AVerifiedCompanyBuyer_OrdersWithVatAddedOnTop()
+    {
+        var admin = await NewBuyerAsync();
+        var buyer = await NewBuyerAsync();
+        var company = await CompanyAsync(admin, activate: true, CompanyRoles.Buyer, buyer);
+        var v = await SeedAsync(5, 100_000);
+
+        var placed = await With(s => s.PlaceAsync(ForCompany(buyer, company, v.VariantId)));
+
+        placed.GrandTotalMinor.Should().Be(105_000, "company orders are VAT-exclusive: 5 % is added to the 1,000.00 price");
+        await using var db = fixture.CreateContext();
+        (await db.Orders.AsNoTracking().SingleAsync(o => o.Id == placed.OrderId)).CompanyId.Should().Be(company);
+    }
+
+    [PostgresFact]
+    public async Task CompanyOrders_AreRefusedUnlessTheCallerIsABuyerOfAnActiveCompany()
+    {
+        var admin = await NewBuyerAsync();
+        var requesterOnly = await NewBuyerAsync();
+        var outsider = await NewBuyerAsync();
+        var buyer = await NewBuyerAsync();
+        var v = await SeedAsync(20, 100_000);
+
+        var active = await CompanyAsync(admin, activate: true, CompanyRoles.Requester, requesterOnly);
+        var pending = await CompanyAsync(admin, activate: false, CompanyRoles.Buyer, buyer);
+
+        (await Assert.ThrowsAsync<KeyNotFoundException>(() => With(s => s.PlaceAsync(ForCompany(outsider, active, v.VariantId))))).Message.Should().Contain("not found");
+        (await Assert.ThrowsAsync<ForbiddenException>(() => With(s => s.PlaceAsync(ForCompany(requesterOnly, active, v.VariantId))))).Code.Should().Be("COMPANY_ROLE_REQUIRED");
+        (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.PlaceAsync(ForCompany(buyer, pending, v.VariantId))))).Code.Should().Be("COMPANY_NOT_VERIFIED");
+
+        await using (var db = fixture.CreateContext())
+        {
+            var svc = new ShopVerse.Infrastructure.Companies.CompanyService(db);
+            await svc.AdminActivateAsync(pending);
+            await svc.AdminSuspendAsync(pending);
+        }
+
+        (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.PlaceAsync(ForCompany(buyer, pending, v.VariantId))))).Code.Should().Be("COMPANY_SUSPENDED");
+        (await StockAsync(v.VariantId)).Reserved.Should().Be(0, "no refused order may hold stock");
     }
 
     [PostgresFact]
