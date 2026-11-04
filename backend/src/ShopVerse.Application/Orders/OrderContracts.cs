@@ -15,6 +15,12 @@ public sealed record PlaceOrderRequest(
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;
     public const int MaxQuantityPerLine = 10_000;
+
+    /// <summary>
+    /// Every unpaid order holds its stock for 30 minutes. Without a cap one account could keep any product "out of stock"
+    /// for everyone else by placing order after order and never paying (finding #2 of the 2026-11-04 test).
+    /// </summary>
+    public const int MaxOpenUnpaidOrdersPerBuyer = 3;
 }
 
 public sealed record PlacedOrder(

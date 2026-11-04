@@ -26,11 +26,13 @@ public sealed partial class OrderService(
         var lines = Normalise(request);
         var hash = HashOf(request, lines);
 
-        // Requests with the same key queue up here. Without this, a client retrying while its first request is still
-        // reserving stock would lose the stock race and be told "insufficient stock" instead of getting its own order back.
-        // The connection is held open so the session-level lock and the later statements share one database session.
+        // A buyer's order requests queue up here, one at a time. With the same key this stops a client retrying while its
+        // first request is still reserving stock from losing the stock race and being told "insufficient stock" instead
+        // of getting its own order back. Across keys it makes the open-unpaid-order cap exact: parallel requests cannot all
+        // count the same "2 open orders" and all pass. The connection is held open so the session-level lock and the
+        // later statements share one database session.
         await db.Database.OpenConnectionAsync(ct);
-        var lockKey = $"order:{request.UserId:N}:{request.IdempotencyKey}";
+        var lockKey = $"order:{request.UserId:N}";
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_lock(hashtextextended({lockKey}, 0))", ct);
         try
         {
@@ -47,6 +49,7 @@ public sealed partial class OrderService(
     {
         if (await ReplayAsync(request.UserId, request.IdempotencyKey, hash, ct) is { } replay) return replay;
 
+        await RequireBuyerMayHoldStockAsync(request, ct);
         if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -95,6 +98,27 @@ public sealed partial class OrderService(
                 throw;
             }
         }
+    }
+
+    /// <summary>
+    /// Placing an order holds stock, so only a verified, active account may do it, and only up to
+    /// <see cref="PlaceOrderRequest.MaxOpenUnpaidOrdersPerBuyer"/> orders may wait for payment at once. Credit orders are
+    /// confirmed immediately and hold nothing, so they are not refused by the cap. Called under the per-buyer lock.
+    /// </summary>
+    private async Task RequireBuyerMayHoldStockAsync(PlaceOrderRequest request, CancellationToken ct)
+    {
+        var status = await db.Users.AsNoTracking().Where(u => u.Id == request.UserId && u.DeletedAtUtc == null)
+            .Select(u => (Domain.Identity.UserStatus?)u.Status).FirstOrDefaultAsync(ct);
+        if (status != Domain.Identity.UserStatus.Active)
+            throw new ForbiddenException("ACCOUNT_NOT_VERIFIED", "Verify your e-mail address or phone number before placing an order.");
+
+        if (request.PayOnCredit) return;
+
+        var open = await db.Orders.AsNoTracking()
+            .CountAsync(o => o.UserId == request.UserId && o.Status == OrderStatus.PendingPayment, ct);
+        if (open >= PlaceOrderRequest.MaxOpenUnpaidOrdersPerBuyer)
+            throw new ConflictException("TOO_MANY_UNPAID_ORDERS",
+                $"You already have {open} orders waiting for payment. Pay or cancel one before placing another.");
     }
 
     /// <summary>
