@@ -39,6 +39,90 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
+  # Blocking: any secret in the git history fails the run. Reviewed false positives live in .gitleaksignore with a reason.
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.24.3
+      GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c
+    steps:
+      - name: Checkout Code (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks (checksum verified)
+        run: |
+          curl -sSL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check --strict
+          tar xzf gitleaks.tgz gitleaks
+
+      - name: Scan every commit
+        run: ./gitleaks git --redact --no-banner --exit-code 1 .
+
+  # Report-only until the first run is triaged (MASTER_PLAN.md, sprint 0): the rule registry could not be reached
+  # from the environment this was written in, so the current code was never scanned with these rules. Findings
+  # appear under Security -> Code scanning. Make it blocking by adding --error once the first report is clean.
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: semgrep/semgrep
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Scan
+        run: >
+          semgrep scan
+          --config p/csharp --config p/typescript --config p/owasp-top-ten
+          --exclude 'frontend/apps/web/public/seed-media' --exclude '**/Migrations/**'
+          --sarif --output semgrep.sarif
+          backend/src frontend/apps frontend/packages
+
+      - name: Upload results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # Report-only for the same reason as Semgrep. Trivy covers what the npm/NuGet audit does not: misconfigured
+  # Dockerfiles / compose / IaC (none for production yet) and secrets in the working tree.
+  trivy:
+    name: Config and dependency scan (Trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Trivy from the official apt repository
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq wget gnupg
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq trivy
+
+      - name: Scan the repository
+        run: >
+          trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL
+          --skip-dirs frontend/apps/web/public/seed-media
+          --format sarif --output trivy.sarif .
+
+      - name: Upload results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
   dependency-audit:
     name: Dependency Vulnerability Gate
     runs-on: ubuntu-latest

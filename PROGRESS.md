@@ -5,7 +5,24 @@
 
 ---
 
-## 📊 Phase Overview
+## 📊 রোডম্যাপ (বর্তমান) — `docs/MASTER_PLAN.md` §৩
+
+> ২০২৬-১১-০৪ থেকে এই তালিকাই চলবে। নিচের পুরনো ১৪-ফেজ তালিকা শুধু ইতিহাসের জন্য রাখা; সেখানকার Phase 10
+> (seller ledger) ও Phase 12 (Gemini AI) brief v2 অনুযায়ী লঞ্চের পরে সরানো হয়েছে।
+
+- [x] **ভিত্তি:** foundation, design system v1, identity (PostgreSQL), catalog, inventory, outbox, orders, payments (mock), promotions, companies, approvals
+- [ ] **স্প্রিন্ট ০ — স্থিতিশীল করা:** স্বাধীন টেস্টের বাগ #১–#৭, ESLint warning ০, ডকুমেন্ট মেলানো, পুরনো Vite অ্যাপ মোছা, branch protection
+- [ ] **স্প্রিন্ট ১–২ — ডিসকভারি ও ডিজাইন:** ক্রেতা সাক্ষাৎকার, ১২ স্ক্রিন প্রোটোটাইপ (light-first), threat model v2
+- [ ] **স্প্রিন্ট ৩–৪ — PIM:** attribute + unit, datasheet/CAD (AV scan), বিকল্প/উত্তরসূরি, আসল ছবি
+- [ ] **স্প্রিন্ট ৫–৬ — সার্চ + PLP/PDP:** Meilisearch, part-number normalisation, product/spec table
+- [ ] **স্প্রিন্ট ৭–৯ — B2B মূল অংশ:** price list / contract price, RFQ ও quote, approval ↔ order, quick order / CSV
+- [ ] **স্প্রিন্ট ১০–১২ — কার্ট, চেকআউট, পেমেন্ট, ইনভয়েস:** SSLCommerz, bKash, COD-OTP, Mushak-6.3, Guideline 2021
+- [ ] **স্প্রিন্ট ১৩–১৪ — ফুলফিলমেন্ট:** কুরিয়ার, RMA, নোটিফিকেশন, ড্যাশবোর্ড
+- [ ] **স্প্রিন্ট ১৫–১৬ — অ্যাডমিন কনসোল:** ক্যাটালগ, 4-eyes প্রাইসিং, কোটেশন ডেস্ক, অডিট ভিউয়ার
+- [ ] **স্প্রিন্ট ১৭–১৮ — হার্ডেনিং ও ডেপ্লয়:** Docker/IaC, k6, ZAP full, DR drill, PDPO, বাইরের পেন-টেস্ট
+- [ ] **স্প্রিন্ট ১৯–২০ — সফট লঞ্চ → পাবলিক লঞ্চ**
+
+## 📜 পুরনো Phase Overview (ইতিহাস, আর অনুসরণ করা হয় না)
 
 - [x] **Phase 0: Kickoff, Architecture & Master Blueprint** (Completed & Signed Off)
 - [x] **Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)** (Completed & Verified)

@@ -1,0 +1,7 @@
+# Reviewed false positives (2026-11-04). Add a fingerprint here only with a reason; never for a real secret.
+# Test fixture: the webhook secret exists only inside the unit test that checks signature verification.
+3e65db88775d67e739680da1da5cc2a3e35ce81c:backend/tests/ShopVerse.UnitTests/Payments/WebhookVerifierTests.cs:generic-api-key:8
+# Fake demo token in the old AI Studio prototype; its signature is the literal text "sig_mem_only".
+8e706edb08ff73632e47cf1f71d92f61cc7c4366:src/components/Phase3IdentityWorkbench.tsx:jwt:87
+# Truncated example request body in the API contract.
+ce7782a68266346cd8bc705402cb2d60e56b94c2:docs/API_CONTRACT.md:generic-api-key:98

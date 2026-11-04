@@ -54,6 +54,13 @@ pnpm dev:console  # Admin/Seller Console at http://localhost:3001
 
 ---
 
+## 🗺️ Plan
+
+The single source of truth for what to build next, in which order, and what every task must prove before it
+merges is [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) (Bangla). Every PR fills in `.github/pull_request_template.md`.
+
+---
+
 ## 🏛️ Repository Architecture
 
 ```
@@ -62,14 +69,14 @@ MECHWARE/
 │   ├── ShopVerse.sln                    # Visual Studio 2026 / .NET 10 Solution
 │   ├── src/
 │   │   ├── ShopVerse.Domain/            # Pure Entities, Money Value Object, Enums, Domain Events
-│   │   ├── ShopVerse.Application/       # CQRS MediatR, FluentValidation, Business Logic
-│   │   ├── ShopVerse.Infrastructure/    # EF Core 10, Npgsql, Redis StackExchange, Dapper
-│   │   ├── ShopVerse.Payment/           # Payment Gateway Adapters (bKash, Stripe, SSLCommerz, COD)
+│   │   ├── ShopVerse.Application/       # Service interfaces & contracts (no MediatR / FluentValidation)
+│   │   ├── ShopVerse.Infrastructure/    # EF Core 10, Npgsql, StackExchange.Redis, RedLock
+│   │   ├── ShopVerse.Payment/           # Reserved for gateway adapters (SSLCommerz, bKash, COD) — empty today
 │   │   ├── ShopVerse.Worker/            # BackgroundService, Outbox Relay, Reservation Expiry
 │   │   └── ShopVerse.Api/               # ASP.NET Core Web API, RFC 7807 ProblemDetails, Swagger
 │   └── tests/
-│       ├── ShopVerse.UnitTests/         # 100% Money & Startup Options Validation Tests
-│       └── ShopVerse.IntegrationTests/  # WebApplicationFactory API Integration Tests
+│       ├── ShopVerse.UnitTests/         # Domain rules, property/fuzz, architecture, JWT attacker tests
+│       └── ShopVerse.IntegrationTests/  # Real PostgreSQL: services, races, IDOR, API security
 ├── frontend/                            # Next.js 15 Monorepo
 │   ├── apps/
 │   │   ├── web/                         # Customer Storefront (App Router, ISR, next-intl)
@@ -81,7 +88,8 @@ MECHWARE/
 ├── infra/
 │   └── docker/                          # docker-compose.yml (Postgres 16, Redis 7, MinIO, Meilisearch)
 ├── docs/                                # Full Architecture, Data Model, API Contract & ADRs
-├── PROGRESS.md                          # Phase-by-phase implementation tracker
+├── PROGRESS.md                          # Implementation tracker
+├── docs/MASTER_PLAN.md                  # Master plan (Bangla): roadmap, test & security gates
 └── README.md
 ```
 

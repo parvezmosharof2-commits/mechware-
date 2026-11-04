@@ -1,5 +1,9 @@
 # SYSTEM ARCHITECTURE SPECIFICATION — MECHWARE
 
+> ⚠️ **পুরনো (২০২৬-১১-০৪)।** এই ডকুমেন্ট brief v1-এর B2C / multi-vendor ডিজাইন বর্ণনা করে (Stripe, AWS SNS, Gemini,
+> seller ledger, MediatR, `SV-` অর্ডার নম্বর)। বর্তমান দিক: `docs/01_PROJECT_BRIEF.md` (v2) ও `docs/100K_GRADE_REVIEW_AND_PLAN.md` §3।
+> এটা brief v2 অনুযায়ী আবার লেখা `docs/MASTER_PLAN.md`-এর স্প্রিন্ট ০-এর কাজ। দুইটা না মিললে brief v2 সঠিক।
+
 > **Stack:** C# 13 / .NET 10 ASP.NET Core Clean Architecture + Next.js 15 Monorepo + PostgreSQL 16 + Redis 7 + Meilisearch
 > **Scope:** Enterprise B2B/B2C Industrial Machinery, Factory Automation & Engineering Services Platform ($100K Agency Grade)
 
