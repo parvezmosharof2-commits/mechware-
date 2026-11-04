@@ -51,6 +51,7 @@ public sealed partial class OrderService(
 
         await RequireBuyerMayHoldStockAsync(request, ct);
         if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
+        var shipTo = await ResolveShipToAsync(request, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
@@ -63,7 +64,7 @@ public sealed partial class OrderService(
             var reserved = await ReserveAsync(orderId, lines, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                request.ShipToJson ?? "{}", OrderStatus.PendingPayment, now);
+                shipTo, OrderStatus.PendingPayment, now);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
@@ -120,6 +121,73 @@ public sealed partial class OrderService(
             throw new ConflictException("TOO_MANY_UNPAID_ORDERS",
                 $"You already have {open} orders waiting for payment. Pay or cancel one before placing another.");
     }
+
+    /// <summary>
+    /// The delivery address, copied from the buyer's address book or the company's delivery sites and serialised by the
+    /// server. Finding #4 of the 2026-11-04 test: the client used to send the address as free JSON, so invalid JSON was a
+    /// 500, two megabytes were stored, and an order could be placed with no address at all. Someone else's address or
+    /// site answers "not found", like any other id the caller cannot see. Called after the company check.
+    /// </summary>
+    private async Task<string> ResolveShipToAsync(PlaceOrderRequest r, CancellationToken ct)
+    {
+        if (r.ShippingAddressId is not null && r.ShipToSiteId is not null)
+            throw new ValidationException("shipTo", "Give either a saved address or a company site, not both.");
+        if (r.ShipToSiteId is not null && r.CompanyId is null)
+            throw new ValidationException("shipToSiteId", "A company site can only be used for an order in the company's name.");
+
+        if (r.ShippingAddressId is { } addressId)
+        {
+            var address = await db.Addresses.AsNoTracking().FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == r.UserId, ct)
+                          ?? throw new KeyNotFoundException("Shipping address not found.");
+            return ShipToFromAddress(address);
+        }
+
+        if (r.CompanyId is { } companyId)
+        {
+            var site = await db.CompanySites.AsNoTracking()
+                .Where(s => s.CompanyId == companyId && (r.ShipToSiteId == null ? s.IsDefaultDelivery : s.Id == r.ShipToSiteId))
+                .FirstOrDefaultAsync(ct);
+            if (site is not null) return ShipToFromSite(site);
+            if (r.ShipToSiteId is not null) throw new KeyNotFoundException("Delivery site not found.");
+        }
+
+        var fallback = await db.Addresses.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == r.UserId && a.IsDefaultShipping, ct);
+        return fallback is not null
+            ? ShipToFromAddress(fallback)
+            : throw new ValidationException("shippingAddressId", "Add a shipping address before placing an order.");
+    }
+
+    private static string ShipToFromAddress(Domain.Identity.Address a) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        source = "address",
+        sourceId = a.Id,
+        recipientName = a.RecipientName,
+        phone = a.Phone,
+        line1 = a.Line1,
+        line2 = a.Line2,
+        area = a.Area,
+        upazila = a.Upazila,
+        district = a.District,
+        division = a.Division,
+        postalCode = a.PostalCode,
+        country = a.Country
+    });
+
+    private static string ShipToFromSite(Domain.Companies.CompanySite s) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        source = "company_site",
+        sourceId = s.Id,
+        siteName = s.Name,
+        recipientName = s.ContactName,
+        phone = s.ContactPhone,
+        line1 = s.Line1,
+        line2 = s.Line2,
+        upazila = s.Upazila,
+        district = s.District,
+        division = s.Division,
+        postalCode = s.PostalCode,
+        country = "BD"
+    });
 
     /// <summary>
     /// An order in a company's name needs a buyer of that company and a verified, unsuspended company. A user who is not
@@ -239,7 +307,7 @@ public sealed partial class OrderService(
 
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShipToJson}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
+        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 

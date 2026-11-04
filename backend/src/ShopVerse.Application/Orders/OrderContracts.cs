@@ -3,14 +3,21 @@ namespace ShopVerse.Application.Orders;
 /// <summary>What the buyer asked for. There is deliberately no price, tax, discount or total here: the server decides them.</summary>
 public sealed record PlaceOrderLine(Guid VariantId, int Quantity);
 
+/// <summary>
+/// Where the order goes is chosen, never typed in: <see cref="ShippingAddressId"/> is one of the buyer's saved addresses,
+/// <see cref="ShipToSiteId"/> a delivery site of <see cref="CompanyId"/>. With neither, a company order goes to the company's
+/// default delivery site and a personal order to the buyer's default shipping address. The server copies the address
+/// into the order, so later edits to the address book never change where a placed order was sent.
+/// </summary>
 public sealed record PlaceOrderRequest(
     Guid UserId,
     string IdempotencyKey,
     IReadOnlyList<PlaceOrderLine> Lines,
-    string? ShipToJson = null,
+    Guid? ShippingAddressId = null,
     Guid? CompanyId = null,
     bool PayOnCredit = false,
-    IReadOnlyList<string>? CouponCodes = null)
+    IReadOnlyList<string>? CouponCodes = null,
+    Guid? ShipToSiteId = null)
 {
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;

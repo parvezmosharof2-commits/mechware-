@@ -48,6 +48,7 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
             user.VerifyEmail(DateTime.UtcNow);
             user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
             db.Users.Add(user);
+            db.Addresses.Add(TestUsers.DefaultAddress(user.Id));
             await db.SaveChangesAsync();
         }
 
@@ -272,5 +273,24 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
             using var response = await client.SendAsync(Post(json, NewKey()));
             ((int)response.StatusCode).Should().BeInRange(400, 499, $"'{name}' must be the client's error, not a crash");
         }
+    }
+
+    /// <summary>Finding #4 over HTTP: the old free-text address field is no longer read, so junk in it cannot reach the database.</summary>
+    [PostgresFact]
+    public async Task TheOldFreeTextAddressField_IsIgnored_InvalidJsonIsNoLonger500_AndTheSavedAddressIsUsed()
+    {
+        var v = await SeedAsync(onHand: 5, price: 100_000);
+        var client = await BuyerAsync();
+        var junk = "not json {" + new string('x', 2_000_000);
+
+        using var response = await client.SendAsync(Post($$"""{ "shipToJson": {{JsonSerializer.Serialize(junk)}}, "lines": [ { "variantId": "{{v.VariantId}}", "quantity": 1 } ] }""", NewKey()));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var orderId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("orderId").GetGuid();
+        var options = new DbContextOptionsBuilder<ShopVerseDbContext>().UseNpgsql(_factory.ConnectionString).Options;
+        await using var db = new ShopVerseDbContext(options);
+        var stored = await db.Orders.AsNoTracking().Where(o => o.Id == orderId).Select(o => o.ShipToJson).SingleAsync();
+        stored.Length.Should().BeLessThan(1_000);
+        JsonDocument.Parse(stored).RootElement.GetProperty("recipientName").GetString().Should().Be("Engr. Test Receiver");
     }
 }
