@@ -1,9 +1,21 @@
-[১. Antigravity ফেজের কোড লিখবে ও লোকাল টেস্ট চালাবে]
-                        ↓
-[২. Antigravity স্বয়ংক্রিয়ভাবে Git-এ Commit & Push করবে]
-                        ↓
-[৩. আপনি Google AI Studio-তে কোড দিয়ে অডিট করাবেন]
-                        ↓
-[৪. AI Studio-র অডিট রিপোর্টটি Antigravity-তে পেস্ট করবেন]
-                        ↓
-[৫. Antigravity ত্রুটিগুলো ফিক্স করে ফাইনাল Git Push দিবে]
+পুরনো Antigravity → AI Studio অডিট ফ্লো বাতিল (২০২৬-১১-০৪)।
+
+এখনকার কাজের ফ্লো দেখুন: docs/MASTER_PLAN.md §২ (প্রতিটা কাজের ৯ ধাপ)
+
+[১. মালিক ব্রিফ লেখেন]
+            ↓
+[২. AI threat model লেখে]
+            ↓
+[৩. টেস্ট আগে লেখা হয় (প্রথমে লাল)]
+            ↓
+[৪. কোড, যতক্ষণ না টেস্ট সবুজ]
+            ↓
+[৫. Mutation check: গার্ড সরালে টেস্ট ফেল করে কিনা]
+            ↓
+[৬. CI গেট: টেস্ট, CodeQL, Semgrep, gitleaks, Trivy, audit, E2E, bundle]
+            ↓
+[৭. AI স্ব-রিভিউ: /code-review ও /security-review]
+            ↓
+[৮. মালিকের ৫ মিনিটের ডেমো ও সাইন-অফ]
+            ↓
+[৯. Merge, PROGRESS.md ও স্কোরকার্ড আপডেট]

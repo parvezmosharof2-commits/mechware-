@@ -1,0 +1,103 @@
+name: DAST (OWASP ZAP)
+
+# Attacks the running API the way an outsider would: every operation in the OpenAPI document, anonymously.
+# Nightly and on demand rather than on every PR, because it needs the API, PostgreSQL and Redis up and takes minutes.
+# Fails when ZAP reports any High-risk alert; Medium and below are uploaded for review (MASTER_PLAN.md §5.2).
+on:
+  schedule:
+    - cron: '41 21 * * *'   # 03:41 Dhaka
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zap-api-scan:
+    name: ZAP API scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: shopverse
+          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      PGPASSWORD: shopverse_secret
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create database and apply migrations
+        run: |
+          dotnet restore backend/ShopVerse.sln
+          psql -h localhost -U shopverse -d postgres -c "CREATE DATABASE shopverse"
+          dotnet tool install --global dotnet-ef --version 10.*
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          SHOPVERSE_DESIGN_DB="Host=localhost;Port=5432;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
+            dotnet ef database update \
+              --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
+
+      - name: Start the API
+        run: |
+          dotnet publish backend/src/ShopVerse.Api -c Release -o "$RUNNER_TEMP/api"
+          cd "$RUNNER_TEMP/api"
+          # Development publishes the OpenAPI document ZAP reads. The scan is anonymous, so the demo accounts are
+          # not used; the rate limit is raised so the scan measures the endpoints, not the limiter.
+          RateLimiting__GlobalPermitPerMinute=100000 \
+          ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://0.0.0.0:5000 \
+            nohup dotnet ShopVerse.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fs http://localhost:5000/health/live > /dev/null && exit 0
+            sleep 2
+          done
+          echo "API did not become healthy"; cat "$RUNNER_TEMP/api.log"; exit 1
+
+      - name: Run ZAP API scan
+        run: |
+          mkdir -p zap && chmod 777 zap
+          # -I: do not fail on warnings here; the next step decides on High-risk alerts only.
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-api-scan.py -t http://localhost:5000/swagger/v1/swagger.json -f openapi \
+            -r zap-report.html -J zap-report.json -I
+
+      - name: Fail on High-risk alerts
+        run: |
+          python3 - <<'PY'
+          import json, sys
+          report = json.load(open("zap/zap-report.json"))
+          alerts = [a for site in report.get("site", []) for a in site.get("alerts", [])]
+          high = [a for a in alerts if str(a.get("riskcode")) == "3"]
+          for a in sorted(alerts, key=lambda a: -int(a.get("riskcode", 0))):
+              print(f"risk={a.get('riskcode')} count={a.get('count')} {a.get('name')}")
+          if high:
+              print(f"::error::{len(high)} High-risk ZAP alert(s); see the zap-report artifact")
+              sys.exit(1)
+          PY
+
+      - name: Upload report and API log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          if-no-files-found: ignore
+          path: |
+            zap/
+            ${{ runner.temp }}/api.log
