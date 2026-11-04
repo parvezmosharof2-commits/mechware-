@@ -289,7 +289,10 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
                 Brand = p.BrandId == null ? null : _db.Brands.Where(b => b.Id == p.BrandId).Select(b => b.Name).FirstOrDefault(),
                 Image = p.Media.OrderBy(m => m.Position).Select(m => new { m.Url, m.AltText }).FirstOrDefault(),
                 Variant = p.Variants.Where(v => v.Status == VariantStatus.Active).OrderByDescending(v => v.IsDefault).ThenBy(v => v.PriceMinor).FirstOrDefault(),
-                Available = _db.InventoryItems.Where(i => p.Variants.Select(v => v.Id).Contains(i.VariantId)).Sum(i => (int?)(i.OnHand - i.Reserved)) ?? 0
+                // Only active warehouses, the same set checkout reserves from, so the listing never promises stock it cannot sell.
+                Available = _db.InventoryItems.Where(i => p.Variants.Select(v => v.Id).Contains(i.VariantId)
+                        && _db.Warehouses.Any(w => w.Id == i.WarehouseId && w.IsActive))
+                    .Sum(i => (int?)(i.OnHand - i.Reserved)) ?? 0
             })
             .ToListAsync(ct);
 

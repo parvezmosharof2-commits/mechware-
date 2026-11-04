@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Common.Enums;
 using ShopVerse.Domain.Common.ValueObjects;
@@ -39,5 +40,19 @@ public static class CatalogTestData
         db.InventoryItems.Add(item);
         await db.SaveChangesAsync();
         return new SeededVariant(product.Id, variant.Id, warehouse.Id, item.Id);
+    }
+
+    /// <summary>Stocks the variant in one more warehouse; returns that warehouse's id.</summary>
+    public static async Task<Guid> AddWarehouseStockAsync(ShopVerseDbContext db, Guid variantId, int onHand, bool warehouseActive = true)
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var warehouse = new Warehouse(Guid.NewGuid(), null, "Second hub", $"HUB2-{suffix}", "Chattogram", "Chattogram", "Agrabad");
+        db.Warehouses.Add(warehouse);
+        await db.SaveChangesAsync();
+        if (!warehouseActive)
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE warehouses SET is_active = false WHERE id = {warehouse.Id}");
+        db.InventoryItems.Add(new InventoryItem(Guid.NewGuid(), variantId, warehouse.Id, onHand, 0));
+        await db.SaveChangesAsync();
+        return warehouse.Id;
     }
 }
