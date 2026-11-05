@@ -39,7 +39,7 @@
 | P1 | **High** | গেটওয়ের সাময়িক ত্রুটিতে payment event চিরতরে হারায়; টাকা কাটা হয়েছে কিন্তু অর্ডার নিশ্চিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
 | P2 | **High** | একই অর্ডারে দুবার টাকা দিলে দ্বিতীয়টা নীরবে থেকে যায়, refund-এর জন্য চিহ্নিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
 | P3 | Medium | `NeedsRefund` পেমেন্টের জন্য কোনো কাজের তালিকা, সতর্কবার্তা বা refund পথ নেই | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): refund তালিকা + 4-eyes; সতর্কবার্তা বাকি |
-| P4 | Medium | ব্যর্থ বা অসম্পূর্ণ webhook-এর কোনো reconciliation নেই (provider-এর তালিকার সাথে দৈনিক মেলানো) | CODE | স্প্রিন্ট ১০–১২ |
+| P4 | Medium | ব্যর্থ বা অসম্পূর্ণ webhook-এর কোনো reconciliation নেই | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): প্রতি মিনিটে গেটওয়েকে জিজ্ঞাসা; দৈনিক settlement মেলানো বাকি |
 | P5 | Low | এক অর্ডারে যত খুশি payment session খোলা যায় (P2-এর পথ) | TEST | ✅ **ঠিক হয়েছে**: একসাথে সর্বোচ্চ ৩টা খোলা চেষ্টা |
 | P6 | Low | webhook-ও global ১০০/মিনিট/IP সীমার মধ্যে; গেটওয়ের burst-এ 429 → গেটওয়ে retry করে | CODE | স্প্রিন্ট ১৭–১৮ |
 | R1 | Medium | কুপন কোড আছে কিনা বোঝা যায়: অজানা কোডে এক উত্তর, আছে-কিন্তু-চলে-না কোডে আরেক | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
@@ -163,6 +163,25 @@ Support টাকা ফেরত চাইতে পারে, কিন্ত�
 - webhook একেবারে না এলে কিছুই ধরা পড়ে না: গেটওয়ের সমস্যা, আমাদের downtime, বা P1।
 - **নিয়ম:** worker প্রতিদিন গেটওয়ের settlement তালিকা (SSLCommerz transaction query API, bKash search) টেনে আনবে আর `payments`-এর সাথে মেলাবে।
 - অমিল হলে সতর্কবার্তা যাবে। ক্রেতার "redirect হয়ে ফিরে আসা" কখনো নিজে থেকে অর্ডার নিশ্চিত করবে না; এটা আগে থেকেই আছে, TEST: `RedirectingBackWithoutAWebhook_NeverConfirmsAnything`।
+
+**ফিক্স (২০২৬-১১-০৫):** `PaymentReconciliationWorker` (API host-এ, যেখানে গেটওয়েগুলো নিবন্ধিত) প্রতি মিনিটে `PaymentService.ReconcileAsync` চালায়।
+- **কোন payment দেখা হয়:** যেসব payment চেষ্টা ২ মিনিটের বেশি পুরোনো আর ২ ঘণ্টার কম, আর এখনো `Pending`, তাদের সব। অর্ডারের অবস্থা যা-ই হোক।
+- **কী করা হয়:** প্রতিটার জন্য গেটওয়েকে সরাসরি জিজ্ঞেস করা হয় (`VerifyAsync`)। টাকা এসে থাকলে webhook-এর সেই একই locked, idempotent settlement চলে:
+  - অর্ডার এখনো অপেক্ষায় থাকলে নিশ্চিত হয়।
+  - অর্ডার আগেই অন্য payment-এ নিশ্চিত, বা বাতিল হয়ে থাকলে `NeedsRefund` হয়, অর্থাৎ refund-এর তালিকায় যায়।
+- একটা গেটওয়ে বন্ধ থাকলেও বাকিগুলো চলে।
+- **ফল:** webhook হারালেও টাকা দেওয়া অর্ডার ৩০ মিনিটের unpaid-expiry-তে আর বাতিল হয় না।
+
+**প্রমাণ:**
+- TEST: `APaidAttemptWhoseWebhookNeverCame_IsConfirmedByReconciliation`, `Reconciliation_LeavesYoungAndUnpaidAttemptsAlone_AndSurvivesAProviderThatIsDown`, `ReconciliationAndTheWebhookAtTheSameMoment_ConfirmOnce`, `ASecondPaidTabWhoseWebhookWasLost_IsFlaggedForRefund_EvenThoughTheOrderIsAlreadyConfirmed`।
+- **Mutation check:**
+  - ৬টা mutant-এর ৫টা ধরা পড়েছে: বয়সের সীমা, window, স্টক commit, exception-এ পুরো pass থেমে যাওয়া, অর্ডার-অবস্থার filter।
+  - "paid flag উপেক্ষা" mutant-টা equivalent: settlement নিজেই না-পাওয়া টাকা প্রত্যাখ্যান করে।
+- **Code review-এ ধরা পড়া ফাঁক:** প্রথম সংস্করণে শুধু অপেক্ষমাণ অর্ডারের payment দেখা হতো। তাতে দ্বিতীয় tab-এর হারানো webhook-এর টাকা কখনো refund তালিকায় পৌঁছাত না। ঠিক করা হয়েছে, টেস্টসহ।
+
+**বাকি:**
+- গেটওয়ের দৈনিক settlement report-এর সাথে মেলানো (আসল adapter এলে)।
+- একাধিক API instance থাকলে একই payment কয়েকবার জিজ্ঞেস করা হয়। settlement নিরাপদ, শুধু বাড়তি API call হয়।
 
 ### P5, P6 (Low)
 - **P5:** session খোলার সংখ্যার কোনো সীমা নেই; P2-এর সাথেই ঠিক হবে।
@@ -329,7 +348,7 @@ Support টাকা ফেরত চাইতে পারে, কিন্ত�
 |---|---|---|
 | ~~P1 + P2 + P5 ঠিক করা, টেস্ট ও mutation check সহ~~ ✅ ২০২৬-১১-০৫ | — | V2.3.3 (L2), V15.4.2 (L3) |
 | ~~P3 refund তালিকা + 4-eyes refund~~ ✅ ২০২৬-১১-০৫ (UI, সতর্কবার্তা, step-up বাকি) | ১৫–১৬ | V2.3.5 (L3) |
-| P4 দৈনিক reconciliation worker | ১০–১২ | — (সরাসরি requirement নেই; ব্যবসায়িক নিয়ন্ত্রণ) |
+| ~~P4 reconciliation worker~~ ✅ ২০২৬-১১-০৫ (দৈনিক settlement report বাকি) | ১০–১২ | — (সরাসরি requirement নেই; ব্যবসায়িক নিয়ন্ত্রণ) |
 | P6 webhook-এর আলাদা rate-limit policy | ১৭–১৮ | V2.4.1 (L2) |
 | ~~R1 কুপন গণনা ঠেকানো~~ ✅ ২০২৬-১১-০৫ | — | V2.4.1 (L2) |
 | R3 + Q1–Q9 (price list, কোটেশন) | ৭–৯ | V2.2.2 (L1), V2.3.1 (L1), V2.3.5 (L3), V8.2.2 (L1) |
