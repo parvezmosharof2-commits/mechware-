@@ -109,7 +109,7 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
   - `docs/prototypes/sprint1/` (EN/বাংলা, light/dark, ৩৬০–১৪৪০ px)
   - প্রতিটা স্ক্রিনে সাক্ষাৎকারের প্রশ্ন আছে
 - ⏳ মালিক: ৫ জন ক্রেতার সাক্ষাৎকার, তারপর সাইন-অফ।
-- ⏳ AI: threat model v2।
+- ✅ AI: threat model v2, খসড়া, মানুষের রিভিউ বাকি (`docs/security/THREAT_MODEL_PRICING_QUOTES_PAYMENTS_INVOICING.md`)। Payments-এ দুটো High (P1, P2) RUN দিয়ে পুনরুৎপাদিত; ফিক্স আলাদা PR-এ।
 
 ### স্প্রিন্ট ৩–৪ — PIM (পণ্যের তথ্য)
 - unit-সহ attribute class (ETIM-ধাঁচ), datasheet/CAD/সার্টিফিকেট আপলোড (magic-byte check + ClamAV স্ক্যান + signed URL),
