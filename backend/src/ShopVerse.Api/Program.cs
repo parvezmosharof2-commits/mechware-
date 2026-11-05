@@ -67,17 +67,22 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 });
 
 // 2.2 Forwarded Headers Options (HIGH-03: reverse-proxy client IP for rate limiting)
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// Behind Cloudflare / a load balancer set ForwardedHeaders:KnownNetworks (see ForwardedHeadersSettings), or every visitor
+// shares the proxy's address and its rate limits.
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1;
-
-    if (builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing")
+    var forwarded = new ForwardedHeadersOptions();
+    ForwardedHeadersSettings.Apply(forwarded, builder.Configuration,
+        trustAnyProxy: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing");
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
+        options.ForwardedHeaders = forwarded.ForwardedHeaders;
+        options.ForwardLimit = forwarded.ForwardLimit;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
-    }
-});
+        foreach (var network in forwarded.KnownIPNetworks) options.KnownIPNetworks.Add(network);
+        foreach (var proxy in forwarded.KnownProxies) options.KnownProxies.Add(proxy);
+    });
+}
 
 // 2.3 Phase 3 Identity, Persistence & RBAC Registration
 builder.Services.AddHttpContextAccessor();
