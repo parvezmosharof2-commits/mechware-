@@ -187,6 +187,17 @@ export function AuthFlowSurface({
         password,
         totpCode: requiresTwoFactor ? totpCode.trim() : undefined
       });
+      if (res.data.requiresTwoFactorEnrollment) {
+        // A staff account without an authenticator: enrolment (with an administrator's setup code) is on the console.
+        setPassword('');
+        setErrorMessage(
+          t(
+            'This staff account must set up an authenticator first. Sign in on the operations console with your setup code.',
+            'এই স্টাফ অ্যাকাউন্টে আগে অথেন্টিকেটর সেট করতে হবে। সেটআপ কোড দিয়ে অপারেশনস কনসোলে সাইন ইন করুন।'
+          )
+        );
+        return;
+      }
       if (res.data.requiresTwoFactor) {
         setRequiresTwoFactor(true);
         setStatusMessage(

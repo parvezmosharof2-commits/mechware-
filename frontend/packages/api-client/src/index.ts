@@ -32,6 +32,19 @@ export interface AuthTokenEnvelope {
   user?: AuthenticatedUser;
   requiresTwoFactor?: boolean;
   twoFactorChallengeToken?: string;
+  /**
+   * Staff whose role demands 2FA but who have no authenticator yet. Without a setup code nothing else is returned; with a
+   * valid one the new secret (shown once) and a 10-minute token for the first code.
+   */
+  requiresTwoFactorEnrollment?: boolean;
+  enrollmentToken?: string;
+  twoFactorSetup?: TwoFactorSecret;
+}
+
+export interface TwoFactorSecret {
+  secret: string;
+  otpAuthUri: string;
+  recoveryCodes: string[];
 }
 
 export interface RegisterRequest {
@@ -61,6 +74,8 @@ export interface LoginRequest {
   identifier: string;
   password: string;
   totpCode?: string;
+  /** One-time code an administrator issued, for staff enrolling their first authenticator. */
+  setupCode?: string;
 }
 
 export interface BdLocationItem {
@@ -190,7 +205,8 @@ export class MechWareApiClient {
       !isRetry &&
       this.autoRefreshOn401 &&
       !cleanPath.startsWith('api/v1/auth/login') &&
-      !cleanPath.startsWith('api/v1/auth/refresh')
+      !cleanPath.startsWith('api/v1/auth/refresh') &&
+      !cleanPath.startsWith('api/v1/auth/2fa/enroll')
     ) {
       const refreshedToken = await this.tryRefreshAccessToken();
       if (refreshedToken) {
@@ -202,7 +218,8 @@ export class MechWareApiClient {
       if (this.onUnauthorized) {
         this.onUnauthorized();
       }
-    } else if (response.status === 401 && this.onUnauthorized) {
+    } else if (response.status === 401 && this.onUnauthorized && !cleanPath.startsWith('api/v1/auth/2fa/enroll')) {
+      // An expired enrolment token is not a lost session: the login page handles it and starts over.
       this.onUnauthorized();
     }
 
@@ -211,6 +228,9 @@ export class MechWareApiClient {
       let problem: ProblemDetails;
       try {
         problem = JSON.parse(rawBody) as ProblemDetails;
+        // Not every error body carries its status (rate limiter, proxies); the HTTP status is the truth.
+        if (typeof problem !== 'object' || problem === null) throw new Error('not an object');
+        problem.status ??= response.status;
       } catch {
         problem = {
           type: 'https://api.mechware.com.bd/errors/HTTP_ERROR',
@@ -294,6 +314,18 @@ export class MechWareApiClient {
     const res = await this.fetch<{ data: AuthTokenEnvelope }>('/api/v1/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload)
+    });
+    if (res.data.accessToken) {
+      defaultTokenVault.setToken(res.data.accessToken, res.data.expiresIn);
+    }
+    return res;
+  }
+
+  /** Turns 2FA on with the first authenticator code and starts the session. */
+  public async completeTwoFactorEnrollment(enrollmentToken: string, code: string): Promise<{ data: AuthTokenEnvelope }> {
+    const res = await this.fetch<{ data: AuthTokenEnvelope }>('/api/v1/auth/2fa/enroll/complete', {
+      method: 'POST',
+      body: JSON.stringify({ enrollmentToken, code })
     });
     if (res.data.accessToken) {
       defaultTokenVault.setToken(res.data.accessToken, res.data.expiresIn);

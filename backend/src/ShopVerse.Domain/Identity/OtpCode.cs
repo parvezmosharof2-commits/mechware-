@@ -7,7 +7,13 @@ public enum OtpType
     PhoneVerify = 0,
     EmailVerify = 1,
     PasswordReset = 2,
-    LoginOtp = 3
+    LoginOtp = 3,
+
+    /// <summary>Session-less, 10-minute, single-use token: after password + setup code, it lets the first authenticator code finish enrolment.</summary>
+    TwoFactorEnrollment = 4,
+
+    /// <summary>One-time code an administrator issues so a staff member can enrol an authenticator (72 hours, three tries).</summary>
+    TwoFactorSetupCode = 5
 }
 
 /// <summary>

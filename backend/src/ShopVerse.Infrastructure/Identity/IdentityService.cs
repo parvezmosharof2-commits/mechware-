@@ -273,6 +273,21 @@ public sealed class IdentityService : IIdentityService
             throw disabled;
         }
 
+        if (RequiresSecondFactor(user) && !user.TwoFactorEnabled)
+        {
+            // The role demands an authenticator this person does not have yet. The password alone earns nothing; with the
+            // one-time setup code an administrator issued, it earns the new secret and a 10-minute token, and the session
+            // starts only with the first correct authenticator code. A leaked password alone cannot enrol a stranger's phone.
+            if (string.IsNullOrWhiteSpace(request.SetupCode))
+            {
+                RecordAudit(user.Id, clientIp, "user.2fa_enrollment_required", "users", user.Id.ToString(), null, null);
+                await _db.SaveChangesAsync(cancellationToken);
+                return new AuthTokenResponseDto(string.Empty, 0, "Bearer", MapUserDto(user), null, RequiresTwoFactorEnrollment: true);
+            }
+
+            return await RedeemSetupCodeAsync(user, request.SetupCode, clientIp, now, cancellationToken);
+        }
+
         if (RequiresSecondFactor(user))
         {
             if (string.IsNullOrWhiteSpace(request.TotpCode))
@@ -420,6 +435,18 @@ public sealed class IdentityService : IIdentityService
         if (user is null || user.DeletedAtUtc.HasValue || user.Status is UserStatus.Banned or UserStatus.Suspended)
         {
             throw new UnauthorizedAccessException("User account is no longer active.");
+        }
+
+        // A role that now demands an authenticator ends sessions begun without one: the person must sign in and enrol.
+        if (RequiresSecondFactor(user) && !user.TwoFactorEnabled)
+        {
+            // Revoked, not just refused: otherwise these sessions would come back to life once the person enrols, without
+            // ever having been through the second factor.
+            await RevokeAllUserSessionsAsync(user.Id, now, cancellationToken);
+            RecordAudit(user.Id, clientIp, "security.sessions_revoked_2fa_required", "users", user.Id.ToString(), null, null);
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            throw new UnauthorizedAccessException("This account must set up two-factor authentication. Please sign in again.");
         }
 
         if (storedToken.IsUsed)
@@ -600,6 +627,22 @@ public sealed class IdentityService : IIdentityService
         var now = DateTime.UtcNow;
         User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
 
+        // Re-running setup would swap the secret and recovery codes at once: a stolen access token could lock the owner out
+        // of their own authenticator and hand the new one to the thief. Changing an active authenticator needs its own flow.
+        if (user.TwoFactorEnabled)
+        {
+            throw new ConflictException("TWO_FACTOR_ALREADY_ENABLED", "Two-factor authentication is already on for this account.");
+        }
+
+        // Staff enrol only with an administrator's setup code (M1); a session from before the role, or a stolen token, must
+        // not be a way around it.
+        RequireSelfServiceEnrollment(user);
+
+        return await IssueNewTwoFactorSecretAsync(user, clientIp, now, cancellationToken);
+    }
+
+    private async Task<TotpSetupResponseDto> IssueNewTwoFactorSecretAsync(User user, string? clientIp, DateTime now, CancellationToken cancellationToken)
+    {
         string secret = _totpService.GenerateBase32Secret();
         IReadOnlyList<string> rawRecoveryCodes = _totpService.GenerateRecoveryCodes(10);
         string hashedCodesJson = JsonSerializer.Serialize(rawRecoveryCodes.Select(_totpService.HashRecoveryCode).ToList());
@@ -623,6 +666,8 @@ public sealed class IdentityService : IIdentityService
         var now = timestampOverride ?? DateTimeOffset.UtcNow;
         User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
 
+        RequireSelfServiceEnrollment(user);
+
         if (string.IsNullOrWhiteSpace(user.TwoFactorSecret))
         {
             throw new ValidationException("code", "2FA setup has not been initiated for this user.");
@@ -637,6 +682,179 @@ public sealed class IdentityService : IIdentityService
         user.EnableTwoFactor(now.UtcDateTime);
         RecordAudit(user.Id, clientIp, "user.2fa_enabled", "users", user.Id.ToString(), null, new { TwoFactorEnabled = true, MatchedTimeStep = matchedStep });
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
+        Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default)
+    {
+        var now = utcNowOverride ?? DateTime.UtcNow;
+        if (adminId == userId)
+        {
+            // Otherwise one stolen admin password plus this endpoint would let anyone reset the admin's own authenticator.
+            throw new ForbiddenException("SETUP_CODE_FOR_SELF", "Another administrator must issue your setup code.");
+        }
+
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
+        if (user.Status is UserStatus.Suspended or UserStatus.Banned)
+        {
+            throw new ForbiddenException("ACCOUNT_DISABLED", "This account is not active.");
+        }
+        if (user.TwoFactorEnabled || !RequiresSecondFactor(user))
+        {
+            throw new ConflictException("TWO_FACTOR_ENROLLMENT_NOT_NEEDED", "This account does not need to enrol an authenticator.");
+        }
+
+        // One transaction: earlier codes are retired only if the new one is stored.
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await RetireEnrollmentCredentialsAsync(user.Id, cancellationToken);
+        string code = NewSetupCode();
+        DateTime expires = now.Add(SetupCodeLifetime);
+        _db.OtpCodes.Add(new OtpCode(Guid.NewGuid(), user.Id.ToString("N"), _tokenService.HashToken(NormalizeSetupCode(code)),
+            OtpType.TwoFactorSetupCode, $"setup_{Guid.NewGuid():N}", expires));
+        RecordAudit(adminId, clientIp, "user.2fa_setup_code_issued", "users", user.Id.ToString(), null, new { ExpiresAtUtc = expires });
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return new TwoFactorSetupCodeDto(user.Id, code, expires);
+    }
+
+    public async Task<AuthTokenResponseDto> CompleteTwoFactorEnrollmentAsync(
+        string enrollmentToken, string code, string? clientIp = null, string? userAgent = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default)
+    {
+        var now = utcNowOverride ?? DateTime.UtcNow;
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Token: "{user id}.{reference}.{secret}"; the first two find the row through the (recipient, reference) index.
+        string[] parts = (enrollmentToken ?? string.Empty).Split('.', 3);
+        OtpCode? token = parts.Length == 3 && parts[1].StartsWith("enr_", StringComparison.Ordinal)
+            ? await LockOtpAsync(parts[0], parts[1], [OtpType.TwoFactorEnrollment], cancellationToken)
+            : null;
+        if (token is null || !token.CanVerify(now)
+            || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(token.CodeHash), Encoding.ASCII.GetBytes(_tokenService.HashToken(parts[2]))))
+        {
+            throw EnrollmentExpired();
+        }
+
+        User user = await GetUserByIdOrThrowAsync(Guid.ParseExact(token.Recipient, "N"), cancellationToken);
+        if (SessionRefusal(user, now) is { } refusal)
+        {
+            throw refusal;
+        }
+        if (user.TwoFactorEnabled || !RequiresSecondFactor(user))
+        {
+            throw new ConflictException("TWO_FACTOR_ENROLLMENT_NOT_NEEDED", "This account does not need to enrol an authenticator.");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.TwoFactorSecret)
+            || !_totpService.TryVerifyTotpCode(user.TwoFactorSecret, code ?? string.Empty, new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
+        {
+            // Counts against the token and the account, like a wrong code at sign-in.
+            token.IncrementAttempts(now);
+            user.RecordFailedLogin(now);
+            RecordAudit(user.Id, clientIp, "user.2fa_enrollment_failed", "users", user.Id.ToString(), null, new { token.Attempts });
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            throw token.CanVerify(now)
+                ? new ValidationException("code", "That authenticator code is not right. Check the device clock and try the next code.")
+                : EnrollmentExpired();
+        }
+
+        user.RecordTotpTimeStepUsed(step, now);
+        user.EnableTwoFactor(now);
+        token.MarkConsumed(now);
+        await RetireEnrollmentCredentialsAsync(user.Id, cancellationToken);
+        // Sessions begun before the authenticator existed never passed a second factor; only the new one survives.
+        await RevokeAllUserSessionsAsync(user.Id, now, cancellationToken);
+        user.RecordSuccessfulLogin(now);
+        RecordAudit(user.Id, clientIp, "user.2fa_enabled", "users", user.Id.ToString(), null, new { TwoFactorEnabled = true, Via = "enrollment" });
+
+        AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return response;
+    }
+
+    private static readonly TimeSpan EnrollmentTokenLifetime = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan SetupCodeLifetime = TimeSpan.FromHours(72);
+    private const string SetupCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";   // no 0/O or 1/I to misread
+
+    private static UnauthorizedAccessException EnrollmentExpired() =>
+        new("This setup has expired. Sign in again with your password and the same setup code (or ask for a new one if it has expired).");
+
+    private static void RequireSelfServiceEnrollment(User user)
+    {
+        if (GetUserRoles(user).Any(Permissions.Roles.RequiresMandatoryTwoFactor))
+        {
+            throw new ForbiddenException("STAFF_ENROLL_WITH_SETUP_CODE",
+                "Staff set up their authenticator at sign-in with a setup code from an administrator.");
+        }
+    }
+
+    /// <summary>Ten characters from a 32-letter alphabet (50 bits) as XXXXX-XXXXX; three tries before it is spent.</summary>
+    private static string NewSetupCode()
+    {
+        var chars = new char[10];
+        for (int i = 0; i < chars.Length; i++) chars[i] = SetupCodeAlphabet[RandomNumberGenerator.GetInt32(SetupCodeAlphabet.Length)];
+        return $"{new string(chars, 0, 5)}-{new string(chars, 5, 5)}";
+    }
+
+    private static string NormalizeSetupCode(string code) =>
+        new((code ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+
+    /// <summary>Only one way into enrolment is open at a time: a new setup code or token retires every earlier one.</summary>
+    private Task RetireEnrollmentCredentialsAsync(Guid userId, CancellationToken cancellationToken, bool tokensOnly = false)
+    {
+        string recipient = userId.ToString("N");
+        string[] types = tokensOnly
+            ? [OtpType.TwoFactorEnrollment.ToString()]
+            : [OtpType.TwoFactorSetupCode.ToString(), OtpType.TwoFactorEnrollment.ToString()];
+        return _db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE otp_codes SET is_consumed = TRUE WHERE recipient = {recipient} AND type = ANY({types}) AND is_consumed = FALSE",
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Password already checked. Spends the administrator's setup code and returns, once, the new authenticator secret, the
+    /// recovery codes and a 10-minute token for the first code. A wrong setup code counts against the code and the account.
+    /// </summary>
+    private async Task<AuthTokenResponseDto> RedeemSetupCodeAsync(User user, string setupCode, string? clientIp, DateTime now, CancellationToken cancellationToken)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+        string recipient = user.Id.ToString("N");
+        string type = OtpType.TwoFactorSetupCode.ToString();
+        OtpCode? setup = (await _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
+                WHERE recipient = {recipient} AND type = {type} AND is_consumed = FALSE
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE")
+            .ToListAsync(cancellationToken)).FirstOrDefault();
+
+        if (setup is null || !setup.CanVerify(now)
+            || !CryptographicOperations.FixedTimeEquals(
+                Encoding.ASCII.GetBytes(setup.CodeHash), Encoding.ASCII.GetBytes(_tokenService.HashToken(NormalizeSetupCode(setupCode)))))
+        {
+            setup?.IncrementAttempts(now);
+            user.RecordFailedLogin(now);
+            RecordAudit(user.Id, clientIp, "user.2fa_setup_code_failed", "users", user.Id.ToString(), null, new { setup?.Attempts });
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            throw new UnauthorizedAccessException("That setup code is not valid. Ask an administrator for a new one.");
+        }
+
+        // The setup code stays valid until enrolment succeeds (or it expires / a new one is issued), so someone who runs out
+        // of time on the first code can start again without a new code; any earlier token is retired.
+        await RetireEnrollmentCredentialsAsync(user.Id, cancellationToken, tokensOnly: true);
+        user.ClearFailedLogins(now);
+        TotpSetupResponseDto secret = await IssueNewTwoFactorSecretAsync(user, clientIp, now, cancellationToken);
+
+        string reference = $"enr_{Guid.NewGuid():N}";
+        string raw = _tokenService.GenerateRawRefreshToken();
+        _db.OtpCodes.Add(new OtpCode(Guid.NewGuid(), recipient, _tokenService.HashToken(raw), OtpType.TwoFactorEnrollment, reference,
+            now.Add(EnrollmentTokenLifetime)));
+        RecordAudit(user.Id, clientIp, "user.2fa_setup_code_redeemed", "users", user.Id.ToString(), null, null);
+        await _db.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+
+        return new AuthTokenResponseDto(string.Empty, 0, "Bearer", MapUserDto(user), null,
+            RequiresTwoFactorEnrollment: true, EnrollmentToken: $"{recipient}.{reference}.{raw}", TwoFactorSetup: secret);
     }
 
     public async Task<IReadOnlyList<ActiveSessionDto>> GetActiveSessionsAsync(

@@ -36,9 +36,12 @@ public static class Permissions
         public const string Finance = "finance";
         public const string Admin = "admin";
 
+        /// <summary>Every staff role signs in with a password and an authenticator (brief §11.1). Buyers and sellers may opt in.</summary>
         public static bool RequiresMandatoryTwoFactor(string role) =>
             string.Equals(role, Admin, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(role, Finance, StringComparison.OrdinalIgnoreCase);
+            string.Equals(role, Finance, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, Support, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(role, Moderator, StringComparison.OrdinalIgnoreCase);
     }
 
     public static IReadOnlyList<string> GetDefaultPermissionsForRole(string role) =>

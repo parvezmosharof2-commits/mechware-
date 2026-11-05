@@ -2,11 +2,11 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import { defaultTokenVault, type AuthTokenEnvelope } from '@mechware/api-client';
-import { api, isStaff, problemMessage } from '../../lib/api';
+import { defaultTokenVault, type AuthTokenEnvelope, type TwoFactorSecret } from '@mechware/api-client';
+import { api, isStaff, problemMessage, problemStatus } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
-type Step = 'credentials' | 'totp';
+type Step = 'credentials' | 'totp' | 'setupCode' | 'enroll';
 
 export default function ConsoleLoginPage() {
   const router = useRouter();
@@ -15,6 +15,8 @@ export default function ConsoleLoginPage() {
   const [password, setPassword] = React.useState('');
   const [step, setStep] = React.useState<Step>('credentials');
   const [code, setCode] = React.useState('');
+  const [enrollmentToken, setEnrollmentToken] = React.useState<string | null>(null);
+  const [enrollment, setEnrollment] = React.useState<TwoFactorSecret | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [statusMessage, setStatusMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
@@ -34,14 +36,30 @@ export default function ConsoleLoginPage() {
       } catch {
         // Nothing to do: the in-memory token is already gone.
       }
-      setStep('credentials');
-      setPassword('');
-      setCode('');
+      resetToCredentials();
       setErrorMessage('This portal is for MECHWARE staff and sellers. Use the storefront to sign in as a buyer.');
       return;
     }
     auth.establishSession(user);
     router.replace('/');
+  };
+
+  const resetToCredentials = () => {
+    setStep('credentials');
+    setPassword('');
+    setCode('');
+    setEnrollmentToken(null);
+    setEnrollment(null);
+  };
+
+  /** Password + administrator's setup code accepted: show the new secret once, then confirm it with a first code. */
+  const beginEnrollment = (token: string, secret: TwoFactorSecret) => {
+    setEnrollmentToken(token);
+    setEnrollment(secret);
+    setPassword('');
+    setCode('');
+    setStep('enroll');
+    setStatusMessage('Add this account to your authenticator app and save the recovery codes, then enter the first code.');
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -50,6 +68,35 @@ export default function ConsoleLoginPage() {
     setStatusMessage(null);
 
     const cleaned = code.trim();
+    if (step === 'enroll') {
+      if (!/^\d{6}$/.test(cleaned) || !enrollmentToken) {
+        setErrorMessage('Enter the 6-digit code your authenticator app shows for this account.');
+        return;
+      }
+      setBusy(true);
+      try {
+        const res = await api.completeTwoFactorEnrollment(enrollmentToken, cleaned);
+        setEnrollment(null);
+        setEnrollmentToken(null);
+        await finish(res.data);
+      } catch (err) {
+        const message = problemMessage(err, 'That code did not work. Try the next code, or start over.');
+        if (problemStatus(err) === 401) {
+          // The 10-minute token is spent or expired: only a fresh password + setup code can continue.
+          resetToCredentials();
+        } else {
+          setCode('');
+        }
+        setErrorMessage(message);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (step === 'setupCode' && !/^[A-Z2-9]{5}-?[A-Z2-9]{5}$/i.test(cleaned)) {
+      setErrorMessage('Enter the setup code from your administrator, like ABCDE-23456.');
+      return;
+    }
     if (step === 'totp') {
       const isSixDigitTotp = /^\d{6}$/.test(cleaned);
       const isRecoveryCode = /^[A-Z0-9]{5}-[A-Z0-9]{5}$/i.test(cleaned);
@@ -64,8 +111,21 @@ export default function ConsoleLoginPage() {
       const res = await api.login({
         identifier: email.trim(),
         password,
-        totpCode: step === 'totp' ? cleaned : undefined
+        totpCode: step === 'totp' ? cleaned : undefined,
+        setupCode: step === 'setupCode' ? cleaned : undefined
       });
+      if (res.data.requiresTwoFactorEnrollment) {
+        if (res.data.enrollmentToken && res.data.twoFactorSetup) {
+          beginEnrollment(res.data.enrollmentToken, res.data.twoFactorSetup);
+        } else {
+          setStep('setupCode');
+          setCode('');
+          setStatusMessage(
+            'Your role requires an authenticator. Enter the one-time setup code an administrator gave you to set one up.'
+          );
+        }
+        return;
+      }
       if (res.data.requiresTwoFactor) {
         setStep('totp');
         setCode('');
@@ -76,7 +136,7 @@ export default function ConsoleLoginPage() {
       await finish(res.data);
     } catch (err) {
       setErrorMessage(problemMessage(err, 'Sign-in failed. Please try again.'));
-      if (step === 'totp') setCode('');
+      if (step === 'totp' || step === 'setupCode') setCode('');
     } finally {
       setBusy(false);
     }
@@ -89,7 +149,7 @@ export default function ConsoleLoginPage() {
           <span className="font-mono text-xs font-bold uppercase text-accent">MECHWARE OPERATIONS CONSOLE</span>
           <h1 className="mt-1 font-display text-2xl font-bold">Staff &amp; Seller Sign In</h1>
           <p className="mt-1 text-xs text-text-muted">
-            Admin and Finance accounts must verify a time-based authenticator code (or a single-use recovery code).
+            Staff accounts must verify a time-based authenticator code (or a single-use recovery code).
           </p>
         </div>
 
@@ -138,8 +198,36 @@ export default function ConsoleLoginPage() {
             </>
           ) : (
             <div>
+              {step === 'enroll' && enrollment && (
+                <div className="mb-4 space-y-3 rounded-md border border-surface-border bg-bg-subtle p-3 text-xs">
+                  <div>
+                    <p className="font-semibold text-text">1. Add to your authenticator app</p>
+                    <p className="mt-1 text-text-muted">Enter this setup key manually, or open the link on the phone that has the app.</p>
+                    <code className="mt-1 block break-all font-mono text-sm tracking-wider text-text" aria-label="Authenticator setup key">
+                      {enrollment.secret.replace(/(.{4})/g, '$1 ').trim()}
+                    </code>
+                    <a href={enrollment.otpAuthUri} className="mt-1 inline-block font-semibold text-accent underline">
+                      Open in authenticator app
+                    </a>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-text">2. Save these recovery codes somewhere safe</p>
+                    <p className="mt-1 text-text-muted">Each works once if you lose the phone. They are not shown again.</p>
+                    <ul className="mt-1 grid grid-cols-2 gap-1 font-mono text-text">
+                      {enrollment.recoveryCodes.map((rc) => (
+                        <li key={rc}>{rc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <p className="font-semibold text-text">3. Enter the code the app shows now</p>
+                </div>
+              )}
               <label htmlFor="console-code" className="block text-xs font-semibold text-accent">
-                6-digit authenticator code or single-use recovery code
+                {step === 'enroll'
+                  ? '6-digit authenticator code'
+                  : step === 'setupCode'
+                    ? 'One-time setup code from your administrator'
+                    : '6-digit authenticator code or single-use recovery code'}
               </label>
               <input
                 id="console-code"
@@ -149,7 +237,7 @@ export default function ConsoleLoginPage() {
                 inputMode="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
-                placeholder="123456 or ABCDE-12345"
+                placeholder={step === 'enroll' ? '123456' : step === 'setupCode' ? 'ABCDE-23456' : '123456 or ABCDE-12345'}
                 className="mt-1 w-full rounded-md border border-surface-border bg-bg-subtle px-3 py-2 font-mono text-base tracking-widest text-text"
               />
             </div>
@@ -159,14 +247,19 @@ export default function ConsoleLoginPage() {
             disabled={busy || !email.trim() || (step === 'credentials' ? password.length === 0 : code.trim().length === 0)}
             className="w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {step === 'credentials' ? 'Sign in' : 'Verify and unlock console'}
+            {step === 'credentials'
+              ? 'Sign in'
+              : step === 'enroll'
+                ? 'Turn on 2FA and unlock console'
+                : step === 'setupCode'
+                  ? 'Continue'
+                  : 'Verify and unlock console'}
           </button>
-          {step === 'totp' && (
+          {step !== 'credentials' && (
             <button
               type="button"
               onClick={() => {
-                setStep('credentials');
-                setCode('');
+                resetToCredentials();
                 setErrorMessage(null);
                 setStatusMessage(null);
               }}

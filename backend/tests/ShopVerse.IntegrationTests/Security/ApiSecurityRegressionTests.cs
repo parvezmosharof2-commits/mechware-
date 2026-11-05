@@ -43,6 +43,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "POST api/v1/auth/logout",
         "POST api/v1/auth/password/forgot",
         "POST api/v1/auth/password/reset",
+        "POST api/v1/auth/2fa/enroll/complete",   // authority is the single-use, 10-minute token that password + admin setup code earn (M1)
         "GET api/v1/locations/bd",
         "GET api/v1/storefront/products/{slug}",
         "GET api/v1/storefront/categories",
@@ -62,6 +63,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "POST api/v1/auth/google",
         "POST api/v1/auth/password/forgot",
         "POST api/v1/auth/password/reset",
+        "POST api/v1/auth/2fa/enroll/complete",
     ];
 
     private sealed record Route(string Key, string Method, string Pattern, Endpoint Endpoint)

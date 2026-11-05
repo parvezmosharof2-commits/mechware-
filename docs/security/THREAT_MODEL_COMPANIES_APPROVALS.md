@@ -131,6 +131,18 @@ Google account, got past the authenticator. Further gaps:
   - suspended and banned accounts on every route.
 - **Mutation check:** 18 + 11 mutants, all caught.
 
+### H6. A stolen access token could replace an active authenticator (High) [TEST] — **FIXED 2026-11-05**
+`POST /auth/2fa/setup` replaced the TOTP secret and the recovery codes at once, even when 2FA was already on. Anyone holding a
+15-minute access token, including an admin's, could:
+- lock the owner out of their own authenticator;
+- keep the new secret and recovery codes for later.
+
+**Fix:** setup is refused with `409 TWO_FACTOR_ALREADY_ENABLED` once 2FA is on.
+
+**Evidence:**
+- TEST: `SetupCannotReplaceAnAuthenticatorThatIsAlreadyOn`.
+- **Mutation check:** caught.
+
 ### H1. Approvals enforce nothing yet, and the amount is client-supplied (High, design rule for Phase 8) [CODE] — **FIXED 2026-11-05**, see "Fix" below
 `ApprovalService.SubmitAsync` trusts `amountMinor` from the caller, and when no rule matches it only returns
 `approvalRequired: false`: nothing stops an order from proceeding without approval, because orders do not
@@ -216,9 +228,45 @@ writes the full old / new values of every changed row, including these fields, a
 read-only audit viewer exposes them. Fix direction: encrypt these columns with a managed key, exclude or mask
 them in audit values, restrict who can read `audit_logs`.
 
-### M1. Staff roles other than admin / finance sign in without a second factor (Medium vs brief) [CODE]
-`RequiresMandatoryTwoFactor` covers admin and finance only. `support` holds `companies.view` and can read every
+### M1. Staff roles other than admin / finance sign in without a second factor (Medium vs brief) [TEST] — **FIXED 2026-11-05** (passkeys still open)
+`RequiresMandatoryTwoFactor` covered admin and finance only. `support` holds `companies.view` and could read every
 company's legal name, BIN and TIN with a password alone. Brief §11.1 asks for passkeys for all staff.
+
+A second gap sat underneath: a staff member whose role demanded 2FA but who had no authenticator could never sign in. 2FA
+setup needed a session, so there was no way to enrol the first authenticator.
+
+**Fix:**
+- **Every staff role needs an authenticator:** admin, finance, support and moderator.
+- **The first authenticator needs a code from another administrator.**
+  - An administrator (`users.manage`, signed in with 2FA) issues a one-time **setup code** for that person. You cannot
+    issue one for yourself.
+  - The code is 10 characters (50 bits), valid for 72 hours, good for 3 tries, and handed over in person.
+  - A new code cancels earlier codes and open tokens.
+- **The password alone earns nothing.** Password + setup code returns the new secret and recovery codes (shown once) and a
+  10-minute, single-use token.
+- **Running out of time is recoverable.** The setup code stays usable until enrolment succeeds, so someone who runs out of
+  time can start again with the same code. Each new start retires the earlier token.
+- **The session starts only after the first correct authenticator code.** Wrong setup codes and wrong authenticator codes
+  both count towards the account lockout.
+- **Old sessions do not survive the rule.**
+  - When a role starts demanding 2FA, refresh revokes every session that began without it, not just refuses it.
+  - Completing enrolment revokes every earlier session.
+  - So a session that never passed a second factor cannot come back later.
+- **No self-service enrolment for staff.** `/2fa/setup` and `/2fa/verify` refuse staff
+  (`403 STAFF_ENROLL_WITH_SETUP_CODE`), so an old session or a stolen token cannot get around the setup code.
+- **No code for a disabled account.** No setup code is issued for a suspended or banned account.
+- **Console:** sign-in → setup code → key + recovery codes → first code.
+
+**Residual:**
+- Passkeys (WebAuthn) are not built.
+- There is no console screen yet for administrators to issue codes; it is API only.
+- Staff roles are still assigned in the database, because there is no staff-management feature.
+
+**Evidence:**
+- TEST: `IT/Identity/StaffTwoFactorEnrollmentTests.cs` (22 tests).
+- **Mutation check:** 22 mutants on the design, plus 11 on the code-review fixes, all caught.
+- **Code review:** two passes. The first found the trust-on-first-use flaw (a leaked password could enrol an attacker's
+  phone), which led to the setup-code design.
 
 ### M2. Members are added without consent (Medium) [CODE] (existence part fixed)
 *Fixed:* a membership must name a live account: `company_members.user_id` has a foreign key to `users` and `RegisterCompany` / `AddMember` refuse an unknown or erased id (tests `AddMember_RefusesAnIdThatIsNotAnAccount_AndAnErasedAccount`, `TheDatabaseItselfRefusesAMembershipWithoutAnAccount`).
@@ -351,7 +399,7 @@ use a company id from a token claim.
 | T | Forge the session marker cookie | Marker only decides a redirect; API returns 401 without a valid token | CODE |
 | I | Token theft from storage | Access token only in memory; refresh token httpOnly, path-scoped | CODE; H-class risk M5 for injected script |
 | D | Refresh-token reuse | Family revocation (ADR-0006) | existing tests |
-| E | Staff without 2FA | admin / finance only | M1 |
+| E | Staff without 2FA | **M1 fixed**: every staff role; first authenticator only with an administrator's setup code | TEST (mutation-checked) |
 | S | Skip the authenticator with an OTP, a reset code or Google | **C2 / H5 fixed**: signed Google tokens only; no passwordless session for 2FA accounts | TEST (mutation-checked) |
 | S/E | Known staff account | **C1 fixed**: no demo accounts outside Development | RUN + TEST (mutation-checked) |
 
