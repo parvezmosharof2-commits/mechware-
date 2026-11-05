@@ -158,26 +158,53 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         results.Count(r => r is not null).Should().Be(1, "the row lock serialises the callers; only the first one finds the token unused");
     }
 
+    /// <summary>
+    /// Racing registrations of one e-mail create one account. Every caller gets the same kind of answer: a duplicate is
+    /// not reported, because that would tell anyone the e-mail is a customer here (finding #5).
+    /// </summary>
     [PostgresFact]
     public async Task ConcurrentRegistrationWithOneEmail_CreatesExactlyOneAccount()
     {
         string email = Unique("race") + "@mechware.com.bd";
-        Task<bool>[] attempts = Enumerable.Range(0, 6).Select(i => Task.Run(async () =>
-        {
-            try
-            {
-                await IdentityTestKit.With(fixture, s => s.RegisterAsync(new RegisterRequestDto(email, null, "RacePass#2026!", "Race Tester")));
-                return true;
-            }
-            catch (ValidationException)
-            {
-                return false;
-            }
-        })).ToArray();
+        var attempts = Enumerable.Range(0, 6).Select(i => Task.Run(() =>
+            IdentityTestKit.With(fixture, s => s.RegisterAsync(new RegisterRequestDto(email, null, "RacePass#2026!", "Race Tester"))))).ToArray();
 
-        (await Task.WhenAll(attempts)).Count(ok => ok).Should().Be(1);
+        var answers = await Task.WhenAll(attempts);
+
+        answers.Should().OnlyContain(a => a.Response.Status == "pending_verification" && a.Response.VerificationChannel == "email_otp");
+        answers.Select(a => a.Response.UserId).Should().OnlyHaveUniqueItems();
         await using var db = fixture.CreateContext();
         (await db.Users.CountAsync(u => u.Email == email)).Should().Be(1);
+    }
+
+    [PostgresFact]
+    public async Task RegisteringAnEmailOrPhoneThatHasAnAccount_LooksLikeANewRegistration_AndChangesNothing()
+    {
+        var (email, phone, password, session) = await RegisterAndVerifyAsync();
+        var userId = session.User.Id;
+        await using (var before = fixture.CreateContext())
+            (await before.Users.CountAsync(u => u.Email == email)).Should().Be(1);
+
+        var byEmail = await IdentityTestKit.With(fixture, s => s.RegisterAsync(new RegisterRequestDto(email.ToUpperInvariant(), null, "Other#Pass2026xyz", "Intruder")));
+        var byPhone = await IdentityTestKit.With(fixture, s => s.RegisterAsync(new RegisterRequestDto(Unique("fresh") + "@example.test", phone, "Other#Pass2026xyz", "Intruder")));
+        var fresh = await IdentityTestKit.With(fixture, s => s.RegisterAsync(new RegisterRequestDto(Unique("new") + "@example.test", null, "Other#Pass2026xyz", "Newcomer")));
+
+        byEmail.Response.Status.Should().Be(fresh.Response.Status);
+        byEmail.Response.VerificationChannel.Should().Be(fresh.Response.VerificationChannel);
+        byEmail.Response.ExpiresInSeconds.Should().Be(fresh.Response.ExpiresInSeconds);
+        byEmail.Response.ReferenceId.Should().HaveLength(fresh.Response.ReferenceId.Length).And.StartWith("ref_");
+        byEmail.Response.UserId.Should().NotBe(userId, "the existing account's id must not leak");
+        byPhone.Response.UserId.Should().NotBe(userId);
+
+        await using var db = fixture.CreateContext();
+        (await db.Users.CountAsync(u => u.Email == email)).Should().Be(1);
+        (await db.Users.CountAsync(u => u.Phone == phone)).Should().Be(1, "no second account with the same phone");
+        (await db.Users.AnyAsync(u => u.Id == byEmail.Response.UserId || u.Id == byPhone.Response.UserId)).Should().BeFalse();
+        (await db.AuditLogs.CountAsync(a => a.Action == "user.registration_for_existing_account")).Should().BeGreaterThanOrEqualTo(2);
+
+        // The owner's account is untouched: the original password still signs in.
+        var login = await IdentityTestKit.With(fixture, s => s.LoginAsync(new LoginRequestDto(email, password)));
+        login.User!.Id.Should().Be(userId);
     }
 
     [PostgresFact]
