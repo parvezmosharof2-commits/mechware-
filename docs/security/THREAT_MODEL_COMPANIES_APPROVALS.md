@@ -59,6 +59,78 @@ seeding restored, 2 unit and 2 integration tests fail, with the fix they pass.
   addresses in Development.
 - The browser E2E and CI run the API in Development, so they are unaffected.
 
+### C2. Google sign-in believed any token, so anyone could sign in as anyone (Critical) [TEST] — **FIXED 2026-11-05**
+Found while auditing the 2FA paths. `POST /auth/google` never checked the ID token's signature or audience:
+- **Any self-made token was accepted.** A three-part token with `"iss":"https://accounts.google.com"` and any `email` was
+  enough.
+- **A "mock" format let the attacker name the account.** `{"idToken":"google_oidc_x","expectedEmail":"victim@…"}` took
+  the e-mail straight from the request body.
+- **The result:** a session as any account without 2FA, and a Google link to it. Missing `email_verified` was also read
+  as yes.
+
+**Fix:**
+- **The token must be Google's own.** `GoogleIdTokenVerifier` checks:
+  - the RS256 signature, against Google's published keys (JWKS);
+  - the issuer, the audience (`aud` = `Authentication:Google:ClientId`) and the expiry (60 s skew; `iat` not in the
+    future);
+  - that `email_verified` is `true`;
+  - a size cap of 8 KB.
+- **Claims are read only after the signature checks out.** There is no test or mock path any more. `GoogleLoginRequestDto` carries
+  only `idToken`.
+- **No client id, no Google sign-in.** Without a configured client id the endpoint answers `403 GOOGLE_SIGNIN_DISABLED`.
+- **Key caching (`GoogleJwksSigningKeys`):**
+  - cached for as long as Google's `Cache-Control` says;
+  - an unknown key id forces at most one refresh a minute;
+  - during an outage the last good keys keep working;
+  - with no keys at all it fails closed, and callers get that answer at once for 10 s instead of each waiting on Google.
+
+**Evidence:**
+- TEST: `IT/Identity/GoogleIdTokenVerifierTests.cs` (21 cases):
+  - another key, a tampered claim, `alg` none / HS256 / RS512, an unsigned token, the old mock formats;
+  - an unknown `kid`, the wrong `aud` / `iss`, expired / no `exp` / non-numeric `exp`, `iat` in the future, an unverified
+    e-mail, an oversized token;
+  - the JWKS parser skipping bad entries.
+- TEST: `GoogleJwksSigningKeysTests` (4): caching, the refresh limit, failing closed with a fast back-off, the last good keys
+  during an outage.
+- **Mutation check:** every guard removed one at a time is caught.
+
+### H5. One-time codes and Google skipped the second factor (High) [TEST] — **FIXED 2026-11-05**
+`VerifyOtpAsync` and `GoogleLoginAsync` issued a full session without asking for the TOTP. That held even for accounts
+with 2FA turned on and for admin / finance, whose role demands it. So whoever could read the phone or mailbox, or had the
+Google account, got past the authenticator. Further gaps:
+- **A password-reset code worked as a sign-in.** `VerifyOtpAsync` did not check the code's type.
+- **Google ignored the account state.** It did not check the lockout, linked by e-mail to accounts that had never proven
+  that e-mail (an attacker could pre-register the victim's address), and quietly moved an account to a second Google
+  identity.
+- **Suspended accounts were not refused.** No sign-in path refused `Suspended`, and refresh did not either.
+
+**Fix:**
+- **OTP sign-in:**
+  - only phone, e-mail and login codes are looked up, so a reset code is never found there and is not spent by the try;
+  - a correct code still verifies the contact;
+  - an account that needs two factors then gets `403 PASSWORD_AND_2FA_REQUIRED` instead of a session.
+- **Google sign-in:**
+  - finds the account by Google identity first, then by e-mail;
+  - refuses a second Google identity (`409 GOOGLE_ACCOUNT_MISMATCH`);
+  - refuses a locked account;
+  - refuses an account that needs 2FA, without linking it;
+  - refuses to link an account whose e-mail was never verified (`409 EMAIL_NOT_VERIFIED`);
+  - turns a double-click race into `409 GOOGLE_SIGNIN_IN_PROGRESS` instead of a 500.
+- **Every sign-in path:** password, OTP, Google and refresh all refuse `Suspended` / `Banned` (`403 ACCOUNT_DISABLED`).
+- **Web:** after a correct code on a 2FA account, the form goes back to sign-in and explains why.
+
+**Evidence:**
+- TEST: `IT/Identity/PasswordlessTwoFactorTests.cs` (13 tests). The 8 that reproduce the bypass failed before the fix.
+  They cover:
+  - a user with 2FA on;
+  - a finance user without 2FA, where the role alone must demand it;
+  - a reset code used to sign in;
+  - lockout;
+  - squatted and unverified e-mails;
+  - a second Google identity;
+  - suspended and banned accounts on every route.
+- **Mutation check:** 18 + 11 mutants, all caught.
+
 ### H1. Approvals enforce nothing yet, and the amount is client-supplied (High, design rule for Phase 8) [CODE] — **FIXED 2026-11-05**, see "Fix" below
 `ApprovalService.SubmitAsync` trusts `amountMinor` from the caller, and when no rule matches it only returns
 `approvalRequired: false`: nothing stops an order from proceeding without approval, because orders do not
@@ -280,6 +352,7 @@ use a company id from a token claim.
 | I | Token theft from storage | Access token only in memory; refresh token httpOnly, path-scoped | CODE; H-class risk M5 for injected script |
 | D | Refresh-token reuse | Family revocation (ADR-0006) | existing tests |
 | E | Staff without 2FA | admin / finance only | M1 |
+| S | Skip the authenticator with an OTP, a reset code or Google | **C2 / H5 fixed**: signed Google tokens only; no passwordless session for 2FA accounts | TEST (mutation-checked) |
 | S/E | Known staff account | **C1 fixed**: no demo accounts outside Development | RUN + TEST (mutation-checked) |
 
 ## 4. What the automated tests do not cover

@@ -100,10 +100,32 @@
 #### `POST /auth/google`
 - **Auth**: Public | **Rate Limit**: 10 req/min per IP
 - **Request**: `{ "idToken": "eyJhbGciOiJSUzI1NiIs..." }`
-- **Response**: `200 OK` (Validates Google OIDC ID token, creates/links `users.google_subject_id`, sets `refresh_token` cookie, and returns `accessToken` + `user`).
+- **Response**: `200 OK`: creates or links `users.google_subject_id`, sets the `refresh_token` cookie, and returns `accessToken` + `user`.
+- **Token checks:** the server verifies the token's RS256 signature against Google's published keys, plus `iss`, `aud` (the configured `Authentication:Google:ClientId`), `exp` and `email_verified: true`. Who the user is comes only from those verified claims; the body carries nothing else.
+- **Errors:**
+
+  | Status | Code | When |
+  |---|---|---|
+  | `400` | — | The token is invalid. |
+  | `401` | — | The token has expired, or the account is locked. |
+  | `403` | `GOOGLE_SIGNIN_DISABLED` | No client id is configured. |
+  | `403` | `PASSWORD_AND_2FA_REQUIRED` | The account has 2FA, or a role that requires it. |
+  | `403` | `ACCOUNT_DISABLED` | The account is suspended or banned. |
+  | `409` | `GOOGLE_ACCOUNT_MISMATCH` | The account is already linked to another Google identity. |
+  | `409` | `EMAIL_NOT_VERIFIED` | An account with this e-mail exists but never verified it. |
+  | `409` | `GOOGLE_SIGNIN_IN_PROGRESS` | Two first sign-ins happened at once; retry. |
 
 #### `POST /auth/otp/send` & `POST /auth/otp/verify`
 - **Auth**: Public | **Rate Limit**: 3 req/min | **Payload**: `{ "phone": "+88017...", "type": "phone_verify" | "login" | "cod_confirm", "referenceId": "optional-uuid" }`
+- **Verify, accepted codes:** phone, e-mail and login codes only. A password-reset code is not accepted here.
+- **Verify, response:** a correct code always verifies the contact. A session is issued only when the account may sign in this way.
+- **Verify, errors:**
+
+  | Status | Code | When |
+  |---|---|---|
+  | `403` | `PASSWORD_AND_2FA_REQUIRED` | The account has 2FA or a role that requires it. It signs in with its password and authenticator. |
+  | `403` | `ACCOUNT_DISABLED` | The account is suspended or banned. |
+  | `401` | — | The account is locked. |
 
 #### `POST /auth/password/forgot` & `POST /auth/password/reset`
 - **Auth**: Public | **Rate Limit**: 3 req/min per IP

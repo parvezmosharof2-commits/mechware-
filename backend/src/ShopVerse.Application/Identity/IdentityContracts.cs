@@ -75,10 +75,17 @@ public sealed record AuthTokenResponseDto(
     bool RequiresTwoFactor = false,
     string? TwoFactorChallengeToken = null);
 
-public sealed record GoogleLoginRequestDto(
-    string IdToken,
-    string? ExpectedEmail = null,
-    string? FullName = null);
+/// <summary>Only the ID token Google issued; who the user is comes from its verified claims, never from the request body.</summary>
+public sealed record GoogleLoginRequestDto(string IdToken);
+
+/// <summary>What a verified Google ID token says about its holder.</summary>
+public sealed record GoogleIdentity(string Subject, string Email, string FullName);
+
+/// <summary>Checks a Google ID token's signature against Google's published keys, and its issuer, audience and lifetime.</summary>
+public interface IGoogleIdTokenVerifier
+{
+    Task<GoogleIdentity> VerifyAsync(string idToken, DateTime utcNow, CancellationToken cancellationToken = default);
+}
 
 public sealed record ForgotPasswordRequestDto(string Identifier);
 

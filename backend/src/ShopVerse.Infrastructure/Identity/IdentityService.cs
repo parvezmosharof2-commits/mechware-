@@ -26,14 +26,17 @@ public sealed class IdentityService : IIdentityService
     private readonly ISmsProvider _smsProvider;
     private readonly ShopVerseDbContext _db;
     private readonly IReadOnlyList<BdLocation> _bdLocations;
+    private readonly IGoogleIdTokenVerifier? _googleVerifier;
 
     public IdentityService(
         IPasswordHasherService passwordHasher,
         ITokenService tokenService,
         ITotpService totpService,
         ISmsProvider smsProvider,
-        ShopVerseDbContext db)
+        ShopVerseDbContext db,
+        IGoogleIdTokenVerifier? googleVerifier = null)
     {
+        _googleVerifier = googleVerifier;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _totpService = totpService;
@@ -176,7 +179,9 @@ public sealed class IdentityService : IIdentityService
 
         // The attempt counter is the brute-force limit, so the row is locked while it is checked and updated.
         await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
-        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, null, cancellationToken);
+        // Only codes that prove a phone or mailbox count here. A password-reset code is not found at all (so it is neither a
+        // sign-in nor spent by trying), and a code type added later stays out until it is listed on purpose.
+        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, SignInOtpTypes, cancellationToken);
 
         if (otp is null || !otp.CanVerify(now))
         {
@@ -208,9 +213,20 @@ public sealed class IdentityService : IIdentityService
             user.VerifyEmail(now);
         }
 
-        user.RecordSuccessfulLogin(now);
         RecordAudit(user.Id, clientIp, "user.otp_verified", "users", user.Id.ToString(), null, new { otp.Type, otp.ReferenceId });
 
+        // The code proves the phone or mailbox, so that much is kept. It is not the password and the authenticator, so an
+        // account that needs both, or one that is locked, gets no session from it.
+        Exception? refusal = SessionRefusal(user, now) ?? (RequiresSecondFactor(user) ? PasswordAndSecondFactorRequired() : null);
+        if (refusal is not null)
+        {
+            RecordAudit(user.Id, clientIp, "user.otp_session_refused", "users", user.Id.ToString(), null, new { otp.Type, Reason = refusal.Message });
+            await _db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            throw refusal;
+        }
+
+        user.RecordSuccessfulLogin(now);
         AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
         await _db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
@@ -250,10 +266,14 @@ public sealed class IdentityService : IIdentityService
             throw new UnauthorizedAccessException("Invalid credentials.");
         }
 
-        IReadOnlyList<string> roles = GetUserRoles(user);
-        bool requiresMandatory2Fa = roles.Any(Permissions.Roles.RequiresMandatoryTwoFactor);
+        if (SessionRefusal(user, now) is ForbiddenException disabled)
+        {
+            RecordAudit(user.Id, clientIp, "user.login_refused", "users", user.Id.ToString(), null, new { user.Status });
+            await _db.SaveChangesAsync(cancellationToken);
+            throw disabled;
+        }
 
-        if (user.TwoFactorEnabled || requiresMandatory2Fa)
+        if (RequiresSecondFactor(user))
         {
             if (string.IsNullOrWhiteSpace(request.TotpCode))
             {
@@ -292,24 +312,58 @@ public sealed class IdentityService : IIdentityService
         CancellationToken cancellationToken = default)
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
-        if (string.IsNullOrWhiteSpace(request.IdToken) || request.IdToken.Length < 10)
+        if (_googleVerifier is null)
         {
-            throw new ValidationException("idToken", "Valid Google OIDC ID token is required.");
+            throw new ForbiddenException("GOOGLE_SIGNIN_DISABLED", "Google sign-in is not configured on this server.");
         }
 
-        (string subjectId, string email, string fullName) = ValidateAndExtractGoogleOidcClaims(request, now);
+        (string subjectId, string email, string fullName) = await _googleVerifier.VerifyAsync(request.IdToken, now, cancellationToken);
 
-        User? user = await _db.Users
-            .Include(u => u.UserRoles)
-            .FirstOrDefaultAsync(
-                u => u.DeletedAtUtc == null && (u.GoogleSubjectId == subjectId || u.Email == email),
-                cancellationToken);
+        // The Google identity already linked wins; the e-mail is only a way to find an account to link for the first time.
+        User? user = await _db.Users.Include(u => u.UserRoles)
+                .FirstOrDefaultAsync(u => u.DeletedAtUtc == null && u.GoogleSubjectId == subjectId, cancellationToken)
+            ?? await _db.Users.Include(u => u.UserRoles)
+                .FirstOrDefaultAsync(u => u.DeletedAtUtc == null && u.Email == email, cancellationToken);
 
         if (user is null)
         {
             user = User.Create(email, null, null, fullName, "en");
             user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
             _db.Users.Add(user);
+        }
+        else
+        {
+            if (user.GoogleSubjectId is not null && user.GoogleSubjectId != subjectId)
+            {
+                RecordAudit(user.Id, clientIp, "user.google_oauth_mismatch", "users", user.Id.ToString(), null, new { subjectId });
+                await _db.SaveChangesAsync(cancellationToken);
+                throw new ConflictException("GOOGLE_ACCOUNT_MISMATCH", "This account is linked to a different Google account.");
+            }
+
+            if (SessionRefusal(user, now) is { } refusal)
+            {
+                RecordAudit(user.Id, clientIp, "user.google_oauth_refused", "users", user.Id.ToString(), null, new { subjectId, Reason = refusal.Message });
+                await _db.SaveChangesAsync(cancellationToken);
+                throw refusal;
+            }
+
+            // Google proves the mailbox, not the password and the authenticator. Such an account is neither signed in nor linked.
+            if (RequiresSecondFactor(user))
+            {
+                RecordAudit(user.Id, clientIp, "user.google_oauth_refused", "users", user.Id.ToString(), null, new { subjectId });
+                await _db.SaveChangesAsync(cancellationToken);
+                throw PasswordAndSecondFactorRequired();
+            }
+
+            // An account whose e-mail was never proven may have been opened by someone else in this address's name, who
+            // still holds its password or phone. Linking would hand the real owner an account a stranger can enter.
+            if (user.GoogleSubjectId is null && user.EmailVerifiedAtUtc is null)
+            {
+                RecordAudit(user.Id, clientIp, "user.google_oauth_refused", "users", user.Id.ToString(), null, new { subjectId, Reason = "email_unverified" });
+                await _db.SaveChangesAsync(cancellationToken);
+                throw new ConflictException("EMAIL_NOT_VERIFIED",
+                    "An account with this e-mail exists but has not verified it. Sign in with its password and verify the e-mail first.");
+            }
         }
 
         user.LinkGoogleAccount(subjectId, now);
@@ -318,7 +372,15 @@ public sealed class IdentityService : IIdentityService
         RecordAudit(user.Id, clientIp, "user.google_oauth_login", "users", user.Id.ToString(), null, new { email, subjectId });
 
         AuthTokenResponseDto response = IssueSessionTokens(user, Guid.NewGuid(), clientIp, userAgent, now);
-        await _db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // Two first sign-ins at once (a double click): the other one created the account. This one may simply retry.
+            throw new ConflictException("GOOGLE_SIGNIN_IN_PROGRESS", "This Google account was just being set up. Please try again.");
+        }
         return response;
     }
 
@@ -355,7 +417,7 @@ public sealed class IdentityService : IIdentityService
         }
 
         User? user = await _db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == storedToken.UserId, cancellationToken);
-        if (user is null || user.DeletedAtUtc.HasValue || user.Status == UserStatus.Banned)
+        if (user is null || user.DeletedAtUtc.HasValue || user.Status is UserStatus.Banned or UserStatus.Suspended)
         {
             throw new UnauthorizedAccessException("User account is no longer active.");
         }
@@ -497,7 +559,7 @@ public sealed class IdentityService : IIdentityService
         string recipient = request.Recipient.Trim().ToLowerInvariant();
 
         await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
-        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, OtpType.PasswordReset, cancellationToken);
+        OtpCode? otp = await LockOtpAsync(recipient, request.ReferenceId, [OtpType.PasswordReset], cancellationToken);
 
         if (otp is null || !otp.CanVerify(now))
         {
@@ -845,99 +907,6 @@ public sealed class IdentityService : IIdentityService
     public async Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(CancellationToken cancellationToken = default) =>
         await _db.AuditLogs.AsNoTracking().OrderBy(a => a.CreatedAtUtc).ToListAsync(cancellationToken);
 
-    private (string SubjectId, string Email, string FullName) ValidateAndExtractGoogleOidcClaims(
-        GoogleLoginRequestDto request,
-        DateTime utcNow)
-    {
-        string rawToken = request.IdToken.Trim();
-        string[] segments = rawToken.Split('.');
-
-        if (segments.Length == 3)
-        {
-            try
-            {
-                string payloadJson = Encoding.UTF8.GetString(FromBase64Url(segments[1]));
-                using JsonDocument doc = JsonDocument.Parse(payloadJson);
-                JsonElement root = doc.RootElement;
-
-                string? iss = root.TryGetProperty("iss", out JsonElement issEl) ? issEl.GetString() : null;
-                if (iss is not ("https://accounts.google.com" or "accounts.google.com"))
-                {
-                    throw new ValidationException("idToken", "Invalid Google OIDC token issuer (iss).");
-                }
-
-                if (root.TryGetProperty("exp", out JsonElement expEl) && expEl.TryGetInt64(out long expUnix))
-                {
-                    DateTime expUtc = DateTimeOffset.FromUnixTimeSeconds(expUnix).UtcDateTime;
-                    if (expUtc <= utcNow)
-                    {
-                        throw new UnauthorizedAccessException("Google OIDC ID token has expired.");
-                    }
-                }
-                else
-                {
-                    throw new ValidationException("idToken", "Google OIDC ID token is missing required expiration (exp) claim.");
-                }
-
-                if (root.TryGetProperty("email_verified", out JsonElement verifiedEl) &&
-                    verifiedEl.ValueKind == JsonValueKind.False)
-                {
-                    throw new ValidationException("idToken", "Google account email is not verified.");
-                }
-
-                string sub = root.TryGetProperty("sub", out JsonElement subEl) && !string.IsNullOrWhiteSpace(subEl.GetString())
-                    ? subEl.GetString()!
-                    : throw new ValidationException("idToken", "Google OIDC ID token is missing subject (sub) claim.");
-
-                string claimEmail = root.TryGetProperty("email", out JsonElement emailEl) && !string.IsNullOrWhiteSpace(emailEl.GetString())
-                    ? emailEl.GetString()!.Trim().ToLowerInvariant()
-                    : throw new ValidationException("idToken", "Google OIDC ID token is missing email claim.");
-
-                string claimName = root.TryGetProperty("name", out JsonElement nameEl) && !string.IsNullOrWhiteSpace(nameEl.GetString())
-                    ? nameEl.GetString()!.Trim()
-                    : "Google Verified Engineer";
-
-                return (sub, claimEmail, claimName);
-            }
-            catch (FormatException ex)
-            {
-                throw new ValidationException("idToken", $"Malformed Google OIDC JWT payload: {ex.Message}");
-            }
-            catch (JsonException ex)
-            {
-                throw new ValidationException("idToken", $"Invalid Google OIDC JSON claims: {ex.Message}");
-            }
-        }
-
-        // Deterministic mock adapter token support (must start with "google_oidc_" or "ya29.")
-        if (!rawToken.StartsWith("google_oidc_", StringComparison.Ordinal) &&
-            !rawToken.StartsWith("ya29.", StringComparison.Ordinal))
-        {
-            throw new ValidationException("idToken", "Unrecognized Google OIDC ID token format.");
-        }
-
-        string subjectId = $"google-sub-{_tokenService.HashToken(rawToken)[..24]}";
-        string email = string.IsNullOrWhiteSpace(request.ExpectedEmail)
-            ? $"oauth.{subjectId[..12]}@mechware.com.bd"
-            : request.ExpectedEmail.Trim().ToLowerInvariant();
-        string fullName = string.IsNullOrWhiteSpace(request.FullName)
-            ? "Google Verified Engineer"
-            : request.FullName.Trim();
-
-        return (subjectId, email, fullName);
-    }
-
-    private static byte[] FromBase64Url(string input)
-    {
-        string padded = input.Replace('-', '+').Replace('_', '/');
-        switch (padded.Length % 4)
-        {
-            case 2: padded += "=="; break;
-            case 3: padded += "="; break;
-        }
-        return Convert.FromBase64String(padded);
-    }
-
     /// <summary>
     /// Validates the full 3-level Bangladesh administrative hierarchy (Division -> District -> Upazila)
     /// against pre-seeded BD locations (AUD-P3-07).
@@ -1043,17 +1012,15 @@ public sealed class IdentityService : IIdentityService
     }
 
     /// <summary>Loads the newest matching OTP and holds a row lock until the surrounding transaction ends.</summary>
-    private async Task<OtpCode?> LockOtpAsync(string recipient, string referenceId, OtpType? type, CancellationToken cancellationToken)
-    {
-        IQueryable<OtpCode> query = type is null
-            ? _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
-                WHERE recipient = {recipient} AND reference_id = {referenceId}
-                ORDER BY created_at DESC LIMIT 1 FOR UPDATE")
-            : _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
-                WHERE recipient = {recipient} AND reference_id = {referenceId} AND type = {type.Value.ToString()}
-                ORDER BY created_at DESC LIMIT 1 FOR UPDATE");
+    private static readonly OtpType[] SignInOtpTypes = [OtpType.PhoneVerify, OtpType.EmailVerify, OtpType.LoginOtp];
 
-        return (await query.ToListAsync(cancellationToken)).FirstOrDefault();
+    private async Task<OtpCode?> LockOtpAsync(string recipient, string referenceId, IReadOnlyCollection<OtpType> types, CancellationToken cancellationToken)
+    {
+        string[] names = types.Select(t => t.ToString()).ToArray();
+        return (await _db.OtpCodes.FromSqlInterpolated($@"SELECT * FROM otp_codes
+                WHERE recipient = {recipient} AND reference_id = {referenceId} AND type = ANY({names})
+                ORDER BY created_at DESC LIMIT 1 FOR UPDATE")
+            .ToListAsync(cancellationToken)).FirstOrDefault();
     }
 
     private bool VerifyUserTwoFactorOrRecoveryCode(User user, string code, DateTime utcNow)
@@ -1155,6 +1122,21 @@ public sealed class IdentityService : IIdentityService
 
     private static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    /// <summary>Whether a session needs the password and a TOTP or recovery code: the user turned 2FA on, or a role demands it.</summary>
+    private static bool RequiresSecondFactor(User user) =>
+        user.TwoFactorEnabled || GetUserRoles(user).Any(Permissions.Roles.RequiresMandatoryTwoFactor);
+
+    /// <summary>Why this account may not start a session right now (suspended, banned, locked), or null when it may.</summary>
+    private static Exception? SessionRefusal(User user, DateTime utcNow) =>
+        user.Status is UserStatus.Suspended or UserStatus.Banned or UserStatus.Deleted
+            ? new ForbiddenException("ACCOUNT_DISABLED", "This account is not active.")
+            : user.IsLockedOut(utcNow)
+                ? new UnauthorizedAccessException($"Account is temporarily locked due to multiple failed login attempts until {user.LockoutUntilUtc:O}.")
+                : null;
+
+    private static ForbiddenException PasswordAndSecondFactorRequired() =>
+        new("PASSWORD_AND_2FA_REQUIRED", "This account signs in with its password and an authenticator code.");
 
     private static IReadOnlyList<string> GetUserRoles(User user)
     {

@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluentAssertions;
@@ -24,9 +25,39 @@ public static class IdentityTestKit
     public static (ShopVerseDbContext Db, IdentityService Service) Open(PostgresDatabaseFixture fixture, IPasswordHasherService? hasher = null, ShopVerseDbContext? db = null)
     {
         db ??= fixture.CreateContext();
-        var service = new IdentityService(hasher ?? Hasher, Tokens, Totp, new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance), db);
+        var service = new IdentityService(hasher ?? Hasher, Tokens, Totp, new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance), db,
+            new GoogleIdTokenVerifier(GoogleClientId, GoogleKeys));
         return (db, service);
     }
+
+    public const string GoogleClientId = "mechware-test.apps.googleusercontent.com";
+    public const string GoogleKid = "test-google-key-1";
+    public static readonly RSA GoogleKey = RSA.Create(2048);
+    public static readonly StaticGoogleKeys GoogleKeys = new(new Dictionary<string, RSAParameters> { [GoogleKid] = GoogleKey.ExportParameters(false) });
+
+    /// <summary>A Google ID token for <paramref name="claims"/>, signed RS256 the way Google signs (by default with the trusted test key).</summary>
+    public static string GoogleToken(object claims, string kid = GoogleKid, RSA? signer = null, string alg = "RS256")
+    {
+        string header = B64(JsonSerializer.SerializeToUtf8Bytes(new { alg, kid, typ = "JWT" }));
+        string payload = B64(JsonSerializer.SerializeToUtf8Bytes(claims));
+        byte[] signature = (signer ?? GoogleKey).SignData(Encoding.ASCII.GetBytes(header + "." + payload), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return $"{header}.{payload}.{B64(signature)}";
+    }
+
+    /// <summary>The claims Google puts in a sign-in token for this application; override any of them per test.</summary>
+    public static Dictionary<string, object?> GoogleClaims(string subject, string email) => new()
+    {
+        ["iss"] = "https://accounts.google.com",
+        ["aud"] = GoogleClientId,
+        ["sub"] = subject,
+        ["email"] = email,
+        ["email_verified"] = true,
+        ["name"] = "Google User",
+        ["iat"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+        ["exp"] = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds(),
+    };
+
+    private static string B64(byte[] bytes) => Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
     /// <summary>Runs one operation on a fresh context, so nothing is served from a change tracker.</summary>
     public static async Task<T> With<T>(PostgresDatabaseFixture fixture, Func<IdentityService, Task<T>> action)
@@ -298,35 +329,15 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         rotated2.AccessToken.Should().NotBeNullOrWhiteSpace();
     }
 
-    private static string Base64Url(string json) =>
-        Convert.ToBase64String(Encoding.UTF8.GetBytes(json)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
     [PostgresFact]
-    public async Task GoogleOidcLogin_ShouldValidateJwtClaims_AndRejectExpiredOrUntrustedIssuer()
+    public async Task GoogleOidcLogin_SignsInWithAGoogleSignedToken_AndRefusesAnotherIssuer()
     {
-        string header = Base64Url(JsonSerializer.Serialize(new { alg = "RS256", typ = "JWT" }));
-        string good = Base64Url(JsonSerializer.Serialize(new
-        {
-            iss = "https://accounts.google.com",
-            sub = "google-uid-" + Guid.NewGuid().ToString("N"),
-            email = Unique("oidc") + "@mechware.com.bd",
-            email_verified = true,
-            name = "Engr. OIDC Verified",
-            exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds()
-        }));
-
-        var session = await IdentityTestKit.With(fixture, s => s.GoogleLoginAsync(new GoogleLoginRequestDto($"{header}.{good}.sig_verified", null, null), "203.112.218.10", "Mozilla/5.0"));
+        var claims = IdentityTestKit.GoogleClaims("google-uid-" + Guid.NewGuid().ToString("N"), Unique("oidc") + "@mechware.com.bd");
+        var session = await IdentityTestKit.With(fixture, s => s.GoogleLoginAsync(new GoogleLoginRequestDto(IdentityTestKit.GoogleToken(claims)), "203.112.218.10", "Mozilla/5.0"));
         session.AccessToken.Should().NotBeNullOrWhiteSpace();
 
-        string bad = Base64Url(JsonSerializer.Serialize(new
-        {
-            iss = "https://evil-idp.example.com",
-            sub = "evil-1",
-            email = "victim@mechware.com.bd",
-            email_verified = true,
-            exp = DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds()
-        }));
-        Func<Task> act = () => IdentityTestKit.With(fixture, s => s.GoogleLoginAsync(new GoogleLoginRequestDto($"{header}.{bad}.sig", null, null)));
+        claims["iss"] = "https://evil-idp.example.com";
+        Func<Task> act = () => IdentityTestKit.With(fixture, s => s.GoogleLoginAsync(new GoogleLoginRequestDto(IdentityTestKit.GoogleToken(claims))));
         (await act.Should().ThrowAsync<ValidationException>()).WithMessage("*issuer*");
     }
 
@@ -441,5 +452,17 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         var user = await db.Users.FirstAsync(u => u.Email == email);
         (await db.AuditLogs.AnyAsync(a => a.ActorId == user.Id && a.Action == "user.login_failed"))
             .Should().BeTrue("a failed login must be audited even though the request itself failed");
+    }
+}
+
+/// <summary>A fixed key set standing in for Google's JWKS; counts how often a refresh was asked for.</summary>
+public sealed class StaticGoogleKeys(IReadOnlyDictionary<string, RSAParameters> keys) : IGoogleSigningKeys
+{
+    public int Refreshes { get; private set; }
+
+    public ValueTask<IReadOnlyDictionary<string, RSAParameters>> GetAsync(bool refresh, CancellationToken cancellationToken)
+    {
+        if (refresh) Refreshes++;
+        return ValueTask.FromResult(keys);
     }
 }

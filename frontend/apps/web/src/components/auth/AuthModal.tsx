@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import type { AuthTokenEnvelope } from '@mechware/api-client';
-import { api, problemFieldErrors, problemMessage } from '../../lib/api';
+import { api, problemCode, problemFieldErrors, problemMessage } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 
 export type AuthViewMode = 'signin' | 'signup' | 'otp' | 'forgot' | 'reset';
@@ -200,6 +200,18 @@ export function AuthFlowSurface({
       setPassword('');
       completeAuthentication(res.data);
     } catch (err) {
+      if (problemCode(err) === 'PASSWORD_AND_2FA_REQUIRED') {
+        // The code was right and the contact is verified, but this account signs in with its password and authenticator.
+        setOtpCode('');
+        setMode('signin');
+        setStatusMessage(
+          t(
+            'Verified. This account signs in with its password and authenticator code.',
+            'যাচাই হয়েছে। এই অ্যাকাউন্টে পাসওয়ার্ড ও অথেন্টিকেটর কোড দিয়ে সাইন ইন করতে হয়।'
+          )
+        );
+        return;
+      }
       showApiError(err);
     } finally {
       setSubmitting(false);
@@ -274,6 +286,18 @@ export function AuthFlowSurface({
       setPassword('');
       completeAuthentication(res.data);
     } catch (err) {
+      if (problemCode(err) === 'PASSWORD_AND_2FA_REQUIRED') {
+        // The code was right and the contact is verified, but this account signs in with its password and authenticator.
+        setOtpCode('');
+        setMode('signin');
+        setStatusMessage(
+          t(
+            'Verified. This account signs in with its password and authenticator code.',
+            'যাচাই হয়েছে। এই অ্যাকাউন্টে পাসওয়ার্ড ও অথেন্টিকেটর কোড দিয়ে সাইন ইন করতে হয়।'
+          )
+        );
+        return;
+      }
       showApiError(err);
     } finally {
       setSubmitting(false);

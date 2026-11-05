@@ -139,6 +139,16 @@ var bootstrapAdmin = BootstrapAdminSettings.FromValues(
 builder.Services.AddScoped<IdentitySeeder>();
 builder.Services.AddScoped<DemoAccountGuard>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
+// Google sign-in exists only where a client id is configured; without one the endpoint answers GOOGLE_SIGNIN_DISABLED.
+string? googleClientId = builder.Configuration["Authentication:Google:ClientId"];
+if (!string.IsNullOrWhiteSpace(googleClientId))
+{
+    builder.Services.AddHttpClient(GoogleJwksSigningKeys.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5));
+    builder.Services.AddSingleton<IGoogleSigningKeys>(sp => new GoogleJwksSigningKeys(
+        () => sp.GetRequiredService<IHttpClientFactory>().CreateClient(GoogleJwksSigningKeys.HttpClientName),
+        sp.GetService<TimeProvider>() ?? TimeProvider.System));
+    builder.Services.AddSingleton<IGoogleIdTokenVerifier>(sp => new GoogleIdTokenVerifier(googleClientId, sp.GetRequiredService<IGoogleSigningKeys>()));
+}
 
 builder.Services
     .AddAuthentication(JwtBearerAuthenticationHandler.SchemeName)

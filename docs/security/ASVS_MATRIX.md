@@ -100,7 +100,8 @@
 ## V10 — OAuth and OIDC
 | নিয়ন্ত্রণ | ASVS ID | অবস্থা | টেস্ট / প্রমাণ | বাকি |
 |---|---|---|---|---|
-| Google ID token যাচাই | V9.1.1 (L1), V9.2.3 (L2), V10.5.2 (L2) | 🟡 | `IdentityService.GoogleLogin` (`iss`, `exp`, `email_verified`, `sub`) | signature (JWKS) টেস্টসহ, `aud` = client id |
+| Google ID token যাচাই | V9.1.1 (L1), V9.2.3 (L2), V10.5.2 (L2) | ✅ | `GoogleIdTokenVerifier`: RS256 সই Google-এর JWKS দিয়ে, `iss`, `aud` = client id, `exp`/`iat`, `email_verified`; `IT/Identity/GoogleIdTokenVerifierTests.cs` | — |
+| OTP / Google দিয়ে 2FA এড়ানো যায় না | V6.3.3 (L2), V6.8.4 (L2) | ✅ | 2FA অ্যাকাউন্টে passwordless পথে session নেই, reset কোডে লগইন নেই, যাচাই না হওয়া ইমেইলে Google link নেই; `IT/Identity/PasswordlessTwoFactorTests.cs` | — |
 
 ## V11 — Cryptography
 | নিয়ন্ত্রণ | ASVS ID | অবস্থা | টেস্ট / প্রমাণ | বাকি |
