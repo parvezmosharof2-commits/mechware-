@@ -352,7 +352,7 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
 
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 50; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: rise 0.18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: 0; } } }
-/* Glass skin: frosted crystal chrome over a brushed-steel field. Data (tables, invoice, inputs) stays near-solid. */
+/* The look (always on): frosted crystal chrome over a brushed-steel field. Data (tables, invoice, inputs) stays near-solid. */
 :root[data-skin="glass"] {
   --bg: #DCE5F0; --surface: rgba(255,255,255,0.72); --sunken: rgba(234,241,250,0.86);
   --line: rgba(15,40,80,0.13); --line-strong: rgba(15,40,80,0.26);
@@ -429,7 +429,7 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
     </span>
     <span class="seg" role="group" aria-label="Theme">
       <button class="pbtn" type="button" data-skin-pick="light" aria-pressed="true">Light</button>
-      <button class="pbtn" type="button" data-skin-pick="glass" aria-pressed="false">Glass</button>
+      <button class="pbtn" type="button" data-skin-pick="dark" aria-pressed="false">Dark</button>
     </span>
   </div>
 </header>
@@ -444,8 +444,8 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
 /* ---------- language and number formatting ---------- */
 var lang = 'en';
 try { var saved = localStorage.getItem('mw-proto-lang'); if (saved === 'bn' || saved === 'en') lang = saved; } catch (e) {}
-var skin = 'light';
-try { var savedSkin = localStorage.getItem('mw-proto-skin'); if (savedSkin === 'glass' || savedSkin === 'light') skin = savedSkin; } catch (e) {}
+var mode = 'light';
+try { var savedMode = localStorage.getItem('mw-proto-mode'); if (savedMode === 'dark' || savedMode === 'light') mode = savedMode; } catch (e) {}
 var BN = '০১২৩৪৫৬৭৮৯';
 function L(en, bn) { return lang === 'bn' ? bn : en; }
 function dg(s) { s = String(s); return lang === 'bn' ? s.replace(/[0-9]/g, function (d) { return BN[d]; }) : s; }
@@ -1104,7 +1104,7 @@ var VIEWS = new Map([['home', vHome], ['products', vProducts], ['product', vProd
 
 /* ---------- interview notes ---------- */
 var NOTES = {
-  'home': [['Light or Glass: which look is easier to work in all day?', 'লাইট না গ্লাস: সারাদিন কাজ করতে কোনটায় আরাম?'], ['How do you start a purchase today: part number, brand, or a list from the plant?', 'আজ কেনাকাটা কীভাবে শুরু করেন: পার্ট নম্বর, ব্র্যান্ড, নাকি প্ল্যান্টের তালিকা থেকে?'], ['Which of the four facts in the trust strip matters most before you buy from a new supplier?', 'নতুন সাপ্লায়ার থেকে কেনার আগে ট্রাস্ট স্ট্রিপের চারটি তথ্যের কোনটা সবচেয়ে জরুরি?']],
+  'home': [['Light or Dark: which is easier to work in all day?', 'লাইট না ডার্ক: সারাদিন কাজ করতে কোনটায় আরাম?'], ['How do you start a purchase today: part number, brand, or a list from the plant?', 'আজ কেনাকাটা কীভাবে শুরু করেন: পার্ট নম্বর, ব্র্যান্ড, নাকি প্ল্যান্টের তালিকা থেকে?'], ['Which of the four facts in the trust strip matters most before you buy from a new supplier?', 'নতুন সাপ্লায়ার থেকে কেনার আগে ট্রাস্ট স্ট্রিপের চারটি তথ্যের কোনটা সবচেয়ে জরুরি?']],
   'products': [['Which columns do you need to compare PLCs? Which can go?', 'PLC তুলনা করতে কোন কলামগুলো লাগে? কোনগুলো বাদ দেওয়া যায়?'], ['Is the price-by-quantity table clear without explanation?', 'পরিমাণভেদে দামের টেবিল কোনো ব্যাখ্যা ছাড়াই বোঝা যায়?']],
   'product': [['What do you check before you trust a part number: datasheet, stock, warranty, origin?', 'পার্ট নম্বরে ভরসা করার আগে কী দেখেন: ডেটাশিট, স্টক, ওয়ারেন্টি, উৎস দেশ?'], ['When do you add to cart, and when do you ask for a quotation?', 'কখন কার্টে যোগ করেন, আর কখন কোটেশন চান?']],
   'quick-order': [['Where does your parts list come from today: Excel, email, WhatsApp, paper?', 'আপনার পার্টের তালিকা আজ কোথা থেকে আসে: Excel, ইমেইল, WhatsApp, কাগজ?'], ['What should happen with a discontinued part number?', 'উৎপাদন বন্ধ হওয়া পার্ট নম্বর এলে কী হওয়া উচিত?']],
@@ -1125,11 +1125,12 @@ var sel = document.getElementById('screen-select');
 function idx(id) { for (var i = 0; i < SCREENS.length; i++) if (SCREENS[i].id === id) return i; return 0; }
 function renderChrome() {
   document.documentElement.lang = lang;
-  document.documentElement.setAttribute('data-skin', skin);
+  document.documentElement.setAttribute('data-skin', 'glass');
+  document.documentElement.setAttribute('data-theme', mode);
   document.querySelectorAll('[data-skin-pick]').forEach(function (b) {
     var v = b.getAttribute('data-skin-pick');
-    b.setAttribute('aria-pressed', String(v === skin));
-    b.textContent = v === 'glass' ? L('Glass', 'গ্লাস') : L('Light', 'লাইট');
+    b.setAttribute('aria-pressed', String(v === mode));
+    b.textContent = v === 'dark' ? L('Dark', 'ডার্ক') : L('Light', 'লাইট');
   });
   sel.innerHTML = SCREENS.map(function (s, i) { return '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + dg(i + 1) + ' · ' + L(s.en, s.bn) + '</option>'; }).join('');
   document.getElementById('proto-label').textContent = L('Prototype · sample data', 'প্রোটোটাইপ · নমুনা ডেটা');
@@ -1193,9 +1194,9 @@ document.addEventListener('click', function (e) {
   if (!t) return;
   if (t.hasAttribute('data-skin-pick')) {
     var sv = t.getAttribute('data-skin-pick');
-    if (sv === 'light' || sv === 'glass') {
-      skin = sv;
-      try { localStorage.setItem('mw-proto-skin', skin); } catch (err) {}
+    if (sv === 'light' || sv === 'dark') {
+      mode = sv;
+      try { localStorage.setItem('mw-proto-mode', mode); } catch (err) {}
       render();
     }
     return;
