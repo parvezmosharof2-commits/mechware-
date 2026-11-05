@@ -688,10 +688,18 @@ function vProduct() {
 /* 4. Quick order */
 function norm(s) { return s.toUpperCase().replace(/\s+/g, ' ').trim(); }
 function findSku(raw) { var n = norm(raw); for (var k in P) if (norm(k) === n) return k; return null; }
+/* Linear scan, no backtracking regex: trailing digits are the quantity when a tab, comma, semicolon or space separates them. */
+function splitQty(line) {
+  var end = line.length;
+  while (end > 0 && line.charCodeAt(end - 1) >= 48 && line.charCodeAt(end - 1) <= 57) end--;
+  var digits = line.slice(end), sep = end;
+  while (sep > 0 && ' \t,;'.indexOf(line.charAt(sep - 1)) >= 0) sep--;
+  if (!digits || sep === end || sep === 0) return [line, 1];
+  return [line.slice(0, sep), parseInt(digits.slice(0, 7), 10) || 1];
+}
 function parseQuick(text) {
   return text.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean).map(function (line) {
-    var m = line.match(/^(.*?)[\s,;]+(\d+)\s*$/);
-    var raw = m ? m[1].replace(/[,;]+$/, '').trim() : line, qty = m ? parseInt(m[2], 10) : 1;
+    var sp = splitQty(line), raw = sp[0], qty = sp[1];
     var sku = findSku(raw);
     if (!sku) return { raw: raw, qty: qty, st: 'missing' };
     var p = P[sku];
