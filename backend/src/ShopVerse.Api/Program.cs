@@ -234,9 +234,22 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1)
             }));
 
+    // Payment-provider webhooks get their own bucket per IP (threat model v2, P6): a provider delivers bursts from a few
+    // addresses, and a 429 makes it retry later, which delays confirming paid orders. They never share the budget that
+    // throttles browsers, and a flood of forged webhooks only exhausts its own bucket (each is refused on the signature).
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
         httpContext.Request.Path.StartsWithSegments("/api/v1/storefront")
         ? RateLimitPartition.GetNoLimiter("storefront")
+        : httpContext.Request.Path.StartsWithSegments("/api/v1/payments/webhooks")
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "webhook:" + (httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:WebhookPermitPerMinute") ?? 1000,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
         : RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             factory: _ => new FixedWindowRateLimiterOptions

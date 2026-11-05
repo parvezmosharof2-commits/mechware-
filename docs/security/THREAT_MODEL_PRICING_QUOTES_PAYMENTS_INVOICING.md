@@ -41,7 +41,7 @@
 | P3 | Medium | `NeedsRefund` পেমেন্টের জন্য কোনো কাজের তালিকা, সতর্কবার্তা বা refund পথ নেই | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): refund তালিকা + 4-eyes; সতর্কবার্তা বাকি |
 | P4 | Medium | ব্যর্থ বা অসম্পূর্ণ webhook-এর কোনো reconciliation নেই | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): প্রতি মিনিটে গেটওয়েকে জিজ্ঞাসা; দৈনিক settlement মেলানো বাকি |
 | P5 | Low | এক অর্ডারে যত খুশি payment session খোলা যায় (P2-এর পথ) | TEST | ✅ **ঠিক হয়েছে**: একসাথে সর্বোচ্চ ৩টা খোলা চেষ্টা |
-| P6 | Low | webhook-ও global ১০০/মিনিট/IP সীমার মধ্যে; গেটওয়ের burst-এ 429 → গেটওয়ে retry করে | CODE | স্প্রিন্ট ১৭–১৮ |
+| P6 | Low | webhook-ও global ১০০/মিনিট/IP সীমার মধ্যে; গেটওয়ের burst-এ 429 → গেটওয়ে retry করে | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): webhook-এর আলাদা bucket |
 | R1 | Medium | কুপন কোড আছে কিনা বোঝা যায়: অজানা কোডে এক উত্তর, আছে-কিন্তু-চলে-না কোডে আরেক | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
 | R2 | Info | promotion বানানো বা বদলানোর কোনো HTTP পথ নেই; শুধু seed বা database দিয়ে। ভবিষ্যতে admin API এলে নিয়ম লাগবে | CODE | স্প্রিন্ট ১৫–১৬ |
 | R3 | Info (নিয়ম) | কোম্পানিভিত্তিক price list: 4-eyes, margin floor, audit | RULE | স্প্রিন্ট ৭–৯ |
@@ -186,6 +186,13 @@ Support টাকা ফেরত চাইতে পারে, কিন্ত�
 ### P5, P6 (Low)
 - **P5:** session খোলার সংখ্যার কোনো সীমা নেই; P2-এর সাথেই ঠিক হবে।
 - **P6:** `/payments/webhooks/*`-এর জন্য আলাদা rate-limit policy লাগবে: গেটওয়ের IP allowlist (যেখানে গেটওয়ে প্রকাশ করে), নয়তো উঁচু সীমা। ৪২৯ পেলে গেটওয়ে retry করে, তাতে confirm দেরিতে হয়, তবে টাকা হারায় না (P1 ঠিক হওয়ার পরে)।
+
+**P6 ফিক্স (২০২৬-১১-০৫):** `/api/v1/payments/webhooks/*`-এর নিজস্ব bucket আছে, প্রতি IP-তে মিনিটে ১০০০টা।
+- সীমাটা কনফিগে বদলানো যায় (`RateLimiting:WebhookPermitPerMinute`)।
+- browser-এর ১০০/মিনিটের বাজেট এই bucket-এর সাথে ভাগ হয় না।
+- জাল webhook-এর বন্যা হলে শুধু নিজের bucket-টাই শেষ হয়, আর প্রতিটা জাল বার্তা স্বাক্ষর মেলাতে গিয়েই প্রত্যাখ্যাত হয়।
+
+TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarvedByWebhooks`, `TheWebhookBucket_HasItsOwnLimit`। আলাদা bucket সরিয়ে দিলে প্রথম টেস্টটা লাল হয় (mutation-checked)।
 
 ### R1. কুপন কোড গণনা করা যায় (Medium) [CODE]
 `OrderService.ApplyPromotionsAsync` দুই রকম উত্তর দেয়:
@@ -349,7 +356,7 @@ Support টাকা ফেরত চাইতে পারে, কিন্ত�
 | ~~P1 + P2 + P5 ঠিক করা, টেস্ট ও mutation check সহ~~ ✅ ২০২৬-১১-০৫ | — | V2.3.3 (L2), V15.4.2 (L3) |
 | ~~P3 refund তালিকা + 4-eyes refund~~ ✅ ২০২৬-১১-০৫ (UI, সতর্কবার্তা, step-up বাকি) | ১৫–১৬ | V2.3.5 (L3) |
 | ~~P4 reconciliation worker~~ ✅ ২০২৬-১১-০৫ (দৈনিক settlement report বাকি) | ১০–১২ | — (সরাসরি requirement নেই; ব্যবসায়িক নিয়ন্ত্রণ) |
-| P6 webhook-এর আলাদা rate-limit policy | ১৭–১৮ | V2.4.1 (L2) |
+| ~~P6 webhook-এর আলাদা rate-limit policy~~ ✅ ২০২৬-১১-০৫ | — | V2.4.1 (L2) |
 | ~~R1 কুপন গণনা ঠেকানো~~ ✅ ২০২৬-১১-০৫ | — | V2.4.1 (L2) |
 | R3 + Q1–Q9 (price list, কোটেশন) | ৭–৯ | V2.2.2 (L1), V2.3.1 (L1), V2.3.5 (L3), V8.2.2 (L1) |
 | I1–I10 (ইনভয়েস, মূসক) | ১০–১২ | V2.3.3 (L2), V8.2.2 (L1), V5.2.1 (L1), V5.2.2 (L1), V16.3.3 (L2) |
