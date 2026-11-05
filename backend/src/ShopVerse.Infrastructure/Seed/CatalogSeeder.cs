@@ -479,19 +479,38 @@ public static class CatalogSeeder
         $"01{3 + salt % 7}{(long)salt * 7919 % 100_000_000:D8}";
 
     /// <summary>Writes artwork to disk (when enabled) and returns the public URL stored in the database.</summary>
-    private sealed class MediaSink(SeedOptions options, SeedReport report)
+    internal sealed class MediaSink(SeedOptions options, SeedReport report)
     {
         public string? Write(string relativePath, string svg)
         {
             if (options.WriteMediaFiles)
             {
-                var full = Path.Combine(options.MediaRoot, relativePath);
+                var full = ResolveInside(options.MediaRoot, relativePath);
                 Directory.CreateDirectory(Path.GetDirectoryName(full)!);
                 File.WriteAllText(full, svg);
                 report.MediaFilesWritten++;
             }
 
             return $"{options.MediaBaseUrl.TrimEnd('/')}/{relativePath}";
+        }
+
+        /// <summary>
+        /// The full path of <paramref name="relativePath"/> under <paramref name="root"/>, refusing anything that would land
+        /// outside it ("../", an absolute path, a drive letter). The paths come from the seed's own slugs today, but the
+        /// seeder writes files, so it must not be able to write anywhere else if that ever changes.
+        /// </summary>
+        internal static string ResolveInside(string root, string relativePath)
+        {
+            var rootFull = Path.GetFullPath(root);
+            if (!rootFull.EndsWith(Path.DirectorySeparatorChar)) rootFull += Path.DirectorySeparatorChar;
+            if (Path.IsPathRooted(relativePath))
+                throw new InvalidOperationException($"Media path '{relativePath}' must be relative to the media root.");
+
+            // nosemgrep: csharp.lang.security.filesystem.unsafe-path-combine.unsafe-path-combine -- the combined path is normalised and checked to stay under the root on the next lines.
+            var full = Path.GetFullPath(Path.Combine(rootFull, relativePath));
+            if (!full.StartsWith(rootFull, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Media path '{relativePath}' resolves outside the media root.");
+            return full;
         }
     }
 }

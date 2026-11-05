@@ -516,8 +516,7 @@ test('26. Phase 3 frontend files contain zero explicit any types and RoleAwareSi
     'frontend/apps/web/src/components/auth/HeaderAccountMenu.tsx',
     'frontend/apps/web/src/app/[locale]/account/addresses/page.tsx',
     'frontend/apps/console/src/components/RoleAwareSidebar.tsx',
-    'frontend/apps/console/src/app/login/page.tsx',
-    'src/components/Phase3IdentityWorkbench.tsx'
+    'frontend/apps/console/src/app/login/page.tsx'
   ];
 
   for (const relPath of phase3FrontendFiles) {

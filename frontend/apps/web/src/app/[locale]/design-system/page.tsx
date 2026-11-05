@@ -4,13 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useParams } from 'next/navigation';
 import {
   colors,
-  scales,
   chartPalette,
-  typography,
-  spacing,
-  radius,
-  shadows,
-  zIndex,
   Button,
   IconButton,
   Input,
@@ -26,7 +20,6 @@ import {
   PhoneInput,
   Checkbox,
   RadioGroup,
-  Radio,
   RadioCard,
   Switch,
   QuantityStepper,
@@ -51,9 +44,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
   TooltipContent,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -76,7 +66,6 @@ import {
   SheetTitle,
   SheetDescription,
   SheetFooter,
-  SheetClose,
   ToastProvider,
   useToast,
   AlertBanner,
@@ -86,21 +75,11 @@ import {
   BreadcrumbLink,
   BreadcrumbSeparator,
   BreadcrumbPage,
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationPrevious,
-  PaginationNext,
-  PaginationEllipsis,
-  Skeleton,
   Avatar,
   AvatarImage,
   AvatarFallback,
   Progress,
   Stepper,
-  Carousel,
-  CarouselSlide,
   CountdownTimer,
   ImageGallery,
   DataTable,
@@ -127,18 +106,11 @@ import {
   Cpu,
   Layers,
   ShieldCheck,
-  Terminal,
   Zap,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
   Truck,
   CreditCard,
   FileText,
   AlertTriangle,
-  RotateCw,
-  ExternalLink,
-  Info,
 } from 'lucide-react';
 
 // Sample Industrial Data for DataTable
@@ -273,7 +245,6 @@ function DesignSystemContent() {
   const [quantity, setQuantity] = useState(2);
   const [phoneVal, setPhoneVal] = useState('01711223344');
   const [interactiveRating, setInteractiveRating] = useState(4.5);
-  const [sliderVal, setSliderVal] = useState(1);
 
   const { toast } = useToast();
 
@@ -1100,7 +1071,7 @@ function DesignSystemContent() {
                   { label: 'Bestseller', variant: 'bestseller' },
                   { label: 'Genuine CE', variant: 'authentic' },
                 ]}
-                onAddToCart={(id) => toast({ title: 'Added to Cart', description: 'Siemens S7-1500 added to procurement cart.', variant: 'success' })}
+                onAddToCart={() => toast({ title: 'Added to Cart', description: 'Siemens S7-1500 added to procurement cart.', variant: 'success' })}
               />
 
               {/* Matching Skeleton 1 (Zero Layout Shift!) */}
@@ -1122,7 +1093,7 @@ function DesignSystemContent() {
                   { label: '-14% Deal', variant: 'deal' },
                   { label: 'Low Stock', variant: 'low-stock' },
                 ]}
-                onAddToCart={(id) => toast({ title: 'Added to Cart', description: 'ABB ACS580 added to procurement cart.', variant: 'success' })}
+                onAddToCart={() => toast({ title: 'Added to Cart', description: 'ABB ACS580 added to procurement cart.', variant: 'success' })}
               />
 
               {/* Matching Skeleton 2 */}
@@ -1144,7 +1115,7 @@ function DesignSystemContent() {
                 primaryImage="https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=300&auto=format&fit=crop&q=80"
                 price={3850}
                 compareAtPrice={4500}
-                onAddToCart={(id) => toast({ title: 'Added to Cart', description: 'Omron Sensor added to cart.', variant: 'success' })}
+                onAddToCart={() => toast({ title: 'Added to Cart', description: 'Omron Sensor added to cart.', variant: 'success' })}
               />
               <ProductCardSkeleton size="horizontal" />
             </div>
