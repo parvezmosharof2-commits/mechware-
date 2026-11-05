@@ -28,7 +28,7 @@ function securityHeaders(options = {}) {
     ['frame-src', ...(google.length ? google : ["'none'"])].join(' '),
     "frame-ancestors 'none'",
     "object-src 'none'",
-    "base-uri 'self'",
+    "base-uri 'none'",
     "form-action 'self'"
   ].join('; ');
 
