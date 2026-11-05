@@ -352,6 +352,67 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
 
 .toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 50; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: rise 0.18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: 0; } } }
+/* Glass skin: frosted crystal chrome over a brushed-steel field. Data (tables, invoice, inputs) stays near-solid. */
+:root[data-skin="glass"] {
+  --bg: #DCE5F0; --surface: rgba(255,255,255,0.72); --sunken: rgba(234,241,250,0.86);
+  --line: rgba(15,40,80,0.13); --line-strong: rgba(15,40,80,0.26);
+  --chrome: rgba(11,27,51,0.80); --chrome-2: rgba(255,255,255,0.16); --navy-wash: rgba(15,62,125,0.12);
+  --solid: rgba(255,255,255,0.93);
+  --glass-fill: linear-gradient(140deg, rgba(255,255,255,0.82), rgba(236,243,252,0.60));
+  --glass-edge: rgba(255,255,255,0.88);
+  --glass-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 14px 32px rgba(11,27,51,0.14);
+  --glass-field: radial-gradient(900px 560px at 92% 4%, rgba(0,168,181,0.32) 0%, rgba(0,168,181,0) 70%), radial-gradient(1000px 700px at 0% 100%, rgba(15,62,125,0.42) 0%, rgba(15,62,125,0) 70%), linear-gradient(120deg, #C3D1E2 0%, #EBF0F7 40%, #A6BAD3 70%, #DCE5EF 100%);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-skin="glass"]:not([data-theme="light"]) {
+    --bg: #08101E; --surface: rgba(22,36,62,0.72); --sunken: rgba(14,24,42,0.86);
+    --line: rgba(255,255,255,0.10); --line-strong: rgba(255,255,255,0.22); --navy-wash: rgba(142,185,242,0.14);
+    --chrome: rgba(4,9,18,0.82); --chrome-2: rgba(255,255,255,0.12); --solid: rgba(15,25,44,0.95);
+    --glass-fill: linear-gradient(140deg, rgba(34,54,92,0.78), rgba(14,26,48,0.64));
+    --glass-edge: rgba(255,255,255,0.16);
+    --glass-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 16px 36px rgba(0,0,0,0.4);
+    --glass-field: radial-gradient(800px 520px at 100% 0%, rgba(0,168,181,0.40) 0%, rgba(0,168,181,0) 70%), radial-gradient(1000px 700px at 0% 70%, rgba(46,107,193,0.40) 0%, rgba(46,107,193,0) 70%), linear-gradient(170deg, #0C1730 0%, #070E1C 55%, #0B1A2A 100%);
+  }
+}
+:root[data-skin="glass"][data-theme="dark"] {
+  --bg: #08101E; --surface: rgba(22,36,62,0.72); --sunken: rgba(14,24,42,0.86);
+  --line: rgba(255,255,255,0.10); --line-strong: rgba(255,255,255,0.22); --navy-wash: rgba(142,185,242,0.14);
+  --chrome: rgba(4,9,18,0.82); --chrome-2: rgba(255,255,255,0.12); --solid: rgba(15,25,44,0.95);
+  --glass-fill: linear-gradient(140deg, rgba(34,54,92,0.78), rgba(14,26,48,0.64));
+  --glass-edge: rgba(255,255,255,0.16);
+  --glass-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 16px 36px rgba(0,0,0,0.4);
+  --glass-field: radial-gradient(800px 520px at 100% 0%, rgba(0,168,181,0.40) 0%, rgba(0,168,181,0) 70%), radial-gradient(1000px 700px at 0% 70%, rgba(46,107,193,0.40) 0%, rgba(46,107,193,0) 70%), linear-gradient(170deg, #0C1730 0%, #070E1C 55%, #0B1A2A 100%);
+}
+:root[data-skin="glass"] body { background: var(--glass-field); background-color: var(--bg); background-attachment: fixed; }
+:root[data-skin="glass"] .hero { background: transparent; border-bottom: 0; }
+:root[data-skin="glass"] .store-head, :root[data-skin="glass"] .catnav { background: var(--glass-fill); border-color: var(--glass-edge); }
+:root[data-skin="glass"] .proto-bar, :root[data-skin="glass"] .side, :root[data-skin="glass"] .store-head, :root[data-skin="glass"] .catnav,
+:root[data-skin="glass"] .panel, :root[data-skin="glass"] .cat, :root[data-skin="glass"] .kpi, :root[data-skin="glass"] .trust,
+:root[data-skin="glass"] .qmeta, :root[data-skin="glass"] .choice, :root[data-skin="glass"] .doc {
+  -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+}
+:root[data-skin="glass"] .panel, :root[data-skin="glass"] .cat, :root[data-skin="glass"] .kpi, :root[data-skin="glass"] .trust,
+:root[data-skin="glass"] .qmeta, :root[data-skin="glass"] .choice, :root[data-skin="glass"] .doc {
+  background: var(--glass-fill); border: 1px solid var(--glass-edge); box-shadow: var(--glass-shadow); border-radius: 20px;
+}
+:root[data-skin="glass"] .choice.on { background: var(--navy-wash); border-color: var(--navy-ink); box-shadow: inset 0 0 0 1px var(--navy-ink), var(--glass-shadow); }
+:root[data-skin="glass"] .tbl, :root[data-skin="glass"] .specs, :root[data-skin="glass"] .invoice, :root[data-skin="glass"] .req,
+:root[data-skin="glass"] .lists button { background-color: var(--solid); }
+:root[data-skin="glass"] .req.sel, :root[data-skin="glass"] .lists button.sel, :root[data-skin="glass"] .tbl tr.sel { background-color: var(--navy-wash); }
+:root[data-skin="glass"] .input, :root[data-skin="glass"] .search input, :root[data-skin="glass"] .bigsearch input { background: var(--solid); border-radius: 12px; }
+:root[data-skin="glass"] .search input { border-radius: 12px 0 0 12px; }
+:root[data-skin="glass"] .search button { border-radius: 0 12px 12px 0; }
+:root[data-skin="glass"] .btn { border-radius: 999px; background: var(--glass-fill); border-color: var(--glass-edge); box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); }
+:root[data-skin="glass"] .btn-primary { background: linear-gradient(170deg, #1F57A3 0%, #0F3E7D 60%, #0B2F60 100%); border-color: #0F3E7D; color: #FFFFFF; box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 6px 16px rgba(15,62,125,0.3); }
+:root[data-skin="glass"] .btn-accent { background: linear-gradient(170deg, #3FD0DB 0%, #00A8B5 60%, #008C98 100%); border-color: #00A8B5; color: #03282C; box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 6px 16px rgba(0,168,181,0.3); }
+:root[data-skin="glass"] .btn-danger { color: var(--bad); border-color: var(--bad); }
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-skin="glass"] { --glass-fill: var(--solid); }
+  :root[data-skin="glass"] * { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root[data-skin="glass"] { --glass-fill: var(--solid); }
+}
 </style>
 
 <header class="proto-bar" aria-label="Prototype controls">
@@ -366,6 +427,10 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
       <button class="pbtn" type="button" data-lang="en" aria-pressed="true">EN</button>
       <button class="pbtn" type="button" data-lang="bn" aria-pressed="false">বাংলা</button>
     </span>
+    <span class="seg" role="group" aria-label="Theme">
+      <button class="pbtn" type="button" data-skin-pick="light" aria-pressed="true">Light</button>
+      <button class="pbtn" type="button" data-skin-pick="glass" aria-pressed="false">Glass</button>
+    </span>
   </div>
 </header>
 <section class="notes" id="notes" hidden></section>
@@ -379,6 +444,8 @@ html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12
 /* ---------- language and number formatting ---------- */
 var lang = 'en';
 try { var saved = localStorage.getItem('mw-proto-lang'); if (saved === 'bn' || saved === 'en') lang = saved; } catch (e) {}
+var skin = 'light';
+try { var savedSkin = localStorage.getItem('mw-proto-skin'); if (savedSkin === 'glass' || savedSkin === 'light') skin = savedSkin; } catch (e) {}
 var BN = '০১২৩৪৫৬৭৮৯';
 function L(en, bn) { return lang === 'bn' ? bn : en; }
 function dg(s) { s = String(s); return lang === 'bn' ? s.replace(/[0-9]/g, function (d) { return BN[d]; }) : s; }
@@ -1037,7 +1104,7 @@ var VIEWS = new Map([['home', vHome], ['products', vProducts], ['product', vProd
 
 /* ---------- interview notes ---------- */
 var NOTES = {
-  'home': [['How do you start a purchase today: part number, brand, or a list from the plant?', 'আজ কেনাকাটা কীভাবে শুরু করেন: পার্ট নম্বর, ব্র্যান্ড, নাকি প্ল্যান্টের তালিকা থেকে?'], ['Which of the four facts in the trust strip matters most before you buy from a new supplier?', 'নতুন সাপ্লায়ার থেকে কেনার আগে ট্রাস্ট স্ট্রিপের চারটি তথ্যের কোনটা সবচেয়ে জরুরি?']],
+  'home': [['Light or Glass: which look is easier to work in all day?', 'লাইট না গ্লাস: সারাদিন কাজ করতে কোনটায় আরাম?'], ['How do you start a purchase today: part number, brand, or a list from the plant?', 'আজ কেনাকাটা কীভাবে শুরু করেন: পার্ট নম্বর, ব্র্যান্ড, নাকি প্ল্যান্টের তালিকা থেকে?'], ['Which of the four facts in the trust strip matters most before you buy from a new supplier?', 'নতুন সাপ্লায়ার থেকে কেনার আগে ট্রাস্ট স্ট্রিপের চারটি তথ্যের কোনটা সবচেয়ে জরুরি?']],
   'products': [['Which columns do you need to compare PLCs? Which can go?', 'PLC তুলনা করতে কোন কলামগুলো লাগে? কোনগুলো বাদ দেওয়া যায়?'], ['Is the price-by-quantity table clear without explanation?', 'পরিমাণভেদে দামের টেবিল কোনো ব্যাখ্যা ছাড়াই বোঝা যায়?']],
   'product': [['What do you check before you trust a part number: datasheet, stock, warranty, origin?', 'পার্ট নম্বরে ভরসা করার আগে কী দেখেন: ডেটাশিট, স্টক, ওয়ারেন্টি, উৎস দেশ?'], ['When do you add to cart, and when do you ask for a quotation?', 'কখন কার্টে যোগ করেন, আর কখন কোটেশন চান?']],
   'quick-order': [['Where does your parts list come from today: Excel, email, WhatsApp, paper?', 'আপনার পার্টের তালিকা আজ কোথা থেকে আসে: Excel, ইমেইল, WhatsApp, কাগজ?'], ['What should happen with a discontinued part number?', 'উৎপাদন বন্ধ হওয়া পার্ট নম্বর এলে কী হওয়া উচিত?']],
@@ -1058,6 +1125,12 @@ var sel = document.getElementById('screen-select');
 function idx(id) { for (var i = 0; i < SCREENS.length; i++) if (SCREENS[i].id === id) return i; return 0; }
 function renderChrome() {
   document.documentElement.lang = lang;
+  document.documentElement.setAttribute('data-skin', skin);
+  document.querySelectorAll('[data-skin-pick]').forEach(function (b) {
+    var v = b.getAttribute('data-skin-pick');
+    b.setAttribute('aria-pressed', String(v === skin));
+    b.textContent = v === 'glass' ? L('Glass', 'গ্লাস') : L('Light', 'লাইট');
+  });
   sel.innerHTML = SCREENS.map(function (s, i) { return '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + dg(i + 1) + ' · ' + L(s.en, s.bn) + '</option>'; }).join('');
   document.getElementById('proto-label').textContent = L('Prototype · sample data', 'প্রোটোটাইপ · নমুনা ডেটা');
   var nb = document.getElementById('notes-btn');
@@ -1116,8 +1189,17 @@ function addToCart(sku, qty) {
 }
 
 document.addEventListener('click', function (e) {
-  var t = e.target.closest('[data-go],[data-act],[data-lang]');
+  var t = e.target.closest('[data-go],[data-act],[data-lang],[data-skin-pick]');
   if (!t) return;
+  if (t.hasAttribute('data-skin-pick')) {
+    var sv = t.getAttribute('data-skin-pick');
+    if (sv === 'light' || sv === 'glass') {
+      skin = sv;
+      try { localStorage.setItem('mw-proto-skin', skin); } catch (err) {}
+      render();
+    }
+    return;
+  }
   if (t.hasAttribute('data-lang')) {
     lang = t.getAttribute('data-lang');
     try { localStorage.setItem('mw-proto-lang', lang); } catch (err) {}
