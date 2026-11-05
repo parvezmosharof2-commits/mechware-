@@ -1,7 +1,10 @@
 # ADR 0003: Order Splitting per Seller (Parent Order and SubOrder Hierarchy)
 
 ## Status
-Accepted
+Accepted (2026-10-29). Amended 2026-11-05: order numbers are `MW-YYMMDD-XXXXXX` (brief v2; implemented in
+`OrderNumber.Generate`, `backend/src/ShopVerse.Domain/Orders/OrderStateMachine.cs`) and sub-orders append `-01`, `-02`.
+Brief v2 launches MECHWARE as the direct seller; the parent order / sub-order split stays in the model so authorised
+distributors can be added later without a migration, but seller payouts and commission ledgers are after launch.
 
 ## Date
 2026-10-29
@@ -12,7 +15,7 @@ MECHWARE operates as a hybrid direct manufacturer and multi-vendor industrial ma
 2. Siemens S7-1500 PLCs sold by an authorized distributor in Dhaka.
 3. Pneumatic valves and sensors sold by a third-party seller in Chittagong.
 
-The customer expects a unified shopping cart, a single unified payment transaction (e.g., via bKash or corporate credit card), and a consolidated master order number (`SV-YYMMDD-XXXXXX`). However:
+The customer expects a unified shopping cart, a single unified payment transaction (e.g., via bKash or corporate credit card), and a consolidated master order number (`MW-YYMMDD-XXXXXX`). However:
 - Each seller fulfills items from their own warehouse or factory.
 - Couriers (Steadfast, Pathao, Paperfly) assign distinct tracking numbers and shipping labels per pickup location.
 - Seller commissions, payouts, cancellations, and return requests must be isolated per seller.
@@ -31,12 +34,12 @@ We implement a **Two-Tier Order Hierarchy**:
 
 ### 1. Parent Order (`orders`)
 - **Role**: Customer-facing aggregate root and commercial contract.
-- **Attributes**: `id`, `order_number` (format `SV-YYMMDD-XXXXXX`), `user_id` (or guest credentials), `currency`, `subtotal`, `discount_total`, `shipping_total`, `tax_total`, `grand_total`, `payment_status` (`unpaid`, `paid`, `partially_refunded`, `refunded`), snapshot addresses, and customer notes.
+- **Attributes**: `id`, `order_number` (format `MW-YYMMDD-XXXXXX`), `user_id` (or guest credentials), `currency`, `subtotal`, `discount_total`, `shipping_total`, `tax_total`, `grand_total`, `payment_status` (`unpaid`, `paid`, `partially_refunded`, `refunded`), snapshot addresses, and customer notes.
 - **Payment Association**: Exactly one parent payment transaction covers the entire parent order.
 
 ### 2. SubOrder (`sub_orders`)
 - **Role**: Operational fulfillment and financial settlement unit per seller.
-- **Attributes**: `id`, `order_id`, `seller_id`, `sub_order_number` (`SV-YYMMDD-XXXXXX-01`), `status`, `subtotal`, `shipping_fee`, `commission_rate`, `commission_amount`, `seller_earning`, `shipment_id`.
+- **Attributes**: `id`, `order_id`, `seller_id`, `sub_order_number` (`MW-YYMMDD-XXXXXX-01`), `status`, `subtotal`, `shipping_fee`, `commission_rate`, `commission_amount`, `seller_earning`, `shipment_id`.
 - **State Machine**: Managed independently per `SubOrder`:
   $$\text{PendingPayment} \rightarrow \text{Confirmed} \rightarrow \text{Processing} \rightarrow \text{Packed} \rightarrow \text{Shipped} \rightarrow \text{OutForDelivery} \rightarrow \text{Delivered} \rightarrow \text{Completed}$$
   Side paths: `Cancelled`, `DeliveryFailed -> ReturnedToSeller`, `ReturnRequested -> ReturnApproved -> Refunded`.

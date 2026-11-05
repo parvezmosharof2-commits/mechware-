@@ -487,7 +487,7 @@ Time-bounded high-urgency promotional campaigns.
 | Column | Type | Constraints | Description |
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | Master Order ID |
-| `order_number` | `varchar(30)` | NOT NULL, UNIQUE | Format: `SV-YYMMDD-XXXXXX` |
+| `order_number` | `varchar(30)` | NOT NULL, UNIQUE | Format: `MW-YYMMDD-XXXXXX` |
 | `user_id` | `uuid` | FK -> `users(id)` ON DELETE SET NULL | Registered buyer (or null) |
 | `guest_email` | `varchar(255)` | nullable | For guest checkout |
 | `guest_phone` | `varchar(20)` | nullable | For guest checkout & OTP |
@@ -515,7 +515,7 @@ Time-bounded high-urgency promotional campaigns.
 | `id` | `uuid` | PK, default `gen_random_uuid()` | SubOrder ID |
 | `order_id` | `uuid` | FK -> `orders(id)` ON DELETE CASCADE | Parent aggregate |
 | `seller_id` | `uuid` | FK -> `sellers(id)` ON DELETE RESTRICT | Fulfilling seller |
-| `sub_order_number` | `varchar(35)` | NOT NULL, UNIQUE | e.g. `SV-261029-A7K92M-01` |
+| `sub_order_number` | `varchar(35)` | NOT NULL, UNIQUE | e.g. `MW-261029-A7K92M-01` |
 | `status` | `varchar(35)` | NOT NULL, default `'pending_payment'` | Lifecycle state (see Section 8.5) |
 | `subtotal_minor` | `bigint` | NOT NULL, CHECK (`subtotal_minor >= 0`) | Seller's item subtotal |
 | `seller_discount_minor` | `bigint` | NOT NULL, default `0`, CHECK (`seller_discount_minor >= 0`) | Seller-funded discount |

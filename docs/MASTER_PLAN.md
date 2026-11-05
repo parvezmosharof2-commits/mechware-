@@ -88,9 +88,9 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 | বাগ #৪ | `shipToJson`-এর বদলে typed ঠিকানা (address id বা যাচাই করা ফিল্ড), আকারের সীমা, ঠিকানা বাধ্যতামূলক; ভুল ইনপুটে 400, কখনো 500 নয় |
 | বাগ #৫, #৭ | রেজিস্ট্রেশনে অ্যাকাউন্ট আছে কিনা ফাঁস না করা; web/console-এ security header (CSP, HSTS, X-Frame-Options) |
 | বাগ #৬ | `ForwardedHeaders`-এ `KnownNetworks` কনফিগারযোগ্য করা (Cloudflare/LB) |
-| পরিচ্ছন্নতা | ৩৩টা ESLint warning ঠিক, তারপর `--max-warnings 0` চালু; রুটের পুরনো Vite/AI Studio অ্যাপ মুছে ফেলা |
-| CI গেট | Semgrep ও Trivy-র প্রথম রিপোর্ট দেখে ব্লকিং করা; ZAP প্রথমবার হাতে চালানো; ASVS ম্যাট্রিক্সে অফিসিয়াল requirement ID বসানো |
-| ডকুমেন্ট | `ARCHITECTURE.md`-কে brief v2-এর মডিউল তালিকা অনুযায়ী আপডেট; ADR-0003-এ `MW-` নম্বর |
+| পরিচ্ছন্নতা | ✅ ৩৩টা ESLint warning ঠিক, `--max-warnings 0` চালু; ✅ রুটের পুরনো Vite/AI Studio অ্যাপ মোছা, পুরনো নোট `docs/archive/`-এ |
+| CI গেট | ✅ Semgrep ও Trivy ব্লকিং (finding log-এ দেখায়); ✅ ZAP চালানো হয়েছে; ⬜ ASVS ম্যাট্রিক্সে অফিসিয়াল requirement ID বসানো |
+| ডকুমেন্ট | ✅ `ARCHITECTURE.md` v2 (কোড + brief v2); ADR-0003 ও DATA_MODEL-এ `MW-` নম্বর |
 | মালিক | GitHub-এ branch protection, secret scanning + push protection চালু |
 
 **Exit gate:** উপরের প্রতিটা বাগের regression test + mutation check; সব CI সবুজ; নতুন ZAP baseline-এ High নেই।
@@ -263,9 +263,4 @@ Seller marketplace + payout ledger, AI assistant, PunchOut (cXML/OCI), installed
 - Development ছাড়া অন্য environment-এ API চালু হওয়ার সময় ডাটাবেস লাগবে (demo অ্যাকাউন্ট চেক)।
 - Cloudflare / load balancer-এর পেছনে `ForwardedHeaders__KnownNetworks` সেট করতে হবে।
 
-**স্প্রিন্ট ০-এর বাকি কাজ:**
-- ৩৩টা ESLint warning ঠিক করে `--max-warnings 0`
-- Semgrep/Trivy ব্লকিং
-- রুটের পুরনো Vite অ্যাপ মোছা
-- `ARCHITECTURE.md` আবার লেখা, ADR-0003-এ `MW-`
-- ASVS-এ অফিসিয়াল ID বসানো
+**স্প্রিন্ট ০-এর বাকি কাজ:** ASVS-এ অফিসিয়াল ID বসানো (বাকিগুলো ২০২৬-১১-০৫-এ PR #26-এ করা হয়েছে)।
