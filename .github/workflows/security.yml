@@ -61,9 +61,10 @@ jobs:
       - name: Scan every commit
         run: ./gitleaks git --redact --no-banner --exit-code 1 .
 
-  # Report-only until the first run is triaged (MASTER_PLAN.md, sprint 0): the rule registry could not be reached
-  # from the environment this was written in, so the current code was never scanned with these rules. Findings
-  # appear under Security -> Code scanning. Make it blocking by adding --error once the first report is clean.
+  # Blocking since sprint 0: any finding fails the run. The findings are printed in the log (the first report-only
+  # runs wrote them only to SARIF, so they could not be read without code-scanning access) and uploaded to
+  # Security -> Code scanning. A reviewed false positive is silenced in the code with a `nosemgrep: <rule-id>`
+  # comment that says why.
   semgrep:
     name: SAST (Semgrep)
     runs-on: ubuntu-latest
@@ -81,7 +82,7 @@ jobs:
           semgrep scan
           --config p/csharp --config p/typescript --config p/owasp-top-ten
           --exclude 'frontend/apps/web/public/seed-media' --exclude '**/Migrations/**'
-          --sarif --output semgrep.sarif
+          --text --sarif-output=semgrep.sarif --error
           backend/src frontend/apps frontend/packages
 
       - name: Upload results to code scanning
@@ -91,8 +92,8 @@ jobs:
           sarif_file: semgrep.sarif
           category: semgrep
 
-  # Report-only for the same reason as Semgrep. Trivy covers what the npm/NuGet audit does not: misconfigured
-  # Dockerfiles / compose / IaC (none for production yet) and secrets in the working tree.
+  # Trivy covers what the npm/NuGet audit does not: misconfigured Dockerfiles / compose / IaC and secrets in the working
+  # tree. Blocking since sprint 0 on HIGH / CRITICAL; findings are printed as a table and uploaded as SARIF.
   trivy:
     name: Config and dependency scan (Trivy)
     runs-on: ubuntu-latest
@@ -110,7 +111,7 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
           sudo apt-get update -qq && sudo apt-get install -y -qq trivy
 
-      - name: Scan the repository
+      - name: Scan the repository (SARIF for code scanning)
         run: >
           trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL
           --skip-dirs frontend/apps/web/public/seed-media
@@ -122,6 +123,12 @@ jobs:
         with:
           sarif_file: trivy.sarif
           category: trivy
+
+      - name: Fail on HIGH / CRITICAL findings (printed as a table)
+        run: >
+          trivy fs --scanners vuln,misconfig,secret --severity HIGH,CRITICAL
+          --skip-dirs frontend/apps/web/public/seed-media
+          --format table --exit-code 1 .
 
   dependency-audit:
     name: Dependency Vulnerability Gate
