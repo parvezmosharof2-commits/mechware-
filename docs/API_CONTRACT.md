@@ -65,8 +65,12 @@
   ```
 - **Response**: `201 Created`
   ```json
-  { "userId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6", "message": "Verification code dispatched via SMS and Email." }
+  { "data": { "userId": "f81d4fae-7dec-11d0-a765-00a0c91e6bf6", "status": "pending_verification", "verificationChannel": "phone_otp", "referenceId": "ref_3f9c0a1b2c3d", "expiresInSeconds": 300 } }
   ```
+- **No account enumeration** (2026-11-05, finding #5): an e-mail or phone that already has an account gets the same
+  `201` shape (random `userId` and `referenceId`, nothing created, the attempt audited as
+  `user.registration_for_existing_account`). Every validation runs before that check, so an invalid body is `400` either
+  way.
 
 #### `POST /auth/login`
 - **Auth**: Public | **Rate Limit**: 5 req/min per IP + user | **Idempotency**: No
@@ -643,3 +647,34 @@ Implemented (brief v2 §8.3). `Bearer`; same tenancy rule as §2.16 (a company t
 Statuses: `pending`, `approved` (every step approved), `rejected` (any rejection), `cancelled`. Not yet: `Idempotency-Key` on these endpoints, outbox events (`ApprovalRequested` / `Granted`), notifications, and the 24 h soft stock hold.
 
 ---
+
+### 2.18 Orders as implemented (`/orders`) — supersedes the `/checkout/orders` sketch in §2.4
+
+#### `POST /orders`
+- **Auth**: Bearer, verified (active) account — otherwise `403 ACCOUNT_NOT_VERIFIED`. **Header**: `Idempotency-Key`
+  (8-100 of `A-Z a-z 0-9 - _`, mandatory).
+- **Request**: items and where to deliver; no price, tax, discount, total or address text is read from the client.
+  ```json
+  {
+    "lines": [ { "variantId": "uuid", "quantity": 2 } ],
+    "shippingAddressId": "uuid (optional, one of the caller's saved addresses)",
+    "companyId": "uuid (optional, order in a company's name)",
+    "shipToSiteId": "uuid (optional, a delivery site of companyId)",
+    "payOnCredit": false,
+    "couponCodes": ["WELCOME10"]
+  }
+  ```
+- **Delivery address** (finding #4): the server copies the chosen saved address or company site into the order. With
+  neither, a company order goes to the company's default delivery site and a personal order to the caller's default
+  shipping address; with no address at all `400`. Someone else's address or another company's site is `404`; both
+  choices at once, or a site without `companyId`, `400`. The old `shipToJson` member is ignored.
+- **Stock**: a line may be served from several active warehouses (finding #3); the order holds it for 30 minutes.
+- **Unpaid orders** (finding #2): at most 3 orders per buyer may wait for payment; the 4th is `409 TOO_MANY_UNPAID_ORDERS`
+  (credit orders are confirmed at once and are not counted). A retry with the same key and body returns the original
+  order with `200`.
+- **Responses**: `201` new order, `200` replay, `400` bad body / address, `403 ACCOUNT_NOT_VERIFIED`,
+  `404` foreign company / address / site, `409 INSUFFICIENT_STOCK | VARIANT_UNAVAILABLE | TOO_MANY_UNPAID_ORDERS |
+  IDEMPOTENCY_KEY_REUSED | COMPANY_NOT_VERIFIED | COMPANY_SUSPENDED | COUPON_*`.
+
+#### `GET /orders/{orderId}` · `POST /orders/{orderId}/cancel` · `POST /orders/{orderId}/payments`
+Owner only; anyone else gets `404`. Cancel needs `{ "reason": "..." }` and works while the order is pending.

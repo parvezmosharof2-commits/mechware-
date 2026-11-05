@@ -42,6 +42,15 @@ public sealed class PostgresFactAttribute : FactAttribute
     }
 }
 
+/// <summary>[Theory] that skips when no local PostgreSQL is reachable.</summary>
+public sealed class PostgresTheoryAttribute : TheoryAttribute
+{
+    public PostgresTheoryAttribute()
+    {
+        if (!TestInfra.PostgresAvailable) Skip = "PostgreSQL not reachable (set MECHWARE_TEST_PG).";
+    }
+}
+
 public sealed class PostgresAndRedisFactAttribute : FactAttribute
 {
     public PostgresAndRedisFactAttribute()

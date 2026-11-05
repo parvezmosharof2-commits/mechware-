@@ -7,7 +7,9 @@ using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ShopVerse.Application.Payments;
+using ShopVerse.Domain.Identity;
 using ShopVerse.Domain.Payments;
+using ShopVerse.Infrastructure.Identity;
 using ShopVerse.Infrastructure.Payments;
 using ShopVerse.Infrastructure.Persistence;
 using ShopVerse.IntegrationTests.Support;
@@ -31,7 +33,27 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
         return client;
     }
 
-    private Task<HttpClient> BuyerAsync() => SignedInAsync("buyer@mechware.com.bd", "BuyerPass#2026!");
+    /// <summary>
+    /// A fresh, verified buyer per test. Sharing the demo buyer across the class let its unpaid orders pile up, so a test's
+    /// outcome would depend on how many ran before it (a buyer may only have a few unpaid orders open).
+    /// </summary>
+    private async Task<HttpClient> BuyerAsync()
+    {
+        string email = $"buyer.{Guid.NewGuid():N}@example.test";
+        const string password = "Buyer#Test2026xyz";
+        var options = new DbContextOptionsBuilder<ShopVerseDbContext>().UseNpgsql(_factory.ConnectionString).Options;
+        await using (var db = new ShopVerseDbContext(options))
+        {
+            var user = User.Create(email, null, new PasswordHasherService().HashPassword(password), "Test Buyer", "en");
+            user.VerifyEmail(DateTime.UtcNow);
+            user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
+            db.Users.Add(user);
+            db.Addresses.Add(TestUsers.DefaultAddress(user.Id));
+            await db.SaveChangesAsync();
+        }
+
+        return await SignedInAsync(email, password);
+    }
 
     private async Task<SeededVariant> SeedAsync(int onHand, long price)
     {
@@ -251,5 +273,24 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
             using var response = await client.SendAsync(Post(json, NewKey()));
             ((int)response.StatusCode).Should().BeInRange(400, 499, $"'{name}' must be the client's error, not a crash");
         }
+    }
+
+    /// <summary>Finding #4 over HTTP: the old free-text address field is no longer read, so junk in it cannot reach the database.</summary>
+    [PostgresFact]
+    public async Task TheOldFreeTextAddressField_IsIgnored_InvalidJsonIsNoLonger500_AndTheSavedAddressIsUsed()
+    {
+        var v = await SeedAsync(onHand: 5, price: 100_000);
+        var client = await BuyerAsync();
+        var junk = "not json {" + new string('x', 2_000_000);
+
+        using var response = await client.SendAsync(Post($$"""{ "shipToJson": {{JsonSerializer.Serialize(junk)}}, "lines": [ { "variantId": "{{v.VariantId}}", "quantity": 1 } ] }""", NewKey()));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var orderId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data").GetProperty("orderId").GetGuid();
+        var options = new DbContextOptionsBuilder<ShopVerseDbContext>().UseNpgsql(_factory.ConnectionString).Options;
+        await using var db = new ShopVerseDbContext(options);
+        var stored = await db.Orders.AsNoTracking().Where(o => o.Id == orderId).Select(o => o.ShipToJson).SingleAsync();
+        stored.Length.Should().BeLessThan(1_000);
+        JsonDocument.Parse(stored).RootElement.GetProperty("recipientName").GetString().Should().Be("Engr. Test Receiver");
     }
 }

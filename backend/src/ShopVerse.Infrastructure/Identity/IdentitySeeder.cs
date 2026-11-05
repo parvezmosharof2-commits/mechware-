@@ -60,7 +60,7 @@ public sealed class IdentitySeeder(ShopVerseDbContext db, IPasswordHasherService
 
     private async Task SeedDemoAccountsAsync(CancellationToken cancellationToken)
     {
-        if (await EmailExistsAsync("admin@mechware.com.bd", cancellationToken))
+        if (await EmailExistsAsync(PublishedDemoCredentials.AdminEmail, cancellationToken))
         {
             return;
         }
@@ -68,32 +68,32 @@ public sealed class IdentitySeeder(ShopVerseDbContext db, IPasswordHasherService
         var now = DateTime.UtcNow;
 
         var admin = User.Create(
-            "admin@mechware.com.bd", "+8801711000001", passwordHasher.HashPassword("MechAdmin#2026!"),
+            PublishedDemoCredentials.AdminEmail, "+8801711000001", passwordHasher.HashPassword("MechAdmin#2026!"),
             "Parvez Mosharof (Principal Admin)", "en");
         admin.VerifyEmail(now);
         admin.VerifyPhone(now);
         admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
         var recoveryHashes = new[] { totpService.HashRecoveryCode("ABCDE-12345") };
-        admin.ConfigureTwoFactorSecret("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", JsonSerializer.Serialize(recoveryHashes), now);
+        admin.ConfigureTwoFactorSecret(PublishedDemoCredentials.AdminTotpSecret, JsonSerializer.Serialize(recoveryHashes), now);
         admin.EnableTwoFactor(now);
         db.Users.Add(admin);
 
         var sellerAlpha = User.Create(
-            "seller.alpha@mechware.com.bd", "+8801711000002", passwordHasher.HashPassword("SellerAlpha#2026!"),
+            PublishedDemoCredentials.SellerAlphaEmail, "+8801711000002", passwordHasher.HashPassword("SellerAlpha#2026!"),
             "Dhaka Heavy Pneumatics Ltd.", "en", IdentityService.SellerAlphaId);
         sellerAlpha.VerifyEmail(now);
         sellerAlpha.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000002"), Permissions.Roles.Seller);
         db.Users.Add(sellerAlpha);
 
         var sellerBeta = User.Create(
-            "seller.beta@mechware.com.bd", "+8801711000003", passwordHasher.HashPassword("SellerBeta#2026!"),
+            PublishedDemoCredentials.SellerBetaEmail, "+8801711000003", passwordHasher.HashPassword("SellerBeta#2026!"),
             "Chattogram Marine Automation", "bn", IdentityService.SellerBetaId);
         sellerBeta.VerifyEmail(now);
         sellerBeta.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000002"), Permissions.Roles.Seller);
         db.Users.Add(sellerBeta);
 
         var buyer = User.Create(
-            "buyer@mechware.com.bd", "+8801711000004", passwordHasher.HashPassword("BuyerPass#2026!"),
+            PublishedDemoCredentials.BuyerEmail, "+8801711000004", passwordHasher.HashPassword("BuyerPass#2026!"),
             "Gazipur Textile Mills Procurement", "en");
         buyer.VerifyEmail(now);
         buyer.VerifyPhone(now);

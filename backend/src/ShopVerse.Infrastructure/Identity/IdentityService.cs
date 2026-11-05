@@ -51,22 +51,26 @@ public sealed class IdentityService : IIdentityService
         _passwordHasher.ValidatePasswordPolicy(request.Password);
 
         string normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        if (await _db.Users.AnyAsync(u => u.DeletedAtUtc == null && u.Email == normalizedEmail, cancellationToken))
-        {
-            throw new ValidationException("email", "An account with this email address already exists.");
-        }
+        string? normalizedPhone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
 
-        if (!string.IsNullOrWhiteSpace(request.Phone))
-        {
-            string normalizedPhone = request.Phone.Trim();
-            if (await _db.Users.AnyAsync(u => u.DeletedAtUtc == null && u.Phone == normalizedPhone, cancellationToken))
-            {
-                throw new ValidationException("phone", "An account with this phone number already exists.");
-            }
-        }
-
+        // Hashing first keeps both outcomes equally slow, so timing does not tell them apart either.
         string passwordHash = _passwordHasher.HashPassword(request.Password);
-        var user = User.Create(normalizedEmail, request.Phone?.Trim(), passwordHash, request.FullName, request.Locale);
+
+        // Every validation runs before the existence check (User.Create validates e-mail, phone, name and locale), so an
+        // invalid request is refused the same way whether or not the account exists: otherwise "fullName: X" answering
+        // 201 for a taken e-mail and 400 for a free one would still tell them apart.
+        var user = User.Create(normalizedEmail, normalizedPhone, passwordHash, request.FullName, request.Locale);
+
+        // Finding #5 of the 2026-11-04 test: registration said "an account with this email address already exists",
+        // which tells anyone whether an e-mail or phone number is a customer here. It now answers exactly as for a new
+        // account; the owner keeps their account, no second one is created, and the attempt is audited.
+        bool taken = await _db.Users.AnyAsync(u => u.DeletedAtUtc == null
+            && (u.Email == normalizedEmail || (normalizedPhone != null && u.Phone == normalizedPhone)), cancellationToken);
+        if (taken)
+        {
+            return await IndistinguishableFromNewRegistrationAsync(normalizedEmail, normalizedPhone, clientIp, cancellationToken);
+        }
+
         user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
         _db.Users.Add(user);
 
@@ -83,8 +87,9 @@ public sealed class IdentityService : IIdentityService
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // Two requests raced past the checks above; the unique index is the real guard.
-            throw new ValidationException("email", "An account with this email address or phone number already exists.");
+            // Two requests raced past the check above; the unique index is the real guard. Same answer as above.
+            _db.ChangeTracker.Clear();
+            return await IndistinguishableFromNewRegistrationAsync(normalizedEmail, normalizedPhone, clientIp, cancellationToken);
         }
 
         if (verifyByPhone)
@@ -103,6 +108,26 @@ public sealed class IdentityService : IIdentityService
             300);
 
         return (response, rawCode);
+    }
+
+    /// <summary>
+    /// The answer to a registration whose e-mail or phone already has an account: shaped exactly like a new registration
+    /// (random user id, random reference, same channel rule), so nothing in it reveals the existing account. No code is
+    /// stored, so the reference can never be verified. The attempt is audited without naming the existing account.
+    /// </summary>
+    private async Task<(RegisterResponseDto Response, string RawOtpForDev)> IndistinguishableFromNewRegistrationAsync(
+        string email, string? phone, string? clientIp, CancellationToken cancellationToken)
+    {
+        RecordAudit(null, clientIp, "user.registration_for_existing_account", "users", "-", null, new { channel = phone is null ? "email" : "phone" });
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var response = new RegisterResponseDto(
+            Guid.NewGuid(),
+            "pending_verification",
+            phone is null ? "email_otp" : "phone_otp",
+            $"ref_{Guid.NewGuid():N}"[..16],
+            300);
+        return (response, string.Empty);
     }
 
     public async Task<(SendOtpResponseDto Response, string RawOtpForDev)> SendOtpAsync(

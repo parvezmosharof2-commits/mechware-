@@ -535,7 +535,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         var (company, creditBuyer) = await CreditCompanyAsync(500_000);
         var v = await SeedAsync(20, 100_000);
         var unpaid = new List<Guid>();
-        for (var i = 0; i < 4; i++) unpaid.Add((await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 1))))).OrderId);
+        for (var i = 0; i < PlaceOrderRequest.MaxOpenUnpaidOrdersPerBuyer; i++) unpaid.Add((await With(s => s.PlaceAsync(Req(buyer, Key(), (v.VariantId, 1))))).OrderId);
         var creditOrder = await With(s => s.PlaceAsync(OnCredit(creditBuyer, company, v.VariantId)));
 
         await using (var db = fixture.CreateContext())

@@ -119,23 +119,18 @@ public sealed class InventoryService : IInventoryService
             x => PricingEngine.Quote(PricingInput.From(x.Variant, x.VatRate), now, TaxMode.Inclusive).Gross.ToMinorUnits());
 
         var shortfalls = new List<InsufficientStockLine>();
-        var plan = new List<(InventoryItem Item, ReservationLine Line)>();
+        var plan = new List<(InventoryItem Item, ReservationLine Line, int Quantity)>();
         foreach (var line in lines)
         {
-            var candidates = items.Where(i => i.VariantId == line.VariantId).ToList();
-            var chosen = candidates
-                .Where(i => i.CanReserve(line.Quantity))
-                .OrderByDescending(i => i.Available)
-                .ThenBy(i => i.WarehouseId)
-                .FirstOrDefault();
-            if (chosen is null)
+            var allocation = Allocate(items.Where(i => i.VariantId == line.VariantId).ToList(), line.Quantity);
+            if (allocation is null)
             {
-                var best = candidates.Count == 0 ? 0 : candidates.Max(i => i.Available);
-                shortfalls.Add(new InsufficientStockLine(line.VariantId, line.Quantity, best));
+                var total = items.Where(i => i.VariantId == line.VariantId).Sum(i => Math.Max(i.Available, 0));
+                shortfalls.Add(new InsufficientStockLine(line.VariantId, line.Quantity, total));
             }
             else
             {
-                plan.Add((chosen, line));
+                plan.AddRange(allocation.Select(a => (a.Item, line, a.Quantity)));
             }
         }
 
@@ -147,11 +142,11 @@ public sealed class InventoryService : IInventoryService
         }
 
         var ids = new List<Guid>();
-        foreach (var (item, line) in plan)
+        foreach (var (item, line, quantity) in plan)
         {
-            if (!item.TryReserve(line.Quantity)) throw new InvalidOperationException("Row-locked reservation failed unexpectedly.");
+            if (!item.TryReserve(quantity)) throw new InvalidOperationException("Row-locked reservation failed unexpectedly.");
             var reservation = new StockReservation(
-                Guid.NewGuid(), line.VariantId, item.WarehouseId, request.ReferenceId, line.Quantity,
+                Guid.NewGuid(), line.VariantId, item.WarehouseId, request.ReferenceId, quantity,
                 unitPrices[line.VariantId], now, ttl);
             _db.StockReservations.Add(reservation);
             ids.Add(reservation.Id);
@@ -161,6 +156,27 @@ public sealed class InventoryService : IInventoryService
         await tx.CommitAsync(ct);
         _db.ChangeTracker.Clear();
         return ReserveStockResult.Ok(ids, now + ttl);
+    }
+
+    /// <summary>
+    /// Decides which warehouses a line is held in: largest balance first, then the lowest warehouse id. A warehouse that can
+    /// supply the whole line therefore takes all of it (one parcel); only when none can is the line split, so the buyer can
+    /// have everything the storefront shows as available across active warehouses (finding #3 of the 2026-11-04 test: the
+    /// storefront summed every warehouse but checkout only ever used one). Null when they do not have enough together.
+    /// </summary>
+    internal static List<(InventoryItem Item, int Quantity)>? Allocate(IReadOnlyList<InventoryItem> balances, int quantity)
+    {
+        var allocation = new List<(InventoryItem Item, int Quantity)>();
+        var remaining = quantity;
+        foreach (var item in balances.Where(i => i.Available > 0).OrderByDescending(i => i.Available).ThenBy(i => i.WarehouseId))
+        {
+            var take = Math.Min(item.Available, remaining);
+            allocation.Add((item, take));
+            remaining -= take;
+            if (remaining == 0) return allocation;
+        }
+
+        return null;
     }
 
     public Task<int> CommitAsync(Guid referenceId, CancellationToken ct = default) =>

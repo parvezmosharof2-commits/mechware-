@@ -67,17 +67,22 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 });
 
 // 2.2 Forwarded Headers Options (HIGH-03: reverse-proxy client IP for rate limiting)
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// Behind Cloudflare / a load balancer set ForwardedHeaders:KnownNetworks (see ForwardedHeadersSettings), or every visitor
+// shares the proxy's address and its rate limits.
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = 1;
-
-    if (builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing")
+    var forwarded = new ForwardedHeadersOptions();
+    ForwardedHeadersSettings.Apply(forwarded, builder.Configuration,
+        trustAnyProxy: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing");
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
+        options.ForwardedHeaders = forwarded.ForwardedHeaders;
+        options.ForwardLimit = forwarded.ForwardLimit;
         options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
-    }
-});
+        foreach (var network in forwarded.KnownIPNetworks) options.KnownIPNetworks.Add(network);
+        foreach (var proxy in forwarded.KnownProxies) options.KnownProxies.Add(proxy);
+    });
+}
 
 // 2.3 Phase 3 Identity, Persistence & RBAC Registration
 builder.Services.AddHttpContextAccessor();
@@ -128,6 +133,7 @@ var bootstrapAdmin = BootstrapAdminSettings.FromValues(
     builder.Configuration["Identity:BootstrapAdmin:Password"],
     builder.Configuration["Identity:BootstrapAdmin:TotpSecret"]);
 builder.Services.AddScoped<IdentitySeeder>();
+builder.Services.AddScoped<DemoAccountGuard>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
 
 builder.Services
@@ -258,14 +264,22 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Accounts an environment starts with live in the database. Nothing is touched when there is nothing to seed, so an
-// environment without demo accounts or a bootstrap administrator starts without needing the database at boot.
+// Accounts an environment starts with live in the database. Outside Development the database is read at boot to make
+// sure no account with a published demo credential exists, so the API needs the database to start there.
 {
     var seedPolicy = app.Services.GetRequiredService<IdentitySeedPolicy>();
     if (seedPolicy.SeedDemoAccounts || bootstrapAdmin is not null)
     {
         using var seedScope = app.Services.CreateScope();
         await seedScope.ServiceProvider.GetRequiredService<IdentitySeeder>().SeedAsync(seedPolicy, bootstrapAdmin);
+    }
+
+    // Not seeding demo accounts is not enough: a database that ever ran in Development still has them. Fail closed.
+    if (!seedPolicy.SeedDemoAccounts)
+    {
+        using var guardScope = app.Services.CreateScope();
+        await guardScope.ServiceProvider.GetRequiredService<DemoAccountGuard>()
+            .EnsureNoPublishedCredentialAccountsAsync(app.Environment.EnvironmentName);
     }
 }
 
