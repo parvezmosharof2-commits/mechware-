@@ -139,6 +139,7 @@ var bootstrapAdmin = BootstrapAdminSettings.FromValues(
 builder.Services.AddScoped<IdentitySeeder>();
 builder.Services.AddScoped<DemoAccountGuard>();
 builder.Services.AddScoped<IIdentityService, IdentityService>();
+builder.Services.AddScoped<ISessionValidator, SessionValidator>();
 // Google sign-in exists only where a client id is configured; without one the endpoint answers GOOGLE_SIGNIN_DISABLED.
 string? googleClientId = builder.Configuration["Authentication:Google:ClientId"];
 if (!string.IsNullOrWhiteSpace(googleClientId))

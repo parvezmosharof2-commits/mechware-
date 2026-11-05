@@ -432,13 +432,13 @@ public sealed class IdentityService : IIdentityService
         }
 
         User? user = await _db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == storedToken.UserId, cancellationToken);
-        if (user is null || user.DeletedAtUtc.HasValue || user.Status is UserStatus.Banned or UserStatus.Suspended)
+        if (user is null || user.DeletedAtUtc.HasValue || AccountRules.IsDisabled(user.Status))
         {
             throw new UnauthorizedAccessException("User account is no longer active.");
         }
 
         // A role that now demands an authenticator ends sessions begun without one: the person must sign in and enrol.
-        if (RequiresSecondFactor(user) && !user.TwoFactorEnabled)
+        if (AccountRules.MustEnrollSecondFactor(user.TwoFactorEnabled, GetUserRoles(user)))
         {
             // Revoked, not just refused: otherwise these sessions would come back to life once the person enrols, without
             // ever having been through the second factor.
@@ -456,7 +456,7 @@ public sealed class IdentityService : IIdentityService
             {
                 IReadOnlyList<string> roles = GetUserRoles(user);
                 IReadOnlyList<string> permissions = GetUserPermissions(roles);
-                string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, now);
+                string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, now, storedToken.FamilyId);
 
                 return new AuthTokenResponseDto(
                     accessToken,
@@ -504,7 +504,7 @@ public sealed class IdentityService : IIdentityService
 
         IReadOnlyList<string> userRoles = GetUserRoles(user);
         IReadOnlyList<string> userPermissions = GetUserPermissions(userRoles);
-        string newAccessToken = _tokenService.GenerateAccessToken(user, userRoles, userPermissions, now);
+        string newAccessToken = _tokenService.GenerateAccessToken(user, userRoles, userPermissions, now, storedToken.FamilyId);
 
         await _db.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
@@ -695,7 +695,7 @@ public sealed class IdentityService : IIdentityService
         }
 
         User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
-        if (user.Status is UserStatus.Suspended or UserStatus.Banned)
+        if (AccountRules.IsDisabled(user.Status))
         {
             throw new ForbiddenException("ACCOUNT_DISABLED", "This account is not active.");
         }
@@ -783,7 +783,7 @@ public sealed class IdentityService : IIdentityService
 
     private static void RequireSelfServiceEnrollment(User user)
     {
-        if (GetUserRoles(user).Any(Permissions.Roles.RequiresMandatoryTwoFactor))
+        if (AccountRules.RequiresSecondFactor(false, GetUserRoles(user)))
         {
             throw new ForbiddenException("STAFF_ENROLL_WITH_SETUP_CODE",
                 "Staff set up their authenticator at sign-in with a setup code from an administrator.");
@@ -891,7 +891,8 @@ public sealed class IdentityService : IIdentityService
         RevokeSessionsRequestDto request,
         string? clientIp = null,
         string? currentRawRefreshToken = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Guid? currentSessionId = null)
     {
         var now = DateTime.UtcNow;
         string? currentHash = string.IsNullOrWhiteSpace(currentRawRefreshToken)
@@ -904,23 +905,29 @@ public sealed class IdentityService : IIdentityService
                 .Where(rt => rt.UserId == userId && rt.TokenHash == currentHash)
                 .Select(rt => (Guid?)rt.FamilyId)
                 .FirstOrDefaultAsync(cancellationToken);
+        // Without the cookie (a bearer-only client, a blocked cookie) the access token's own session id says which one is current.
+        currentFamilyId ??= currentSessionId;
 
         IQueryable<RefreshToken> targets = _db.RefreshTokens.Where(rt => rt.UserId == userId && !rt.IsRevoked);
 
         if (request.SessionId.HasValue)
         {
+            // A session is a whole token family: naming one of its tokens ends all of them, so no older token keeps it alive.
             Guid sessionId = request.SessionId.Value;
-            targets = targets.Where(rt => rt.Id == sessionId || rt.FamilyId == sessionId);
+            Guid family = await _db.RefreshTokens.Where(rt => rt.UserId == userId && rt.Id == sessionId)
+                .Select(rt => (Guid?)rt.FamilyId).FirstOrDefaultAsync(cancellationToken) ?? sessionId;
+            targets = targets.Where(rt => rt.FamilyId == family);
         }
         else if (request.RevokeAllExceptCurrent && currentFamilyId.HasValue)
         {
             Guid family = currentFamilyId.Value;
             targets = targets.Where(rt => rt.FamilyId != family);
         }
-        else if (!request.RevokeAll && currentFamilyId.HasValue)
+        else if (!request.RevokeAll)
         {
-            Guid family = currentFamilyId.Value;
-            targets = targets.Where(rt => rt.FamilyId == family);
+            // "This session only": if it cannot be told which one that is, end none rather than all of them.
+            Guid? family = currentFamilyId;
+            targets = family.HasValue ? targets.Where(rt => rt.FamilyId == family.Value) : targets.Where(_ => false);
         }
 
         List<RefreshToken> tokens = await targets.ToListAsync(cancellationToken);
@@ -1189,7 +1196,7 @@ public sealed class IdentityService : IIdentityService
         IReadOnlyList<string> roles = GetUserRoles(user);
         IReadOnlyList<string> permissions = GetUserPermissions(roles);
 
-        string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, utcNow);
+        string accessToken = _tokenService.GenerateAccessToken(user, roles, permissions, utcNow, familyId);
         string rawRefreshToken = _tokenService.GenerateRawRefreshToken();
         string refreshTokenHash = _tokenService.HashToken(rawRefreshToken);
 
@@ -1342,12 +1349,11 @@ public sealed class IdentityService : IIdentityService
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     /// <summary>Whether a session needs the password and a TOTP or recovery code: the user turned 2FA on, or a role demands it.</summary>
-    private static bool RequiresSecondFactor(User user) =>
-        user.TwoFactorEnabled || GetUserRoles(user).Any(Permissions.Roles.RequiresMandatoryTwoFactor);
+    private static bool RequiresSecondFactor(User user) => AccountRules.RequiresSecondFactor(user.TwoFactorEnabled, GetUserRoles(user));
 
     /// <summary>Why this account may not start a session right now (suspended, banned, locked), or null when it may.</summary>
     private static Exception? SessionRefusal(User user, DateTime utcNow) =>
-        user.Status is UserStatus.Suspended or UserStatus.Banned or UserStatus.Deleted
+        AccountRules.IsDisabled(user.Status)
             ? new ForbiddenException("ACCOUNT_DISABLED", "This account is not active.")
             : user.IsLockedOut(utcNow)
                 ? new UnauthorizedAccessException($"Account is temporarily locked due to multiple failed login attempts until {user.LockoutUntilUtc:O}.")
@@ -1356,17 +1362,10 @@ public sealed class IdentityService : IIdentityService
     private static ForbiddenException PasswordAndSecondFactorRequired() =>
         new("PASSWORD_AND_2FA_REQUIRED", "This account signs in with its password and an authenticator code.");
 
-    private static IReadOnlyList<string> GetUserRoles(User user)
-    {
-        List<string> roles = user.UserRoles.Select(ur => ur.RoleName).Distinct().ToList();
-        return roles.Count > 0 ? roles.AsReadOnly() : [Permissions.Roles.Buyer];
-    }
+    private static IReadOnlyList<string> GetUserRoles(User user) =>
+        AccountRules.EffectiveRoles(user.UserRoles.Select(ur => ur.RoleName));
 
-    private static IReadOnlyList<string> GetUserPermissions(IReadOnlyList<string> roles) =>
-        roles.SelectMany(Permissions.GetDefaultPermissionsForRole)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList()
-            .AsReadOnly();
+    private static IReadOnlyList<string> GetUserPermissions(IReadOnlyList<string> roles) => AccountRules.PermissionsFor(roles);
 
     private static AuthenticatedUserDto MapUserDto(User user)
     {
