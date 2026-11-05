@@ -38,6 +38,13 @@ public class RefundRulesTests
         method.GetCustomAttributes<RequirePermissionAttribute>().Select(a => a.Permission).Should().Equal(permission);
     }
 
+    [Fact]
+    public void RejectingACompany_NeedsCompaniesManage()
+    {
+        var method = typeof(AdminCompaniesController).GetMethod(nameof(AdminCompaniesController.Reject), BindingFlags.Public | BindingFlags.Instance)!;
+        method.GetCustomAttributes<RequirePermissionAttribute>().Select(a => a.Permission).Should().Equal(Permissions.CompaniesManage);
+    }
+
     private static Refund NewRefund(Guid asker) => new(Guid.NewGuid(), Guid.NewGuid(), 1_000, "BDT", "Order cancelled", asker, Now);
 
     [Fact]

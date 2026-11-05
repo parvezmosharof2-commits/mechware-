@@ -7,7 +7,7 @@ public sealed record MoneyDto(long MinorUnits, string Currency);
 public sealed record CompanyDto(
     Guid Id, string LegalName, string TradeLicenceNo, string Bin, string? Tin, string? Industry,
     string Status, string CreditTerms, MoneyDto CreditLimit, MoneyDto CreditUsed, MoneyDto CreditAvailable,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc, string? RejectionReason = null);
 
 /// <summary>A company as seen by one of its members, with that member's own roles.</summary>
 public sealed record MyCompanyDto(CompanyDto Company, CompanyRoles Roles);
@@ -68,5 +68,10 @@ public interface ICompanyService
     Task<CompanyDto> AdminGetAsync(Guid companyId, CancellationToken ct = default);
     Task<CompanyDto> AdminActivateAsync(Guid companyId, CancellationToken ct = default);
     Task<CompanyDto> AdminSuspendAsync(Guid companyId, CancellationToken ct = default);
+
+    /// <summary>Refuses a pending registration with a reason and frees its BIN (threat model v1, H2).</summary>
+    Task<CompanyDto> AdminRejectAsync(Guid companyId, RejectCompanyRequest request, CancellationToken ct = default);
     Task<CompanyDto> AdminSetCreditAsync(Guid companyId, SetCreditRequest request, CancellationToken ct = default);
 }
+
+public sealed record RejectCompanyRequest(string Reason);

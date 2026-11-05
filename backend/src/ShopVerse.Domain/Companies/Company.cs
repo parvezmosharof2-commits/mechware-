@@ -26,6 +26,9 @@ public sealed class Company : AggregateRoot<Guid>
     public Guid? DefaultPriceListId { get; private set; }
     public Guid? AccountManagerId { get; private set; }
 
+    /// <summary>Why MECHWARE refused the registration; shown to the registrant.</summary>
+    public string? RejectionReason { get; private set; }
+
     public Money CreditLimit => Money.FromMinorUnits(CreditLimitMinor, Currency);
     public Money CreditUsed => Money.FromMinorUnits(CreditUsedMinor, Currency);
     public Money CreditAvailable => CreditLimit - CreditUsed;
@@ -63,13 +66,29 @@ public sealed class Company : AggregateRoot<Guid>
 
     public void Activate()
     {
+        if (Status == CompanyStatus.Rejected)
+            throw new ConflictException("COMPANY_REJECTED", "A rejected registration cannot be activated; the company must register again.");
         if (Status == CompanyStatus.Active) return;
         Status = CompanyStatus.Active;
         Touch();
     }
 
+    /// <summary>Refuses a registration that was never verified, and frees its BIN for the real owner.</summary>
+    public void Reject(string reason)
+    {
+        if (Status != CompanyStatus.Pending)
+            throw new ConflictException("COMPANY_NOT_PENDING", "Only a registration waiting for verification can be rejected; suspend an active company instead.");
+        var trimmed = (reason ?? string.Empty).Trim();
+        if (trimmed.Length is < 5 or > 500) throw new ValidationException("reason", "Give a reason of 5 to 500 characters.");
+        Status = CompanyStatus.Rejected;
+        RejectionReason = trimmed;
+        Touch();
+    }
+
     public void Suspend()
     {
+        if (Status == CompanyStatus.Rejected)
+            throw new ConflictException("COMPANY_REJECTED", "A rejected registration cannot be suspended.");
         if (Status == CompanyStatus.Suspended) return;
         Status = CompanyStatus.Suspended;
         Touch();

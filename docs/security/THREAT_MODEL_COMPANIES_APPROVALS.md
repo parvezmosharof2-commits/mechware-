@@ -98,13 +98,38 @@ placement itself must refuse to proceed while an approval is pending / rejected 
   - client-side amount
   - request not withdrawn on cancel
 
-### H2. Company-registration abuse and BIN squatting (High) [CODE]
+### H2. Company-registration abuse and BIN squatting (High) [CODE] — **FIXED 2026-11-05** (KYC documents still open)
 Any signed-in user can register any number of companies (`CompanyService.RegisterAsync`, no per-user cap, only
 the global 100 requests/min/IP limit). BIN is globally unique (`ux_companies_bin`, `COMPANY_BIN_EXISTS`), so
 someone can register a real firm's BIN first and lock the real firm out. Staff can only verify or **suspend**; there is
 no reject / release / dispute, and no document check. Fix direction: a per-user cap and a registration rate
 limit, staff "reject and release BIN", KYC document upload before a BIN is held, and a way for the real owner to
 dispute.
+
+**Fix (2026-11-05):**
+- **Reject frees the BIN:** staff (`companies.manage`) can reject a pending registration with a reason, via
+  `POST /admin/companies/{id}/reject`.
+  - The company becomes `rejected`; the registrant sees the reason.
+  - Its **BIN is freed**: `ux_companies_bin` is now a partial unique index that skips rejected rows.
+  - The real owner can then register; the rejected record stays for the audit trail.
+- **A rejected company is dead:** it cannot be activated, suspended or used (`COMPANY_REJECTED` on every member write).
+- **Pending cap:** one account may hold at most 2 unverified registrations (`TOO_MANY_PENDING_COMPANIES`). A per-registrant
+  transaction lock keeps the count exact under parallel requests.
+
+**Evidence:**
+- TEST: `IT/Companies/CompanyRegistrationAbuseTests.cs` (6 tests, including racing firms for a released BIN and parallel
+  registrations by one account), `UT/Payments/RefundRulesTests.RejectingACompany_NeedsCompaniesManage`.
+- **Mutation check:** 6 mutants, all caught:
+  - BIN check ignores rejection
+  - no pending cap
+  - rejected company activatable
+  - rejected company usable
+  - active company rejectable
+  - no lock (fails 3 out of 3 runs)
+
+**Still open:**
+- KYC document upload before a BIN is held.
+- A dispute path for the real owner (they contact MECHWARE today).
 
 ### H3. No step-up or second person for credit changes; audit is not tamper-evident (High) [CODE]
 Brief §11.1 requires step-up authentication for credit limits. `PUT /admin/companies/{id}/credit` needs only

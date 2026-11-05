@@ -30,5 +30,7 @@ internal static class CompanyAccess
                      ?? throw new KeyNotFoundException("Company not found.");
         if (status == CompanyStatus.Suspended)
             throw new ConflictException("COMPANY_SUSPENDED", "The company account is suspended.");
+        if (status == CompanyStatus.Rejected)
+            throw new ConflictException("COMPANY_REJECTED", "MECHWARE did not accept this company's registration.");
     }
 }
