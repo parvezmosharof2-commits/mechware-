@@ -105,3 +105,10 @@ We implement a **Two-Phase Inventory Reservation Pattern** with tiered concurren
 
 ### Negative:
 - Database row-level locking introduces minor serialization queues under extreme load (tested up to 5,000 concurrent checkouts via k6).
+
+## Amendment (2026-11-05): holds for orders waiting for approval
+
+A company order that an approval rule covers (threat model v1, H1) holds its stock while it waits: up to 24 hours for the
+approval, plus the 30 minutes the buyer then has to pay. The maximum reservation TTL is therefore 24 h 30 min. Ordinary
+checkouts still hold for 30 minutes. Only server code sets a TTL; no endpoint accepts one. Abuse stays bounded by the
+open-order cap per buyer (orders waiting for approval count towards it) and by company membership.

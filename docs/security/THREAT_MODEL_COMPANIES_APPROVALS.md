@@ -59,12 +59,44 @@ seeding restored, 2 unit and 2 integration tests fail, with the fix they pass.
   addresses in Development.
 - The browser E2E and CI run the API in Development, so they are unaffected.
 
-### H1. Approvals enforce nothing yet, and the amount is client-supplied (High, design rule for Phase 8) [CODE]
+### H1. Approvals enforce nothing yet, and the amount is client-supplied (High, design rule for Phase 8) [CODE] — **FIXED 2026-11-05**, see "Fix" below
 `ApprovalService.SubmitAsync` trusts `amountMinor` from the caller, and when no rule matches it only returns
 `approvalRequired: false`: nothing stops an order from proceeding without approval, because orders do not
 exist. Rules for Phase 8: (1) the server computes the total from the cart/order, never from the client; (2) order
 placement itself must refuse to proceed while an approval is pending / rejected / absent when a rule matches;
 (3) the approval request must be created in the same transaction as the order and reference it.
+
+**Fix (2026-11-05):** all three rules hold.
+- **Placement:** a company order is matched against the company's active approval rules with the **server's own total**,
+  plus the optional cost centre (which must belong to the company, else 404) and the order's categories. When a rule
+  matches, the order starts `pending_approval`, and its `ApprovalRequest` (subject `order`, amount = grand total) is
+  created in the **same transaction** as the order.
+- **No paying around it:** an order waiting for approval cannot be paid (`ORDER_NOT_PAYABLE`). A credit order holds
+  **no credit until approved**.
+- **Approved:** the order becomes payable, and its 30 minutes to pay (`orders.payment_due_at`) start at the approval.
+  A credit order is confirmed with the credit held then; if the credit no longer covers it, it is cancelled rather than
+  overdrawn.
+- **Rejected or withdrawn:** the order is cancelled and its stock freed.
+- **Nobody decides within 24 hours:** the order lapses and its request leaves the inbox. Stock is held for up to
+  24 h 30 min (ADR 0004 amendment).
+- **Missed decision:** a decision that was not applied at once (crash) is applied by the minute sweep.
+- **Buyer cancels a waiting order:** its request is withdrawn too.
+- **Open-order cap:** orders waiting for approval count towards it.
+- **No client-made order approvals:** `POST …/approvals` refuses subject type `order`, so a client cannot create an
+  order approval with its own amount.
+
+**Evidence:**
+- TEST: `IT/Orders/OrderApprovalTests.cs` (10 tests).
+- **Mutation check:** 9 mutants, all caught:
+  - no rule lookup
+  - credit held at placement
+  - payment clock not restarted
+  - decision not applied
+  - no 24-hour lapse
+  - cap ignoring waiting orders
+  - order subject accepted from clients
+  - client-side amount
+  - request not withdrawn on cancel
 
 ### H2. Company-registration abuse and BIN squatting (High) [CODE]
 Any signed-in user can register any number of companies (`CompanyService.RegisterAsync`, no per-user cap, only

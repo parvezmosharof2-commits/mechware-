@@ -28,7 +28,7 @@
 | স্টক double-booking (oversell) নয় | V2.3.4 (L2) | ✅ | `IT/Catalog/InventoryConcurrencyTests.cs`, `InventoryChaosTests.cs`, `MultiWarehouseReservationTests.RacingSplitReservations_NeverOversell` | — |
 | অর্ডারের ঠিকানা যাচাই | V2.2.1 (L1) | ✅ | `IT/Orders/ShipToTests.cs`, `OrdersApiTests.TheOldFreeTextAddressField_…` (বাগ #৪) | — |
 | স্টক hoarding (abuse) | V2.4.1 (L2) | ✅ | `IT/Orders/StockHoardingTests.cs` (বাগ #২) | CAPTCHA (স্প্রিন্ট ১৭–১৮) |
-| Approval bypass; বড় অর্ডারে একাধিক জনের অনুমোদন | V2.3.1 (L1), V2.3.5 (L3) | 🔴 | threat model H1: approval অর্ডারের সাথে যুক্ত নয় | স্প্রিন্ট ৭–৯ |
+| Approval bypass; বড় অর্ডারে একাধিক জনের অনুমোদন | V2.3.1 (L1), V2.3.5 (L3) | ✅ | `IT/Orders/OrderApprovalTests.cs` (১০টা টেস্ট, ৯টা mutant সবগুলো ধরা পড়েছে): সার্ভারের মোট দিয়ে নিয়ম মেলানো, অর্ডার আর approval একই transaction-এ, অনুমোদনের আগে payment বা credit নয় | step-up auth (স্প্রিন্ট ১৫–১৬) |
 | কোটেশন ও কোম্পানির price list: snapshot দাম, একবার গ্রহণ, 4-eyes | V2.2.2 (L1), V2.3.1 (L1), V2.3.5 (L3) | ❌ | threat model v2 Q1–Q9, R3 (নিয়ম) | স্প্রিন্ট ৭–৯ |
 | মূসক-৬.৩ ইনভয়েস: ফাঁকহীন ক্রমিক নম্বর, immutable, credit note | V2.3.3 (L2) | ❌ | threat model v2 I1–I10 (নিয়ম) | স্প্রিন্ট ১০–১২ |
 

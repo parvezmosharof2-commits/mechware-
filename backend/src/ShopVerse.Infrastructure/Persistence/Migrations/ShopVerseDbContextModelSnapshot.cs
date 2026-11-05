@@ -1982,6 +1982,14 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("order_number");
 
+                    b.Property<DateTime?>("PaymentDueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("payment_due_at");
+
+                    b.Property<bool>("PaysOnCredit")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pays_on_credit");
+
                     b.Property<DateTime>("PlacedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("placed_at");

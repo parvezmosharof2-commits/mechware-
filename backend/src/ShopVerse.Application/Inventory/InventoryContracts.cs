@@ -10,7 +10,11 @@ public sealed record ReserveStockRequest(Guid ReferenceId, IReadOnlyList<Reserva
 {
     public const int MaxLines = 50;
     public const int MaxQuantityPerLine = 10_000;
-    public static readonly TimeSpan MaxTtl = TimeSpan.FromMinutes(30);
+    /// <summary>
+    /// The longest hold: an order waiting for its company's approval holds stock for up to 24 hours plus the 30 minutes to pay
+    /// after approval (threat model v1, H1; ADR 0004). Ordinary checkouts hold for 30 minutes. Only server code sets a TTL.
+    /// </summary>
+    public static readonly TimeSpan MaxTtl = TimeSpan.FromHours(24) + TimeSpan.FromMinutes(30);
 }
 
 public sealed record InsufficientStockLine(Guid VariantId, int Requested, int Available);

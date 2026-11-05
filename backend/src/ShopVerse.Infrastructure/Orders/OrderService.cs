@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using ShopVerse.Application.Inventory;
 using ShopVerse.Application.Orders;
+using ShopVerse.Domain.Approvals;
 using ShopVerse.Domain.Catalog;
+using ShopVerse.Domain.Companies;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Orders;
 using ShopVerse.Domain.Pricing;
@@ -55,24 +57,31 @@ public sealed partial class OrderService(
 
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, applied) = await PriceAsync(request, lines, mode, now, ct);
+        var (priced, applied, categories) = await PriceAsync(request, lines, mode, now, ct);
+
+        // A company order that one of the company's approval rules covers waits for that approval before it can be paid or
+        // charged to credit (threat model v1, H1). The amount is the server's own total, never a number from the client.
+        var approvalRule = request.CompanyId is { } forCompany
+            ? await FindApprovalRuleAsync(request, forCompany, priced.GrandTotalMinor, categories, ct)
+            : null;
+        var initialStatus = approvalRule is null ? OrderStatus.PendingPayment : OrderStatus.PendingApproval;
 
         // A rare clash of two random order numbers is retried with a fresh one rather than shown to the buyer.
         for (var attempt = 0; ; attempt++)
         {
             var orderId = Guid.NewGuid();
-            var reserved = await ReserveAsync(orderId, lines, ct);
+            var reserved = await ReserveAsync(orderId, lines, approvalRule is null ? UnpaidOrderLifetime : ApprovalHoldLifetime + UnpaidOrderLifetime, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                shipTo, OrderStatus.PendingPayment, now);
+                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
             try
             {
-                await SaveAsync(order, request, applied, now, ct);
-                // Credit orders are confirmed at once (brief §8.5): the held stock becomes a real deduction.
-                if (request.PayOnCredit) await inventory.CommitAsync(orderId, ct);
+                await SaveAsync(order, request, applied, approvalRule, categories, now, ct);
+                // Credit orders that need no approval are confirmed at once (brief §8.5): the held stock becomes a real deduction.
+                if (order.Status == OrderStatus.Confirmed) await inventory.CommitAsync(orderId, ct);
 
                 return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor, reserved, false);
             }
@@ -116,7 +125,7 @@ public sealed partial class OrderService(
         if (request.PayOnCredit) return;
 
         var open = await db.Orders.AsNoTracking()
-            .CountAsync(o => o.UserId == request.UserId && o.Status == OrderStatus.PendingPayment, ct);
+            .CountAsync(o => o.UserId == request.UserId && (o.Status == OrderStatus.PendingPayment || o.Status == OrderStatus.PendingApproval), ct);
         if (open >= PlaceOrderRequest.MaxOpenUnpaidOrdersPerBuyer)
             throw new ConflictException("TOO_MANY_UNPAID_ORDERS",
                 $"You already have {open} orders waiting for payment. Pay or cancel one before placing another.");
@@ -204,31 +213,120 @@ public sealed partial class OrderService(
 
     public static readonly TimeSpan UnpaidOrderLifetime = TimeSpan.FromMinutes(30);
 
+    /// <summary>How long an order waits for its company approval before it lapses and its stock goes back on the shelf.</summary>
+    public static readonly TimeSpan ApprovalHoldLifetime = TimeSpan.FromHours(24);
+
+    /// <summary>The company's rule for this order, if any. A cost centre, when given, must belong to the company.</summary>
+    private async Task<ApprovalRule?> FindApprovalRuleAsync(
+        PlaceOrderRequest request, Guid companyId, long amountMinor, IReadOnlyList<Guid> categories, CancellationToken ct)
+    {
+        if (request.CostCentreId is { } cc && !await db.CostCentres.AnyAsync(c => c.Id == cc && c.CompanyId == companyId, ct))
+            throw new KeyNotFoundException("Cost centre not found.");
+        var rules = await db.ApprovalRules.AsNoTracking().Where(r => r.CompanyId == companyId && r.IsActive).ToListAsync(ct);
+        return ApprovalRule.Select(rules, amountMinor, request.CostCentreId, categories.ToList());
+    }
+
+    public async Task<int> SettleApprovalsAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default)
+    {
+        var ids = await db.Orders.AsNoTracking().Where(o => o.Status == OrderStatus.PendingApproval)
+            .OrderBy(o => o.PlacedAtUtc).Select(o => o.Id).Take(batchSize).ToListAsync(ct);
+        var settled = 0;
+        foreach (var id in ids)
+            if (await ApplyApprovalAsync(id, nowUtc, ct)) settled++;
+        return settled;
+    }
+
+    public Task<bool> ApplyApprovalAsync(Guid orderId, CancellationToken ct = default) =>
+        ApplyApprovalAsync(orderId, clock.GetUtcNow().UtcDateTime, ct);
+
+    /// <summary>
+    /// Moves an order waiting for approval on according to its request: approved becomes payable (or, on credit, confirmed
+    /// with the credit held now); rejected, cancelled or lapsed is cancelled and its stock freed. Safe to repeat: the sweep
+    /// runs it every minute, so an approval decided while the process died is still applied.
+    /// </summary>
+    private async Task<bool> ApplyApprovalAsync(Guid orderId, DateTime now, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var request = await db.ApprovalRequests
+            .Where(r => r.SubjectType == PlaceOrderRequest.ApprovalSubjectType && r.SubjectId == orderId)
+            .OrderByDescending(r => r.CreatedAtUtc).FirstOrDefaultAsync(ct);
+
+        if (request?.Status == ApprovalStatus.Approved) return await ApproveOrderAsync(orderId, now, ct);
+        if (request?.Status is ApprovalStatus.Rejected or ApprovalStatus.Cancelled)
+            return await CancelOneAsync(orderId, null, "The company's approver did not approve this order", now, WaitingForApproval, ct);
+
+        var placedAt = await db.Orders.AsNoTracking().Where(o => o.Id == orderId).Select(o => o.PlacedAtUtc).FirstAsync(ct);
+        if (now - placedAt < ApprovalHoldLifetime) return false;
+
+        // Nobody decided within the hold: the order lapses and so does its request, so it leaves the approvers' inbox.
+        if (request is not null)
+        {
+            request.Expire(now);
+            await db.SaveChangesAsync(ct);
+        }
+        return await CancelOneAsync(orderId, null, "The company did not approve this order within 24 hours", now, WaitingForApproval, ct);
+    }
+
+    private static bool WaitingForApproval(Order o) => o.Status == OrderStatus.PendingApproval;
+
+    private async Task<bool> ApproveOrderAsync(Guid orderId, DateTime now, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var confirmed = false;
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            var order = (await db.Orders.FromSqlInterpolated($"SELECT o.*, o.xmin FROM orders o WHERE o.id = {orderId} FOR UPDATE")
+                .Include(o => o.SubOrders).ToListAsync(ct)).Single();
+            if (order.Status != OrderStatus.PendingApproval) return false;
+
+            order.Approve(null, now + UnpaidOrderLifetime, now);
+            if (order.PaysOnCredit)
+            {
+                var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {order.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
+                try { company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor)); }
+                catch (ConflictException)
+                {
+                    // The credit was used up while the order waited: it cannot go ahead on credit.
+                    await tx.RollbackAsync(ct);
+                    return await CancelOneAsync(orderId, null, "Approved, but the company's credit no longer covers this order", now, WaitingForApproval, ct);
+                }
+                order.Transition(OrderStatus.Confirmed, null, "Placed on credit terms after approval", now);
+                confirmed = true;
+            }
+
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+        }
+
+        if (confirmed) await inventory.CommitAsync(orderId, ct);
+        return true;
+    }
+
     public async Task<OrderDto> CancelAsync(Guid userId, Guid orderId, string reason, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new ValidationException("reason", "A reason is required to cancel an order.");
         var now = clock.GetUtcNow().UtcDateTime;
 
-        if (!await CancelOneAsync(orderId, userId, reason.Trim(), now, onlyIfUnpaidSince: null, ct))
+        if (!await CancelOneAsync(orderId, userId, reason.Trim(), now, onlyIf: null, ct))
             throw new KeyNotFoundException("Order not found.");
         return await GetAsync(userId, orderId, ct);
     }
 
     public async Task<int> ExpireUnpaidAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default)
     {
-        var cutoff = nowUtc - UnpaidOrderLifetime;
         var ids = await db.Orders.AsNoTracking()
-            .Where(o => o.Status == OrderStatus.PendingPayment && o.PlacedAtUtc <= cutoff)
-            .OrderBy(o => o.PlacedAtUtc).Select(o => o.Id).Take(batchSize).ToListAsync(ct);
+            .Where(o => o.Status == OrderStatus.PendingPayment && o.PaymentDueAtUtc <= nowUtc)
+            .OrderBy(o => o.PaymentDueAtUtc).Select(o => o.Id).Take(batchSize).ToListAsync(ct);
 
         var cancelled = 0;
         foreach (var id in ids)
-            if (await CancelOneAsync(id, null, "Payment was not received within 30 minutes", nowUtc, cutoff, ct)) cancelled++;
+            if (await CancelOneAsync(id, null, "Payment was not received within 30 minutes", nowUtc,
+                    o => o.Status == OrderStatus.PendingPayment && o.PaymentDueAtUtc <= nowUtc, ct)) cancelled++;
         return cancelled;
     }
 
-    /// <returns>False when the order is not found (or not the caller's) or, for a sweep, is no longer an overdue unpaid order.</returns>
-    private async Task<bool> CancelOneAsync(Guid orderId, Guid? ownerUserId, string reason, DateTime now, DateTime? onlyIfUnpaidSince, CancellationToken ct)
+    /// <returns>False when the order is not found (or not the caller's) or, for a sweep, no longer matches <paramref name="onlyIf"/>.</returns>
+    private async Task<bool> CancelOneAsync(Guid orderId, Guid? ownerUserId, string reason, DateTime now, Func<Order, bool>? onlyIf, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
         await using (var tx = await db.Database.BeginTransactionAsync(ct))
@@ -240,11 +338,20 @@ public sealed partial class OrderService(
                 .ToListAsync(ct)).SingleOrDefault();
 
             if (order is null || (ownerUserId is not null && order.UserId != ownerUserId)) return false;
-            if (onlyIfUnpaidSince is { } cutoff && (order.Status != OrderStatus.PendingPayment || order.PlacedAtUtc > cutoff)) return false;
+            if (onlyIf is not null && !onlyIf(order)) return false;
 
             // Until stock can be returned to the shelf, only an order whose stock is still merely held may be cancelled.
             if (order.Status is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
                 throw new ConflictException("ORDER_NOT_CANCELLABLE", $"An order that is {ToWire(order.Status)} can no longer be cancelled here.");
+
+            // An order that no longer waits takes its approval request out of the approvers' inbox.
+            if (order.Status == OrderStatus.PendingApproval)
+            {
+                var waiting = await db.ApprovalRequests
+                    .Where(r => r.SubjectType == PlaceOrderRequest.ApprovalSubjectType && r.SubjectId == orderId && r.Status == ApprovalStatus.Pending)
+                    .ToListAsync(ct);
+                foreach (var request in waiting) request.Expire(now);
+            }
 
             order.Transition(OrderStatus.Cancelled, ownerUserId, reason, now);
 
@@ -307,7 +414,7 @@ public sealed partial class OrderService(
 
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
+        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.CostCentreId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -320,11 +427,11 @@ public sealed partial class OrderService(
 
         var order = await db.Orders.AsNoTracking().FirstAsync(o => o.Id == record.OrderId, ct);
         return new PlacedOrder(order.Id, order.OrderNumber, ToWire(order.Status), order.GrandTotalMinor,
-            order.PlacedAtUtc + UnpaidOrderLifetime, true);
+            order.PaymentDueAtUtc ?? order.PlacedAtUtc + ApprovalHoldLifetime, true);
     }
 
 
-    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied)> PriceAsync(
+    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, IReadOnlyList<Guid> Categories)> PriceAsync(
         PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
     {
         var ids = lines.Select(l => l.VariantId).ToList();
@@ -359,7 +466,7 @@ public sealed partial class OrderService(
 
         var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
         var discounted = applied.Lines.Select((d, i) => drafts[i] with { DiscountMinor = d.DiscountMinor }).ToList();
-        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied);
+        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied, categoryOf.Values.Distinct().ToList());
     }
 
     /// <summary>
@@ -442,11 +549,23 @@ public sealed partial class OrderService(
     /// Saves the order in one transaction: for a credit order the company's credit is checked and held first; every promotion
     /// the order uses is claimed with an atomic conditional update, so two orders can never both take the last use.
     /// </summary>
-    private async Task SaveAsync(Order order, PlaceOrderRequest request, IReadOnlyList<AppliedPromotion> applied, DateTime now, CancellationToken ct)
+    private async Task SaveAsync(Order order, PlaceOrderRequest request, IReadOnlyList<AppliedPromotion> applied,
+        ApprovalRule? approvalRule, IReadOnlyList<Guid> categories, DateTime now, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
-        if (request.PayOnCredit)
+        if (approvalRule is not null)
+        {
+            // Created with the order, in the same transaction and pointing at it: an order never waits for an approval that
+            // does not exist, and no approval can be asked for an amount other than the order's.
+            var eligible = (await db.CompanyMembers.AsNoTracking()
+                .Where(m => m.CompanyId == request.CompanyId && m.IsActive && approvalRule.ApproverUserIds.Contains(m.UserId)
+                            && ((m.Roles & CompanyRoles.Approver) != 0 || (m.Roles & CompanyRoles.Admin) != 0))
+                .Select(m => m.UserId).ToListAsync(ct)).ToHashSet();
+            db.ApprovalRequests.Add(ApprovalRequest.Create(Guid.NewGuid(), request.UserId, PlaceOrderRequest.ApprovalSubjectType, order.Id,
+                order.GrandTotalMinor, request.CostCentreId, categories, approvalRule, eligible));
+        }
+        else if (request.PayOnCredit)
         {
             var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {request.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
             company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
@@ -474,11 +593,11 @@ public sealed partial class OrderService(
         await tx.CommitAsync(ct);
     }
 
-    private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, CancellationToken ct)
+    private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, TimeSpan holdFor, CancellationToken ct)
     {
         var result = await inventory.ReserveAsync(
-            new ReserveStockRequest(orderId, lines.Select(l => new ReservationLine(l.VariantId, l.Quantity)).ToList(), UnpaidOrderLifetime), ct);
-        if (result.Succeeded) return result.ExpiresAtUtc ?? clock.GetUtcNow().UtcDateTime + UnpaidOrderLifetime;
+            new ReserveStockRequest(orderId, lines.Select(l => new ReservationLine(l.VariantId, l.Quantity)).ToList(), holdFor), ct);
+        if (result.Succeeded) return result.ExpiresAtUtc ?? clock.GetUtcNow().UtcDateTime + holdFor;
 
         if (result.UnavailableVariants is { Count: > 0 })
             throw new ConflictException("VARIANT_UNAVAILABLE", "Some items are not available.");

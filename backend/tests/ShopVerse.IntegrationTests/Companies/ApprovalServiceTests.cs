@@ -46,7 +46,7 @@ public class ApprovalServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
     }
 
     private static SubmitApprovalRequest Subject(long amount = 500_000, Guid? id = null) =>
-        new("order", id ?? Guid.NewGuid(), amount, null, null);
+        new("purchase_request", id ?? Guid.NewGuid(), amount, null, null);
 
     [PostgresFact]
     public async Task Submit_WithoutAMatchingRule_NeedsNoApproval_AndStoresNothing()
