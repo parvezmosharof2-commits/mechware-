@@ -29,6 +29,8 @@
 | অর্ডারের ঠিকানা যাচাই | V2.2.1 (L1) | ✅ | `IT/Orders/ShipToTests.cs`, `OrdersApiTests.TheOldFreeTextAddressField_…` (বাগ #৪) | — |
 | স্টক hoarding (abuse) | V2.4.1 (L2) | ✅ | `IT/Orders/StockHoardingTests.cs` (বাগ #২) | CAPTCHA (স্প্রিন্ট ১৭–১৮) |
 | Approval bypass; বড় অর্ডারে একাধিক জনের অনুমোদন | V2.3.1 (L1), V2.3.5 (L3) | 🔴 | threat model H1: approval অর্ডারের সাথে যুক্ত নয় | স্প্রিন্ট ৭–৯ |
+| কোটেশন ও কোম্পানির price list: snapshot দাম, একবার গ্রহণ, 4-eyes | V2.2.2 (L1), V2.3.1 (L1), V2.3.5 (L3) | ❌ | threat model v2 Q1–Q9, R3 (নিয়ম) | স্প্রিন্ট ৭–৯ |
+| মূসক-৬.৩ ইনভয়েস: ফাঁকহীন ক্রমিক নম্বর, immutable, credit note | V2.3.3 (L2) | ❌ | threat model v2 I1–I10 (নিয়ম) | স্প্রিন্ট ১০–১২ |
 
 ## V3 — Web Frontend Security
 | নিয়ন্ত্রণ | ASVS ID | অবস্থা | টেস্ট / প্রমাণ | বাকি |
@@ -48,6 +50,8 @@
 | বড় body প্রত্যাখ্যান | — (ASVS 5.0-এ request body আকারের সরাসরি requirement নেই; সম্পর্কিত: V15.2.2) | ✅ | webhook 64 KB সীমা (R3 রিভিউ); Kestrel সীমা | — |
 | Idempotency (একই key-তে একটাই অর্ডার) | — (সরাসরি requirement নেই; সম্পর্কিত: V2.3.3) | ✅ | `IT/Orders/OrderServiceTests.cs` (একই key-তে ৮ সমান্তরাল retry → ১ অর্ডার) | — |
 | Payment webhook: প্রতি বার্তায় স্বাক্ষর, replay নয় | V4.1.5 (L3) | ✅ | `UT/Payments/WebhookVerifierTests.cs`, `IT/Orders/PaymentServiceTests.cs` | — |
+| Payment event সাময়িক ত্রুটিতে হারায় না; এক অর্ডারে দ্বিতীয় পেমেন্ট refund-এ চিহ্নিত | V2.3.3 (L2), V15.4.2 (L3) | 🔴 | threat model v2 P1, P2 (RUN-এ পুনরুৎপাদিত) | আলাদা ফিক্স PR, আসল গেটওয়ের আগে |
+| কুপন কোড গণনা ঠেকানো | V2.4.1 (L2) | 🔴 | threat model v2 R1 | স্প্রিন্ট ১০–১২ |
 | Proxy-র পেছনে আসল client IP (rate limit) | V15.3.4 (L2), V4.1.3 (L2) | ✅ | `UT/Configuration/ForwardedHeadersSettingsTests.cs` (বাগ #৬) | ডেপ্লয়ে মান সেট করা |
 
 ## V5 — File Handling

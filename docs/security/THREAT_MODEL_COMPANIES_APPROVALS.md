@@ -1,5 +1,7 @@
 # Threat model: company accounts, credit and approvals (draft for human review)
 
+> Pricing, Quotes, Payments and Invoicing are covered in [v2](THREAT_MODEL_PRICING_QUOTES_PAYMENTS_INVOICING.md).
+
 > Status: **draft by an AI assistant, 2026-10-30. Not reviewed by a person, not a penetration test.**
 > Brief v2 §11.1 asks for a STRIDE threat model per module before it is built; this one was written after the
 > modules were built (PR #18), so treat the "mitigations" as claims to be checked, not as sign-off.
