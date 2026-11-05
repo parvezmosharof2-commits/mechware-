@@ -301,10 +301,11 @@ export class MechWareApiClient {
     return res;
   }
 
-  public async googleLogin(idToken: string, expectedEmail?: string, fullName?: string): Promise<{ data: AuthTokenEnvelope }> {
+  /** Signs in with the ID token Google issued; the server reads who the user is from its verified claims only. */
+  public async googleLogin(idToken: string): Promise<{ data: AuthTokenEnvelope }> {
     const res = await this.fetch<{ data: AuthTokenEnvelope }>('/api/v1/auth/google', {
       method: 'POST',
-      body: JSON.stringify({ idToken, expectedEmail, fullName })
+      body: JSON.stringify({ idToken })
     });
     if (res.data.accessToken) {
       defaultTokenVault.setToken(res.data.accessToken, res.data.expiresIn);
