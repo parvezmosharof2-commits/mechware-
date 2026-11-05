@@ -394,6 +394,7 @@ var MONTHS = { en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct',
   bn: ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'] };
 function dt(y, m, d) { return lang === 'bn' ? dg(d) + ' ' + MONTHS.bn[m - 1] + ' ' + dg(y) : d + ' ' + MONTHS.en[m - 1] + ' ' + y; }
 function when(x) { return Array.isArray(x) ? dt(x[0], x[1], x[2]) : dg(x); }
+function own(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
 function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 
 /* ---------- sample catalogue ---------- */
@@ -746,7 +747,7 @@ function vCart() {
     '<section class="panel panel-flush"><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th>' + L('Stock', 'স্টক') + '</th><th class="num">' + L('Unit price', 'একক দাম') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('Line total', 'মোট') + '</th><th></th></tr></thead><tbody>' +
     (S.cart.length ? S.cart.map(function (l, i) {
       var u = unitPrice(l.sku, l.qty), p = P[l.sku], nxt = p.prices.filter(function (b) { return b[0] > l.qty; })[0];
-      return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + l.sku + '</span><div class="cell-sub">' + p.mfr + ' · ' + esc(p.name) + '</div>' + (nxt ? '<div class="subtle" style="color:var(--teal-ink)">' + L('Buy', 'আরও') + ' ' + num(nxt[0] - l.qty) + ' ' + L('more to pay', 'টি নিলে দাম হবে') + ' ' + tk(nxt[1]) + ' ' + L('each', 'প্রতিটি') + '</div>' : '') + '</td>' +
+      return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + esc(l.sku) + '</span><div class="cell-sub">' + p.mfr + ' · ' + esc(p.name) + '</div>' + (nxt ? '<div class="subtle" style="color:var(--teal-ink)">' + L('Buy', 'আরও') + ' ' + num(nxt[0] - l.qty) + ' ' + L('more to pay', 'টি নিলে দাম হবে') + ' ' + tk(nxt[1]) + ' ' + L('each', 'প্রতিটি') + '</div>' : '') + '</td>' +
         '<td data-label="' + L('Stock', 'স্টক') + '">' + stockCell(l.sku) + '</td>' +
         '<td class="num" data-label="' + L('Unit price', 'একক দাম') + '">' + tk(u) + '</td>' +
         '<td class="num" data-label="' + L('Qty', 'পরিমাণ') + '"><input class="input qty" type="number" id="cq-' + i + '" data-cart-qty="' + i + '" min="' + p.pack + '" step="' + p.pack + '" value="' + l.qty + '" aria-label="' + L('Quantity for', 'পরিমাণ:') + ' ' + esc(l.sku) + '"></td>' +
@@ -797,13 +798,13 @@ function vCheckout() {
     '<div><span class="label">' + L('Company', 'কোম্পানি') + '</span><div><b>' + L(COMPANY.en, COMPANY.bn) + '</b></div></div>' +
     '<div><span class="label">BIN</span><div class="tnum"><b>00XXXXXXX-0302</b></div></div>' +
     '<div><span class="label">' + L('PO number', 'PO নম্বর') + '</span><div><b>' + esc(S.po) + '</b></div></div>' +
-    '<div><span class="label">' + L('Cost centre', 'কস্ট সেন্টার') + '</span><div><b>' + S.costCentre + '</b></div></div>' +
+    '<div><span class="label">' + L('Cost centre', 'কস্ট সেন্টার') + '</span><div><b>' + esc(S.costCentre) + '</b></div></div>' +
     '</div></section>' +
     '<section class="panel stack"><h2>' + L('Payment', 'পেমেন্ট') + '</h2><div class="choices">' +
     pays.map(function (p) { var on = S.pay === p.id && p.ok; return '<label class="choice' + (on ? ' on' : '') + (p.ok ? '' : ' off') + '" for="pay-' + p.id + '"><input type="radio" name="pay" id="pay-' + p.id + '" data-bind="pay" value="' + p.id + '"' + (on ? ' checked' : '') + (p.ok ? '' : ' disabled') + '><span><b>' + p.t + '</b><br><span class="subtle">' + p.d + (p.ok ? '' : ' · ' + L('Not available for this order', 'এই অর্ডারে প্রযোজ্য নয়')) + '</span></span></label>'; }).join('') +
     '</div></section></div>' +
     '<aside class="summary"><section class="panel stack"><h2>' + L('Order summary', 'অর্ডারের সারাংশ') + '</h2>' +
-    S.cart.map(function (l) { return '<div class="sumrow subtle"><span class="pn" style="font-weight:500">' + dg(l.qty) + ' × ' + l.sku + '</span><span>' + tk(unitPrice(l.sku, l.qty) * l.qty) + '</span></div>'; }).join('') +
+    S.cart.map(function (l) { return '<div class="sumrow subtle"><span class="pn" style="font-weight:500">' + dg(l.qty) + ' × ' + esc(l.sku) + '</span><span>' + tk(unitPrice(l.sku, l.qty) * l.qty) + '</span></div>'; }).join('') +
     '<div class="sumrow"><span>' + L('Subtotal', 'সাবটোটাল') + '</span><span>' + tk2(t.sub) + '</span></div>' +
     '<div class="sumrow"><span>' + L('VAT 15%', 'VAT ১৫%') + '</span><span>' + tk2(t.vat) + '</span></div>' +
     '<div class="sumrow"><span>' + L('Delivery', 'ডেলিভারি') + '</span><span>' + tk(0) + '</span></div>' +
@@ -835,7 +836,7 @@ function vQuote() {
     '<div><span class="label">' + L('Delivery', 'ডেলিভারি') + '</span><b>' + L('7 working days', '৭ কার্যদিবস') + '</b><span class="subtle">' + L('from PO date', 'PO-এর তারিখ থেকে') + '</span></div>' +
     '</div>' +
     '<div class="split"><section class="panel panel-flush"><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('List price', 'তালিকা দাম') + '</th><th class="num">' + L('Quoted price', 'কোটেশন দাম') + '</th><th class="num">' + L('Line total', 'মোট') + '</th></tr></thead><tbody>' +
-    QUOTE.map(function (l) { return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + l.sku + '</span><div class="cell-sub">' + P[l.sku].mfr + ' · ' + esc(P[l.sku].name) + '</div></td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l.qty) + '</td><td class="num" data-label="' + L('List price', 'তালিকা দাম') + '"><span class="diff-old">' + tk(l.list) + '</span></td><td class="num" data-label="' + L('Quoted price', 'কোটেশন দাম') + '"><b>' + tk(l.q) + '</b> <span class="subtle">−' + pct((l.list - l.q) / l.list * 100) + '</span></td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l.q * l.qty) + '</td></tr>'; }).join('') +
+    QUOTE.map(function (l) { return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + esc(l.sku) + '</span><div class="cell-sub">' + P[l.sku].mfr + ' · ' + esc(P[l.sku].name) + '</div></td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l.qty) + '</td><td class="num" data-label="' + L('List price', 'তালিকা দাম') + '"><span class="diff-old">' + tk(l.list) + '</span></td><td class="num" data-label="' + L('Quoted price', 'কোটেশন দাম') + '"><b>' + tk(l.q) + '</b> <span class="subtle">−' + pct((l.list - l.q) / l.list * 100) + '</span></td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l.q * l.qty) + '</td></tr>'; }).join('') +
     '</tbody><tfoot><tr><td colspan="4">' + L('Subtotal', 'সাবটোটাল') + '</td><td class="num">' + tk2(sub) + '</td></tr><tr><td colspan="4">' + L('VAT 15%', 'VAT ১৫%') + '</td><td class="num">' + tk2(vat) + '</td></tr></tfoot></table></div>' +
     '<div style="padding:12px 16px;border-top:1px solid var(--line)" class="stack"><span class="label">' + L('Terms', 'শর্ত') + '</span><p class="muted">' + L('Prices hold for the full quantity on one PO. Payment on 30-day company credit. Drives include on-site commissioning in Dhaka division.', 'একটি PO-তে পুরো পরিমাণ নিলে এই দাম। পেমেন্ট ৩০ দিনের কোম্পানি ক্রেডিটে। ঢাকা বিভাগে ড্রাইভ চালু করে দেওয়া (commissioning) দামের মধ্যে।') + '</p></div></section>' +
     '<aside class="summary"><section class="panel stack"><h2>' + L('History', 'ইতিহাস') + '</h2><div class="versions">' +
@@ -863,7 +864,7 @@ function vApprovals() {
     '<div><span class="label">' + L('Their note', 'অনুরোধকারীর নোট') + '</span><p>' + L(a.note.en, a.note.bn) + '</p></div>' +
     '<div class="callout info"><div><b>' + L('Why you are asked', 'কেন আপনার অনুমোদন লাগছে') + '</b><br>' + L(a.why.en, a.why.bn) + '</div></div>' +
     '<div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('Unit', 'একক') + '</th><th class="num">' + L('Line total', 'মোট') + '</th></tr></thead><tbody>' +
-    lines.map(function (l) { return '<tr><td class="full pn" data-label="' + L('Part', 'পার্ট') + '">' + l[0] + '</td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l[1]) + '</td><td class="num" data-label="' + L('Unit', 'একক') + '">' + tk(l[2]) + '</td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l[1] * l[2]) + '</td></tr>'; }).join('') +
+    lines.map(function (l) { return '<tr><td class="full pn" data-label="' + L('Part', 'পার্ট') + '">' + esc(l[0]) + '</td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l[1]) + '</td><td class="num" data-label="' + L('Unit', 'একক') + '">' + tk(l[2]) + '</td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l[1] * l[2]) + '</td></tr>'; }).join('') +
     '</tbody></table></div>' +
     (done ? '<div class="callout ' + (a.status === 'approved' ? 'ok' : 'bad') + '"><div><b>' + (a.status === 'approved' ? L('You approved this. MECHWARE has been told to confirm the order.', 'আপনি অনুমোদন দিয়েছেন। MECHWARE-কে অর্ডার নিশ্চিত করতে জানানো হয়েছে।') : L('You rejected this. Tanvir has been told why.', 'আপনি বাতিল করেছেন। কারণসহ অনুরোধকারীকে জানানো হয়েছে।')) + '</b>' + (a.reason ? '<br>' + L('Reason', 'কারণ') + ': ' + esc(a.reason) : '') + '</div></div><div><button class="btn" type="button" data-act="ap-undo">' + L('Undo (prototype)', 'আগের অবস্থায় ফেরান (প্রোটোটাইপ)') + '</button></div>'
       : '<label class="field" for="ap-reason"><span>' + L('Comment (required to reject)', 'মন্তব্য (বাতিল করতে লাগবে)') + '</span><textarea class="input" id="ap-reason" rows="2" style="font-family:inherit" data-ap-reason>' + esc(a.reason) + '</textarea></label>' +
@@ -1069,17 +1070,20 @@ function render() {
   if (fid) { var el = document.getElementById(fid); if (el && app.contains(el)) el.focus({ preventScroll: true }); }
 }
 function go(id) {
-  if (!VIEWS[id]) id = 'home';
+  if (!own(VIEWS, id)) id = 'home';
   if (location.hash.slice(1) !== id) { location.hash = id; return; }
   current = id; render(); window.scrollTo(0, 0);
 }
-window.addEventListener('hashchange', function () { var id = location.hash.slice(1); current = VIEWS[id] ? id : 'home'; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', function () { var id = location.hash.slice(1); current = own(VIEWS, id) ? id : 'home'; render(); window.scrollTo(0, 0); });
 
 var toastTimer;
 function toast(msg) {
   var live = document.getElementById('toast-live');
-  live.innerHTML = '<div class="toast">' + msg + '</div>';
-  clearTimeout(toastTimer); toastTimer = setTimeout(function () { live.innerHTML = ''; }, 2600);
+  var box = document.createElement('div');
+  box.className = 'toast';
+  box.textContent = msg;
+  live.replaceChildren(box);
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { live.replaceChildren(); }, 2600);
 }
 var MSG = {
   pdf: ['The PDF is generated by the real system. Not part of the prototype.', 'আসল সিস্টেম PDF বানাবে। প্রোটোটাইপে নেই।'],
@@ -1093,6 +1097,7 @@ var MSG = {
 };
 
 function addToCart(sku, qty) {
+  if (!own(P, sku)) return;
   qty = Math.max(1, qty | 0);
   var p = P[sku]; if (p.pack > 1 && qty % p.pack) qty = Math.ceil(qty / p.pack) * p.pack;
   var line = S.cart.filter(function (l) { return l.sku === sku; })[0];
@@ -1119,6 +1124,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'clear-filters') { S.filters = { mfr: {}, supply: {}, comms: {}, di: {}, instock: false }; render(); }
   else if (a === 'validate') { S.quickText = document.getElementById('quick-text').value; S.quickRows = parseQuick(S.quickText); render(); toast(L('List checked', 'তালিকা যাচাই হয়েছে')); }
   else if (a === 'swap') {
+    if (!own(P, t.getAttribute('data-from')) || !own(P, t.getAttribute('data-to'))) return;
     S.quickText = S.quickText.split('\n').map(function (l) { return l.indexOf(t.getAttribute('data-from')) === 0 ? l.replace(t.getAttribute('data-from'), t.getAttribute('data-to')) : l; }).join('\n');
     S.quickRows = parseQuick(S.quickText); render();
   } else if (a === 'quick-to-cart') {
@@ -1135,12 +1141,12 @@ document.addEventListener('click', function (e) {
     if (!r2.reason.trim()) { S.apError = L('Write a short reason so the requester knows what to change.', 'অনুরোধকারী যেন বোঝেন কী বদলাতে হবে, তাই ছোট একটা কারণ লিখুন।'); render(); var ta = document.getElementById('ap-reason'); if (ta) ta.focus(); return; }
     r2.status = 'rejected'; S.apError = ''; render(); toast(L('Rejected', 'বাতিল করা হয়েছে'));
   } else if (a === 'ap-undo') { S.approvals[S.apSel].status = 'pending'; render(); }
-  else if (a === 'co-filter') { S.coFilter = t.getAttribute('data-k'); render(); }
+  else if (a === 'co-filter') { var fk = t.getAttribute('data-k'); if (['all', 'new', 'unpaid', 'approval', 'picking', 'shipped', 'cancelled'].indexOf(fk) >= 0) { S.coFilter = fk; render(); } }
   else if (a === 'co-sel') { S.coSel = +t.getAttribute('data-i'); render(); }
   else if (a === 'pl-approve') { if (S.plAck) { S.plStatus = 'approved'; render(); toast(L('Price list approved', 'প্রাইস লিস্ট অনুমোদিত')); } }
   else if (a === 'pl-return') { S.plStatus = 'returned'; render(); }
   else if (a === 'pl-undo') { S.plStatus = 'pending'; S.plAck = false; render(); }
-  else if (a === 'toast') { var m = MSG[t.getAttribute('data-msg')]; toast(L(m[0], m[1])); }
+  else if (a === 'toast') { var mk = t.getAttribute('data-msg'); if (own(MSG, mk)) toast(L(MSG[mk][0], MSG[mk][1])); }
 });
 document.addEventListener('submit', function (e) {
   if (e.target.getAttribute('data-act') === 'search') { e.preventDefault(); go('products'); }
@@ -1150,7 +1156,9 @@ document.addEventListener('change', function (e) {
   if (t === sel) { go(sel.value); return; }
   if (t.hasAttribute('data-filter')) {
     var g = t.getAttribute('data-filter');
-    if (g === 'instock') S.filters.instock = t.checked; else S.filters[g][t.getAttribute('data-key')] = t.checked;
+    var fkey = t.getAttribute('data-key');
+    if (g === 'instock') S.filters.instock = t.checked;
+    else if (['mfr', 'supply', 'comms', 'di'].indexOf(g) >= 0 && fkey && fkey !== '__proto__' && fkey !== 'constructor' && fkey !== 'prototype') S.filters[g][fkey] = t.checked;
     render(); return;
   }
   if (t.hasAttribute('data-cart-qty')) {
@@ -1165,7 +1173,7 @@ document.addEventListener('change', function (e) {
     fr.readAsText(t.files[0]); return;
   }
   var b = t.getAttribute('data-bind');
-  if (b) { S[b] = t.type === 'checkbox' ? t.checked : t.value; render(); }
+  if (['costCentre', 'po', 'site', 'pay', 'vds', 'plAck'].indexOf(b) >= 0) { S[b] = t.type === 'checkbox' ? t.checked : t.value; render(); }
 });
 document.addEventListener('input', function (e) {
   if (e.target.hasAttribute('data-ap-reason')) S.approvals[S.apSel].reason = e.target.value;
@@ -1176,7 +1184,7 @@ document.getElementById('next-btn').addEventListener('click', function () { var 
 document.getElementById('notes-btn').addEventListener('click', function () { notesOpen = !notesOpen; renderChrome(); });
 
 var start = location.hash.slice(1);
-current = VIEWS[start] ? start : 'home';
+current = own(VIEWS, start) ? start : 'home';
 render();
 })();
 </script>
