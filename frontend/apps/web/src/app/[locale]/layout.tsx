@@ -25,6 +25,9 @@ const hindSiliguri = Hind_Siliguri({
   display: 'swap'
 });
 
+// Every page is rendered per request, so Next.js can stamp that request's CSP nonce on its scripts (threat model M5).
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'MECHWARE — YOUR GATEWAY TO INDUSTRY 4.0',
   description: 'Enterprise Industrial Machinery, Automation Marketplace & Engineering Platform | Made in Bangladesh Machinery'

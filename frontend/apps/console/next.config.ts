@@ -1,10 +1,8 @@
 import type { NextConfig } from 'next';
 import { securityHeaders } from '@mechware/config/security-headers';
 
-const headers = securityHeaders({
-  apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000',
-  isDev: process.env.NODE_ENV !== 'production'
-});
+// The Content-Security-Policy carries a per-request nonce, so middleware.ts sets it; these are the static headers.
+const headers = securityHeaders();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

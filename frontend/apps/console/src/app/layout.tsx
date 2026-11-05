@@ -16,6 +16,9 @@ const plusJakarta = Plus_Jakarta_Sans({
   display: 'swap'
 });
 
+// Every page is rendered per request, so Next.js can stamp that request's CSP nonce on its scripts (threat model M5).
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'MECHWARE Console — Management & Seller Hub',
   description: 'Operations, Catalog, KYC & Financial Ledger Management'

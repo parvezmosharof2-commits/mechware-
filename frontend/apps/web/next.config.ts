@@ -4,11 +4,8 @@ import { securityHeaders } from '@mechware/config/security-headers';
 
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
-const headers = securityHeaders({
-  apiBaseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000',
-  googleSignIn: Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID),
-  isDev: process.env.NODE_ENV !== 'production'
-});
+// The Content-Security-Policy carries a per-request nonce, so middleware.ts sets it; these are the static headers.
+const headers = securityHeaders({ googleSignIn: Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) });
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
