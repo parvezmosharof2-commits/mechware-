@@ -170,7 +170,8 @@ public sealed class AuthController : ControllerBase
                 _currentUser.UserId.Value,
                 new RevokeSessionsRequestDto(RevokeAll: false),
                 _currentUser.IpAddress,
-                rawRefreshToken);
+                rawRefreshToken,
+                currentSessionId: CurrentSessionId());
         }
 
         Response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions
@@ -265,9 +266,14 @@ public sealed class AuthController : ControllerBase
     {
         Guid userId = RequireAuthenticatedUserId();
         string? rawRefreshToken = Request.Cookies[RefreshTokenCookieName];
-        int revokedCount = await _identityService.RevokeSessionsAsync(userId, request, _currentUser.IpAddress, rawRefreshToken);
+        int revokedCount = await _identityService.RevokeSessionsAsync(
+            userId, request, _currentUser.IpAddress, rawRefreshToken, currentSessionId: CurrentSessionId());
         return Ok(new { data = new { revokedCount } });
     }
+
+    /// <summary>The session the bearer token belongs to (its refresh-token family).</summary>
+    private Guid? CurrentSessionId() =>
+        Guid.TryParseExact(User.FindFirst(ShopVerse.Infrastructure.Identity.JwtTokenService.SessionIdClaimType)?.Value, "N", out Guid sid) ? sid : null;
 
     private Guid RequireAuthenticatedUserId() =>
         _currentUser.UserId ?? throw new UnauthorizedAccessException("User authentication is required.");

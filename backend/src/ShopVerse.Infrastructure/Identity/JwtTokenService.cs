@@ -15,6 +15,7 @@ public sealed class JwtTokenService : ITokenService
 {
     public const string PermissionClaimType = "permission";
     public const string SellerIdClaimType = "seller_id";
+    public const string SessionIdClaimType = "sid";
 
     /// <summary>Tokens longer than this are rejected before any decoding (resource-exhaustion guard).</summary>
     public const int MaxTokenLength = 8192;
@@ -47,7 +48,8 @@ public sealed class JwtTokenService : ITokenService
         User user,
         IReadOnlyList<string> roles,
         IReadOnlyList<string> permissions,
-        DateTime utcNow)
+        DateTime utcNow,
+        Guid sessionId)
     {
         long iat = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc)).ToUnixTimeSeconds();
         long exp = new DateTimeOffset(DateTime.SpecifyKind(utcNow.AddMinutes(_accessTokenExpiryMinutes), DateTimeKind.Utc)).ToUnixTimeSeconds();
@@ -77,6 +79,8 @@ public sealed class JwtTokenService : ITokenService
         {
             payloadDict[SellerIdClaimType] = user.SellerId.Value.ToString();
         }
+
+        payloadDict[SessionIdClaimType] = sessionId.ToString("N");
 
         string payloadJson = JsonSerializer.Serialize(payloadDict);
 
@@ -190,6 +194,11 @@ public sealed class JwtTokenService : ITokenService
         if (StringClaim(root, "name") is string name)
         {
             claims.Add(new Claim(ClaimTypes.Name, name));
+        }
+
+        if (StringClaim(root, SessionIdClaimType) is string sid)
+        {
+            claims.Add(new Claim(SessionIdClaimType, sid));
         }
 
         if (StringClaim(root, SellerIdClaimType) is string sellerId)

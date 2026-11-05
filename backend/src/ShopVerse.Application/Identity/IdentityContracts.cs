@@ -212,13 +212,27 @@ public interface ITotpService
     string HashRecoveryCode(string rawCode);
 }
 
+/// <summary>What the database says, right now, about the holder of an access token.</summary>
+public sealed record LiveSession(IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions, Guid? SellerId);
+
+/// <summary>
+/// Checked on every authenticated request (M4): the account still exists and is active, its session was not ended, and its
+/// roles are the current ones, not those frozen into a token minted up to 15 minutes ago.
+/// </summary>
+public interface ISessionValidator
+{
+    Task<LiveSession?> ValidateAsync(Guid userId, Guid sessionId, DateTime utcNow, CancellationToken cancellationToken = default);
+}
+
 public interface ITokenService
 {
+    /// <param name="sessionId">The refresh-token family the access token belongs to; ending that session ends the token too.</param>
     string GenerateAccessToken(
         User user,
         IReadOnlyList<string> roles,
         IReadOnlyList<string> permissions,
-        DateTime utcNow);
+        DateTime utcNow,
+        Guid sessionId);
 
     ClaimsPrincipal? ValidateAccessToken(string token, DateTime utcNow);
     string GenerateRawRefreshToken();
@@ -323,7 +337,8 @@ public interface IIdentityService
         RevokeSessionsRequestDto request,
         string? clientIp = null,
         string? currentRawRefreshToken = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        Guid? currentSessionId = null);
 
     Task<IReadOnlyList<AddressDto>> GetAddressesAsync(Guid userId, CancellationToken cancellationToken = default);
 

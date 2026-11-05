@@ -301,10 +301,46 @@ are never compared with anything.
   - no cost-centre lock (fails 3 out of 3 runs)
   - limits applied even when a rule routes the order
 
-### M4. Staff permissions live in the access token for up to 15 minutes (Medium) [CODE]
-Permission claims come from the JWT (`PermissionAuthorizationHandler`). Removing a staff permission or role
-takes effect when the token expires. Company roles are different: they are read from the database on every
-call, so removing a company member is immediate [TEST: `Idor_*`, `NonAdminMembers_*`].
+### M4. Staff permissions live in the access token for up to 15 minutes (Medium) [TEST] — **FIXED 2026-11-05**
+Permission claims came from the JWT (`PermissionAuthorizationHandler`), so removing a staff permission or role took effect
+only when the token expired. The same 15-minute delay applied to more than roles:
+- suspending, banning or erasing an account;
+- signing out;
+- a password reset;
+- "sign out everywhere".
+
+Company roles were already read from the database on every call.
+
+**Fix:**
+- **Every access token names its session.** It carries `sid`, its refresh-token family, and a token without one is refused.
+- **Every request is checked against the database.** `JwtBearerAuthenticationHandler` asks `SessionValidator` (one query)
+  whether:
+  - the account exists and is not suspended, banned or erased;
+  - the session still has a usable token (not revoked, not used, not expired);
+  - a staff role has not left the account without its required authenticator.
+- **Current values replace the token's.** Roles, permissions and the seller link are rebuilt from the database, not taken
+  from the token.
+- **One set of rules.** `AccountRules` (Domain) holds the account rules that login, refresh and this check share.
+
+Fixed along the way (found by the code review):
+- **Revoking one token left the session open.** `sessions/revoke` with one token's id left the rest of the family alive,
+  so the access token survived. A session is now always revoked as a whole family.
+- **Logout without the cookie signed out every device.** A bearer-only client, or a blocked cookie, revoked every session.
+  It now ends only the token's own session, and "end this session" with no known session ends none.
+
+**Evidence:**
+- TEST: `IT/Api/LiveSessionTests.cs` (14 tests, over HTTP). They cover:
+  - logout, and one device versus another;
+  - suspended, banned and erased accounts;
+  - a removed role and a changed seller link;
+  - a staff role without an authenticator;
+  - a forged token for an unknown account, and an unknown session;
+  - revoke by a used token after a refresh;
+  - bearer-only logout.
+- **Mutation check:** 21 mutants, all caught.
+
+**Cost:** one indexed query per authenticated request. A database outage shows as `500`, not `401`, so clients do not
+throw away good sessions.
 
 ### M5. No Content-Security-Policy on the web and console apps (Medium) [CODE]
 Neither Next.js app sets a CSP (the API does). The access token is kept in memory, which blocks theft from

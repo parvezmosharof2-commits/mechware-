@@ -69,6 +69,7 @@
 | TOTP একবারই ব্যবহার (replay guard) | V6.5.1 (L2) | ✅ | `IT/Identity/IdentityServiceTests.cs`, console E2E | — |
 | স্টাফের MFA | V6.3.3 (L2) | ✅ | সব staff role-এ TOTP বাধ্যতামূলক; প্রথম authenticator শুধু admin-এর দেওয়া এককালীন setup code দিয়ে; `IT/Identity/StaffTwoFactorEnrollmentTests.cs` | passkey (L3); admin-এর setup code দেওয়ার console পাতা |
 | চালু থাকা authenticator বদলানো যায় না | V6.4.3 (L2) | ✅ | `2fa/setup` চালু 2FA-তে `409`; `SetupCannotReplaceAnAuthenticatorThatIsAlreadyOn` | — |
+| প্রতি request-এ session আর role যাচাই (sign-out, suspend, role সরানো সঙ্গে সঙ্গে কার্যকর) | V7.4.1 (L1), V7.4.2 (L1), V8.2.1 (L1) | ✅ | `SessionValidator` + `JwtBearerAuthenticationHandler`; `IT/Api/LiveSessionTests.cs` | — |
 | Production-এ default/demo অ্যাকাউন্ট নেই | V6.3.2 (L1) | ✅ | `Production_HasNoDemoAccounts_…` (খালি DB) + `IT/Security/DemoAccountGuardTests.cs` (Development-এ চালানো DB-তে Production/Staging চালু হয় না) | — |
 | অ্যাকাউন্ট আছে কিনা ফাঁস না করা (registration, forgot password) | V6.3.8 (L3) | ✅ | `IdentityServiceTests.RegisteringAnEmailOrPhoneThatHasAnAccount_…`, `AnInvalidRegistration_IsRefusedTheSameWay_…` (বাগ #৫) | login-এর response time মেলানো যাচাই |
 | Bootstrap admin শুধু পাসওয়ার্ড + TOTP | V6.3.3 (L2) | ✅ | `Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp`, `UT/Identity/BootstrapAdminTests.cs` | — |

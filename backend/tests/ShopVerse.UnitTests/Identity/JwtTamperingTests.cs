@@ -53,7 +53,7 @@ public class JwtTamperingTests
     public void GenuineToken_IsAccepted()
     {
         var user = User.Create("buyer@example.test", null, null, "Buyer");
-        var token = _svc.GenerateAccessToken(user, ["Buyer"], ["catalog.read"], Now);
+        var token = _svc.GenerateAccessToken(user, ["Buyer"], ["catalog.read"], Now, Guid.NewGuid());
         _svc.ValidateAccessToken(token, Now.AddMinutes(14)).Should().NotBeNull();
         _svc.ValidateAccessToken(Sign(Hs256Header, Payload()), Now).Should().NotBeNull();
     }
@@ -62,7 +62,7 @@ public class JwtTamperingTests
     public void PrivilegeEscalation_ByEditingThePayload_IsRejected()
     {
         var user = User.Create("buyer@example.test", null, null, "Buyer");
-        var parts = _svc.GenerateAccessToken(user, ["Buyer"], ["catalog.read"], Now).Split('.');
+        var parts = _svc.GenerateAccessToken(user, ["Buyer"], ["catalog.read"], Now, Guid.NewGuid()).Split('.');
         var json = Encoding.UTF8.GetString(Convert.FromBase64String(parts[1].Replace('-', '+').Replace('_', '/').PadRight((parts[1].Length + 3) / 4 * 4, '=')));
         var escalated = json.Replace("\"catalog.read\"", "\"catalog.read\",\"orders.refund\",\"users.manage\"").Replace("\"Buyer\"", "\"SuperAdmin\"");
         escalated.Should().NotBe(json);
