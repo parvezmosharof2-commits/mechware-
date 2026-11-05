@@ -80,7 +80,7 @@ public sealed class InventoryService : IInventoryService
         var now = _clock.GetUtcNow().UtcDateTime;
         var ttl = request.Ttl ?? StockReservation.DefaultTtl;
         if (ttl <= TimeSpan.Zero || ttl > ReserveStockRequest.MaxTtl)
-            throw new ValidationException("ttl", "Reservation TTL must be between 0 and 30 minutes.");
+            throw new ValidationException("ttl", $"Reservation TTL must be between 0 and {ReserveStockRequest.MaxTtl.TotalHours} hours.");
         var variantIds = lines.Select(l => l.VariantId).ToArray();
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);

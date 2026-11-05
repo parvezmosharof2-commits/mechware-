@@ -693,3 +693,12 @@ than 10 refused codes per user per hour gives `409 COUPON_ATTEMPTS_EXCEEDED`.
 
 Refund statuses: `Requested`, `Processing`, `Completed`, `Failed`, `Rejected`. A fully refunded payment becomes `Refunded`;
 a later provider webhook for it answers `AlreadyRefunded` and changes nothing.
+
+### 2.20 Company orders that need approval (threat model v1, H1)
+
+`POST /orders` takes an optional `costCentreId` (one of the company's; another company's is `404`). When one of the company's
+approval rules covers the order's own total, the order is placed as `pending_approval` and an approval request (subject type
+`order`, amount = grand total) is created with it. Such an order cannot be paid (`409 ORDER_NOT_PAYABLE`) and holds no credit.
+Approval makes it `pending_payment` with 30 minutes to pay from then (credit orders become `confirmed` with the credit held;
+if the credit no longer covers it, it is cancelled); rejection, withdrawal or 24 hours without a decision cancel it.
+`POST /companies/{companyId}/approvals` refuses subject type `order` (`400`): order approvals come only from placing the order.

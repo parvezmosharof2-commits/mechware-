@@ -121,6 +121,14 @@ public sealed class ApprovalRequest : AggregateRoot<Guid>
         UpdatedAtUtc = nowUtc;
     }
 
+    /// <summary>Nobody decided in time and the thing it was about has lapsed (an order whose stock hold ran out).</summary>
+    public void Expire(DateTime nowUtc)
+    {
+        if (Status != ApprovalStatus.Pending) return;
+        Status = ApprovalStatus.Cancelled;
+        UpdatedAtUtc = nowUtc;
+    }
+
     public void Cancel(Guid actorUserId, DateTime nowUtc)
     {
         if (actorUserId != RequesterUserId)

@@ -512,7 +512,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
 
         // Age the first order by moving its placement time back; the second is placed "now".
         await using (var db = fixture.CreateContext())
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '31 minutes' WHERE id = {staleOrder.OrderId}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '31 minutes', payment_due_at = now() - interval '1 minute' WHERE id = {staleOrder.OrderId}");
         var freshOrder = await With(s => s.PlaceAsync(Req(buyer, Key(), (fresh.VariantId, 2))));
 
         var cancelled = await With(s => s.ExpireUnpaidAsync(DateTime.UtcNow));
@@ -539,7 +539,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         var creditOrder = await With(s => s.PlaceAsync(OnCredit(creditBuyer, company, v.VariantId)));
 
         await using (var db = fixture.CreateContext())
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '2 hours' WHERE user_id IN ({buyer}, {creditBuyer})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE orders SET placed_at = now() - interval '2 hours', payment_due_at = CASE WHEN payment_due_at IS NULL THEN NULL ELSE now() - interval '90 minutes' END WHERE user_id IN ({buyer}, {creditBuyer})");
 
         await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => Task.Run(() => With(s => s.ExpireUnpaidAsync(DateTime.UtcNow)))));
 

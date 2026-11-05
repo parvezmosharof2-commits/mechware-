@@ -137,6 +137,15 @@ public sealed class Order : AggregateRoot<Guid>
     public int EventSequence { get; private set; }
     public DateTime PlacedAtUtc { get; private set; }
 
+    /// <summary>The buyer chose company credit terms; when an approval is needed the credit is held only once it is given.</summary>
+    public bool PaysOnCredit { get; private set; }
+
+    /// <summary>
+    /// When an order waiting for payment is cancelled if still unpaid. Starts when the order becomes payable: at placement, or
+    /// when its approval is given (threat model v1, H1), so a long approval does not eat the buyer's time to pay.
+    /// </summary>
+    public DateTime? PaymentDueAtUtc { get; private set; }
+
     public IReadOnlyCollection<SubOrder> SubOrders => _subOrders.AsReadOnly();
     public IReadOnlyCollection<OrderEventRecord> Events => _events.AsReadOnly();
 
@@ -144,7 +153,7 @@ public sealed class Order : AggregateRoot<Guid>
 
     public static Order Place(
         Guid id, string orderNumber, Guid userId, Guid? companyId, PricedOrder priced, TaxMode taxMode, string shipToJson,
-        OrderStatus initialStatus, DateTime nowUtc)
+        OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null)
     {
         if (!OrderNumber_IsValid(orderNumber)) throw new ValidationException("orderNumber", "Invalid order number.");
         if (initialStatus is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
@@ -164,7 +173,9 @@ public sealed class Order : AggregateRoot<Guid>
             ShippingMinor = priced.ShippingMinor,
             GrandTotalMinor = priced.GrandTotalMinor,
             ShipToJson = string.IsNullOrWhiteSpace(shipToJson) ? "{}" : shipToJson,
-            PlacedAtUtc = nowUtc
+            PlacedAtUtc = nowUtc,
+            PaysOnCredit = paysOnCredit,
+            PaymentDueAtUtc = initialStatus == OrderStatus.PendingPayment ? paymentDueAtUtc : null
         };
 
         var n = 0;
@@ -187,6 +198,13 @@ public sealed class Order : AggregateRoot<Guid>
         foreach (var sub in _subOrders) sub.SetStatus(to);
         _events.Add(new OrderEventRecord(e, ++EventSequence));
         UpdatedAtUtc = nowUtc;
+    }
+
+    /// <summary>The approval was given: the order can now be paid, and the time to pay starts now.</summary>
+    public void Approve(Guid? actorId, DateTime paymentDueAtUtc, DateTime nowUtc)
+    {
+        Transition(OrderStatus.PendingPayment, actorId, "Approved by the company", nowUtc);
+        PaymentDueAtUtc = paymentDueAtUtc;
     }
 
     private Order(Guid id) : base(id) { }

@@ -17,7 +17,8 @@ public sealed record PlaceOrderRequest(
     Guid? CompanyId = null,
     bool PayOnCredit = false,
     IReadOnlyList<string>? CouponCodes = null,
-    Guid? ShipToSiteId = null)
+    Guid? ShipToSiteId = null,
+    Guid? CostCentreId = null)
 {
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;
@@ -28,6 +29,9 @@ public sealed record PlaceOrderRequest(
     /// for everyone else by placing order after order and never paying (finding #2 of the 2026-11-04 test).
     /// </summary>
     public const int MaxOpenUnpaidOrdersPerBuyer = 3;
+
+    /// <summary>The approval subject type of an order: such requests are created only by placing the order (threat model v1, H1).</summary>
+    public const string ApprovalSubjectType = "order";
 }
 
 public sealed record PlacedOrder(
@@ -51,6 +55,12 @@ public interface IOrderService
 
     /// <summary>Cancels orders still unpaid 30 minutes after placement (brief §8.6) and frees their stock. Returns how many.</summary>
     Task<int> ExpireUnpaidAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default);
+
+    /// <summary>Applies decided (or lapsed) company approvals to the orders waiting for them; run by the expiry sweep.</summary>
+    Task<int> SettleApprovalsAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default);
+
+    /// <summary>Applies one order's approval outcome right after the decision. Returns false when there was nothing to do.</summary>
+    Task<bool> ApplyApprovalAsync(Guid orderId, CancellationToken ct = default);
 
     /// <summary>The buyer's own order. Someone else's order answers "not found", never "forbidden", so ids reveal nothing.</summary>
     Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default);

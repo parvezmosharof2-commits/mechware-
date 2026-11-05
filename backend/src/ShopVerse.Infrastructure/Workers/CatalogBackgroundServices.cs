@@ -86,6 +86,14 @@ public sealed class UnpaidOrderExpiryWorker : BackgroundService
                     cancelled = await orders.ExpireUnpaidAsync(_clock.GetUtcNow().UtcDateTime, Batch, stoppingToken);
                     if (cancelled > 0) _logger.LogInformation("Cancelled {Count} unpaid orders after 30 minutes", cancelled);
                 } while (cancelled == Batch && !stoppingToken.IsCancellationRequested);
+
+                // Orders waiting for a company approval: apply decisions that were not applied at once, and let lapsed ones go.
+                await using (var scope = _scopes.CreateAsyncScope())
+                {
+                    var orders = scope.ServiceProvider.GetRequiredService<IOrderService>();
+                    var settled = await orders.SettleApprovalsAsync(_clock.GetUtcNow().UtcDateTime, Batch, stoppingToken);
+                    if (settled > 0) _logger.LogInformation("Applied {Count} company approval outcomes to orders", settled);
+                }
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

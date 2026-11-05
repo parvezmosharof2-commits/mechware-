@@ -31,6 +31,8 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         b.Property(o => o.GrandTotalMinor).HasColumnName("grand_total");
         b.Property(o => o.ShipToJson).HasColumnName("ship_to").HasColumnType("jsonb");
         b.Property(o => o.PlacedAtUtc).HasColumnName("placed_at");
+        b.Property(o => o.PaysOnCredit).HasColumnName("pays_on_credit");
+        b.Property(o => o.PaymentDueAtUtc).HasColumnName("payment_due_at");
         b.Property(o => o.EventSequence).HasColumnName("event_seq");
 
         b.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);

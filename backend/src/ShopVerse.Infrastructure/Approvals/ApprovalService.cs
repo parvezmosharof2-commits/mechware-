@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using ShopVerse.Application.Approvals;
 using ShopVerse.Domain.Approvals;
@@ -8,7 +9,9 @@ using ShopVerse.Infrastructure.Persistence;
 
 namespace ShopVerse.Infrastructure.Approvals;
 
-public sealed class ApprovalService(ShopVerseDbContext db, TimeProvider clock) : IApprovalService
+public sealed class ApprovalService(
+    ShopVerseDbContext db, TimeProvider clock, ShopVerse.Application.Orders.IOrderService? orders = null,
+    Microsoft.Extensions.Logging.ILogger<ApprovalService>? logger = null) : IApprovalService
 {
     private const CompanyRoles AnyRole = CompanyRoles.Requester | CompanyRoles.Buyer | CompanyRoles.Approver | CompanyRoles.Admin;
     private const CompanyRoles CanApprove = CompanyRoles.Approver | CompanyRoles.Admin;
@@ -81,6 +84,11 @@ public sealed class ApprovalService(ShopVerseDbContext db, TimeProvider clock) :
             throw new ValidationException("costCentreId", "The cost centre does not belong to this company.");
         if (r.AmountMinor <= 0) throw new ValidationException("amount", "Amount must be positive.");
 
+        // An order's approval is created by placing the order, with the server's own total (threat model v1, H1). Asking for
+        // one here would let a client name the amount an approver sees.
+        if (string.Equals((r.SubjectType ?? string.Empty).Trim(), ShopVerse.Application.Orders.PlaceOrderRequest.ApprovalSubjectType, StringComparison.OrdinalIgnoreCase))
+            throw new ValidationException("subjectType", "Order approvals are created by placing the order.");
+
         var categories = r.CategoryIds?.Distinct().ToList() ?? [];
         var rules = await db.ApprovalRules.AsNoTracking().Where(x => x.CompanyId == companyId && x.IsActive).ToListAsync(ct);
         var rule = ApprovalRule.Select(rules, r.AmountMinor, r.CostCentreId, categories);
@@ -140,7 +148,9 @@ public sealed class ApprovalService(ShopVerseDbContext db, TimeProvider clock) :
         var request = await LoadVisibleAsync(actorUserId, companyId, requestId, member, ct);
         request.Decide(actorUserId, d.Approve, d.Comment, clock.GetUtcNow().UtcDateTime);
         await db.SaveChangesAsync(ct); // xmin token: a concurrent decision on the same request surfaces as 409
-        return ToDto(request);
+        var dto = ToDto(request);
+        await ApplyToOrderAsync(request, ct);
+        return dto;
     }
 
     public async Task<ApprovalRequestDto> CancelAsync(Guid actorUserId, Guid companyId, Guid requestId, CancellationToken ct = default)
@@ -150,7 +160,27 @@ public sealed class ApprovalService(ShopVerseDbContext db, TimeProvider clock) :
         var request = await LoadVisibleAsync(actorUserId, companyId, requestId, member, ct);
         request.Cancel(actorUserId, clock.GetUtcNow().UtcDateTime);
         await db.SaveChangesAsync(ct);
-        return ToDto(request);
+        var dto = ToDto(request);
+        await ApplyToOrderAsync(request, ct);
+        return dto;
+    }
+
+    /// <summary>
+    /// A decided order approval moves its order on at once. If this fails (or the process dies), the order sweep applies it
+    /// within a minute, so the decision itself is never lost.
+    /// </summary>
+    private async Task ApplyToOrderAsync(ApprovalRequest request, CancellationToken ct)
+    {
+        if (orders is null || request.Status == ApprovalStatus.Pending || request.SubjectType != ShopVerse.Application.Orders.PlaceOrderRequest.ApprovalSubjectType) return;
+        try
+        {
+            await orders.ApplyApprovalAsync(request.SubjectId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The decision is saved and stands; the approver is not told it failed. The sweep applies it to the order.
+            logger?.LogWarning(ex, "Approval {RequestId} was decided but its order {OrderId} was not moved on yet", request.Id, request.SubjectId);
+        }
     }
 
     /// <summary>A request is visible to its requester, to anyone in its chain, and to company admins. Others get "not found".</summary>
