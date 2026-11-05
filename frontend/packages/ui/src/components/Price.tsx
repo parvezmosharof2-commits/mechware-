@@ -4,8 +4,6 @@ import React from 'react';
 import { cn } from '../utils';
 import { formatCurrency } from '../formatters';
 
-export { formatCurrency };
-
 export interface PriceProps extends React.HTMLAttributes<HTMLDivElement> {
   amount: number | string;
   compareAt?: number | string;

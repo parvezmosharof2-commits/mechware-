@@ -53,7 +53,8 @@ public sealed record VerifyOtpRequestDto(
 public sealed record LoginRequestDto(
     string Identifier,
     string Password,
-    string? TotpCode = null);
+    string? TotpCode = null,
+    string? SetupCode = null);
 
 public sealed record AuthenticatedUserDto(
     Guid Id,
@@ -73,7 +74,15 @@ public sealed record AuthTokenResponseDto(
     AuthenticatedUserDto User,
     string? RefreshTokenCookieValue = null,
     bool RequiresTwoFactor = false,
-    string? TwoFactorChallengeToken = null);
+    string? TwoFactorChallengeToken = null,
+    bool RequiresTwoFactorEnrollment = false,
+    string? EnrollmentToken = null,
+    TotpSetupResponseDto? TwoFactorSetup = null);
+
+public sealed record TwoFactorEnrollmentCompleteDto(string EnrollmentToken, string Code);
+
+/// <summary>Shown once to the administrator, who hands it to the staff member in person or by another trusted channel.</summary>
+public sealed record TwoFactorSetupCodeDto(Guid UserId, string SetupCode, DateTime ExpiresAtUtc);
 
 /// <summary>Only the ID token Google issued; who the user is comes from its verified claims, never from the request body.</summary>
 public sealed record GoogleLoginRequestDto(string IdToken);
@@ -287,6 +296,15 @@ public interface IIdentityService
         CancellationToken cancellationToken = default);
 
     Task<TotpSetupResponseDto> SetupTwoFactorAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    /// <summary>An administrator lets a staff member who must use 2FA enrol their first authenticator.</summary>
+    Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
+        Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Turns 2FA on with the first authenticator code, spends the token and starts the session.</summary>
+    Task<AuthTokenResponseDto> CompleteTwoFactorEnrollmentAsync(
+        string enrollmentToken, string code, string? clientIp = null, string? userAgent = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
 
     Task VerifyAndEnableTwoFactorAsync(
         Guid userId,

@@ -92,6 +92,20 @@ public sealed class AuthController : ControllerBase
             _currentUser.IpAddress,
             _currentUser.UserAgent);
 
+        if (result.RequiresTwoFactorEnrollment)
+        {
+            return StatusCode(StatusCodes.Status202Accepted, new
+            {
+                data = new
+                {
+                    requiresTwoFactorEnrollment = true,
+                    enrollmentToken = result.EnrollmentToken,
+                    twoFactorSetup = result.TwoFactorSetup,
+                    user = result.User
+                }
+            });
+        }
+
         if (result.RequiresTwoFactor)
         {
             return StatusCode(StatusCodes.Status202Accepted, new
@@ -213,6 +227,17 @@ public sealed class AuthController : ControllerBase
                 recoveryCodes = result.RecoveryCodes
             }
         });
+    }
+
+    /// <summary>Staff enrolling their first authenticator: the token from password + setup code, and the first code.</summary>
+    [HttpPost("2fa/enroll/complete")]
+    [EnableRateLimiting(AuthStrictRateLimitPolicy)]
+    public async Task<IActionResult> CompleteTwoFactorEnrollment([FromBody] TwoFactorEnrollmentCompleteDto request)
+    {
+        AuthTokenResponseDto result = await _identityService.CompleteTwoFactorEnrollmentAsync(
+            request.EnrollmentToken, request.Code, _currentUser.IpAddress, _currentUser.UserAgent);
+        WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
+        return Ok(new { data = MapTokenEnvelope(result) });
     }
 
     [Authorize]
@@ -474,5 +499,23 @@ public sealed class SellerIsolationResourcesController : ControllerBase
                 permissionVerified = Permissions.OrdersRefund
             }
         });
+    }
+}
+
+/// <summary>
+/// Staff onboarding (M1): every staff role must use an authenticator, and the first one is enrolled with a one-time setup code
+/// an administrator issues. A leaked password alone therefore cannot enrol an attacker's phone.
+/// </summary>
+[ApiController]
+[Route("api/v1/admin/users")]
+public sealed class AdminUserSecurityController(IIdentityService identity, ICurrentUserService currentUser) : ControllerBase
+{
+    [HttpPost("{userId:guid}/two-factor-setup-code")]
+    [RequirePermission(Permissions.UsersManage)]
+    public async Task<IActionResult> IssueSetupCode(Guid userId, CancellationToken ct)
+    {
+        Guid adminId = currentUser.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+        TwoFactorSetupCodeDto result = await identity.IssueTwoFactorSetupCodeAsync(adminId, userId, currentUser.IpAddress, cancellationToken: ct);
+        return Ok(new { data = result });
     }
 }

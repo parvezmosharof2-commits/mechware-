@@ -92,6 +92,40 @@
     }
   }
   ```
+- **Accounts that use 2FA:** `202` `{ "requiresTwoFactor": true }`. Send the request again with `totpCode` (a 6-digit code or a recovery code).
+- **Staff with no authenticator yet (M1):** the roles `admin`, `finance`, `support` and `moderator` must use 2FA.
+  1. A correct password alone returns `202 { "requiresTwoFactorEnrollment": true }` and nothing else.
+  2. Send the request again with `"setupCode": "ABCDE-23456"`, the one-time code an administrator issued. This returns `202 { "requiresTwoFactorEnrollment": true, "enrollmentToken": "…", "twoFactorSetup": { "secret", "otpAuthUri", "recoveryCodes" } }`. The secret is shown this one time only.
+  3. Finish with `POST /auth/2fa/enroll/complete`.
+  - A wrong setup code is a `401`. It counts as a failed login, and after 3 tries the code is spent.
+  - The code stays usable until enrolment succeeds. Using it again starts over: a new secret, a new token, and the old token retired.
+  - Completing enrolment revokes every earlier session.
+  - Staff cannot use `/auth/2fa/setup` or `/auth/2fa/verify`; those return `403 STAFF_ENROLL_WITH_SETUP_CODE`.
+
+#### `POST /auth/2fa/enroll/complete`
+- **Auth**: Public; the authority is the enrolment token | **Rate Limit**: strict auth limiter
+- **Request**: `{ "enrollmentToken": "…", "code": "123456" }`
+- **On success:** 2FA is turned on, the token is spent and the session starts. The response is `200`, the same as a login.
+- **Errors:**
+
+  | Status | When |
+  |---|---|
+  | `400` | The code is wrong. It counts as a failed login. |
+  | `401` | The token is unknown, expired, used, or has had 3 wrong codes. Start again with password + setup code. |
+
+#### `POST /admin/users/{id}/two-factor-setup-code`
+- **Auth**: Bearer + `users.manage`
+- **Response**: `200 { "userId", "setupCode": "ABCDE-23456", "expiresAtUtc" }`
+  - The code is shown once, valid for 72 hours and good for 3 tries.
+  - Hand it over in person or through another trusted channel.
+  - Issuing a new code cancels every earlier code and any open enrolment token.
+- **Errors:**
+
+  | Status | Code | When |
+  |---|---|---|
+  | `403` | `SETUP_CODE_FOR_SELF` | You cannot issue a code for yourself. |
+  | `403` | `ACCOUNT_DISABLED` | The account is suspended or banned. |
+  | `409` | `TWO_FACTOR_ENROLLMENT_NOT_NEEDED` | The user is not staff, or already has an authenticator. |
 
 #### `POST /auth/refresh`
 - **Auth**: Public (Reads `refresh_token` cookie) | **Rate Limit**: 20 req/min
@@ -137,7 +171,9 @@
 - **Revoke Request**: `{ "sessionId": "optional-family-uuid", "revokeAllExceptCurrent": false }` -> Marks target or all refresh token families as `is_revoked = true` and clears cookie on full logout.
 
 #### `POST /auth/2fa/setup` & `POST /auth/2fa/verify`
-- **Auth**: Bearer (`authenticated`, mandatory for `admin` & `finance` roles) | **Rate Limit**: 10 req/min
+- **Auth**: Bearer (`authenticated`) | **Rate Limit**: 10 req/min
+- **Who uses it:** buyers and sellers who opt in. Staff enrol through the setup-code flow above.
+- **Setup is refused with `409 TWO_FACTOR_ALREADY_ENABLED` once 2FA is on.** Otherwise a stolen access token could swap the secret and recovery codes, which would lock the owner out and give the thief the new secret.
 - **Setup Response**: `200 OK` `{ "secret": "JBSWY3DPEHPK3PXP", "qrCodeOtpAuthUrl": "otpauth://totp/MECHWARE:admin@mechware.com.bd?...", "recoveryCodes": ["MW-8F92-K19A", "..."] }`
 - **Verify Request**: `{ "totpCode": "123456" }` -> Enables `two_factor_enabled = true` and stores hashed recovery codes.
 

@@ -127,6 +127,14 @@ public sealed class User : AggregateRoot<Guid>
             _ => 4000
         };
 
+    /// <summary>The password and a further proof were right, but no session starts yet (2FA enrolment): only the failure count resets.</summary>
+    public void ClearFailedLogins(DateTime utcNow)
+    {
+        FailedLoginAttempts = 0;
+        LockoutUntilUtc = null;
+        UpdatedAtUtc = utcNow;
+    }
+
     public void RecordSuccessfulLogin(DateTime utcNow)
     {
         FailedLoginAttempts = 0;
