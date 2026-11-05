@@ -66,22 +66,27 @@ public sealed class Payment : Entity<Guid>
 
 /// <summary>
 /// The webhook inbox (brief §8.7): every provider event id is stored once. A second delivery of the same event hits the
-/// unique index and is answered as a duplicate without being processed again.
+/// unique index and is answered as a duplicate, unless the first attempt never finished (<see cref="Outcome"/> still
+/// <see cref="Received"/>): then the claim was given back on failure, or is taken over once stale.
 /// </summary>
 public sealed class PaymentEvent : Entity<Guid>
 {
     public string Provider { get; private set; } = string.Empty;
     public string EventId { get; private set; } = string.Empty;
     public string ProviderRef { get; private set; } = string.Empty;
-    public string Outcome { get; private set; } = "received";
+    /// <summary>The outcome of a row whose processing has started but not finished.</summary>
+    public const string Received = "received";
+
+    public string Outcome { get; private set; } = Received;
 
     private PaymentEvent() { }
 
-    public PaymentEvent(string provider, string eventId, string providerRef) : base(Guid.NewGuid())
+    public PaymentEvent(string provider, string eventId, string providerRef, DateTime? receivedAtUtc = null) : base(Guid.NewGuid())
     {
         Provider = provider;
         EventId = eventId;
         ProviderRef = providerRef;
+        if (receivedAtUtc is { } at) CreatedAtUtc = at;
     }
 
     public void Record(string outcome) => Outcome = outcome;

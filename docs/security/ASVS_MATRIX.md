@@ -50,7 +50,7 @@
 | বড় body প্রত্যাখ্যান | — (ASVS 5.0-এ request body আকারের সরাসরি requirement নেই; সম্পর্কিত: V15.2.2) | ✅ | webhook 64 KB সীমা (R3 রিভিউ); Kestrel সীমা | — |
 | Idempotency (একই key-তে একটাই অর্ডার) | — (সরাসরি requirement নেই; সম্পর্কিত: V2.3.3) | ✅ | `IT/Orders/OrderServiceTests.cs` (একই key-তে ৮ সমান্তরাল retry → ১ অর্ডার) | — |
 | Payment webhook: প্রতি বার্তায় স্বাক্ষর, replay নয় | V4.1.5 (L3) | ✅ | `UT/Payments/WebhookVerifierTests.cs`, `IT/Orders/PaymentServiceTests.cs` | — |
-| Payment event সাময়িক ত্রুটিতে হারায় না; এক অর্ডারে দ্বিতীয় পেমেন্ট refund-এ চিহ্নিত | V2.3.3 (L2), V15.4.2 (L3) | 🔴 | threat model v2 P1, P2 (RUN-এ পুনরুৎপাদিত) | আলাদা ফিক্স PR, আসল গেটওয়ের আগে |
+| Payment event সাময়িক ত্রুটিতে হারায় না; এক অর্ডারে দ্বিতীয় পেমেন্ট refund-এ চিহ্নিত | V2.3.3 (L2), V15.4.2 (L3) | ✅ | `IT/Orders/PaymentServiceTests.cs`: `ATransientProviderFailure_…`, `AnAttemptThatDiedMidway_…`, `ASecondPaidSessionForAConfirmedOrder_…`, `OneOrder_CannotCollectPaymentAttemptsWithoutBound` (mutation-checked) | refund-এর কাজের তালিকা (P3) |
 | কুপন কোড গণনা ঠেকানো | V2.4.1 (L2) | 🔴 | threat model v2 R1 | স্প্রিন্ট ১০–১২ |
 | Proxy-র পেছনে আসল client IP (rate limit) | V15.3.4 (L2), V4.1.3 (L2) | ✅ | `UT/Configuration/ForwardedHeadersSettingsTests.cs` (বাগ #৬) | ডেপ্লয়ে মান সেট করা |
 
