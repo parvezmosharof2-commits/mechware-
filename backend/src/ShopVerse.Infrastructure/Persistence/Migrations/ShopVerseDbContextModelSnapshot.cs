@@ -899,6 +899,11 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("legal_name");
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -930,7 +935,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Bin")
                         .IsUnique()
-                        .HasDatabaseName("ux_companies_bin");
+                        .HasDatabaseName("ux_companies_bin")
+                        .HasFilter("status <> 'Rejected'");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_companies_status");

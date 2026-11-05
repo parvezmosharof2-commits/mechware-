@@ -702,3 +702,10 @@ approval rules covers the order's own total, the order is placed as `pending_app
 Approval makes it `pending_payment` with 30 minutes to pay from then (credit orders become `confirmed` with the credit held;
 if the credit no longer covers it, it is cancelled); rejection, withdrawal or 24 hours without a decision cancel it.
 `POST /companies/{companyId}/approvals` refuses subject type `order` (`400`): order approvals come only from placing the order.
+
+### 2.21 Rejecting a company registration (threat model v1, H2)
+
+`POST /admin/companies/{companyId}/reject` (`companies.manage`) with `{ "reason": "..." }` (5–500 chars) refuses a **pending**
+registration (`409 COMPANY_NOT_PENDING` otherwise). The company becomes `rejected` (with `rejectionReason` on the company), can no
+longer be activated, suspended or used (`409 COMPANY_REJECTED`), and its BIN is free to register again. `POST /companies` answers
+`409 TOO_MANY_PENDING_COMPANIES` when the caller already administers 2 companies waiting for verification.

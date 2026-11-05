@@ -19,7 +19,20 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         await EnsureUserExistsAsync(actorUserId, ct);
         var company = Company.Register(Guid.NewGuid(), request.LegalName, request.TradeLicenceNo, request.Bin, request.Tin, request.Industry);
 
-        if (await db.Companies.AnyAsync(c => c.Bin == company.Bin, ct))
+        // One account cannot hold a stack of unverified registrations (and their BINs) at once (threat model v1, H2). The
+        // transaction-scoped lock per registrant makes the count exact under parallel requests.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var lockKey = $"company-register:{actorUserId:N}";
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", ct);
+        var pending = await (from m in db.CompanyMembers
+                             join c in db.Companies on m.CompanyId equals c.Id
+                             where m.UserId == actorUserId && (m.Roles & CompanyRoles.Admin) != 0 && c.Status == CompanyStatus.Pending
+                             select c.Id).CountAsync(ct);
+        if (pending >= MaxPendingRegistrationsPerUser)
+            throw new ConflictException("TOO_MANY_PENDING_COMPANIES",
+                $"You already have {pending} companies waiting for verification. Wait for MECHWARE to verify them first.");
+
+        if (await db.Companies.AnyAsync(c => c.Bin == company.Bin && c.Status != CompanyStatus.Rejected, ct))
             throw new ConflictException("COMPANY_BIN_EXISTS", "A company with this BIN is already registered.");
 
         db.Companies.Add(company);
@@ -29,6 +42,7 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         try
         {
             await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
         {
@@ -281,6 +295,12 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
     public Task<CompanyDto> AdminActivateAsync(Guid companyId, CancellationToken ct = default) =>
         MutateCompanyAsync(companyId, c => c.Activate(), ct);
 
+    /// <summary>Unverified registrations one account may hold at a time.</summary>
+    public const int MaxPendingRegistrationsPerUser = 2;
+
+    public Task<CompanyDto> AdminRejectAsync(Guid companyId, RejectCompanyRequest r, CancellationToken ct = default) =>
+        MutateCompanyAsync(companyId, c => c.Reject(r.Reason), ct);
+
     public Task<CompanyDto> AdminSuspendAsync(Guid companyId, CancellationToken ct = default) =>
         MutateCompanyAsync(companyId, c => c.Suspend(), ct);
 
@@ -321,7 +341,7 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
     private static CompanyDto ToDto(Company c) => new(
         c.Id, c.LegalName, c.TradeLicenceNo, c.Bin, c.Tin, c.Industry,
         c.Status.ToString().ToLowerInvariant(), c.CreditTerms.ToString().ToLowerInvariant(),
-        ToDto(c.CreditLimit), ToDto(c.CreditUsed), ToDto(c.CreditAvailable), c.CreatedAtUtc);
+        ToDto(c.CreditLimit), ToDto(c.CreditUsed), ToDto(c.CreditAvailable), c.CreatedAtUtc, c.RejectionReason);
 
     private static MoneyDto ToDto(Money m) => new(m.ToMinorUnits(), m.Currency.ToString());
 

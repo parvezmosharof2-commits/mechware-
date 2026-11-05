@@ -1,6 +1,10 @@
 namespace ShopVerse.Domain.Companies;
 
-public enum CompanyStatus { Pending = 1, Active = 2, Suspended = 3 }
+/// <summary>
+/// <see cref="Rejected"/>: MECHWARE refused the registration (wrong or someone else's BIN, failed documents). Final; its BIN is
+/// free for the real owner to register (threat model v1, H2).
+/// </summary>
+public enum CompanyStatus { Pending = 1, Active = 2, Suspended = 3, Rejected = 4 }
 
 public enum CreditTerms { None = 0, Net15 = 15, Net30 = 30 }
 

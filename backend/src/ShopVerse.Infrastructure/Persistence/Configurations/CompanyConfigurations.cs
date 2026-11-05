@@ -36,7 +36,9 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         b.Property(c => c.DefaultPriceListId).HasColumnName("default_price_list_id");
         b.Property(c => c.AccountManagerId).HasColumnName("account_manager_id");
 
-        b.HasIndex(c => c.Bin).IsUnique().HasDatabaseName("ux_companies_bin");
+        b.Property(c => c.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(500);
+        // A rejected registration releases its BIN, so a squatter cannot lock the real firm out (threat model v1, H2).
+        b.HasIndex(c => c.Bin).IsUnique().HasFilter("status <> 'Rejected'").HasDatabaseName("ux_companies_bin");
         b.HasIndex(c => c.Status).HasDatabaseName("ix_companies_status");
     }
 }

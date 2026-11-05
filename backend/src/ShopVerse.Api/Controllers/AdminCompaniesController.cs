@@ -25,6 +25,12 @@ public sealed class AdminCompaniesController(ICompanyService companies) : Contro
     public async Task<IActionResult> Activate(Guid companyId, CancellationToken ct) =>
         Ok(new { data = await companies.AdminActivateAsync(companyId, ct) });
 
+    /// <summary>Refuses a registration (wrong or someone else's BIN, failed documents) and frees its BIN for the real owner.</summary>
+    [HttpPost("{companyId:guid}/reject")]
+    [RequirePermission(Permissions.CompaniesManage)]
+    public async Task<IActionResult> Reject(Guid companyId, [FromBody] RejectCompanyRequest body, CancellationToken ct) =>
+        Ok(new { data = await companies.AdminRejectAsync(companyId, body, ct) });
+
     [HttpPost("{companyId:guid}/suspend")]
     [RequirePermission(Permissions.CompaniesManage)]
     public async Task<IActionResult> Suspend(Guid companyId, CancellationToken ct) =>
