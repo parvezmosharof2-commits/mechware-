@@ -1033,7 +1033,7 @@ function vConsolePrices() {
   return consoleShell('console-prices', inner);
 }
 
-var VIEWS = { 'home': vHome, 'products': vProducts, 'product': vProduct, 'quick-order': vQuick, 'cart': vCart, 'checkout': vCheckout, 'quote': vQuote, 'approvals': vApprovals, 'company': vCompany, 'invoice': vInvoice, 'console-orders': vConsoleOrders, 'console-prices': vConsolePrices };
+var VIEWS = new Map([['home', vHome], ['products', vProducts], ['product', vProduct], ['quick-order', vQuick], ['cart', vCart], ['checkout', vCheckout], ['quote', vQuote], ['approvals', vApprovals], ['company', vCompany], ['invoice', vInvoice], ['console-orders', vConsoleOrders], ['console-prices', vConsolePrices]]);
 
 /* ---------- interview notes ---------- */
 var NOTES = {
@@ -1074,15 +1074,16 @@ function renderChrome() {
 function render() {
   var fid = document.activeElement && document.activeElement.id;
   renderChrome();
-  app.innerHTML = VIEWS[current]();
+  var view = VIEWS.get(current) || vHome;
+  app.innerHTML = view();
   if (fid) { var el = document.getElementById(fid); if (el && app.contains(el)) el.focus({ preventScroll: true }); }
 }
 function go(id) {
-  if (!own(VIEWS, id)) id = 'home';
+  if (!VIEWS.has(id)) id = 'home';
   if (location.hash.slice(1) !== id) { location.hash = id; return; }
   current = id; render(); window.scrollTo(0, 0);
 }
-window.addEventListener('hashchange', function () { var id = location.hash.slice(1); current = own(VIEWS, id) ? id : 'home'; render(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', function () { var id = location.hash.slice(1); current = VIEWS.has(id) ? id : 'home'; render(); window.scrollTo(0, 0); });
 
 var toastTimer;
 function toast(msg) {
@@ -1192,7 +1193,7 @@ document.getElementById('next-btn').addEventListener('click', function () { var 
 document.getElementById('notes-btn').addEventListener('click', function () { notesOpen = !notesOpen; renderChrome(); });
 
 var start = location.hash.slice(1);
-current = own(VIEWS, start) ? start : 'home';
+current = VIEWS.has(start) ? start : 'home';
 render();
 })();
 </script>
