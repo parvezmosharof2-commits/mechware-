@@ -56,6 +56,11 @@ public sealed class IdentityService : IIdentityService
         // Hashing first keeps both outcomes equally slow, so timing does not tell them apart either.
         string passwordHash = _passwordHasher.HashPassword(request.Password);
 
+        // Every validation runs before the existence check (User.Create validates e-mail, phone, name and locale), so an
+        // invalid request is refused the same way whether or not the account exists: otherwise "fullName: X" answering
+        // 201 for a taken e-mail and 400 for a free one would still tell them apart.
+        var user = User.Create(normalizedEmail, normalizedPhone, passwordHash, request.FullName, request.Locale);
+
         // Finding #5 of the 2026-11-04 test: registration said "an account with this email address already exists",
         // which tells anyone whether an e-mail or phone number is a customer here. It now answers exactly as for a new
         // account; the owner keeps their account, no second one is created, and the attempt is audited.
@@ -66,7 +71,6 @@ public sealed class IdentityService : IIdentityService
             return await IndistinguishableFromNewRegistrationAsync(normalizedEmail, normalizedPhone, clientIp, cancellationToken);
         }
 
-        var user = User.Create(normalizedEmail, request.Phone?.Trim(), passwordHash, request.FullName, request.Locale);
         user.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000003"), Permissions.Roles.Buyer);
         _db.Users.Add(user);
 

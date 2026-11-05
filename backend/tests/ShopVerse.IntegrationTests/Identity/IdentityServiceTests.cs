@@ -207,6 +207,23 @@ public class IdentityServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         login.User!.Id.Should().Be(userId);
     }
 
+    /// <summary>
+    /// Found while re-testing finding #5 against the running API: the taken-account path skipped the name check, so a
+    /// one-letter name answered 201 for a taken e-mail and 400 for a free one, which still revealed the account.
+    /// </summary>
+    [PostgresFact]
+    public async Task AnInvalidRegistration_IsRefusedTheSameWay_WhetherOrNotTheAccountExists()
+    {
+        var (email, _, _, _) = await RegisterAndVerifyAsync();
+        var invalid = new RegisterRequestDto(email, null, "Other#Pass2026xyz", "X");
+        var invalidFree = invalid with { Email = Unique("free") + "@example.test" };
+
+        var taken = await Assert.ThrowsAsync<ValidationException>(() => IdentityTestKit.With(fixture, s => s.RegisterAsync(invalid)));
+        var free = await Assert.ThrowsAsync<ValidationException>(() => IdentityTestKit.With(fixture, s => s.RegisterAsync(invalidFree)));
+
+        taken.Message.Should().Be(free.Message);
+    }
+
     [PostgresFact]
     public async Task LoginLookup_UsesTheUniqueIndexes_AndStillIgnoresCase()
     {
