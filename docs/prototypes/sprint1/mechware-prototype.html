@@ -1,0 +1,1199 @@
+<title>MECHWARE Buyer Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a dense, table-first parts catalogue (McMaster / DigiKey register) inside a slim interview bar; console screens swap to a staff shell with a side nav. */
+:root {
+  --bg: #F3F6FA;
+  --surface: #FFFFFF;
+  --sunken: #EAF0F6;
+  --ink: #0F172A;
+  --ink-2: #3E4C63;
+  --ink-3: #5A687D;
+  --line: #D5DEE9;
+  --line-strong: #A9B7CA;
+  --navy: #0F3E7D;
+  --on-navy: #FFFFFF;
+  --navy-ink: #0F3E7D;
+  --navy-wash: #E6EEF9;
+  --teal: #00A8B5;
+  --teal-ink: #00707D;
+  --teal-wash: #E0F6F8;
+  --on-teal: #03282C;
+  --focus: #00C3D9;
+  --chrome: #0B2A55;
+  --on-chrome: #F1F6FD;
+  --chrome-2: #1A4380;
+  --ok: #11703A; --ok-bg: #E3F4E9;
+  --warn: #8A5300; --warn-bg: #FCF0D4;
+  --bad: #B42318; --bad-bg: #FDE7E4;
+  --info: #0B5E7A; --info-bg: #E2F2F7;
+
+  --f-ui: "Inter", "Hind Siliguri", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-bn: "Hind Siliguri", "Inter", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 6px;
+  --gut-l: max(16px, env(safe-area-inset-left, 0px));
+  --gut-r: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0A111E; --surface: #101A2C; --sunken: #0C1524; --ink: #E6EDF7; --ink-2: #B3C0D2; --ink-3: #94A3B8;
+    --line: #22324C; --line-strong: #3A4F72; --navy: #2E6BC1; --on-navy: #FFFFFF; --navy-ink: #8EB9F2; --navy-wash: #142640;
+    --teal: #1FB9C5; --teal-ink: #5ED2DB; --teal-wash: #0E2A30; --on-teal: #03282C; --focus: #38E3F5;
+    --chrome: #060C18; --on-chrome: #E6EDF7; --chrome-2: #1A2B47;
+    --ok: #63CF8F; --ok-bg: #11301F; --warn: #F2C25B; --warn-bg: #33270D; --bad: #F4897F; --bad-bg: #3A1714; --info: #7CCFE6; --info-bg: #0D2833;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0A111E; --surface: #101A2C; --sunken: #0C1524; --ink: #E6EDF7; --ink-2: #B3C0D2; --ink-3: #94A3B8;
+  --line: #22324C; --line-strong: #3A4F72; --navy: #2E6BC1; --on-navy: #FFFFFF; --navy-ink: #8EB9F2; --navy-wash: #142640;
+  --teal: #1FB9C5; --teal-ink: #5ED2DB; --teal-wash: #0E2A30; --on-teal: #03282C; --focus: #38E3F5;
+  --chrome: #060C18; --on-chrome: #E6EDF7; --chrome-2: #1A2B47;
+  --ok: #63CF8F; --ok-bg: #11301F; --warn: #F2C25B; --warn-bg: #33270D; --bad: #F4897F; --bad-bg: #3A1714; --info: #7CCFE6; --info-bg: #0D2833;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 14px; line-height: 1.45; }
+html[lang="bn"] body { font-family: var(--f-bn); line-height: 1.55; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--chrome); }
+h1, h2, h3 { margin: 0; text-wrap: balance; color: var(--ink); }
+h1 { font-size: 22px; line-height: 1.25; font-weight: 700; }
+h2 { font-size: 16px; font-weight: 700; }
+h3 { font-size: 14px; font-weight: 600; }
+p { margin: 0; }
+a { color: var(--navy-ink); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.num, .tnum { font-variant-numeric: tabular-nums; }
+.num { text-align: right; white-space: nowrap; }
+.pn { font-family: var(--f-mono); font-weight: 600; letter-spacing: -0.01em; word-break: break-all; }
+.muted { color: var(--ink-2); }
+.subtle { color: var(--ink-3); font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+html[lang="bn"] .label { letter-spacing: 0; text-transform: none; font-size: 12px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding-left: var(--gut-l); padding-right: var(--gut-r); }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.between { justify-content: space-between; }
+.grow { flex: 1 1 auto; min-width: 0; }
+
+/* Interview bar */
+.proto-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: var(--chrome); color: var(--on-chrome); }
+.proto-bar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-block: 8px; }
+.proto-tag { font-size: 12px; font-weight: 600; opacity: 0.9; white-space: nowrap; }
+.proto-tag b { font-weight: 700; letter-spacing: 0.08em; }
+.proto-bar select, .proto-bar .pbtn { height: 32px; border-radius: var(--r); border: 1px solid var(--chrome-2); background: var(--chrome-2); color: var(--on-chrome); padding: 0 10px; }
+.proto-bar select { min-width: 0; flex: 1 1 200px; max-width: 320px; }
+.proto-bar .pbtn { cursor: pointer; font-weight: 600; font-size: 13px; }
+.proto-bar .pbtn[aria-pressed="true"] { background: var(--on-chrome); color: var(--chrome); border-color: var(--on-chrome); }
+.seg { display: inline-flex; }
+.seg .pbtn:first-child { border-radius: var(--r) 0 0 var(--r); }
+.seg .pbtn:last-child { border-radius: 0 var(--r) var(--r) 0; }
+.proto-spacer { flex: 1 1 0; }
+@media (max-width: 520px) { .proto-tag { display: none; } }
+.notes { background: var(--teal-wash); border-bottom: 1px solid var(--line); }
+.notes .wrap { padding-block: 10px; }
+.notes ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
+
+/* Buttons and fields */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: var(--r); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 13px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.btn:hover { border-color: var(--navy-ink); }
+.btn-primary { background: var(--navy); border-color: var(--navy); color: var(--on-navy); }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-accent { background: var(--teal); border-color: var(--teal); color: var(--on-teal); }
+.btn-danger { color: var(--bad); border-color: var(--bad); }
+.btn-sm { min-height: 30px; padding: 0 10px; font-size: 12px; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; filter: none; }
+.btn-link { background: none; border: 0; padding: 0; color: var(--navy-ink); font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.input, select.input, textarea.input { height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface); min-width: 0; width: 100%; }
+textarea.input { height: auto; padding: 10px; font-family: var(--f-mono); font-size: 13px; line-height: 1.6; resize: vertical; }
+.qty { width: 72px; text-align: right; font-variant-numeric: tabular-nums; }
+.check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--navy); }
+
+/* Surfaces */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.panel-flush { padding: 0; overflow: hidden; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.callout { border-radius: var(--r); padding: 10px 12px; font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+.callout b { font-weight: 700; }
+.callout.warn { background: var(--warn-bg); color: var(--ink); border-left: 4px solid var(--warn); }
+.callout.info { background: var(--info-bg); color: var(--ink); border-left: 4px solid var(--info); }
+.callout.ok { background: var(--ok-bg); color: var(--ink); border-left: 4px solid var(--ok); }
+.callout.bad { background: var(--bad-bg); color: var(--ink); border-left: 4px solid var(--bad); }
+.pill { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.info { background: var(--info-bg); color: var(--info); }
+.pill.neutral { background: var(--sunken); color: var(--ink-2); }
+.chip { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--navy); color: var(--on-navy); border-color: var(--navy); }
+.chip .ct { font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+/* Tables */
+.tbl-scroll { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); padding: 8px 10px; border-bottom: 1px solid var(--line-strong); background: var(--sunken); white-space: nowrap; }
+html[lang="bn"] .tbl th { text-transform: none; letter-spacing: 0; font-size: 12px; }
+.tbl th.num { text-align: right; }
+.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tbl tbody tr:hover { background: var(--sunken); }
+.tbl tr.sel { background: var(--navy-wash); }
+.tbl tfoot td { font-weight: 700; border-bottom: 0; }
+.tbl .cell-title { font-weight: 600; }
+.tbl .cell-sub { font-size: 12px; color: var(--ink-2); }
+.breaks { display: grid; grid-template-columns: auto auto; gap: 0 10px; font-size: 12px; justify-content: end; }
+.breaks span:nth-child(odd) { color: var(--ink-3); text-align: right; }
+.breaks span:nth-child(even) { text-align: right; font-weight: 600; }
+.clickrow { cursor: pointer; }
+
+@media (max-width: 760px) {
+  .rt thead { display: none; }
+  .rt, .rt tbody, .rt tfoot { display: block; }
+  .rt tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 12px; border-bottom: 1px solid var(--line); }
+  .rt td { display: block; border: 0; padding: 0; min-width: 0; text-align: left; }
+  .rt td.num { text-align: left; white-space: normal; }
+  .rt td[data-label]::before { content: attr(data-label); display: block; font-size: 11px; font-weight: 600; color: var(--ink-3); }
+  .rt td.full { grid-column: 1 / -1; }
+  .rt td.hide-m { display: none; }
+  .rt .breaks { justify-content: start; }
+  .rt tfoot tr { display: flex; justify-content: space-between; }
+}
+
+/* Storefront chrome */
+.store-head { background: var(--surface); border-bottom: 1px solid var(--line); }
+.store-head .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding-block: 10px; }
+.logo { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 800; font-size: 18px; letter-spacing: 0.08em; color: var(--navy-ink); text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0; }
+.logo i { font-style: normal; width: 10px; height: 10px; background: var(--teal); display: inline-block; transform: rotate(45deg); border-radius: 2px; }
+.logo small { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-3); }
+.search { display: flex; flex: 1 1 320px; min-width: 0; order: 3; }
+.search input { flex: 1; min-width: 0; height: 38px; border: 1px solid var(--line-strong); border-right: 0; border-radius: var(--r) 0 0 var(--r); padding: 0 12px; background: var(--surface); }
+.search button { border-radius: 0 var(--r) var(--r) 0; }
+.acct { display: flex; align-items: center; gap: 12px; margin-left: auto; order: 2; font-size: 13px; }
+.acct .who { text-align: right; line-height: 1.25; }
+.acct .who b { display: block; }
+.cart-btn { position: relative; }
+.cart-btn .badge { background: var(--teal); color: var(--on-teal); border-radius: 999px; font-size: 11px; padding: 0 6px; font-weight: 700; }
+.catnav { border-top: 1px solid var(--line); background: var(--surface); }
+.catnav .wrap { display: flex; gap: 18px; overflow-x: auto; padding-block: 8px; font-size: 13px; font-weight: 600; scrollbar-width: none; }
+.catnav button { background: none; border: 0; padding: 2px 0; cursor: pointer; white-space: nowrap; color: var(--ink-2); }
+.catnav button:hover { color: var(--navy-ink); }
+@media (min-width: 900px) { .search { order: 2; } .acct { order: 3; margin-left: 0; } }
+@media (max-width: 520px) { .acct .who { display: none; } }
+
+.page { padding-block: 18px 48px; display: flex; flex-direction: column; gap: 16px; }
+.crumbs { font-size: 12px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 6px; }
+.crumbs button { background: none; border: 0; padding: 0; color: var(--navy-ink); cursor: pointer; font-size: 12px; }
+.title-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; }
+
+/* Home */
+.hero { background: var(--navy-wash); border-bottom: 1px solid var(--line); }
+.hero .wrap { padding-block: 22px; display: grid; gap: 12px; }
+.hero h1 { font-size: 24px; }
+.bigsearch { display: flex; gap: 8px; flex-wrap: wrap; }
+.bigsearch input { flex: 1 1 280px; min-width: 0; height: 46px; font-size: 16px; padding: 0 14px; border: 2px solid var(--navy); border-radius: var(--r); background: var(--surface); font-family: var(--f-mono); }
+.bigsearch .btn { min-height: 46px; padding: 0 22px; font-size: 14px; }
+.trust { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.trust div { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; min-width: 0; }
+.trust b { display: block; font-size: 13px; }
+.trust span { font-size: 12px; color: var(--ink-2); }
+.cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.cat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cat-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cat-head button { background: none; border: 0; padding: 0; font-weight: 700; font-size: 14px; color: var(--navy-ink); cursor: pointer; text-align: left; }
+.cat ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.cat li button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink-2); text-align: left; }
+.cat li button:hover { color: var(--navy-ink); text-decoration: underline; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+
+/* PLP */
+.plp { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px; align-items: start; }
+.filters { display: flex; flex-direction: column; gap: 14px; }
+.fgroup { display: flex; flex-direction: column; gap: 6px; }
+.fgroup .check { font-size: 13px; justify-content: space-between; }
+.fgroup .check span:first-of-type { flex: 1; }
+.filter-toggle { display: none; }
+@media (max-width: 960px) {
+  .plp { grid-template-columns: minmax(0, 1fr); }
+  .filter-toggle { display: inline-flex; }
+  .filters-wrap { display: none; }
+  .filters-wrap.open { display: block; }
+}
+
+/* PDP */
+.pdp { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.pdp-id { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: start; }
+.pdp-id h1 { font-family: var(--f-mono); font-size: 26px; letter-spacing: -0.02em; word-break: break-all; }
+.drawing { background: var(--sunken); border: 1px solid var(--line); border-radius: 8px; aspect-ratio: 1; max-width: 100%; display: grid; place-items: center; }
+.drawing svg { width: 82%; height: auto; }
+.specs { display: grid; grid-template-columns: minmax(140px, 0.9fr) minmax(0, 1.4fr); font-size: 13px; }
+.specs div { padding: 7px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.specs div:nth-child(odd) { color: var(--ink-2); background: var(--sunken); }
+.buybox { position: sticky; top: 64px; display: flex; flex-direction: column; gap: 14px; }
+.price-big { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.docs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.doc { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; background: var(--surface); font-size: 13px; min-width: 0; }
+.doc .ext { font-family: var(--f-mono); font-size: 10px; font-weight: 700; background: var(--navy-wash); color: var(--navy-ink); padding: 3px 5px; border-radius: 3px; }
+@media (max-width: 1000px) { .pdp { grid-template-columns: minmax(0, 1fr); } .buybox { position: static; } }
+@media (max-width: 560px) { .pdp-id { grid-template-columns: minmax(0, 1fr); } .pdp-id .drawing { max-width: 200px; } .pdp-id h1 { font-size: 22px; } }
+
+/* Checkout / cart */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.summary { position: sticky; top: 64px; display: flex; flex-direction: column; gap: 10px; }
+.sumrow { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.sumrow.total { font-size: 18px; font-weight: 700; border-top: 1px solid var(--line-strong); padding-top: 10px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.choice { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 12px; cursor: pointer; background: var(--surface); }
+.choice input { margin-top: 3px; accent-color: var(--navy); }
+.choice.on { border-color: var(--navy-ink); box-shadow: inset 0 0 0 1px var(--navy-ink); background: var(--navy-wash); }
+.choice.off { opacity: 0.6; cursor: not-allowed; }
+.choices { display: grid; gap: 8px; }
+.steps { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.steps span.on { color: var(--navy-ink); }
+.split.qo { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+@media (max-width: 1000px) { .split, .split.qo { grid-template-columns: minmax(0, 1fr); } .summary { position: static; } }
+
+/* Quote */
+.qmeta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.qmeta div { padding: 10px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 -1px -1px 0; min-width: 0; }
+.qmeta b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+.countdown { color: var(--warn); }
+.versions { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.versions div { display: flex; gap: 10px; justify-content: space-between; }
+
+/* Approvals */
+.inbox { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 16px; align-items: start; }
+.req { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--surface); cursor: pointer; text-align: left; border-left: 4px solid transparent; width: 100%; border-top: 0; border-right: 0; }
+.req.sel { border-left-color: var(--navy); background: var(--navy-wash); }
+.req .amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.inbox.pl { grid-template-columns: 280px minmax(0, 1fr); }
+@media (max-width: 900px) { .inbox, .inbox.pl { grid-template-columns: minmax(0, 1fr); } }
+
+/* Dashboard */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; text-align: left; cursor: pointer; }
+.kpi:hover { border-color: var(--navy-ink); }
+.kpi b { font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.meter { height: 10px; background: var(--sunken); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
+.meter span { display: block; height: 100%; background: var(--navy); }
+.bars { display: grid; gap: 10px; }
+.bar { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.bar .track { height: 14px; background: var(--sunken); border-radius: 3px; overflow: hidden; }
+.bar .fill { height: 100%; background: var(--teal); }
+.bar .fill.over { background: var(--warn); }
+.bar .v { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 92px; text-align: right; }
+@media (max-width: 560px) { .bar { grid-template-columns: minmax(0, 1fr) auto; } .bar .track { grid-column: 1 / -1; grid-row: 2; } }
+
+/* Invoice */
+.invoice { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 4px; padding: 24px; display: flex; flex-direction: column; gap: 14px; font-family: var(--f-bn); }
+.inv-top { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: start; }
+.inv-top .mid { text-align: center; }
+.inv-top .mid h1 { font-size: 20px; }
+.inv-top .right { text-align: right; font-size: 12px; }
+.inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--line-strong); }
+.inv-parties > dl { margin: 0; padding: 10px 12px; font-size: 13px; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; }
+.inv-parties > dl + dl { border-left: 1px solid var(--line-strong); }
+.inv-parties dt { color: var(--ink-2); }
+.inv-parties dd { margin: 0; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.inv .tbl th, .inv .tbl td { border: 1px solid var(--line-strong); }
+.inv .tbl th { white-space: normal; text-transform: none; letter-spacing: 0; font-size: 11px; vertical-align: bottom; }
+.sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; font-size: 12px; padding-top: 28px; }
+.sign div { border-top: 1px solid var(--line-strong); padding-top: 6px; }
+@media (max-width: 700px) {
+  .invoice { padding: 14px; }
+  .inv-top { grid-template-columns: 1fr; }
+  .inv-top .mid, .inv-top .right { text-align: left; }
+  .inv-parties { grid-template-columns: 1fr; }
+  .inv-parties > dl + dl { border-left: 0; border-top: 1px solid var(--line-strong); }
+}
+
+/* Console */
+.console { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 70vh; }
+.side { background: var(--chrome); color: var(--on-chrome); padding: 14px 10px; display: flex; flex-direction: column; gap: 2px; }
+.side .logo { color: var(--on-chrome); padding: 4px 8px 12px; }
+.side .logo small { color: var(--on-chrome); opacity: 0.75; }
+.side button { background: none; border: 0; color: var(--on-chrome); text-align: left; padding: 8px 10px; border-radius: var(--r); font-size: 13px; font-weight: 500; cursor: pointer; opacity: 0.85; white-space: nowrap; }
+.side button.on { background: var(--chrome-2); opacity: 1; font-weight: 700; }
+.side .who { margin-top: auto; font-size: 12px; opacity: 0.8; padding: 12px 10px 0; }
+.cmain { padding-block: 18px 48px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.co-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.timeline li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; padding-bottom: 14px; position: relative; font-size: 13px; }
+.timeline li::before { content: ""; position: absolute; left: 8px; top: 16px; bottom: 0; width: 2px; background: var(--line); }
+.timeline li:last-child::before { display: none; }
+.timeline .dot { width: 14px; height: 14px; border-radius: 50%; margin-top: 3px; border: 2px solid var(--line-strong); background: var(--surface); position: relative; z-index: 1; }
+.timeline li.done .dot { background: var(--ok); border-color: var(--ok); }
+.timeline li.now .dot { background: var(--teal); border-color: var(--teal); box-shadow: 0 0 0 4px var(--teal-wash); }
+.diff-old { text-decoration: line-through; color: var(--ink-3); font-size: 12px; display: block; }
+.diff-new { font-weight: 700; }
+.flag { color: var(--bad); font-weight: 700; }
+.lists { display: flex; flex-direction: column; }
+.lists button { text-align: left; background: var(--surface); border: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; border-left: 4px solid transparent; }
+.lists button.sel { border-left-color: var(--navy); background: var(--navy-wash); }
+@media (max-width: 1100px) { .co-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) {
+  .console { grid-template-columns: minmax(0, 1fr); }
+  .side { flex-direction: row; overflow-x: auto; padding: 8px max(16px, env(safe-area-inset-left, 0px)); align-items: center; }
+  .side .logo { padding: 0 12px 0 0; }
+  .side .who { display: none; }
+  .cmain { padding-left: var(--gut-l); padding-right: var(--gut-r); }
+}
+
+.toast { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; z-index: 50; max-width: calc(100% - 32px); box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: rise 0.18s ease-out; } @keyframes rise { from { transform: translate(-50%, 8px); opacity: 0; } } }
+</style>
+
+<header class="proto-bar" aria-label="Prototype controls">
+  <div class="wrap">
+    <span class="proto-tag"><b>MECHWARE</b> · <span id="proto-label">Prototype · sample data</span></span>
+    <button class="pbtn" id="prev-btn" type="button" aria-label="Previous screen">‹</button>
+    <select id="screen-select" aria-label="Screen"></select>
+    <button class="pbtn" id="next-btn" type="button" aria-label="Next screen">›</button>
+    <span class="proto-spacer"></span>
+    <button class="pbtn" id="notes-btn" type="button" aria-pressed="false" aria-controls="notes">Interview notes</button>
+    <span class="seg" role="group" aria-label="Language">
+      <button class="pbtn" type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button class="pbtn" type="button" data-lang="bn" aria-pressed="false">বাংলা</button>
+    </span>
+  </div>
+</header>
+<section class="notes" id="notes" hidden></section>
+<div id="app"></div>
+<div id="toast-live" aria-live="polite"></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ---------- language and number formatting ---------- */
+var lang = 'en';
+try { var saved = localStorage.getItem('mw-proto-lang'); if (saved === 'bn' || saved === 'en') lang = saved; } catch (e) {}
+var BN = '০১২৩৪৫৬৭৮৯';
+function L(en, bn) { return lang === 'bn' ? bn : en; }
+function dg(s) { s = String(s); return lang === 'bn' ? s.replace(/[0-9]/g, function (d) { return BN[d]; }) : s; }
+function num(n) { return dg(Math.round(n).toLocaleString('en-IN')); }
+function tk(n) { return '৳' + num(n); }
+function tk2(n) {
+  var v = Math.round(n * 100) / 100;
+  var s = v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '৳' + dg(s);
+}
+function pct(n, d) { return dg((n).toFixed(d == null ? 1 : d)) + '%'; }
+var MONTHS = { en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+  bn: ['জানুয়ারি','ফেব্রুয়ারি','মার্চ','এপ্রিল','মে','জুন','জুলাই','আগস্ট','সেপ্টেম্বর','অক্টোবর','নভেম্বর','ডিসেম্বর'] };
+function dt(y, m, d) { return lang === 'bn' ? dg(d) + ' ' + MONTHS.bn[m - 1] + ' ' + dg(y) : d + ' ' + MONTHS.en[m - 1] + ' ' + y; }
+function when(x) { return Array.isArray(x) ? dt(x[0], x[1], x[2]) : dg(x); }
+function own(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+/* ---------- sample catalogue ---------- */
+var P = {
+  '6ES7214-1AG40-0XB0': { mfr: 'Siemens', name: 'SIMATIC S7-1200 CPU 1214C DC/DC/DC', cat: 'plc', di: 14, dout: 10, an: '2 AI', supply: '24 VDC', comms: ['PROFINET'], stock: { dhk: 30, ctg: 12 }, prices: [[1, 48500], [5, 46800], [10, 45200]], pack: 1 },
+  '6ES7215-1AG40-0XB0': { mfr: 'Siemens', name: 'SIMATIC S7-1200 CPU 1215C DC/DC/DC', cat: 'plc', di: 14, dout: 10, an: '2 AI / 2 AO', supply: '24 VDC', comms: ['PROFINET'], stock: { dhk: 11, ctg: 7 }, prices: [[1, 62400], [5, 60100], [10, 58300]], pack: 1 },
+  '6ES7212-1BE40-0XB0': { mfr: 'Siemens', name: 'SIMATIC S7-1200 CPU 1212C AC/DC/Relay', cat: 'plc', di: 8, dout: 6, an: '2 AI', supply: '85–264 VAC', comms: ['PROFINET'], stock: { dhk: 20, ctg: 7 }, prices: [[1, 31900], [5, 30700], [10, 29600]], pack: 1 },
+  'AS228T-A': { mfr: 'Delta', name: 'AS200 series CPU, 28 I/O, transistor', cat: 'plc', di: 16, dout: 12, an: '—', supply: '24 VDC', comms: ['Ethernet', 'RS-485'], stock: { dhk: 22, ctg: 9 }, prices: [[1, 24900], [5, 23900], [10, 23100]], pack: 1 },
+  'DVP28SV11T2': { mfr: 'Delta', name: 'DVP-SV2 slim PLC, 28 I/O, transistor', cat: 'plc', di: 16, dout: 12, an: '—', supply: '24 VDC', comms: ['RS-485'], stock: { dhk: 40, ctg: 15 }, prices: [[1, 18450], [10, 17200], [25, 16600]], pack: 1 },
+  'CP1E-N40DT-D': { mfr: 'Omron', name: 'SYSMAC CP1E N-type CPU, 40 I/O', cat: 'plc', di: 24, dout: 16, an: '—', supply: '24 VDC', comms: ['RS-232'], stock: { dhk: 9, ctg: 0 }, prices: [[1, 27600], [5, 26500]], pack: 1 },
+  'FX5U-32MT/ES': { mfr: 'Mitsubishi', name: 'MELSEC iQ-F FX5U CPU, 32 I/O', cat: 'plc', di: 16, dout: 16, an: '2 AI / 1 AO', supply: '100–240 VAC', comms: ['Ethernet', 'RS-485'], stock: { dhk: 0, ctg: 0 }, lead: [3, 4], prices: [[1, 44200], [5, 42600]], pack: 1 },
+  'TM221CE24T': { mfr: 'Schneider', name: 'Modicon M221 logic controller, 24 I/O', cat: 'plc', di: 14, dout: 10, an: '2 AI', supply: '100–240 VAC', comms: ['Ethernet'], stock: { dhk: 12, ctg: 0 }, prices: [[1, 29800], [5, 28700]], pack: 1 },
+  'E2E-X5ME1 2M': { mfr: 'Omron', name: 'Inductive proximity sensor M18, 5 mm, NPN-NO, 2 m cable', cat: 'sensor', stock: { dhk: 260, ctg: 80 }, prices: [[1, 2350], [10, 2180], [50, 1990]], pack: 1 },
+  'UK 2.5 N': { mfr: 'Phoenix Contact', name: 'Feed-through terminal block 2.5 mm², grey (box of 50)', cat: 'panel', stock: { dhk: 1800, ctg: 600 }, prices: [[1, 43], [500, 39]], pack: 50 },
+  'VFD037E43A': { mfr: 'Delta', name: 'VFD-E AC drive 3.7 kW, 3-phase 415 V', cat: 'drive', stock: { dhk: 9, ctg: 5 }, prices: [[1, 38900], [5, 37400]], pack: 1 },
+  '6ES7214-1AG31-0XB0': { mfr: 'Siemens', name: 'S7-1200 CPU 1214C (firmware V3)', cat: 'plc', discontinued: '6ES7214-1AG40-0XB0', stock: { dhk: 0, ctg: 0 }, prices: [[1, 0]], pack: 1 }
+};
+function stockOf(sku) { var s = P[sku].stock; return s.dhk + s.ctg; }
+function unitPrice(sku, q) { var pr = P[sku].prices, u = pr[0][1]; for (var i = 0; i < pr.length; i++) if (q >= pr[i][0]) u = pr[i][1]; return u; }
+var PLC = Object.keys(P).filter(function (k) { return P[k].cat === 'plc' && !P[k].discontinued; });
+
+/* ---------- state ---------- */
+var S = {
+  cart: [
+    { sku: '6ES7214-1AG40-0XB0', qty: 4 },
+    { sku: 'DVP28SV11T2', qty: 10 },
+    { sku: 'E2E-X5ME1 2M', qty: 25 },
+    { sku: 'UK 2.5 N', qty: 150 }
+  ],
+  filters: { mfr: {}, supply: {}, comms: {}, di: {}, instock: false },
+  filtersOpen: false,
+  pdpQty: 4,
+  costCentre: 'CC-204',
+  po: 'MTM/PO/2026/1187',
+  site: 'nrg',
+  pay: 'credit',
+  vds: true,
+  quickText: '6ES7214-1AG40-0XB0\t4\nDVP28SV11T2, 10\nE2E-X5ME1 2M 25\nUK 2.5 N\t120\nFX5U-32MT/ES\t2\n6ES7214-1AG31-0XB0\t1',
+  quickRows: null,
+  approvals: [
+    { id: 'MW-261105-K7Q2P9', kind: 'order', by: 'Tanvir Ahmed', role: { en: 'Maintenance engineer', bn: 'মেইনটেন্যান্স ইঞ্জিনিয়ার' }, cc: 'CC-204', amount: 490992.5, at: '10:42', note: { en: 'Line 3 conveyor PLC replacement and spare proximity sensors.', bn: 'লাইন ৩-এর কনভেয়রের PLC বদল আর বাড়তি প্রক্সিমিটি সেন্সর।' }, why: { en: 'Order total is above your ৳1,00,000 single-order limit.', bn: 'অর্ডারের মোট টাকা একক অর্ডারের ৳১,০০,০০০ সীমার বেশি।' }, status: 'pending', reason: '' },
+    { id: 'QT-261104-0137 v2', kind: 'quote', by: 'Shahana Akter', role: { en: 'Purchase officer', bn: 'ক্রয় কর্মকর্তা' }, cc: 'CC-310', amount: 312800, at: '09:15', note: { en: 'Accept MECHWARE quotation for boiler feed-pump drives.', bn: 'বয়লার ফিড-পাম্পের ড্রাইভের জন্য MECHWARE-এর কোটেশন গ্রহণ।' }, why: { en: 'Accepting a quotation always needs a manager.', bn: 'কোটেশন গ্রহণে সবসময় ম্যানেজারের অনুমোদন লাগে।' }, status: 'pending', reason: '' },
+    { id: 'MW-261104-H2M8XD', kind: 'order', by: 'Mahmudul Karim', role: { en: 'Electrical supervisor', bn: 'ইলেকট্রিক্যাল সুপারভাইজার' }, cc: 'CC-118', amount: 58650, at: [2026, 11, 4], note: { en: 'MCBs and contactors for the new spinning panel.', bn: 'নতুন স্পিনিং প্যানেলের MCB আর কন্টাক্টর।' }, why: { en: 'Cost centre CC-118 has used 92% of this quarter’s budget.', bn: 'CC-118 এই প্রান্তিকের বাজেটের ৯২% খরচ করে ফেলেছে।' }, status: 'pending', reason: '' }
+  ],
+  apSel: 0,
+  apError: '',
+  coFilter: 'all',
+  coSel: 0,
+  plSel: 0,
+  plAck: false,
+  plStatus: 'pending'
+};
+
+var CC = [
+  { id: 'CC-204', en: 'Dyeing unit — Maintenance', bn: 'ডাইং ইউনিট — মেইনটেন্যান্স', spend: 842300, budget: 1200000 },
+  { id: 'CC-310', en: 'Utility — Boiler house', bn: 'ইউটিলিটি — বয়লার হাউস', spend: 315800, budget: 600000 },
+  { id: 'CC-118', en: 'Electrical — Spinning', bn: 'ইলেকট্রিক্যাল — স্পিনিং', spend: 207400, budget: 225000 },
+  { id: 'CC-415', en: 'Packaging line', bn: 'প্যাকেজিং লাইন', spend: 96250, budget: 300000 }
+];
+var APPROVAL_LIMIT = 100000, CREDIT_LIMIT = 1000000, CREDIT_USED = 360000, VAT = 0.15, COD_LIMIT = 50000;
+
+function cartTotals() {
+  var sub = 0;
+  S.cart.forEach(function (l) { sub += unitPrice(l.sku, l.qty) * l.qty; });
+  var vat = sub * VAT;
+  return { sub: sub, vat: vat, total: sub + vat, vds: S.vds ? vat : 0 };
+}
+function cartCount() { return S.cart.length; }
+
+/* ---------- screens ---------- */
+var SCREENS = [
+  { id: 'home', en: 'Home', bn: 'হোম' },
+  { id: 'products', en: 'Product list', bn: 'পণ্যের তালিকা' },
+  { id: 'product', en: 'Product page', bn: 'পণ্যের পাতা' },
+  { id: 'quick-order', en: 'Quick order', bn: 'কুইক অর্ডার' },
+  { id: 'cart', en: 'Cart', bn: 'কার্ট' },
+  { id: 'checkout', en: 'Checkout', bn: 'চেকআউট' },
+  { id: 'quote', en: 'Quotation', bn: 'কোটেশন' },
+  { id: 'approvals', en: 'Approval inbox', bn: 'অনুমোদনের ইনবক্স' },
+  { id: 'company', en: 'Company dashboard', bn: 'কোম্পানি ড্যাশবোর্ড' },
+  { id: 'invoice', en: 'Invoice (Mushak-6.3)', bn: 'ইনভয়েস (মূসক-৬.৩)' },
+  { id: 'console-orders', en: 'Console: orders', bn: 'কনসোল: অর্ডার' },
+  { id: 'console-prices', en: 'Console: price lists', bn: 'কনসোল: প্রাইস লিস্ট' }
+];
+var current = 'home';
+
+var PERSONA = {
+  buyer: { name: 'Tanvir Ahmed', role: { en: 'Maintenance engineer', bn: 'মেইনটেন্যান্স ইঞ্জিনিয়ার' } },
+  manager: { name: 'Rafiq Hasan', role: { en: 'Plant manager', bn: 'প্ল্যান্ট ম্যানেজার' } },
+  accounts: { name: 'Nasrin Sultana', role: { en: 'Accounts', bn: 'হিসাব বিভাগ' } }
+};
+var COMPANY = { en: 'Meghna Textile Mills Ltd.', bn: 'মেঘনা টেক্সটাইল মিলস লিমিটেড' };
+
+function storeHead(persona) {
+  var p = PERSONA[persona || 'buyer'];
+  return '<div class="store-head"><div class="wrap">' +
+    '<button class="logo" data-go="home" type="button"><i aria-hidden="true"></i>MECHWARE<small>' + L('Industrial supply', 'ইন্ডাস্ট্রিয়াল সাপ্লাই') + '</small></button>' +
+    '<form class="search" data-act="search" role="search"><input id="hdr-search" type="search" aria-label="' + L('Search by part number or keyword', 'পার্ট নম্বর বা কীওয়ার্ড দিয়ে খুঁজুন') + '" placeholder="' + L('Part number, e.g. 6ES7214-1AG40', 'পার্ট নম্বর, যেমন 6ES7214-1AG40') + '"><button class="btn btn-primary" type="submit">' + L('Search', 'খুঁজুন') + '</button></form>' +
+    '<div class="acct"><button class="btn btn-sm" data-go="quick-order" type="button">' + L('Quick order', 'কুইক অর্ডার') + '</button>' +
+    '<div class="who"><b>' + p.name + '</b><span class="subtle">' + L(p.role.en, p.role.bn) + ' · ' + L(COMPANY.en, COMPANY.bn) + '</span></div>' +
+    '<button class="btn btn-sm cart-btn" data-go="cart" type="button">' + L('Cart', 'কার্ট') + ' <span class="badge">' + dg(cartCount()) + '</span></button></div>' +
+    '</div></div>' +
+    '<nav class="catnav" aria-label="' + L('Categories', 'ক্যাটাগরি') + '"><div class="wrap">' +
+    CATS.map(function (c) { return '<button type="button" data-go="products">' + L(c.en, c.bn) + '</button>'; }).join('') +
+    '<button type="button" data-go="company">' + L('Company account', 'কোম্পানি অ্যাকাউন্ট') + '</button>' +
+    '</div></nav>';
+}
+
+var CATS = [
+  { en: 'PLCs & controllers', bn: 'PLC ও কন্ট্রোলার', n: 1240, subs: [['CPU modules', 'CPU মডিউল'], ['I/O modules', 'I/O মডিউল'], ['HMI panels', 'HMI প্যানেল']] },
+  { en: 'Drives & motors', bn: 'ড্রাইভ ও মোটর', n: 860, subs: [['AC drives (VFD)', 'AC ড্রাইভ (VFD)'], ['Servo systems', 'সার্ভো সিস্টেম'], ['Gear motors', 'গিয়ার মোটর']] },
+  { en: 'Sensors', bn: 'সেন্সর', n: 2315, subs: [['Proximity', 'প্রক্সিমিটি'], ['Photoelectric', 'ফটোইলেকট্রিক'], ['Pressure & temperature', 'চাপ ও তাপমাত্রা']] },
+  { en: 'Switchgear', bn: 'সুইচগিয়ার', n: 1980, subs: [['Contactors', 'কন্টাক্টর'], ['MCB / MCCB', 'MCB / MCCB'], ['Overload relays', 'ওভারলোড রিলে']] },
+  { en: 'Power supplies', bn: 'পাওয়ার সাপ্লাই', n: 410, subs: [['DIN-rail 24 VDC', 'DIN-rail ২৪ VDC'], ['UPS modules', 'UPS মডিউল'], ['Transformers', 'ট্রান্সফর্মার']] },
+  { en: 'Pneumatics', bn: 'নিউমেটিক্স', n: 1125, subs: [['Cylinders', 'সিলিন্ডার'], ['Solenoid valves', 'সোলেনয়েড ভালভ'], ['FRL units', 'FRL ইউনিট']] },
+  { en: 'Cables & connectors', bn: 'ক্যাবল ও কানেক্টর', n: 3460, subs: [['Control cable', 'কন্ট্রোল ক্যাবল'], ['M12 connectors', 'M12 কানেক্টর'], ['Cable glands', 'ক্যাবল গ্ল্যান্ড']] },
+  { en: 'Panel accessories', bn: 'প্যানেল অ্যাক্সেসরিজ', n: 2070, subs: [['Terminal blocks', 'টার্মিনাল ব্লক'], ['Enclosures', 'এনক্লোজার'], ['Pilot lights', 'পাইলট লাইট']] }
+];
+
+function crumbs(items) {
+  return '<nav class="crumbs" aria-label="Breadcrumb">' + items.map(function (it, i) {
+    var sep = i ? '<span aria-hidden="true">/</span>' : '';
+    return sep + (it.go ? '<button type="button" data-go="' + it.go + '">' + it.t + '</button>' : '<span>' + it.t + '</span>');
+  }).join('') + '</nav>';
+}
+
+function stockCell(sku) {
+  var p = P[sku], n = stockOf(sku);
+  if (n > 0) return '<span class="pill ok">' + num(n) + ' ' + L('in stock', 'স্টকে') + '</span><div class="subtle">' + L('Dhaka', 'ঢাকা') + ' ' + num(p.stock.dhk) + ' · ' + L('Ctg', 'চট্টগ্রাম') + ' ' + num(p.stock.ctg) + '</div>';
+  return '<span class="pill warn">' + L('On order', 'অর্ডারে আছে') + '</span><div class="subtle">' + L('Lead time', 'আসতে সময়') + ' ' + dg(p.lead[0]) + '–' + dg(p.lead[1]) + ' ' + L('weeks', 'সপ্তাহ') + '</div>';
+}
+function breaksHtml(sku) {
+  return '<div class="breaks">' + P[sku].prices.map(function (b) { return '<span>' + num(b[0]) + '+</span><span>' + tk(b[1]) + '</span>'; }).join('') + '</div>';
+}
+
+/* 1. Home */
+function vHome() {
+  var recent = [['6ES7214-1AG40-0XB0', dt(2026, 10, 12), 2], ['E2E-X5ME1 2M', dt(2026, 10, 12), 20], ['VFD037E43A', dt(2026, 9, 28), 1]];
+  return storeHead() +
+    '<section class="hero"><div class="wrap">' +
+    '<h1>' + L('Find the exact part. See stock and your price.', 'ঠিক পার্টটা খুঁজুন। স্টক আর আপনার দাম সাথে সাথে দেখুন।') + '</h1>' +
+    '<form class="bigsearch" data-act="search"><input id="home-search" type="search" aria-label="' + L('Part number or keyword', 'পার্ট নম্বর বা কীওয়ার্ড') + '" value="6ES7214"><button class="btn btn-primary" type="submit">' + L('Search parts', 'পার্ট খুঁজুন') + '</button><button class="btn" type="button" data-go="quick-order">' + L('Paste a parts list', 'পার্টের তালিকা পেস্ট করুন') + '</button></form>' +
+    '<div class="row subtle">' + L('Try:', 'চেষ্টা করুন:') + ' <button class="btn-link pn" type="button" data-go="product">6ES7214-1AG40-0XB0</button> <button class="btn-link pn" type="button" data-go="products">DVP28SV11T2</button> <button class="btn-link pn" type="button" data-go="products">E2E-X5ME1</button></div>' +
+    '</div></section>' +
+    '<main class="wrap page">' +
+    '<div class="trust">' +
+    '<div><b>' + L('Authorised distributor', 'অনুমোদিত ডিস্ট্রিবিউটর') + '</b><span>Siemens · Delta · Omron · Mitsubishi Electric</span></div>' +
+    '<div><b>' + L('Trade licence & BIN', 'ট্রেড লাইসেন্স ও BIN') + '</b><span class="tnum">TRAD/DNCC/0XXXXX/2024 · BIN 00XXXXXXX-0101</span></div>' +
+    '<div><b>' + L('Two warehouses', 'দুটি গুদাম') + '</b><span>' + L('Dhaka (Tejgaon) · Chattogram (Agrabad)', 'ঢাকা (তেজগাঁও) · চট্টগ্রাম (আগ্রাবাদ)') + '</span></div>' +
+    '<div><b>' + L('Same-day dispatch', 'একই দিনে পাঠানো') + '</b><span>' + L('Orders confirmed before 2:00 pm', 'দুপুর ২টার আগে নিশ্চিত হওয়া অর্ডার') + '</span></div>' +
+    '</div>' +
+    '<div class="two">' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Buy again', 'আবার কিনুন') + '</h2><button class="btn-link" type="button" data-go="company">' + L('All orders', 'সব অর্ডার') + '</button></div>' +
+    '<div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th>' + L('Last bought', 'শেষ কেনা') + '</th><th class="num">' + L('Your price', 'আপনার দাম') + '</th><th></th></tr></thead><tbody>' +
+    recent.map(function (r) {
+      return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + r[0] + '</span><div class="cell-sub">' + P[r[0]].mfr + ' · ' + esc(P[r[0]].name) + '</div></td><td data-label="' + L('Last bought', 'শেষ কেনা') + '">' + r[1] + ' · ' + num(r[2]) + ' ' + L('pcs', 'পিস') + '</td><td class="num" data-label="' + L('Your price', 'আপনার দাম') + '">' + tk(unitPrice(r[0], 1)) + '</td><td class="num"><button class="btn btn-sm" type="button" data-act="add" data-sku="' + esc(r[0]) + '" data-qty="' + r[2] + '">' + L('Add', 'যোগ') + ' ' + num(r[2]) + '</button></td></tr>';
+    }).join('') + '</tbody></table></div></section>' +
+    '<section class="panel stack"><div class="row between"><h2>' + L('Your company', 'আপনার কোম্পানি') + '</h2><button class="btn-link" type="button" data-go="company">' + L('Dashboard', 'ড্যাশবোর্ড') + '</button></div>' +
+    '<div class="row between"><span class="muted">' + L('Waiting for approval', 'অনুমোদনের অপেক্ষায়') + '</span><button class="btn-link" type="button" data-go="approvals">' + num(pendingCount()) + ' ' + L('requests', 'টি অনুরোধ') + '</button></div>' +
+    '<div class="row between"><span class="muted">' + L('Open quotations', 'খোলা কোটেশন') + '</span><button class="btn-link" type="button" data-go="quote">' + num(2) + '</button></div>' +
+    '<div><div class="row between"><span class="muted">' + L('Credit used (30-day terms)', 'ক্রেডিট ব্যবহার (৩০ দিনের শর্ত)') + '</span><span class="tnum">' + tk(CREDIT_USED) + ' / ' + tk(CREDIT_LIMIT) + '</span></div><div class="meter" style="margin-top:6px"><span style="width:' + (CREDIT_USED / CREDIT_LIMIT * 100) + '%"></span></div></div>' +
+    '</section></div>' +
+    '<section class="stack"><div class="row between"><h2>' + L('Browse by category', 'ক্যাটাগরি অনুযায়ী দেখুন') + '</h2><span class="subtle">' + num(13460) + ' ' + L('parts listed', 'টি পার্ট তালিকায়') + '</span></div>' +
+    '<div class="cats">' + CATS.map(function (c) {
+      return '<div class="cat"><div class="cat-head"><button type="button" data-go="products">' + L(c.en, c.bn) + '</button><span class="subtle tnum">' + num(c.n) + '</span></div><ul>' + c.subs.map(function (s) { return '<li><button type="button" data-go="products">' + L(s[0], s[1]) + '</button></li>'; }).join('') + '</ul></div>';
+    }).join('') + '</div></section>' +
+    '</main>';
+}
+
+/* 2. PLP */
+function plpRows() {
+  var f = S.filters;
+  function anyOn(o) { for (var k in o) if (o[k]) return true; return false; }
+  return PLC.filter(function (sku) {
+    var p = P[sku];
+    if (anyOn(f.mfr) && !f.mfr[p.mfr]) return false;
+    if (anyOn(f.supply) && !f.supply[p.supply]) return false;
+    if (anyOn(f.comms) && !p.comms.some(function (c) { return f.comms[c]; })) return false;
+    if (anyOn(f.di)) {
+      var band = p.di <= 8 ? 'le8' : p.di <= 16 ? '9to16' : 'gt16';
+      if (!f.di[band]) return false;
+    }
+    if (f.instock && stockOf(sku) === 0) return false;
+    return true;
+  });
+}
+function fCheck(group, key, label, count) {
+  var id = 'f-' + group + '-' + key.replace(/[^a-z0-9]/gi, '');
+  return '<label class="check" for="' + id + '"><input type="checkbox" id="' + id + '" data-filter="' + group + '" data-key="' + esc(key) + '"' + (S.filters[group][key] ? ' checked' : '') + '><span>' + label + '</span><span class="subtle tnum">' + num(count) + '</span></label>';
+}
+function countBy(fn) { var o = {}; PLC.forEach(function (s) { [].concat(fn(P[s])).forEach(function (k) { o[k] = (o[k] || 0) + 1; }); }); return o; }
+function vProducts() {
+  var rows = plpRows();
+  var byMfr = countBy(function (p) { return p.mfr; }), bySup = countBy(function (p) { return p.supply; }), byCom = countBy(function (p) { return p.comms; });
+  var byDi = countBy(function (p) { return p.di <= 8 ? 'le8' : p.di <= 16 ? '9to16' : 'gt16'; });
+  var activeN = 0; ['mfr', 'supply', 'comms', 'di'].forEach(function (g) { for (var k in S.filters[g]) if (S.filters[g][k]) activeN++; }); if (S.filters.instock) activeN++;
+  var filters = '<aside class="filters-wrap' + (S.filtersOpen ? ' open' : '') + '" id="filters"><div class="panel filters">' +
+    '<div class="row between"><h2>' + L('Filters', 'ফিল্টার') + '</h2>' + (activeN ? '<button class="btn-link" type="button" data-act="clear-filters">' + L('Clear all', 'সব মুছুন') + '</button>' : '') + '</div>' +
+    '<label class="check" for="f-instock"><input type="checkbox" id="f-instock" data-filter="instock"' + (S.filters.instock ? ' checked' : '') + '><span>' + L('In stock now', 'এখনই স্টকে আছে') + '</span></label>' +
+    '<div class="fgroup"><span class="label">' + L('Manufacturer', 'প্রস্তুতকারক') + '</span>' + Object.keys(byMfr).sort().map(function (k) { return fCheck('mfr', k, k, byMfr[k]); }).join('') + '</div>' +
+    '<div class="fgroup"><span class="label">' + L('Digital inputs (DI)', 'ডিজিটাল ইনপুট (DI)') + '</span>' + fCheck('di', 'le8', '≤ ' + dg(8), byDi.le8 || 0) + fCheck('di', '9to16', dg(9) + '–' + dg(16), byDi['9to16'] || 0) + fCheck('di', 'gt16', '> ' + dg(16), byDi.gt16 || 0) + '</div>' +
+    '<div class="fgroup"><span class="label">' + L('Supply voltage', 'সাপ্লাই ভোল্টেজ') + '</span>' + Object.keys(bySup).sort().map(function (k) { return fCheck('supply', k, k, bySup[k]); }).join('') + '</div>' +
+    '<div class="fgroup"><span class="label">' + L('Communication', 'কমিউনিকেশন') + '</span>' + Object.keys(byCom).sort().map(function (k) { return fCheck('comms', k, k, byCom[k]); }).join('') + '</div>' +
+    '</div></aside>';
+  var table = '<section class="panel panel-flush"><div class="panel-head"><span class="muted tnum">' + num(rows.length) + ' ' + L('of', '/') + ' ' + num(PLC.length) + ' ' + L('CPU modules', 'টি CPU মডিউল') + '</span>' +
+    '<div class="row"><button class="btn btn-sm filter-toggle" type="button" data-act="toggle-filters" aria-expanded="' + S.filtersOpen + '" aria-controls="filters">' + L('Filters', 'ফিল্টার') + (activeN ? ' (' + dg(activeN) + ')' : '') + '</button>' +
+    '<label class="row subtle" for="sort">' + L('Sort', 'সাজান') + ' <select id="sort" class="input" style="height:30px;width:auto"><option>' + L('Best match', 'সবচেয়ে মিল') + '</option><option>' + L('Price, low to high', 'দাম, কম থেকে বেশি') + '</option><option>' + L('Stock, high to low', 'স্টক, বেশি থেকে কম') + '</option></select></label></div></div>' +
+    (rows.length ? '<div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part number', 'পার্ট নম্বর') + '</th><th class="num">DI / DO</th><th>' + L('Analogue', 'অ্যানালগ') + '</th><th>' + L('Supply', 'সাপ্লাই') + '</th><th>' + L('Comms', 'কমিউনিকেশন') + '</th><th>' + L('Stock', 'স্টক') + '</th><th class="num">' + L('Unit price by qty', 'পরিমাণভেদে একক দাম') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th></tr></thead><tbody>' +
+      rows.map(function (sku) {
+        var p = P[sku], qid = 'q-' + sku.replace(/[^a-z0-9]/gi, '');
+        return '<tr><td class="full" data-label="' + L('Part number', 'পার্ট নম্বর') + '"><button class="btn-link pn" type="button" data-go="product">' + sku + '</button><div class="cell-sub">' + p.mfr + ' · ' + esc(p.name) + '</div></td>' +
+          '<td class="num" data-label="DI / DO">' + dg(p.di) + ' / ' + dg(p.dout) + '</td>' +
+          '<td data-label="' + L('Analogue', 'অ্যানালগ') + '">' + p.an + '</td>' +
+          '<td data-label="' + L('Supply', 'সাপ্লাই') + '">' + p.supply + '</td>' +
+          '<td data-label="' + L('Comms', 'কমিউনিকেশন') + '">' + p.comms.join(', ') + '</td>' +
+          '<td data-label="' + L('Stock', 'স্টক') + '">' + stockCell(sku) + '</td>' +
+          '<td class="num" data-label="' + L('Unit price by qty', 'পরিমাণভেদে একক দাম') + '">' + breaksHtml(sku) + '</td>' +
+          '<td class="num full" data-label="' + L('Qty', 'পরিমাণ') + '"><div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><input class="input qty" id="' + qid + '" type="number" min="1" value="1" aria-label="' + L('Quantity for', 'পরিমাণ:') + ' ' + sku + '"><button class="btn btn-sm btn-accent" type="button" data-act="add" data-sku="' + esc(sku) + '" data-qty-from="' + qid + '">' + L('Add', 'যোগ') + '</button></div></td></tr>';
+      }).join('') + '</tbody></table></div>'
+      : '<div style="padding:24px" class="stack"><b>' + L('No CPU modules match these filters.', 'এই ফিল্টারে কোনো CPU মডিউল মেলেনি।') + '</b><span class="muted">' + L('Remove a filter, or ask us to source it.', 'একটা ফিল্টার সরান, অথবা আমাদের সংগ্রহ করে দিতে বলুন।') + '</span><div><button class="btn" type="button" data-act="clear-filters">' + L('Clear filters', 'ফিল্টার মুছুন') + '</button></div></div>') +
+    '</section>';
+  return storeHead() + '<main class="wrap page">' +
+    crumbs([{ t: L('Home', 'হোম'), go: 'home' }, { t: L('PLCs & controllers', 'PLC ও কন্ট্রোলার'), go: 'products' }, { t: L('CPU modules', 'CPU মডিউল') }]) +
+    '<div class="title-row"><div><h1>' + L('PLC CPU modules', 'PLC CPU মডিউল') + '</h1><p class="muted">' + L('Prices are your company’s contract prices, excluding 15% VAT.', 'দামগুলো আপনার কোম্পানির চুক্তিমূল্য, ১৫% VAT ছাড়া।') + '</p></div></div>' +
+    '<div class="plp">' + filters + table + '</div></main>';
+}
+
+/* 3. PDP */
+function plcDrawing() {
+  return '<svg viewBox="0 0 200 180" role="img" aria-label="' + L('Line drawing of a compact PLC CPU', 'একটি কমপ্যাক্ট PLC CPU-এর রেখাচিত্র') + '">' +
+    '<rect x="20" y="20" width="160" height="140" rx="6" fill="var(--surface)" stroke="var(--line-strong)" stroke-width="2"/>' +
+    '<rect x="20" y="20" width="160" height="22" rx="6" fill="var(--navy-wash)" stroke="var(--line-strong)" stroke-width="2"/>' +
+    '<rect x="20" y="138" width="160" height="22" rx="6" fill="var(--navy-wash)" stroke="var(--line-strong)" stroke-width="2"/>' +
+    Array.from({ length: 12 }, function (_, i) { return '<circle cx="' + (30 + i * 12.7) + '" cy="31" r="3.4" fill="var(--ink-3)"/><circle cx="' + (30 + i * 12.7) + '" cy="149" r="3.4" fill="var(--ink-3)"/>'; }).join('') +
+    '<rect x="34" y="58" width="58" height="36" rx="3" fill="var(--sunken)" stroke="var(--line-strong)"/>' +
+    Array.from({ length: 4 }, function (_, i) { return '<rect x="' + (108 + i * 15) + '" y="60" width="9" height="6" rx="1" fill="' + (i < 2 ? 'var(--ok)' : 'var(--line-strong)') + '"/>'; }).join('') +
+    '<rect x="108" y="100" width="56" height="24" rx="3" fill="var(--sunken)" stroke="var(--line-strong)"/>' +
+    '<rect x="34" y="104" width="18" height="16" rx="2" fill="var(--teal)"/>' +
+    '<text x="62" y="80" font-size="10" font-family="var(--f-mono)" fill="var(--ink-2)">1214C</text>' +
+    '</svg>';
+}
+function vProduct() {
+  var sku = '6ES7214-1AG40-0XB0', p = P[sku], q = S.pdpQty, u = unitPrice(sku, q);
+  var specs = [
+    [L('Supply voltage', 'সাপ্লাই ভোল্টেজ'), '24 VDC (20.4–28.8 V)'],
+    [L('Digital inputs', 'ডিজিটাল ইনপুট'), dg(14) + ' × 24 VDC, sink/source'],
+    [L('Digital outputs', 'ডিজিটাল আউটপুট'), dg(10) + ' × transistor, 0.5 A'],
+    [L('Analogue inputs', 'অ্যানালগ ইনপুট'), dg(2) + ' × 0–10 V'],
+    [L('Work memory', 'ওয়ার্ক মেমরি'), dg(100) + ' KB'],
+    [L('Load memory', 'লোড মেমরি'), dg(4) + ' MB'],
+    [L('Interface', 'ইন্টারফেস'), 'PROFINET, ' + L('2 ports', '২টি পোর্ট')],
+    [L('Expansion', 'সম্প্রসারণ'), L('up to 8 signal modules, 3 comms modules', 'সর্বোচ্চ ৮টি সিগন্যাল মডিউল, ৩টি কমিউনিকেশন মডিউল')],
+    [L('Operating temperature', 'চালু অবস্থার তাপমাত্রা'), '−20 … +60 °C'],
+    [L('Dimensions (W × H × D)', 'মাপ (প্রস্থ × উচ্চতা × গভীরতা)'), dg(110) + ' × ' + dg(100) + ' × ' + dg(75) + ' mm'],
+    [L('HS code', 'HS কোড'), '8537.10.19'],
+    [L('Warranty', 'ওয়ারেন্টি'), L('12 months, MECHWARE service centre', '১২ মাস, MECHWARE সার্ভিস সেন্টার')]
+  ];
+  var alt = [['6ES7215-1AG40-0XB0', L('More I/O: adds 2 analogue outputs', 'বেশি I/O: ২টি অ্যানালগ আউটপুট বাড়তি')], ['AS228T-A', L('Lower-cost alternative, different programming software', 'কম দামের বিকল্প, প্রোগ্রামিং সফটওয়্যার আলাদা')]];
+  return storeHead() + '<main class="wrap page">' +
+    crumbs([{ t: L('Home', 'হোম'), go: 'home' }, { t: L('PLCs & controllers', 'PLC ও কন্ট্রোলার'), go: 'products' }, { t: L('CPU modules', 'CPU মডিউল'), go: 'products' }, { t: sku }]) +
+    '<div class="pdp"><div class="stack">' +
+    '<div class="pdp-id"><div class="drawing">' + plcDrawing() + '</div><div class="stack" style="gap:8px">' +
+    '<span class="label">Siemens · SIMATIC S7-1200</span><h1>' + sku + '</h1><p style="font-size:16px;font-weight:600">CPU 1214C DC/DC/DC</p>' +
+    '<p class="muted">' + L('Compact CPU with 14 DI / 10 DO / 2 AI on board and PROFINET for HMI and drive networking.', 'বোর্ডে ১৪ DI / ১০ DO / ২ AI সহ কমপ্যাক্ট CPU; HMI আর ড্রাইভ নেটওয়ার্কের জন্য PROFINET।') + '</p>' +
+    '<div class="row"><span class="pill ok">' + L('Active product', 'চালু পণ্য') + '</span><span class="pill info">' + L('Replaces 6ES7214-1AG31-0XB0', '6ES7214-1AG31-0XB0-এর উত্তরসূরি') + '</span></div></div></div>' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Specifications', 'স্পেসিফিকেশন') + '</h2><span class="subtle">' + L('From the manufacturer datasheet', 'প্রস্তুতকারকের ডেটাশিট থেকে') + '</span></div><div class="specs">' + specs.map(function (s) { return '<div>' + s[0] + '</div><div class="tnum">' + s[1] + '</div>'; }).join('') + '</div></section>' +
+    '<section class="stack"><h2>' + L('Documents and CAD', 'ডকুমেন্ট ও CAD') + '</h2><div class="docs">' +
+    [['PDF', L('Datasheet', 'ডেটাশিট'), '1.2 MB'], ['PDF', L('System manual', 'সিস্টেম ম্যানুয়াল'), '18.4 MB'], ['STEP', L('3D model', '৩D মডেল'), '2.8 MB'], ['EDZ', L('EPLAN macro', 'EPLAN ম্যাক্রো'), '0.6 MB']].map(function (d) { return '<div class="doc"><span class="ext">' + d[0] + '</span><span class="grow">' + d[1] + '<div class="subtle tnum">' + dg(d[2]) + '</div></span></div>'; }).join('') +
+    '</div></section>' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Alternatives', 'বিকল্প পণ্য') + '</h2></div><div class="tbl-scroll"><table class="tbl rt"><tbody>' +
+    alt.map(function (a) { return '<tr><td class="full"><button class="btn-link pn" type="button" data-go="product">' + a[0] + '</button><div class="cell-sub">' + a[1] + '</div></td><td>' + stockCell(a[0]) + '</td><td class="num">' + tk(unitPrice(a[0], 1)) + '</td></tr>'; }).join('') +
+    '</tbody></table></div></section>' +
+    '</div>' +
+    '<aside class="buybox"><section class="panel stack">' +
+    '<div><span class="label">' + L('Your price', 'আপনার দাম') + ' · ' + L(COMPANY.en, COMPANY.bn) + '</span><div class="price-big">' + tk(u) + '</div><span class="subtle">' + L('per piece, excl. 15% VAT', 'প্রতি পিস, ১৫% VAT ছাড়া') + '</span></div>' +
+    '<table class="tbl"><thead><tr><th>' + L('Quantity', 'পরিমাণ') + '</th><th class="num">' + L('Unit price', 'একক দাম') + '</th></tr></thead><tbody>' +
+    p.prices.map(function (b, i) { var nx = p.prices[i + 1]; var on = q >= b[0] && (!nx || q < nx[0]); return '<tr' + (on ? ' class="sel"' : '') + '><td class="tnum">' + num(b[0]) + (nx ? '–' + num(nx[0] - 1) : '+') + '</td><td class="num">' + tk(b[1]) + '</td></tr>'; }).join('') +
+    '</tbody></table>' +
+    '<div><span class="label">' + L('Stock by warehouse', 'গুদামভিত্তিক স্টক') + '</span>' +
+    '<div class="sumrow" style="margin-top:4px"><span>' + L('Dhaka (Tejgaon)', 'ঢাকা (তেজগাঁও)') + '</span><b>' + num(p.stock.dhk) + '</b></div>' +
+    '<div class="sumrow"><span>' + L('Chattogram (Agrabad)', 'চট্টগ্রাম (আগ্রাবাদ)') + '</span><b>' + num(p.stock.ctg) + '</b></div>' +
+    '<p class="subtle" style="margin-top:4px">' + L('Order before 2:00 pm for dispatch today from Dhaka.', 'দুপুর ২টার আগে অর্ডার করলে আজই ঢাকা থেকে পাঠানো হবে।') + '</p></div>' +
+    '<div class="row"><label class="field" for="pdp-qty" style="flex:0 0 auto"><span>' + L('Quantity', 'পরিমাণ') + '</span><input class="input qty" id="pdp-qty" type="number" min="1" value="' + q + '"></label>' +
+    '<div class="grow" style="align-self:flex-end"><span class="subtle">' + L('Line total', 'লাইনের মোট') + '</span><div style="font-weight:700" class="tnum">' + tk(u * q) + '</div></div></div>' +
+    '<button class="btn btn-primary" type="button" data-act="add" data-sku="' + sku + '" data-qty-from="pdp-qty">' + L('Add to cart', 'কার্টে যোগ করুন') + '</button>' +
+    '<button class="btn" type="button" data-go="quote">' + L('Request a quotation', 'কোটেশন চান') + '</button>' +
+    '<p class="subtle">' + L('Need 20 or more, or a project price? Ask for a quotation. We reply within one working day.', '২০টির বেশি বা প্রজেক্টের দাম লাগলে কোটেশন চান। এক কার্যদিবসের মধ্যে উত্তর দেব।') + '</p>' +
+    '</section></aside></div></main>';
+}
+
+/* 4. Quick order */
+function norm(s) { return s.toUpperCase().replace(/\s+/g, ' ').trim(); }
+function findSku(raw) { var n = norm(raw); for (var k in P) if (norm(k) === n) return k; return null; }
+/* Linear scan, no backtracking regex: trailing digits are the quantity when a tab, comma, semicolon or space separates them. */
+function splitQty(line) {
+  var end = line.length;
+  while (end > 0 && line.charCodeAt(end - 1) >= 48 && line.charCodeAt(end - 1) <= 57) end--;
+  var digits = line.slice(end), sep = end;
+  while (sep > 0 && ' \t,;'.indexOf(line.charAt(sep - 1)) >= 0) sep--;
+  if (!digits || sep === end || sep === 0) return [line, 1];
+  return [line.slice(0, sep), parseInt(digits.slice(0, 7), 10) || 1];
+}
+function parseQuick(text) {
+  return text.split(/\r?\n/).map(function (line) { return line.trim(); }).filter(Boolean).map(function (line) {
+    var sp = splitQty(line), raw = sp[0], qty = sp[1];
+    var sku = findSku(raw);
+    if (!sku) return { raw: raw, qty: qty, st: 'missing' };
+    var p = P[sku];
+    if (p.discontinued) return { raw: raw, sku: sku, qty: qty, st: 'disc', succ: p.discontinued };
+    var adj = qty;
+    if (p.pack > 1 && qty % p.pack) adj = Math.ceil(qty / p.pack) * p.pack;
+    var st = adj !== qty ? 'pack' : 'ok';
+    if (stockOf(sku) === 0) st = 'back';
+    else if (adj > stockOf(sku)) st = 'partial';
+    return { raw: raw, sku: sku, qty: qty, adj: adj, st: st, price: unitPrice(sku, adj) };
+  });
+}
+function vQuick() {
+  if (!S.quickRows) S.quickRows = parseQuick(S.quickText);
+  var rows = S.quickRows, okRows = rows.filter(function (r) { return r.sku && r.st !== 'disc'; });
+  var total = okRows.reduce(function (a, r) { return a + r.price * r.adj; }, 0);
+  var issues = rows.filter(function (r) { return r.st !== 'ok'; }).length;
+  function status(r) {
+    if (r.st === 'ok') return '<span class="pill ok">' + L('Ready', 'ঠিক আছে') + '</span>';
+    if (r.st === 'pack') return '<span class="pill info">' + L('Rounded to pack', 'প্যাক অনুযায়ী বাড়ানো') + '</span><div class="subtle">' + L('Sold in boxes of', 'বিক্রি হয় বাক্সে') + ' ' + num(P[r.sku].pack) + ': ' + num(r.qty) + ' → ' + num(r.adj) + '</div>';
+    if (r.st === 'back') return '<span class="pill warn">' + L('Backorder', 'ব্যাকঅর্ডার') + '</span><div class="subtle">' + L('Arrives in', 'আসবে') + ' ' + dg(P[r.sku].lead[0]) + '–' + dg(P[r.sku].lead[1]) + ' ' + L('weeks', 'সপ্তাহে') + '</div>';
+    if (r.st === 'partial') return '<span class="pill warn">' + L('Part in stock', 'আংশিক স্টকে') + '</span>';
+    if (r.st === 'disc') return '<span class="pill bad">' + L('Discontinued', 'উৎপাদন বন্ধ') + '</span><div class="subtle">' + L('Successor:', 'উত্তরসূরি:') + ' <button class="btn-link pn" type="button" data-act="swap" data-from="' + esc(r.sku) + '" data-to="' + esc(r.succ) + '">' + r.succ + '</button></div>';
+    return '<span class="pill bad">' + L('Not found', 'পাওয়া যায়নি') + '</span><div class="subtle">' + L('Check the part number or ask us to source it.', 'পার্ট নম্বর মিলিয়ে দেখুন, বা আমাদের সংগ্রহ করতে বলুন।') + '</div>';
+  }
+  return storeHead() + '<main class="wrap page">' +
+    '<div class="title-row"><div><h1>' + L('Quick order', 'কুইক অর্ডার') + '</h1><p class="muted">' + L('Paste a parts list from Excel or email: one part number and quantity per line.', 'Excel বা ইমেইল থেকে পার্টের তালিকা পেস্ট করুন: প্রতি লাইনে একটি পার্ট নম্বর আর পরিমাণ।') + '</p></div></div>' +
+    '<div class="split qo">' +
+    '<section class="panel stack"><label class="field" for="quick-text"><span>' + L('Part number, quantity', 'পার্ট নম্বর, পরিমাণ') + '</span><textarea class="input" id="quick-text" rows="9" spellcheck="false">' + esc(S.quickText) + '</textarea></label>' +
+    '<div class="row"><button class="btn btn-primary" type="button" data-act="validate">' + L('Check list', 'তালিকা যাচাই করুন') + '</button><label class="btn" for="csv-file">' + L('Upload CSV / Excel', 'CSV / Excel আপলোড') + '</label><input id="csv-file" type="file" accept=".csv,.txt" hidden></div>' +
+    '<p class="subtle">' + L('Separators: tab, comma, semicolon or space. Up to 200 lines.', 'আলাদা করতে: ট্যাব, কমা, সেমিকোলন বা স্পেস। সর্বোচ্চ ২০০ লাইন।') + '</p></section>' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Checked lines', 'যাচাই করা লাইন') + '</h2><span class="subtle">' + num(rows.length) + ' ' + L('lines', 'লাইন') + ' · ' + num(issues) + ' ' + L('need a look', 'টি দেখে নিতে হবে') + '</span></div>' +
+    '<div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th>' + L('Check', 'যাচাই') + '</th><th class="num">' + L('Unit', 'একক') + '</th><th class="num">' + L('Line total', 'মোট') + '</th></tr></thead><tbody>' +
+    rows.map(function (r) {
+      var ok = r.sku && r.st !== 'disc';
+      return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + esc(r.sku || r.raw) + '</span>' + (r.sku ? '<div class="cell-sub">' + P[r.sku].mfr + ' · ' + esc(P[r.sku].name) + '</div>' : '') + '</td>' +
+        '<td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(ok ? r.adj : r.qty) + '</td>' +
+        '<td data-label="' + L('Check', 'যাচাই') + '" class="full">' + status(r) + '</td>' +
+        '<td class="num" data-label="' + L('Unit', 'একক') + '">' + (ok ? tk(r.price) : '—') + '</td>' +
+        '<td class="num" data-label="' + L('Line total', 'মোট') + '">' + (ok ? tk(r.price * r.adj) : '—') + '</td></tr>';
+    }).join('') +
+    '</tbody><tfoot><tr><td colspan="4">' + L('Total for valid lines, excl. VAT', 'সঠিক লাইনের মোট, VAT ছাড়া') + '</td><td class="num">' + tk(total) + '</td></tr></tfoot></table></div>' +
+    '<div class="panel-head" style="border-top:1px solid var(--line);border-bottom:0"><span class="subtle">' + L('Lines that are not found stay here; the rest go to the cart.', 'যে লাইন পাওয়া যায়নি সেগুলো এখানে থাকবে; বাকিগুলো কার্টে যাবে।') + '</span><button class="btn btn-primary" type="button" data-act="quick-to-cart">' + L('Add', 'যোগ করুন') + ' ' + num(okRows.length) + ' ' + L('lines to cart', 'টি লাইন কার্টে') + '</button></div>' +
+    '</section></div></main>';
+}
+
+/* 5. Cart */
+function vCart() {
+  var t = cartTotals(), needs = t.total > APPROVAL_LIMIT;
+  return storeHead() + '<main class="wrap page">' +
+    '<div class="title-row"><h1>' + L('Cart', 'কার্ট') + ' <span class="muted tnum" style="font-weight:500">(' + num(S.cart.length) + ')</span></h1><button class="btn btn-sm" type="button" data-go="quick-order">' + L('Add from a list', 'তালিকা থেকে যোগ') + '</button></div>' +
+    '<div class="split"><div class="stack">' +
+    '<section class="panel panel-flush"><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th>' + L('Stock', 'স্টক') + '</th><th class="num">' + L('Unit price', 'একক দাম') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('Line total', 'মোট') + '</th><th></th></tr></thead><tbody>' +
+    (S.cart.length ? S.cart.map(function (l, i) {
+      var u = unitPrice(l.sku, l.qty), p = P[l.sku], nxt = p.prices.filter(function (b) { return b[0] > l.qty; })[0];
+      return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + esc(l.sku) + '</span><div class="cell-sub">' + p.mfr + ' · ' + esc(p.name) + '</div>' + (nxt ? '<div class="subtle" style="color:var(--teal-ink)">' + L('Buy', 'আরও') + ' ' + num(nxt[0] - l.qty) + ' ' + L('more to pay', 'টি নিলে দাম হবে') + ' ' + tk(nxt[1]) + ' ' + L('each', 'প্রতিটি') + '</div>' : '') + '</td>' +
+        '<td data-label="' + L('Stock', 'স্টক') + '">' + stockCell(l.sku) + '</td>' +
+        '<td class="num" data-label="' + L('Unit price', 'একক দাম') + '">' + tk(u) + '</td>' +
+        '<td class="num" data-label="' + L('Qty', 'পরিমাণ') + '"><input class="input qty" type="number" id="cq-' + i + '" data-cart-qty="' + i + '" min="' + p.pack + '" step="' + p.pack + '" value="' + l.qty + '" aria-label="' + L('Quantity for', 'পরিমাণ:') + ' ' + esc(l.sku) + '"></td>' +
+        '<td class="num" data-label="' + L('Line total', 'মোট') + '"><b>' + tk(u * l.qty) + '</b></td>' +
+        '<td class="num"><button class="btn btn-sm" type="button" data-act="remove" data-i="' + i + '">' + L('Remove', 'বাদ দিন') + '</button></td></tr>';
+    }).join('') : '<tr><td colspan="6" style="padding:24px">' + L('Your cart is empty.', 'আপনার কার্ট খালি।') + ' <button class="btn-link" type="button" data-go="products">' + L('Browse PLCs', 'PLC দেখুন') + '</button></td></tr>') +
+    '</tbody></table></div></section>' +
+    '<section class="panel stack"><h2>' + L('Who is this for?', 'কার জন্য কেনা হচ্ছে?') + '</h2><div class="form-grid">' +
+    '<label class="field" for="cart-company"><span>' + L('Company', 'কোম্পানি') + '</span><select class="input" id="cart-company"><option>' + L(COMPANY.en, COMPANY.bn) + '</option><option>' + L('Meghna Dyeing & Finishing Ltd.', 'মেঘনা ডাইং অ্যান্ড ফিনিশিং লিমিটেড') + '</option></select></label>' +
+    '<label class="field" for="cart-cc"><span>' + L('Cost centre', 'কস্ট সেন্টার') + '</span><select class="input" id="cart-cc" data-bind="costCentre">' + CC.map(function (c) { return '<option value="' + c.id + '"' + (S.costCentre === c.id ? ' selected' : '') + '>' + c.id + ' · ' + L(c.en, c.bn) + '</option>'; }).join('') + '</select></label>' +
+    '<label class="field" for="cart-po"><span>' + L('Your PO number', 'আপনার PO নম্বর') + '</span><input class="input" id="cart-po" data-bind="po" value="' + esc(S.po) + '"></label>' +
+    '<label class="field" for="cart-need"><span>' + L('Needed by', 'কবে লাগবে') + '</span><input class="input" id="cart-need" type="date" value="2026-11-12"></label>' +
+    '</div></section></div>' +
+    '<aside class="summary"><section class="panel stack">' +
+    '<div class="sumrow"><span>' + L('Subtotal', 'সাবটোটাল') + '</span><span>' + tk2(t.sub) + '</span></div>' +
+    '<div class="sumrow"><span>' + L('VAT 15%', 'VAT ১৫%') + '</span><span>' + tk2(t.vat) + '</span></div>' +
+    '<div class="sumrow"><span>' + L('Delivery', 'ডেলিভারি') + '</span><span>' + L('Free over ৳50,000', '৳৫০,০০০-এর বেশিতে ফ্রি') + '</span></div>' +
+    '<div class="sumrow total"><span>' + L('Total', 'মোট') + '</span><span>' + tk2(t.total) + '</span></div>' +
+    (needs ? '<div class="callout warn"><div><b>' + L('Needs approval', 'অনুমোদন লাগবে') + '</b><br>' + L('Orders above ৳1,00,000 go to Rafiq Hasan (Plant manager) before we confirm them. Stock is held for 24 hours.', '৳১,০০,০০০-এর বেশি অর্ডার নিশ্চিত হওয়ার আগে রফিক হাসানের (প্ল্যান্ট ম্যানেজার) কাছে যাবে। স্টক ২৪ ঘণ্টা ধরে রাখা হবে।') + '</div></div>'
+      : '<div class="callout ok"><div>' + L('Within your limit. No approval needed.', 'আপনার সীমার মধ্যে। অনুমোদন লাগবে না।') + '</div></div>') +
+    '<button class="btn btn-primary" type="button" data-go="checkout"' + (S.cart.length ? '' : ' disabled') + '>' + L('Continue to checkout', 'চেকআউটে যান') + '</button>' +
+    '<button class="btn" type="button" data-go="quote">' + L('Turn into a quotation request', 'কোটেশনের অনুরোধ বানান') + '</button>' +
+    '</section></aside></div></main>';
+}
+
+/* 6. Checkout */
+var SITES = [
+  { id: 'nrg', en: 'Unit 2, Kanchpur, Narayanganj — Gate 3 store', bn: 'ইউনিট ২, কাঁচপুর, নারায়ণগঞ্জ — গেট ৩ স্টোর', who: 'Jahid (Store) · 01XXX-XXX214' },
+  { id: 'gzp', en: 'Unit 4, Konabari, Gazipur — Maintenance office', bn: 'ইউনিট ৪, কোনাবাড়ি, গাজীপুর — মেইনটেন্যান্স অফিস', who: 'Sumon (Maint.) · 01XXX-XXX388' }
+];
+function vCheckout() {
+  var t = cartTotals(), avail = CREDIT_LIMIT - CREDIT_USED;
+  var pays = [
+    { id: 'credit', t: L('Company credit, 30 days', 'কোম্পানি ক্রেডিট, ৩০ দিন'), d: L('Available', 'বাকি আছে') + ' ' + tk(avail) + ' ' + L('of', '/') + ' ' + tk(CREDIT_LIMIT), ok: t.total <= avail },
+    { id: 'bank', t: L('Bank transfer (BEFTN / RTGS)', 'ব্যাংক ট্রান্সফার (BEFTN / RTGS)'), d: L('We confirm once the money reaches our account.', 'টাকা আমাদের অ্যাকাউন্টে এলে নিশ্চিত করব।'), ok: true },
+    { id: 'bkash', t: 'bKash', d: L('Merchant payment. Limit ৳5,00,000 per transaction.', 'মার্চেন্ট পেমেন্ট। প্রতি লেনদেনে সীমা ৳৫,০০,০০০।'), ok: t.total <= 500000 },
+    { id: 'card', t: L('Card or internet banking (SSLCommerz)', 'কার্ড বা ইন্টারনেট ব্যাংকিং (SSLCommerz)'), d: L('Visa, Mastercard, Amex, Nagad, Rocket.', 'Visa, Mastercard, Amex, নগদ, রকেট।'), ok: true },
+    { id: 'cod', t: L('Cash on delivery', 'ক্যাশ অন ডেলিভারি'), d: L('Only for orders up to ৳50,000.', 'শুধু ৳৫০,০০০ পর্যন্ত অর্ডারে।'), ok: t.total <= COD_LIMIT }
+  ];
+  var payable = t.total - t.vds;
+  return storeHead() + '<main class="wrap page">' +
+    '<div class="title-row"><h1>' + L('Checkout', 'চেকআউট') + '</h1><div class="steps"><span class="on">1 ' + L('Delivery', 'ডেলিভারি') + '</span><span class="on">2 ' + L('Payment', 'পেমেন্ট') + '</span><span>3 ' + L('Approval', 'অনুমোদন') + '</span></div></div>' +
+    '<div class="split"><div class="stack">' +
+    '<section class="panel stack"><h2>' + L('Deliver to', 'কোথায় পাঠাবো') + '</h2><div class="choices">' +
+    SITES.map(function (s) { return '<label class="choice' + (S.site === s.id ? ' on' : '') + '" for="site-' + s.id + '"><input type="radio" name="site" id="site-' + s.id + '" data-bind="site" value="' + s.id + '"' + (S.site === s.id ? ' checked' : '') + '><span><b>' + L(s.en, s.bn) + '</b><br><span class="subtle">' + L('Receiver', 'গ্রহীতা') + ': ' + dg(s.who) + '</span></span></label>'; }).join('') +
+    '</div><button class="btn-link" type="button">+ ' + L('Add a delivery site', 'নতুন ডেলিভারি ঠিকানা') + '</button></section>' +
+    '<section class="panel stack"><h2>' + L('Bill to', 'বিল যাবে') + '</h2><div class="form-grid">' +
+    '<div><span class="label">' + L('Company', 'কোম্পানি') + '</span><div><b>' + L(COMPANY.en, COMPANY.bn) + '</b></div></div>' +
+    '<div><span class="label">BIN</span><div class="tnum"><b>00XXXXXXX-0302</b></div></div>' +
+    '<div><span class="label">' + L('PO number', 'PO নম্বর') + '</span><div><b>' + esc(S.po) + '</b></div></div>' +
+    '<div><span class="label">' + L('Cost centre', 'কস্ট সেন্টার') + '</span><div><b>' + esc(S.costCentre) + '</b></div></div>' +
+    '</div></section>' +
+    '<section class="panel stack"><h2>' + L('Payment', 'পেমেন্ট') + '</h2><div class="choices">' +
+    pays.map(function (p) { var on = S.pay === p.id && p.ok; return '<label class="choice' + (on ? ' on' : '') + (p.ok ? '' : ' off') + '" for="pay-' + p.id + '"><input type="radio" name="pay" id="pay-' + p.id + '" data-bind="pay" value="' + p.id + '"' + (on ? ' checked' : '') + (p.ok ? '' : ' disabled') + '><span><b>' + p.t + '</b><br><span class="subtle">' + p.d + (p.ok ? '' : ' · ' + L('Not available for this order', 'এই অর্ডারে প্রযোজ্য নয়')) + '</span></span></label>'; }).join('') +
+    '</div></section></div>' +
+    '<aside class="summary"><section class="panel stack"><h2>' + L('Order summary', 'অর্ডারের সারাংশ') + '</h2>' +
+    S.cart.map(function (l) { return '<div class="sumrow subtle"><span class="pn" style="font-weight:500">' + dg(l.qty) + ' × ' + esc(l.sku) + '</span><span>' + tk(unitPrice(l.sku, l.qty) * l.qty) + '</span></div>'; }).join('') +
+    '<div class="sumrow"><span>' + L('Subtotal', 'সাবটোটাল') + '</span><span>' + tk2(t.sub) + '</span></div>' +
+    '<div class="sumrow"><span>' + L('VAT 15%', 'VAT ১৫%') + '</span><span>' + tk2(t.vat) + '</span></div>' +
+    '<div class="sumrow"><span>' + L('Delivery', 'ডেলিভারি') + '</span><span>' + tk(0) + '</span></div>' +
+    '<div class="sumrow total"><span>' + L('Invoice total', 'ইনভয়েসের মোট') + '</span><span>' + tk2(t.total) + '</span></div>' +
+    '<label class="check" for="vds"><input type="checkbox" id="vds" data-bind="vds"' + (S.vds ? ' checked' : '') + '><span>' + L('We deduct VAT at source (VDS) and will send Mushak-6.6', 'আমরা উৎসে VAT কাটব (VDS) এবং মূসক-৬.৬ পাঠাব') + '</span></label>' +
+    (S.vds ? '<div class="sumrow"><span>' + L('VAT deducted at source', 'উৎসে কাটা VAT') + '</span><span>− ' + tk2(t.vds) + '</span></div>' : '') +
+    '<div class="sumrow" style="font-weight:700"><span>' + L('You pay MECHWARE', 'MECHWARE-কে দেবেন') + '</span><span>' + tk2(payable) + '</span></div>' +
+    '<p class="subtle">' + L('VAT is rounded to the poisha using banker’s rounding.', 'VAT পয়সা পর্যন্ত banker’s rounding-এ রাউন্ড করা।') + '</p>' +
+    (t.total > APPROVAL_LIMIT ? '<button class="btn btn-primary" type="button" data-act="submit-approval">' + L('Send to Rafiq Hasan for approval', 'অনুমোদনের জন্য রফিক হাসানকে পাঠান') + '</button>' : '<button class="btn btn-primary" type="button" data-act="place">' + L('Place order', 'অর্ডার দিন') + '</button>') +
+    '</section></aside></div></main>';
+}
+
+/* 7. Quote */
+var QUOTE = [
+  { sku: 'VFD037E43A', qty: 6, list: 38900, q: 35200 },
+  { sku: '6ES7215-1AG40-0XB0', qty: 1, list: 62400, q: 58900 },
+  { sku: 'E2E-X5ME1 2M', qty: 12, list: 2350, q: 2050 }
+];
+function vQuote() {
+  var sub = QUOTE.reduce(function (a, l) { return a + l.q * l.qty; }, 0), vat = sub * VAT;
+  return storeHead() + '<main class="wrap page">' +
+    crumbs([{ t: L('Company account', 'কোম্পানি অ্যাকাউন্ট'), go: 'company' }, { t: L('Quotations', 'কোটেশন') }, { t: 'QT-261104-0137' }]) +
+    '<div class="title-row"><div><span class="label">' + L('Quotation', 'কোটেশন') + '</span><h1 class="pn" style="font-size:24px">QT-261104-0137 <span class="pill info" style="font-family:var(--f-ui);vertical-align:middle">' + L('Version 2', 'ভার্সন ২') + '</span></h1><p class="muted">' + L('Boiler feed-pump drives · requested by Shahana Akter', 'বয়লার ফিড-পাম্পের ড্রাইভ · অনুরোধ করেছেন শাহানা আক্তার') + '</p></div>' +
+    '<div class="row"><button class="btn" type="button" data-act="toast" data-msg="pdf">' + L('Download PDF', 'PDF ডাউনলোড') + '</button><button class="btn" type="button" data-act="toast" data-msg="revise">' + L('Ask for a revision', 'সংশোধন চান') + '</button><button class="btn btn-primary" type="button" data-go="approvals">' + L('Accept and order', 'গ্রহণ করে অর্ডার দিন') + '</button></div></div>' +
+    '<div class="qmeta">' +
+    '<div><span class="label">' + L('Valid until', 'মেয়াদ') + '</span><b>' + dt(2026, 11, 19) + '</b><span class="countdown subtle" style="color:var(--warn)">' + L('14 days left', 'আর ১৪ দিন বাকি') + '</span></div>' +
+    '<div><span class="label">' + L('Quoted total', 'কোটেশনের মোট') + '</span><b>' + tk2(sub + vat) + '</b><span class="subtle">' + L('incl. 15% VAT', '১৫% VAT সহ') + '</span></div>' +
+    '<div><span class="label">' + L('You save vs list', 'তালিকা দামের চেয়ে সাশ্রয়') + '</span><b>' + tk(QUOTE.reduce(function (a, l) { return a + (l.list - l.q) * l.qty; }, 0)) + '</b></div>' +
+    '<div><span class="label">' + L('Delivery', 'ডেলিভারি') + '</span><b>' + L('7 working days', '৭ কার্যদিবস') + '</b><span class="subtle">' + L('from PO date', 'PO-এর তারিখ থেকে') + '</span></div>' +
+    '</div>' +
+    '<div class="split"><section class="panel panel-flush"><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('List price', 'তালিকা দাম') + '</th><th class="num">' + L('Quoted price', 'কোটেশন দাম') + '</th><th class="num">' + L('Line total', 'মোট') + '</th></tr></thead><tbody>' +
+    QUOTE.map(function (l) { return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + esc(l.sku) + '</span><div class="cell-sub">' + P[l.sku].mfr + ' · ' + esc(P[l.sku].name) + '</div></td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l.qty) + '</td><td class="num" data-label="' + L('List price', 'তালিকা দাম') + '"><span class="diff-old">' + tk(l.list) + '</span></td><td class="num" data-label="' + L('Quoted price', 'কোটেশন দাম') + '"><b>' + tk(l.q) + '</b> <span class="subtle">−' + pct((l.list - l.q) / l.list * 100) + '</span></td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l.q * l.qty) + '</td></tr>'; }).join('') +
+    '</tbody><tfoot><tr><td colspan="4">' + L('Subtotal', 'সাবটোটাল') + '</td><td class="num">' + tk2(sub) + '</td></tr><tr><td colspan="4">' + L('VAT 15%', 'VAT ১৫%') + '</td><td class="num">' + tk2(vat) + '</td></tr></tfoot></table></div>' +
+    '<div style="padding:12px 16px;border-top:1px solid var(--line)" class="stack"><span class="label">' + L('Terms', 'শর্ত') + '</span><p class="muted">' + L('Prices hold for the full quantity on one PO. Payment on 30-day company credit. Drives include on-site commissioning in Dhaka division.', 'একটি PO-তে পুরো পরিমাণ নিলে এই দাম। পেমেন্ট ৩০ দিনের কোম্পানি ক্রেডিটে। ঢাকা বিভাগে ড্রাইভ চালু করে দেওয়া (commissioning) দামের মধ্যে।') + '</p></div></section>' +
+    '<aside class="summary"><section class="panel stack"><h2>' + L('History', 'ইতিহাস') + '</h2><div class="versions">' +
+    '<div><span><b>' + L('Version 2', 'ভার্সন ২') + '</b> · ' + L('current', 'বর্তমান') + '<br><span class="subtle">' + L('Drive price lowered, sensors added', 'ড্রাইভের দাম কমানো, সেন্সর যোগ') + '</span></span><span class="subtle">' + dt(2026, 11, 4) + '</span></div>' +
+    '<div><span><span class="diff-old" style="display:inline">' + L('Version 1', 'ভার্সন ১') + '</span><br><span class="subtle">' + L('Replaced by version 2', 'ভার্সন ২ দিয়ে বদলানো') + '</span></span><span class="subtle">' + dt(2026, 11, 2) + '</span></div>' +
+    '<div><span>' + L('Requested', 'অনুরোধ') + '<br><span class="subtle">Shahana Akter</span></span><span class="subtle">' + dt(2026, 11, 1) + '</span></div>' +
+    '</div><div class="callout info"><div>' + L('Accepting sends this quotation to your plant manager for approval, then it becomes an order at these prices.', 'গ্রহণ করলে কোটেশনটি অনুমোদনের জন্য প্ল্যান্ট ম্যানেজারের কাছে যাবে, তারপর এই দামেই অর্ডার হবে।') + '</div></div>' +
+    '<p class="subtle">' + L('Your account manager', 'আপনার অ্যাকাউন্ট ম্যানেজার') + ': Arif Rahman · <span class="tnum">' + dg('01XXX-XXX905') + '</span></p>' +
+    '</section></aside></div></main>';
+}
+
+/* 8. Approvals */
+function pendingCount() { return S.approvals.filter(function (a) { return a.status === 'pending'; }).length; }
+function vApprovals() {
+  var a = S.approvals[S.apSel];
+  var list = S.approvals.map(function (r, i) {
+    var pill = r.status === 'pending' ? '<span class="pill warn">' + L('Waiting', 'অপেক্ষায়') + '</span>' : r.status === 'approved' ? '<span class="pill ok">' + L('Approved', 'অনুমোদিত') + '</span>' : '<span class="pill bad">' + L('Rejected', 'বাতিল') + '</span>';
+    return '<button class="req' + (i === S.apSel ? ' sel' : '') + '" type="button" data-act="ap-sel" data-i="' + i + '"><span class="row between" style="width:100%"><span class="pn">' + r.id + '</span>' + pill + '</span><span class="row between" style="width:100%"><span class="muted">' + r.by + ' · ' + r.cc + '</span><span class="amt">' + tk2(r.amount) + '</span></span><span class="subtle">' + (r.kind === 'order' ? L('Order', 'অর্ডার') : L('Quotation acceptance', 'কোটেশন গ্রহণ')) + ' · ' + when(r.at) + '</span></button>';
+  }).join('');
+  var lines = a.id === 'MW-261105-K7Q2P9' ? S.cart.map(function (l) { return [l.sku, l.qty, unitPrice(l.sku, l.qty)]; }) : a.kind === 'quote' ? QUOTE.map(function (l) { return [l.sku, l.qty, l.q]; }) : [['LC1D18M7', 12, 3450], ['A9F74216', 15, 1150]];
+  var done = a.status !== 'pending';
+  var detail = '<section class="panel stack">' +
+    '<div class="row between"><div><span class="label">' + (a.kind === 'order' ? L('Order request', 'অর্ডারের অনুরোধ') : L('Quotation acceptance', 'কোটেশন গ্রহণ')) + '</span><h2 class="pn" style="font-size:18px">' + a.id + '</h2></div><div style="text-align:right"><span class="subtle">' + L('Total incl. VAT', 'VAT সহ মোট') + '</span><div class="price-big" style="font-size:22px">' + tk2(a.amount) + '</div></div></div>' +
+    '<div class="form-grid"><div><span class="label">' + L('Requested by', 'অনুরোধকারী') + '</span><div><b>' + a.by + '</b> · ' + L(a.role.en, a.role.bn) + '</div></div><div><span class="label">' + L('Cost centre', 'কস্ট সেন্টার') + '</span><div><b>' + a.cc + '</b> · ' + (function () { var c = CC.filter(function (x) { return x.id === a.cc; })[0]; return L(c.en, c.bn); })() + '</div></div></div>' +
+    '<div><span class="label">' + L('Their note', 'অনুরোধকারীর নোট') + '</span><p>' + L(a.note.en, a.note.bn) + '</p></div>' +
+    '<div class="callout info"><div><b>' + L('Why you are asked', 'কেন আপনার অনুমোদন লাগছে') + '</b><br>' + L(a.why.en, a.why.bn) + '</div></div>' +
+    '<div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Qty', 'পরিমাণ') + '</th><th class="num">' + L('Unit', 'একক') + '</th><th class="num">' + L('Line total', 'মোট') + '</th></tr></thead><tbody>' +
+    lines.map(function (l) { return '<tr><td class="full pn" data-label="' + L('Part', 'পার্ট') + '">' + esc(l[0]) + '</td><td class="num" data-label="' + L('Qty', 'পরিমাণ') + '">' + num(l[1]) + '</td><td class="num" data-label="' + L('Unit', 'একক') + '">' + tk(l[2]) + '</td><td class="num" data-label="' + L('Line total', 'মোট') + '">' + tk(l[1] * l[2]) + '</td></tr>'; }).join('') +
+    '</tbody></table></div>' +
+    (done ? '<div class="callout ' + (a.status === 'approved' ? 'ok' : 'bad') + '"><div><b>' + (a.status === 'approved' ? L('You approved this. MECHWARE has been told to confirm the order.', 'আপনি অনুমোদন দিয়েছেন। MECHWARE-কে অর্ডার নিশ্চিত করতে জানানো হয়েছে।') : L('You rejected this. Tanvir has been told why.', 'আপনি বাতিল করেছেন। কারণসহ অনুরোধকারীকে জানানো হয়েছে।')) + '</b>' + (a.reason ? '<br>' + L('Reason', 'কারণ') + ': ' + esc(a.reason) : '') + '</div></div><div><button class="btn" type="button" data-act="ap-undo">' + L('Undo (prototype)', 'আগের অবস্থায় ফেরান (প্রোটোটাইপ)') + '</button></div>'
+      : '<label class="field" for="ap-reason"><span>' + L('Comment (required to reject)', 'মন্তব্য (বাতিল করতে লাগবে)') + '</span><textarea class="input" id="ap-reason" rows="2" style="font-family:inherit" data-ap-reason>' + esc(a.reason) + '</textarea></label>' +
+        (S.apError ? '<p style="color:var(--bad);font-weight:600" role="alert">' + S.apError + '</p>' : '') +
+        '<div class="row"><button class="btn btn-primary" type="button" data-act="ap-approve">' + L('Approve', 'অনুমোদন দিন') + '</button><button class="btn btn-danger" type="button" data-act="ap-reject">' + L('Reject', 'বাতিল করুন') + '</button><span class="subtle">' + L('Stock is held until', 'স্টক ধরে রাখা আছে') + ' ' + dt(2026, 11, 6) + ' 10:42</span></div>') +
+    '</section>';
+  return storeHead('manager') + '<main class="wrap page">' +
+    '<div class="title-row"><div><h1>' + L('Approval inbox', 'অনুমোদনের ইনবক্স') + '</h1><p class="muted">' + num(pendingCount()) + ' ' + L('waiting for you, Rafiq', 'টি আপনার অপেক্ষায়, রফিক') + '</p></div></div>' +
+    '<div class="inbox"><section class="panel panel-flush">' + list + '</section>' + detail + '</div></main>';
+}
+
+/* 9. Company dashboard */
+var ORDERS = [
+  { id: 'MW-261105-K7Q2P9', d: [2026, 11, 5], by: 'Tanvir Ahmed', cc: 'CC-204', amt: 490992.5, st: 'approval' },
+  { id: 'MW-261104-H2M8XD', d: [2026, 11, 4], by: 'Mahmudul Karim', cc: 'CC-118', amt: 58650, st: 'approval' },
+  { id: 'MW-261102-R5W1NB', d: [2026, 11, 2], by: 'Tanvir Ahmed', cc: 'CC-204', amt: 112470, st: 'picking' },
+  { id: 'MW-261030-C9F4TS', d: [2026, 10, 30], by: 'Shahana Akter', cc: 'CC-310', amt: 74980, st: 'shipped' },
+  { id: 'MW-261027-L3J8VE', d: [2026, 10, 27], by: 'Tanvir Ahmed', cc: 'CC-204', amt: 26450, st: 'delivered' }
+];
+function stPill(st) {
+  var m = { approval: ['warn', 'Awaiting approval', 'অনুমোদনের অপেক্ষায়'], new: ['info', 'New', 'নতুন'], confirmed: ['info', 'Confirmed', 'নিশ্চিত'], picking: ['info', 'Picking', 'প্যাকিং চলছে'], shipped: ['info', 'Shipped', 'পাঠানো হয়েছে'], delivered: ['ok', 'Delivered', 'পৌঁছেছে'], cancelled: ['bad', 'Cancelled', 'বাতিল'], unpaid: ['warn', 'Payment due', 'পেমেন্ট বাকি'] }[st];
+  return '<span class="pill ' + m[0] + '">' + L(m[1], m[2]) + '</span>';
+}
+function vCompany() {
+  var maxB = Math.max.apply(null, CC.map(function (c) { return c.budget; }));
+  return storeHead('manager') + '<main class="wrap page">' +
+    '<div class="title-row"><div><span class="label">' + L('Company account', 'কোম্পানি অ্যাকাউন্ট') + '</span><h1>' + L(COMPANY.en, COMPANY.bn) + '</h1><p class="muted">' + L('October–December 2026 · 14 buyers · 4 cost centres', 'অক্টোবর–ডিসেম্বর ২০২৬ · ১৪ জন ক্রেতা · ৪টি কস্ট সেন্টার') + '</p></div><button class="btn" type="button" data-act="toast" data-msg="export">' + L('Export spend (Excel)', 'খরচ এক্সপোর্ট (Excel)') + '</button></div>' +
+    '<div class="kpis">' +
+    '<button class="kpi" type="button" data-go="company"><span class="label">' + L('Open orders', 'খোলা অর্ডার') + '</span><b>' + num(6) + '</b><span class="subtle">' + L('2 shipping this week', 'এই সপ্তাহে ২টি যাবে') + '</span></button>' +
+    '<button class="kpi" type="button" data-go="approvals"><span class="label">' + L('Waiting for approval', 'অনুমোদনের অপেক্ষায়') + '</span><b>' + num(pendingCount()) + '</b><span class="subtle">' + L('Oldest: 1 day', 'সবচেয়ে পুরোনো: ১ দিন') + '</span></button>' +
+    '<button class="kpi" type="button" data-go="quote"><span class="label">' + L('Open quotations', 'খোলা কোটেশন') + '</span><b>' + num(2) + '</b><span class="subtle" style="color:var(--warn)">' + L('1 expires in 14 days', '১টির মেয়াদ ১৪ দিনে শেষ') + '</span></button>' +
+    '<button class="kpi" type="button" data-go="invoice"><span class="label">' + L('Due to pay', 'পরিশোধ বাকি') + '</span><b>' + tk(CREDIT_USED) + '</b><span class="subtle">' + L('Next due', 'পরবর্তী তারিখ') + ' ' + dt(2026, 11, 29) + '</span></button>' +
+    '</div>' +
+    '<div class="two">' +
+    '<section class="panel stack"><div class="row between"><h2>' + L('Spend by cost centre this quarter', 'এই প্রান্তিকে কস্ট সেন্টারভিত্তিক খরচ') + '</h2><span class="subtle">' + L('bar = spend, track = budget', 'বার = খরচ, পেছনের ঘর = বাজেট') + '</span></div><div class="bars">' +
+    CC.map(function (c) { var used = c.spend / c.budget; return '<div class="bar"><span><b>' + c.id + '</b> <span class="subtle">' + L(c.en, c.bn) + '</span></span><div class="track" style="width:' + (c.budget / maxB * 100) + '%"><div class="fill' + (used > 0.9 ? ' over' : '') + '" style="width:' + (used * 100) + '%"></div></div><span class="v">' + tk(c.spend) + '<div class="subtle" style="font-weight:500">' + pct(used * 100, 0) + ' ' + L('of budget', 'বাজেটের') + '</div></span></div>'; }).join('') +
+    '</div></section>' +
+    '<section class="panel stack"><h2>' + L('Credit', 'ক্রেডিট') + '</h2>' +
+    '<div class="row between"><span class="muted">' + L('Used', 'ব্যবহৃত') + '</span><b class="tnum">' + tk(CREDIT_USED) + '</b></div><div class="meter"><span style="width:' + (CREDIT_USED / CREDIT_LIMIT * 100) + '%"></span></div>' +
+    '<div class="row between subtle"><span>' + L('Limit', 'সীমা') + ' ' + tk(CREDIT_LIMIT) + ' · ' + L('30-day terms', '৩০ দিনের শর্ত') + '</span><span>' + L('Available', 'বাকি') + ' ' + tk(CREDIT_LIMIT - CREDIT_USED) + '</span></div>' +
+    '<div class="callout warn"><div>' + L('If the order waiting for approval goes through, available credit drops to', 'অপেক্ষমাণ অর্ডারটি অনুমোদিত হলে বাকি ক্রেডিট নেমে আসবে') + ' <b class="tnum">' + tk(CREDIT_LIMIT - CREDIT_USED - 490992.5) + '</b>.</div></div>' +
+    '</section></div>' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Recent orders', 'সাম্প্রতিক অর্ডার') + '</h2></div><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Order', 'অর্ডার') + '</th><th>' + L('Placed', 'তারিখ') + '</th><th>' + L('By', 'কে দিয়েছেন') + '</th><th>' + L('Cost centre', 'কস্ট সেন্টার') + '</th><th>' + L('Status', 'অবস্থা') + '</th><th class="num">' + L('Total', 'মোট') + '</th></tr></thead><tbody>' +
+    ORDERS.map(function (o) { return '<tr><td class="full pn" data-label="' + L('Order', 'অর্ডার') + '">' + o.id + '</td><td data-label="' + L('Placed', 'তারিখ') + '">' + dt(o.d[0], o.d[1], o.d[2]) + '</td><td data-label="' + L('By', 'কে দিয়েছেন') + '">' + o.by + '</td><td data-label="' + L('Cost centre', 'কস্ট সেন্টার') + '">' + o.cc + '</td><td data-label="' + L('Status', 'অবস্থা') + '">' + stPill(o.st) + '</td><td class="num" data-label="' + L('Total', 'মোট') + '">' + tk2(o.amt) + '</td></tr>'; }).join('') +
+    '</tbody></table></div></section></main>';
+}
+
+/* 10. Invoice, Mushak-6.3 */
+function vInvoice() {
+  var lines = [
+    ['6ES7214-1AG40-0XB0', 'SIMATIC S7-1200 CPU 1214C', L('pcs', 'পিস'), 2, 48500],
+    ['E2E-X5ME1 2M', 'Omron proximity sensor M18', L('pcs', 'পিস'), 20, 2180],
+    ['UK 2.5 N', 'Phoenix terminal block 2.5 mm²', L('pcs', 'পিস'), 100, 43]
+  ];
+  var tv = 0, tt = 0, tg = 0;
+  var body = lines.map(function (l, i) {
+    var val = l[3] * l[4], vat = val * VAT; tv += val; tt += vat; tg += val + vat;
+    return '<tr><td class="num">' + dg(i + 1) + '</td><td><span class="pn">' + l[0] + '</span><div class="cell-sub">' + l[1] + '</div></td><td>' + l[2] + '</td><td class="num">' + num(l[3]) + '</td><td class="num">' + tk2(l[4]).slice(1) + '</td><td class="num">' + tk2(val).slice(1) + '</td><td class="num">' + dg('0.00') + '</td><td class="num">' + dg('15') + '%</td><td class="num">' + tk2(vat).slice(1) + '</td><td class="num">' + tk2(val + vat).slice(1) + '</td></tr>';
+  }).join('');
+  return storeHead('accounts') + '<main class="wrap page">' +
+    '<div class="title-row"><div><span class="label">' + L('Invoice for order', 'অর্ডারের ইনভয়েস') + ' MW-261012-P6D3QK</span><h1>' + L('Tax invoice', 'কর চালানপত্র') + '</h1></div><div class="row"><button class="btn" type="button" data-act="toast" data-msg="pdf">' + L('Download PDF', 'PDF ডাউনলোড') + '</button><button class="btn" type="button" data-act="toast" data-msg="mushak66">' + L('Upload Mushak-6.6 (VDS)', 'মূসক-৬.৬ আপলোড (VDS)') + '</button></div></div>' +
+    '<p class="subtle">' + L('The legal form is in Bangla, as NBR prescribes. The PDF prints on A4.', 'আইনি ফর্মটি NBR-এর নির্ধারিত বাংলায়। PDF A4-এ প্রিন্ট হয়।') + '</p>' +
+    '<article class="invoice inv" lang="bn">' +
+    '<div class="inv-top"><div class="subtle">গণপ্রজাতন্ত্রী বাংলাদেশ সরকার<br>জাতীয় রাজস্ব বোর্ড</div><div class="mid"><h1>কর চালানপত্র</h1><div class="subtle">[বিধি ৪০-এর উপ-বিধি (১)-এর দফা (গ) ও দফা (চ) দ্রষ্টব্য]</div></div><div class="right"><b style="font-size:16px">মূসক-৬.৩</b></div></div>' +
+    '<div class="inv-parties">' +
+    '<dl><dt>নিবন্ধিত ব্যক্তির নাম</dt><dd>MECHWARE</dd><dt>BIN</dt><dd class="tnum">00XXXXXXX-0101</dd><dt>ঠিকানা</dt><dd>মধুবন টাওয়ার (৬ষ্ঠ তলা), গুলশান লিংক রোড, ঢাকা ১২১২</dd><dt>চালানপত্র নম্বর</dt><dd class="pn">MW/6.3/2026-27/000482</dd><dt>ইস্যুর তারিখ ও সময়</dt><dd class="tnum">১৪ অক্টোবর ২০২৬, ১৫:২০</dd></dl>' +
+    '<dl><dt>ক্রেতার নাম</dt><dd>মেঘনা টেক্সটাইল মিলস লিমিটেড</dd><dt>ক্রেতার BIN</dt><dd class="tnum">00XXXXXXX-0302</dd><dt>ক্রেতার ঠিকানা</dt><dd>ইউনিট ২, কাঁচপুর, নারায়ণগঞ্জ</dd><dt>সরবরাহের গন্তব্যস্থল</dt><dd>গেট ৩ স্টোর, ইউনিট ২</dd><dt>যানবাহনের প্রকৃতি ও নম্বর</dt><dd>কাভার্ড ভ্যান, ঢাকা মেট্রো-ন ১৮-XXXX</dd></dl>' +
+    '</div>' +
+    '<div class="tbl-scroll"><table class="tbl"><thead><tr><th class="num">ক্রমিক সংখ্যা</th><th>পণ্য বা সেবার বর্ণনা (প্রযোজ্য ক্ষেত্রে ব্র্যান্ড নামসহ)</th><th>সরবরাহের একক</th><th class="num">পরিমাণ</th><th class="num">একক মূল্য (টাকায়)</th><th class="num">মোট মূল্য (টাকায়)</th><th class="num">সম্পূরক শুল্কের পরিমাণ (টাকায়)</th><th class="num">মূল্য সংযোজন করের হার</th><th class="num">মূল্য সংযোজন কর পরিমাণ (টাকায়)</th><th class="num">সকল প্রকার শুল্ক ও করসহ মূল্য</th></tr></thead><tbody>' + body + '</tbody>' +
+    '<tfoot><tr><td></td><td colspan="4">সর্বমোট</td><td class="num">' + tk2(tv).slice(1) + '</td><td class="num">' + dg('0.00') + '</td><td></td><td class="num">' + tk2(tt).slice(1) + '</td><td class="num">' + tk2(tg).slice(1) + '</td></tr></tfoot></table></div>' +
+    '<div class="sign"><div>প্রতিষ্ঠান কর্তৃপক্ষের দায়িত্বপ্রাপ্ত ব্যক্তির নাম: (নমুনা) ………………<br>পদবি: হিসাব ব্যবস্থাপক</div><div>স্বাক্ষর ও সিল</div></div>' +
+    '<p class="subtle">* উৎসে কর্তনযোগ্য সরবরাহের ক্ষেত্রে ফরমটি সমন্বিত কর চালানপত্র ও উৎসে কর কর্তন সনদপত্র হিসেবে বিবেচিত হবে এবং উহা উৎসে কর কর্তনযোগ্য সরবরাহের ক্ষেত্রে প্রযোজ্য হবে।</p>' +
+    '</article></main>';
+}
+
+/* 11. Console orders */
+var CORDERS = [
+  { id: 'MW-261105-K7Q2P9', co: 'Meghna Textile Mills', amt: 490992.5, pay: ['credit', 'Credit 30 days', 'ক্রেডিট ৩০ দিন'], st: 'approval', wh: 'DHK', at: '10:42' },
+  { id: 'MW-261105-B4T9LC', co: 'Karnaphuli Steel Re-Rolling', amt: 118450, pay: ['bank', 'Bank transfer · not received', 'ব্যাংক ট্রান্সফার · আসেনি'], st: 'unpaid', wh: 'CTG', at: '09:58' },
+  { id: 'MW-261105-T7V2GA', co: 'Surma Pharma Ltd.', amt: 64285, pay: ['card', 'SSLCommerz · paid', 'SSLCommerz · পরিশোধিত'], st: 'new', wh: 'DHK', at: '09:31' },
+  { id: 'MW-261104-Z8R2QA', co: 'Rupsha Agro Foods', amt: 36800, pay: ['bkash', 'bKash · paid', 'bKash · পরিশোধিত'], st: 'picking', wh: 'CTG', at: [2026, 11, 4] },
+  { id: 'MW-261102-R5W1NB', co: 'Meghna Textile Mills', amt: 112470, pay: ['credit', 'Credit 30 days', 'ক্রেডিট ৩০ দিন'], st: 'picking', wh: 'DHK', at: [2026, 11, 2] },
+  { id: 'MW-261101-E2Q6MU', co: 'Padma Cement Works', amt: 245900, pay: ['credit', 'Credit 45 days', 'ক্রেডিট ৪৫ দিন'], st: 'shipped', wh: 'DHK', at: [2026, 11, 1] },
+  { id: 'MW-261030-C9F4TS', co: 'Meghna Textile Mills', amt: 74980, pay: ['credit', 'Credit 30 days', 'ক্রেডিট ৩০ দিন'], st: 'shipped', wh: 'DHK', at: [2026, 10, 30] },
+  { id: 'MW-261028-W4K9HP', co: 'Tista Paper Mills', amt: 18750, pay: ['cod', 'Cash on delivery', 'ক্যাশ অন ডেলিভারি'], st: 'cancelled', wh: 'DHK', at: [2026, 10, 28] }
+];
+function consoleShell(active, inner) {
+  var items = [['console-orders', 'Orders', 'অর্ডার'], ['quotes', 'Quotations', 'কোটেশন'], ['console-prices', 'Price lists', 'প্রাইস লিস্ট'], ['inv', 'Inventory', 'ইনভেন্টরি'], ['cos', 'Companies', 'কোম্পানি'], ['audit', 'Audit log', 'অডিট লগ']];
+  return '<div class="console"><nav class="side" aria-label="Console"><span class="logo"><i aria-hidden="true"></i>MECHWARE<small>' + L('Console', 'কনসোল') + '</small></span>' +
+    items.map(function (it) { var real = it[0] === 'console-orders' || it[0] === 'console-prices'; return '<button type="button"' + (real ? ' data-go="' + it[0] + '"' : ' data-act="toast" data-msg="soon"') + (active === it[0] ? ' class="on" aria-current="page"' : '') + '>' + L(it[1], it[2]) + '</button>'; }).join('') +
+    '<div class="who">' + (active === 'console-prices' ? 'Arif Rahman<br>' + L('Sales manager', 'সেলস ম্যানেজার') : 'Farzana Islam<br>' + L('Order desk', 'অর্ডার ডেস্ক')) + '</div></nav>' +
+    '<main class="cmain">' + inner + '</main></div>';
+}
+function vConsoleOrders() {
+  var counts = { all: CORDERS.length };
+  CORDERS.forEach(function (o) { counts[o.st] = (counts[o.st] || 0) + 1; });
+  var keys = [['all', 'All', 'সব'], ['new', 'New', 'নতুন'], ['unpaid', 'Payment due', 'পেমেন্ট বাকি'], ['approval', 'Buyer approval', 'ক্রেতার অনুমোদন'], ['picking', 'Picking', 'প্যাকিং'], ['shipped', 'Shipped', 'পাঠানো'], ['cancelled', 'Cancelled', 'বাতিল']];
+  var rows = CORDERS.map(function (o, i) { return [o, i]; }).filter(function (x) { return S.coFilter === 'all' || x[0].st === S.coFilter; });
+  if (!rows.some(function (x) { return x[1] === S.coSel; }) && rows.length) S.coSel = rows[0][1];
+  var o = CORDERS[S.coSel];
+  var order = ['new', 'approval', 'unpaid', 'picking', 'shipped', 'delivered'];
+  var stepsDef = [
+    ['placed', L('Order placed', 'অর্ডার দেওয়া হয়েছে'), when(o.at) + ' · ' + L('by buyer on web', 'ক্রেতা ওয়েবে')],
+    ['approval', L('Buyer’s manager approves', 'ক্রেতার ম্যানেজারের অনুমোদন'), o.st === 'approval' ? L('Waiting for Rafiq Hasan', 'রফিক হাসানের অপেক্ষায়') : L('Not needed or done', 'লাগেনি বা হয়ে গেছে')],
+    ['pay', L('Payment', 'পেমেন্ট'), L(o.pay[1], o.pay[2])],
+    ['picking', L('Picking and packing', 'বাছাই ও প্যাকিং'), (o.wh === 'DHK' ? L('Dhaka warehouse', 'ঢাকা গুদাম') : L('Chattogram warehouse', 'চট্টগ্রাম গুদাম'))],
+    ['shipped', L('Handed to courier', 'কুরিয়ারে দেওয়া'), L('Sundarban Courier · tracking SB-5521XXXX', 'সুন্দরবন কুরিয়ার · ট্র্যাকিং SB-5521XXXX')],
+    ['delivered', L('Delivered, signed for', 'পৌঁছেছে, সই নেওয়া হয়েছে'), '']
+  ];
+  var nowIdx = { new: 2, unpaid: 2, approval: 1, picking: 3, shipped: 4, delivered: 5, cancelled: -1 }[o.st];
+  var timeline = o.st === 'cancelled'
+    ? '<div class="callout bad"><div><b>' + L('Cancelled by buyer', 'ক্রেতা বাতিল করেছেন') + '</b><br>' + L('Reserved stock was released back to Dhaka.', 'ধরে রাখা স্টক ঢাকা গুদামে ফেরত গেছে।') + '</div></div>'
+    : '<ol class="timeline">' + stepsDef.map(function (s, i) { var c = i < nowIdx ? 'done' : i === nowIdx ? 'now' : ''; return '<li class="' + c + '"><span class="dot" aria-hidden="true"></span><div><b>' + s[1] + '</b>' + (i <= nowIdx && s[2] ? '<div class="subtle">' + dg(s[2]) + '</div>' : '') + '</div></li>'; }).join('') + '</ol>';
+  var inner = '<div class="title-row"><div><h1>' + L('Orders', 'অর্ডার') + '</h1><p class="muted">' + L('Today, 5 November 2026 · both warehouses', 'আজ, ৫ নভেম্বর ২০২৬ · দুই গুদাম') + '</p></div><div class="search" style="order:0;flex:0 1 320px"><input id="co-search" type="search" placeholder="' + L('Order no., company or part', 'অর্ডার নং, কোম্পানি বা পার্ট') + '" aria-label="' + L('Search orders', 'অর্ডার খুঁজুন') + '"><button class="btn" type="button">' + L('Find', 'খুঁজুন') + '</button></div></div>' +
+    '<div class="row">' + keys.map(function (k) { return '<button class="chip" type="button" data-act="co-filter" data-k="' + k[0] + '" aria-pressed="' + (S.coFilter === k[0]) + '">' + L(k[1], k[2]) + ' <span class="ct">' + num(counts[k[0]] || 0) + '</span></button>'; }).join('') + '</div>' +
+    '<div class="co-grid"><section class="panel panel-flush"><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Order', 'অর্ডার') + '</th><th>' + L('Company', 'কোম্পানি') + '</th><th>' + L('Payment', 'পেমেন্ট') + '</th><th>' + L('Status', 'অবস্থা') + '</th><th>' + L('WH', 'গুদাম') + '</th><th class="num">' + L('Total', 'মোট') + '</th></tr></thead><tbody>' +
+    (rows.length ? rows.map(function (x) { var r = x[0]; return '<tr class="clickrow' + (x[1] === S.coSel ? ' sel' : '') + '" data-act="co-sel" data-i="' + x[1] + '"><td class="full" data-label="' + L('Order', 'অর্ডার') + '"><button class="btn-link pn" type="button" data-act="co-sel" data-i="' + x[1] + '">' + r.id + '</button><div class="subtle">' + when(r.at) + '</div></td><td data-label="' + L('Company', 'কোম্পানি') + '">' + r.co + '</td><td data-label="' + L('Payment', 'পেমেন্ট') + '">' + L(r.pay[1], r.pay[2]) + '</td><td data-label="' + L('Status', 'অবস্থা') + '">' + stPill(r.st) + '</td><td data-label="' + L('WH', 'গুদাম') + '">' + r.wh + '</td><td class="num" data-label="' + L('Total', 'মোট') + '">' + tk2(r.amt) + '</td></tr>'; }).join('') : '<tr><td colspan="6" style="padding:20px">' + L('No orders in this state.', 'এই অবস্থায় কোনো অর্ডার নেই।') + '</td></tr>') +
+    '</tbody></table></div></section>' +
+    '<aside class="panel stack"><div class="row between"><h2 class="pn">' + o.id + '</h2>' + stPill(o.st) + '</div><div class="muted">' + o.co + ' · <b class="tnum">' + tk2(o.amt) + '</b></div>' + timeline +
+    '<div class="row">' + (o.st === 'new' ? '<button class="btn btn-primary" type="button" data-act="toast" data-msg="confirm">' + L('Confirm and send to warehouse', 'নিশ্চিত করে গুদামে পাঠান') + '</button>' : o.st === 'unpaid' ? '<button class="btn btn-primary" type="button" data-act="toast" data-msg="paid">' + L('Mark bank payment received', 'ব্যাংক পেমেন্ট এসেছে চিহ্নিত করুন') + '</button>' : o.st === 'picking' ? '<button class="btn btn-primary" type="button" data-act="toast" data-msg="ship">' + L('Hand to courier', 'কুরিয়ারে দিন') + '</button>' : '') + '<button class="btn" type="button" data-go="invoice">' + L('Invoice', 'ইনভয়েস') + '</button></div>' +
+    '<p class="subtle">' + L('Every change is written to the audit log with your name.', 'প্রতিটি পরিবর্তন আপনার নামসহ অডিট লগে লেখা হয়।') + '</p></aside></div>';
+  return consoleShell('console-orders', inner);
+}
+
+/* 12. Console price lists */
+var PL = [
+  { sku: '6ES7214-1AG40-0XB0', cost: 41200, list: 48500, old: 46000, nw: 45500, b10: 44300 },
+  { sku: '6ES7215-1AG40-0XB0', cost: 53900, list: 62400, old: 59500, nw: 58900, b10: 57600 },
+  { sku: 'DVP28SV11T2', cost: 15100, list: 18450, old: 16900, nw: 16200, b10: 15900 },
+  { sku: 'E2E-X5ME1 2M', cost: 1640, list: 2350, old: 2050, nw: 1990, b10: 1900 },
+  { sku: 'VFD037E43A', cost: 33800, list: 38900, old: null, nw: 36500, b10: 35700 }
+];
+var FLOOR = 8;
+function vConsolePrices() {
+  var lists = [
+    ['Meghna Group — Q4 2026', L('Draft · waiting for 2nd approval', 'খসড়া · দ্বিতীয় অনুমোদনের অপেক্ষায়'), 'warn'],
+    ['Karnaphuli Steel — 2026 contract', L('Active since 1 Jul 2026', '১ জুলাই ২০২৬ থেকে চালু'), 'ok'],
+    ['Default — BDT', L('Active · public prices', 'চালু · সাধারণ দাম'), 'ok']
+  ];
+  var below = PL.filter(function (r) { return (r.nw - r.cost) / r.nw * 100 < FLOOR; }).length;
+  var st = S.plStatus;
+  var inner = '<div class="title-row"><div><h1>' + L('Price lists', 'প্রাইস লিস্ট') + '</h1><p class="muted">' + L('Company prices need two people: one prepares, a different one approves.', 'কোম্পানির দামে দুজন লাগে: একজন বানান, আরেকজন অনুমোদন দেন।') + '</p></div><button class="btn" type="button" data-act="toast" data-msg="soon">+ ' + L('New price list', 'নতুন প্রাইস লিস্ট') + '</button></div>' +
+    '<div class="inbox pl"><section class="panel panel-flush lists">' +
+    lists.map(function (l, i) { return '<button type="button" class="' + (i === 0 ? 'sel' : '') + '" data-act="toast" data-msg="soon"><b>' + l[0] + '</b><span class="pill ' + (i === 0 && st === 'approved' ? 'ok' : l[2]) + '">' + (i === 0 && st === 'approved' ? L('Approved · starts 1 Nov', 'অনুমোদিত · ১ নভেম্বর থেকে') : l[1]) + '</span></button>'; }).join('') +
+    '</section><div class="stack">' +
+    '<section class="panel stack"><div class="row between"><div><span class="label">' + L('Company price list', 'কোম্পানির প্রাইস লিস্ট') + '</span><h2 style="font-size:18px">Meghna Group — Q4 2026</h2><p class="subtle">' + L('Applies to Meghna Textile Mills and Meghna Dyeing & Finishing · 1 Nov – 31 Dec 2026', 'মেঘনা টেক্সটাইল মিলস ও মেঘনা ডাইং অ্যান্ড ফিনিশিং-এ প্রযোজ্য · ১ নভেম্বর – ৩১ ডিসেম্বর ২০২৬') + '</p></div></div>' +
+    '<div class="form-grid"><div><span class="label">' + L('Prepared by', 'প্রস্তুত করেছেন') + '</span><div><b>Nusrat Jahan</b> · ' + L('Pricing analyst', 'প্রাইসিং অ্যানালিস্ট') + '</div><div class="subtle">' + dt(2026, 11, 4) + ' 16:20</div></div>' +
+    '<div><span class="label">' + L('Second approval', 'দ্বিতীয় অনুমোদন') + '</span><div>' + (st === 'approved' ? '<b>Arif Rahman</b> · ' + dt(2026, 11, 5) : st === 'returned' ? L('Returned to Nusrat', 'নুসরাতকে ফেরত পাঠানো') : L('You, Arif Rahman (Sales manager)', 'আপনি, আরিফ রহমান (সেলস ম্যানেজার)')) + '</div><div class="subtle">' + L('The person who prepared it cannot approve it.', 'যিনি বানিয়েছেন তিনি অনুমোদন দিতে পারবেন না।') + '</div></div></div></section>' +
+    '<section class="panel panel-flush"><div class="panel-head"><h2>' + L('Changes', 'পরিবর্তন') + '</h2><span class="subtle">' + L('Margin floor', 'ন্যূনতম মার্জিন') + ' ' + pct(FLOOR, 0) + '</span></div><div class="tbl-scroll"><table class="tbl rt"><thead><tr><th>' + L('Part', 'পার্ট') + '</th><th class="num">' + L('Cost', 'খরচ') + '</th><th class="num">' + L('List', 'তালিকা দাম') + '</th><th class="num">' + L('Contract 1+', 'চুক্তি ১+') + '</th><th class="num">' + L('Contract 10+', 'চুক্তি ১০+') + '</th><th class="num">' + L('Margin', 'মার্জিন') + '</th></tr></thead><tbody>' +
+    PL.map(function (r) { var m = (r.nw - r.cost) / r.nw * 100, low = m < FLOOR; return '<tr><td class="full" data-label="' + L('Part', 'পার্ট') + '"><span class="pn">' + r.sku + '</span>' + (r.old == null ? ' <span class="pill info">' + L('New line', 'নতুন লাইন') + '</span>' : '') + '</td><td class="num" data-label="' + L('Cost', 'খরচ') + '">' + tk(r.cost) + '</td><td class="num" data-label="' + L('List', 'তালিকা দাম') + '">' + tk(r.list) + '</td><td class="num" data-label="' + L('Contract 1+', 'চুক্তি ১+') + '">' + (r.old != null ? '<span class="diff-old">' + tk(r.old) + '</span>' : '') + '<span class="diff-new">' + tk(r.nw) + '</span></td><td class="num" data-label="' + L('Contract 10+', 'চুক্তি ১০+') + '">' + tk(r.b10) + '</td><td class="num" data-label="' + L('Margin', 'মার্জিন') + '">' + (low ? '<span class="flag">' + pct(m) + ' ▼</span>' : pct(m)) + '</td></tr>'; }).join('') +
+    '</tbody></table></div></section>' +
+    (st === 'pending'
+      ? '<section class="panel stack">' + (below ? '<div class="callout bad"><div><b>' + num(below) + ' ' + L('lines are below the 8% margin floor.', 'টি লাইন ৮% ন্যূনতম মার্জিনের নিচে।') + '</b> ' + L('Approving them needs a reason in the audit log.', 'অনুমোদন দিতে অডিট লগে কারণ লিখতে হবে।') + '</div></div>' : '') +
+        '<label class="check" for="pl-ack"><input type="checkbox" id="pl-ack" data-bind="plAck"' + (S.plAck ? ' checked' : '') + '><span>' + L('I have checked the low-margin lines: volume commitment of ৳40 lakh for the quarter.', 'কম মার্জিনের লাইনগুলো দেখেছি: প্রান্তিকে ৳৪০ লাখ কেনার প্রতিশ্রুতি আছে।') + '</span></label>' +
+        '<div class="row"><button class="btn btn-primary" type="button" data-act="pl-approve"' + (S.plAck ? '' : ' disabled') + '>' + L('Approve price list', 'প্রাইস লিস্ট অনুমোদন দিন') + '</button><button class="btn" type="button" data-act="pl-return">' + L('Return to Nusrat', 'নুসরাতকে ফেরত দিন') + '</button></div></section>'
+      : '<div class="callout ' + (st === 'approved' ? 'ok' : 'warn') + '"><div><b>' + (st === 'approved' ? L('Approved. Meghna buyers see these prices from their next page load.', 'অনুমোদিত। মেঘনার ক্রেতারা পরের বার পাতা খুললেই এই দাম দেখবেন।') : L('Returned to Nusrat with your comment.', 'আপনার মন্তব্যসহ নুসরাতকে ফেরত পাঠানো হয়েছে।')) + '</b> <button class="btn-link" type="button" data-act="pl-undo">' + L('Undo (prototype)', 'আগের অবস্থায় ফেরান (প্রোটোটাইপ)') + '</button></div></div>') +
+    '</div></div>';
+  return consoleShell('console-prices', inner);
+}
+
+var VIEWS = new Map([['home', vHome], ['products', vProducts], ['product', vProduct], ['quick-order', vQuick], ['cart', vCart], ['checkout', vCheckout], ['quote', vQuote], ['approvals', vApprovals], ['company', vCompany], ['invoice', vInvoice], ['console-orders', vConsoleOrders], ['console-prices', vConsolePrices]]);
+
+/* ---------- interview notes ---------- */
+var NOTES = {
+  'home': [['How do you start a purchase today: part number, brand, or a list from the plant?', 'আজ কেনাকাটা কীভাবে শুরু করেন: পার্ট নম্বর, ব্র্যান্ড, নাকি প্ল্যান্টের তালিকা থেকে?'], ['Which of the four facts in the trust strip matters most before you buy from a new supplier?', 'নতুন সাপ্লায়ার থেকে কেনার আগে ট্রাস্ট স্ট্রিপের চারটি তথ্যের কোনটা সবচেয়ে জরুরি?']],
+  'products': [['Which columns do you need to compare PLCs? Which can go?', 'PLC তুলনা করতে কোন কলামগুলো লাগে? কোনগুলো বাদ দেওয়া যায়?'], ['Is the price-by-quantity table clear without explanation?', 'পরিমাণভেদে দামের টেবিল কোনো ব্যাখ্যা ছাড়াই বোঝা যায়?']],
+  'product': [['What do you check before you trust a part number: datasheet, stock, warranty, origin?', 'পার্ট নম্বরে ভরসা করার আগে কী দেখেন: ডেটাশিট, স্টক, ওয়ারেন্টি, উৎস দেশ?'], ['When do you add to cart, and when do you ask for a quotation?', 'কখন কার্টে যোগ করেন, আর কখন কোটেশন চান?']],
+  'quick-order': [['Where does your parts list come from today: Excel, email, WhatsApp, paper?', 'আপনার পার্টের তালিকা আজ কোথা থেকে আসে: Excel, ইমেইল, WhatsApp, কাগজ?'], ['What should happen with a discontinued part number?', 'উৎপাদন বন্ধ হওয়া পার্ট নম্বর এলে কী হওয়া উচিত?']],
+  'cart': [['Do you assign a cost centre per order or per line?', 'কস্ট সেন্টার কি পুরো অর্ডারে দেন, নাকি প্রতি লাইনে?'], ['Who approves, and above what amount?', 'কে অনুমোদন দেন, আর কত টাকার বেশি হলে?']],
+  'checkout': [['Which payment methods does your accounts team actually use with suppliers?', 'আপনার হিসাব বিভাগ সাপ্লায়ারকে আসলে কোন পদ্ধতিতে টাকা দেয়?'], ['Do you deduct VAT at source? Who issues Mushak-6.6?', 'আপনারা কি উৎসে VAT কাটেন? মূসক-৬.৬ কে দেন?']],
+  'quote': [['How many days should a quotation stay valid?', 'কোটেশনের মেয়াদ কত দিন হওয়া উচিত?'], ['Do you compare versions of a quotation? What changes most often?', 'কোটেশনের ভার্সন কি মিলিয়ে দেখেন? সবচেয়ে বেশি কী বদলায়?']],
+  'approvals': [['What does the approver need to see to decide in under a minute?', 'এক মিনিটের মধ্যে সিদ্ধান্ত নিতে অনুমোদনকারীর কী দেখা দরকার?'], ['Do approvals happen on the phone? Through email, SMS or the app?', 'অনুমোদন কি ফোনে হয়? ইমেইল, SMS না অ্যাপে?']],
+  'company': [['Which number do you report to management each month?', 'প্রতি মাসে ম্যানেজমেন্টকে কোন সংখ্যাটা জানান?'], ['Is a budget per cost centre real in your company, or only on paper?', 'কস্ট সেন্টারভিত্তিক বাজেট কি আপনার কোম্পানিতে সত্যিই মানা হয়, নাকি শুধু কাগজে?']],
+  'invoice': [['Does this Mushak-6.3 match what your auditor expects?', 'এই মূসক-৬.৩ কি আপনার অডিটরের প্রত্যাশার সাথে মেলে?'], ['Do you need the invoice in English as well?', 'ইনভয়েস কি ইংরেজিতেও লাগবে?']],
+  'console-orders': [['(Staff) Which states do you work from each morning?', '(স্টাফ) প্রতিদিন সকালে কোন অবস্থার অর্ডার থেকে কাজ শুরু করেন?'], ['(Staff) What do customers call to ask about most often?', '(স্টাফ) গ্রাহক সবচেয়ে বেশি কী জানতে ফোন করেন?']],
+  'console-prices': [['(Owner) Who should be allowed to approve a company price list?', '(মালিক) কোম্পানির প্রাইস লিস্ট অনুমোদনের অধিকার কার থাকা উচিত?'], ['(Owner) Is 8% the right margin floor? Should it differ by brand?', '(মালিক) ৮% ন্যূনতম মার্জিন কি ঠিক? ব্র্যান্ডভেদে কি আলাদা হওয়া উচিত?']]
+};
+var notesOpen = false;
+
+/* ---------- render ---------- */
+var app = document.getElementById('app');
+var sel = document.getElementById('screen-select');
+function idx(id) { for (var i = 0; i < SCREENS.length; i++) if (SCREENS[i].id === id) return i; return 0; }
+function renderChrome() {
+  document.documentElement.lang = lang;
+  sel.innerHTML = SCREENS.map(function (s, i) { return '<option value="' + s.id + '"' + (s.id === current ? ' selected' : '') + '>' + dg(i + 1) + ' · ' + L(s.en, s.bn) + '</option>'; }).join('');
+  document.getElementById('proto-label').textContent = L('Prototype · sample data', 'প্রোটোটাইপ · নমুনা ডেটা');
+  var nb = document.getElementById('notes-btn');
+  nb.textContent = L('Interview notes', 'সাক্ষাৎকারের নোট');
+  nb.setAttribute('aria-pressed', String(notesOpen));
+  document.querySelectorAll('[data-lang]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-lang') === lang)); });
+  document.getElementById('prev-btn').disabled = idx(current) === 0;
+  document.getElementById('next-btn').disabled = idx(current) === SCREENS.length - 1;
+  var notes = document.getElementById('notes');
+  notes.hidden = !notesOpen;
+  if (notesOpen) notes.innerHTML = '<div class="wrap"><span class="label">' + L('Ask the buyer on this screen', 'এই স্ক্রিনে ক্রেতাকে জিজ্ঞেস করুন') + '</span><ol>' + NOTES[current].map(function (q) { return '<li>' + L(q[0], q[1]) + '</li>'; }).join('') + '</ol></div>';
+  document.title = 'MECHWARE · ' + L(SCREENS[idx(current)].en, SCREENS[idx(current)].bn);
+}
+function render() {
+  var fid = document.activeElement && document.activeElement.id;
+  renderChrome();
+  var view = VIEWS.get(current) || vHome;
+  app.innerHTML = view();
+  if (fid) { var el = document.getElementById(fid); if (el && app.contains(el)) el.focus({ preventScroll: true }); }
+}
+function go(id) {
+  if (!VIEWS.has(id)) id = 'home';
+  if (location.hash.slice(1) !== id) { location.hash = id; return; }
+  current = id; render(); window.scrollTo(0, 0);
+}
+window.addEventListener('hashchange', function () { var id = location.hash.slice(1); current = VIEWS.has(id) ? id : 'home'; render(); window.scrollTo(0, 0); });
+
+var toastTimer;
+function toast(msg) {
+  var live = document.getElementById('toast-live');
+  var box = document.createElement('div');
+  box.className = 'toast';
+  box.textContent = msg;
+  live.replaceChildren(box);
+  clearTimeout(toastTimer); toastTimer = setTimeout(function () { live.replaceChildren(); }, 2600);
+}
+var MSG = {
+  pdf: ['The PDF is generated by the real system. Not part of the prototype.', 'আসল সিস্টেম PDF বানাবে। প্রোটোটাইপে নেই।'],
+  revise: ['Revision request sent to Arif Rahman.', 'আরিফ রহমানকে সংশোধনের অনুরোধ পাঠানো হয়েছে।'],
+  export: ['Excel export comes with the real system.', 'Excel এক্সপোর্ট আসল সিস্টেমে থাকবে।'],
+  mushak66: ['Upload of Mushak-6.6 comes with the real system.', 'মূসক-৬.৬ আপলোড আসল সিস্টেমে থাকবে।'],
+  soon: ['This section is not in the prototype.', 'এই অংশ প্রোটোটাইপে নেই।'],
+  confirm: ['Order confirmed and sent to the Dhaka warehouse.', 'অর্ডার নিশ্চিত হয়ে ঢাকা গুদামে গেছে।'],
+  paid: ['Payment marked received. Logged with your name.', 'পেমেন্ট এসেছে বলে চিহ্নিত। আপনার নামে লগ হয়েছে।'],
+  ship: ['Handed to Sundarban Courier. The buyer gets an SMS.', 'সুন্দরবন কুরিয়ারে দেওয়া হয়েছে। ক্রেতা SMS পাবেন।']
+};
+
+function addToCart(sku, qty) {
+  if (!own(P, sku)) return;
+  qty = Math.max(1, qty | 0);
+  var p = P[sku]; if (p.pack > 1 && qty % p.pack) qty = Math.ceil(qty / p.pack) * p.pack;
+  var line = S.cart.filter(function (l) { return l.sku === sku; })[0];
+  if (line) line.qty += qty; else S.cart.push({ sku: sku, qty: qty });
+  render();
+  toast(L('Added', 'যোগ হয়েছে') + ' ' + num(qty) + ' × ' + sku);
+}
+
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-go],[data-act],[data-lang]');
+  if (!t) return;
+  if (t.hasAttribute('data-lang')) {
+    lang = t.getAttribute('data-lang');
+    try { localStorage.setItem('mw-proto-lang', lang); } catch (err) {}
+    render(); return;
+  }
+  if (t.hasAttribute('data-go')) { e.preventDefault(); go(t.getAttribute('data-go')); return; }
+  var a = t.getAttribute('data-act');
+  if (a === 'add') {
+    var from = t.getAttribute('data-qty-from');
+    var q = from ? parseInt(document.getElementById(from).value, 10) : parseInt(t.getAttribute('data-qty'), 10);
+    addToCart(t.getAttribute('data-sku'), q || 1);
+  } else if (a === 'toggle-filters') { S.filtersOpen = !S.filtersOpen; render(); }
+  else if (a === 'clear-filters') { S.filters = { mfr: {}, supply: {}, comms: {}, di: {}, instock: false }; render(); }
+  else if (a === 'validate') { S.quickText = document.getElementById('quick-text').value; S.quickRows = parseQuick(S.quickText); render(); toast(L('List checked', 'তালিকা যাচাই হয়েছে')); }
+  else if (a === 'swap') {
+    if (!own(P, t.getAttribute('data-from')) || !own(P, t.getAttribute('data-to'))) return;
+    S.quickText = S.quickText.split('\n').map(function (l) { return l.indexOf(t.getAttribute('data-from')) === 0 ? l.replace(t.getAttribute('data-from'), t.getAttribute('data-to')) : l; }).join('\n');
+    S.quickRows = parseQuick(S.quickText); render();
+  } else if (a === 'quick-to-cart') {
+    var n = 0;
+    S.quickRows.forEach(function (r) { if (r.sku && r.st !== 'disc') { var ln = S.cart.filter(function (l) { return l.sku === r.sku; })[0]; if (ln) ln.qty += r.adj; else S.cart.push({ sku: r.sku, qty: r.adj }); n++; } });
+    toast(num(n) + ' ' + L('lines added to cart', 'টি লাইন কার্টে যোগ হয়েছে')); go('cart');
+  } else if (a === 'remove') { S.cart.splice(+t.getAttribute('data-i'), 1); render(); }
+  else if (a === 'submit-approval') { S.approvals[0].status = 'pending'; S.apSel = 0; toast(L('Sent to Rafiq Hasan. Stock is held for 24 hours.', 'রফিক হাসানকে পাঠানো হয়েছে। স্টক ২৪ ঘণ্টা ধরে রাখা হলো।')); go('approvals'); }
+  else if (a === 'place') { toast(L('Order placed.', 'অর্ডার দেওয়া হয়েছে।')); go('company'); }
+  else if (a === 'ap-sel') { S.apSel = +t.getAttribute('data-i'); S.apError = ''; render(); }
+  else if (a === 'ap-approve') { var r = S.approvals[S.apSel]; r.status = 'approved'; S.apError = ''; render(); toast(L('Approved', 'অনুমোদিত')); }
+  else if (a === 'ap-reject') {
+    var r2 = S.approvals[S.apSel];
+    if (!r2.reason.trim()) { S.apError = L('Write a short reason so the requester knows what to change.', 'অনুরোধকারী যেন বোঝেন কী বদলাতে হবে, তাই ছোট একটা কারণ লিখুন।'); render(); var ta = document.getElementById('ap-reason'); if (ta) ta.focus(); return; }
+    r2.status = 'rejected'; S.apError = ''; render(); toast(L('Rejected', 'বাতিল করা হয়েছে'));
+  } else if (a === 'ap-undo') { S.approvals[S.apSel].status = 'pending'; render(); }
+  else if (a === 'co-filter') { var fk = t.getAttribute('data-k'); if (['all', 'new', 'unpaid', 'approval', 'picking', 'shipped', 'cancelled'].indexOf(fk) >= 0) { S.coFilter = fk; render(); } }
+  else if (a === 'co-sel') { S.coSel = +t.getAttribute('data-i'); render(); }
+  else if (a === 'pl-approve') { if (S.plAck) { S.plStatus = 'approved'; render(); toast(L('Price list approved', 'প্রাইস লিস্ট অনুমোদিত')); } }
+  else if (a === 'pl-return') { S.plStatus = 'returned'; render(); }
+  else if (a === 'pl-undo') { S.plStatus = 'pending'; S.plAck = false; render(); }
+  else if (a === 'toast') { var mk = t.getAttribute('data-msg'); if (own(MSG, mk)) toast(L(MSG[mk][0], MSG[mk][1])); }
+});
+document.addEventListener('submit', function (e) {
+  if (e.target.getAttribute('data-act') === 'search') { e.preventDefault(); go('products'); }
+});
+document.addEventListener('change', function (e) {
+  var t = e.target;
+  if (t === sel) { go(sel.value); return; }
+  if (t.hasAttribute('data-filter')) {
+    var g = t.getAttribute('data-filter');
+    var fkey = t.getAttribute('data-key');
+    if (g === 'instock') S.filters.instock = t.checked;
+    else if (['mfr', 'supply', 'comms', 'di'].indexOf(g) >= 0 && fkey && fkey !== '__proto__' && fkey !== 'constructor' && fkey !== 'prototype') S.filters[g][fkey] = t.checked;
+    render(); return;
+  }
+  if (t.hasAttribute('data-cart-qty')) {
+    var i = +t.getAttribute('data-cart-qty'), l = S.cart[i], p = P[l.sku], v = Math.max(1, parseInt(t.value, 10) || 1);
+    if (p.pack > 1 && v % p.pack) { v = Math.ceil(v / p.pack) * p.pack; toast(L('Rounded up to a full box of', 'পুরো বাক্সে বাড়ানো হলো:') + ' ' + num(p.pack)); }
+    l.qty = v; render(); return;
+  }
+  if (t.id === 'pdp-qty') { S.pdpQty = Math.max(1, parseInt(t.value, 10) || 1); render(); return; }
+  if (t.id === 'csv-file' && t.files && t.files[0]) {
+    var fr = new FileReader();
+    fr.onload = function () { S.quickText = String(fr.result).slice(0, 20000); S.quickRows = parseQuick(S.quickText); render(); };
+    fr.readAsText(t.files[0]); return;
+  }
+  var b = t.getAttribute('data-bind');
+  if (['costCentre', 'po', 'site', 'pay', 'vds', 'plAck'].indexOf(b) >= 0) { S[b] = t.type === 'checkbox' ? t.checked : t.value; render(); }
+});
+document.addEventListener('input', function (e) {
+  if (e.target.hasAttribute('data-ap-reason')) S.approvals[S.apSel].reason = e.target.value;
+  if (e.target.id === 'quick-text') S.quickText = e.target.value;
+});
+document.getElementById('prev-btn').addEventListener('click', function () { var i = idx(current); if (i > 0) go(SCREENS[i - 1].id); });
+document.getElementById('next-btn').addEventListener('click', function () { var i = idx(current); if (i < SCREENS.length - 1) go(SCREENS[i + 1].id); });
+document.getElementById('notes-btn').addEventListener('click', function () { notesOpen = !notesOpen; renderChrome(); });
+
+var start = location.hash.slice(1);
+current = VIEWS.has(start) ? start : 'home';
+render();
+})();
+</script>

@@ -104,6 +104,13 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 
 **Exit gate:** মালিকের সাইন-অফ করা প্রোটোটাইপ + threat model।
 
+**অবস্থা (২০২৬-১১-০৫):**
+- ✅ ১২ স্ক্রিনের ক্লিকযোগ্য প্রোটোটাইপ তৈরি:
+  - `docs/prototypes/sprint1/` (EN/বাংলা, light/dark, ৩৬০–১৪৪০ px)
+  - প্রতিটা স্ক্রিনে সাক্ষাৎকারের প্রশ্ন আছে
+- ⏳ মালিক: ৫ জন ক্রেতার সাক্ষাৎকার, তারপর সাইন-অফ।
+- ⏳ AI: threat model v2।
+
 ### স্প্রিন্ট ৩–৪ — PIM (পণ্যের তথ্য)
 - unit-সহ attribute class (ETIM-ধাঁচ), datasheet/CAD/সার্টিফিকেট আপলোড (magic-byte check + ClamAV স্ক্যান + signed URL),
   বিকল্প/উত্তরসূরি পণ্য, lifecycle (active / NRND / obsolete), MOQ ও pack size কলাম (CartEngine ইতিমধ্যে নেয়)।
