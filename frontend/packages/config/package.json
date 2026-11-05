@@ -5,6 +5,7 @@
   "main": "tailwind.preset.js",
   "files": [
     "tailwind.preset.js",
+    "security-headers.js",
     "tsconfig.base.json"
   ]
 }

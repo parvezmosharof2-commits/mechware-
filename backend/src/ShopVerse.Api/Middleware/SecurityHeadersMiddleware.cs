@@ -25,6 +25,9 @@ public sealed class SecurityHeadersMiddleware
             ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
             : "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
         headers.TryAdd("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+        // Raised by the first ZAP scan (2026-11-04): other sites may not embed API responses as images or scripts.
+        // same-site, because the storefront and console call the API from sibling subdomains of the same site.
+        headers.TryAdd("Cross-Origin-Resource-Policy", "same-site");
 
         return _next(context);
     }
