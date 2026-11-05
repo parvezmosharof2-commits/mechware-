@@ -89,7 +89,7 @@ export async function cspProbe(browser, url, assetPath = '/favicon.ico') {
   const raw = await page.request.get(url);
   const csp = raw.headers()['content-security-policy'] ?? '';
   const nonce = (csp.match(/'nonce-([^']+)'/) ?? [])[1] ?? '';
-  const tags = (await raw.text()).match(/<script\b[^>]*>/g) ?? [];
+  const tags = (await raw.text()).match(/<script\b[^>]*>/gi) ?? [];
   const nonced = nonce.length >= 16 && tags.length > 0 && tags.every((t) => t.includes(`nonce="${nonce}"`));
 
   await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
