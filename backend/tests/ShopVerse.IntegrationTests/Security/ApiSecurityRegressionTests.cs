@@ -196,6 +196,24 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         (await response.Content.ReadAsStringAsync()).Should().NotContainAny("StackTrace", "   at ShopVerse.");
     }
 
+    /// <summary>The headers every API response carries, including on errors (OWASP ZAP checks these on each run).</summary>
+    [Theory]
+    [InlineData("/health/live")]
+    [InlineData("/api/v1/storefront/categories")]
+    [InlineData("/api/v1/orders/00000000-0000-0000-0000-000000000001")]
+    public async Task EveryResponse_CarriesTheSecurityHeaders(string url)
+    {
+        var client = _factory.CreateClient();
+        using var response = await client.GetAsync(url);
+
+        string Header(string name) => response.Headers.TryGetValues(name, out var v) ? string.Join(",", v) : "";
+        Header("Cross-Origin-Resource-Policy").Should().Be("same-origin");
+        Header("X-Content-Type-Options").Should().Be("nosniff");
+        Header("X-Frame-Options").Should().Be("DENY");
+        Header("Content-Security-Policy").Should().Contain("frame-ancestors 'none'");
+        Header("Strict-Transport-Security").Should().StartWith("max-age=");
+    }
+
     [PostgresFact]
     public async Task Production_RefusesToStart_WithThePublishedDevelopmentJwtSecret()
     {
