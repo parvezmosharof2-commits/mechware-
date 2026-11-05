@@ -35,10 +35,23 @@ public sealed partial class OrderService(
         // later statements share one database session.
         await db.Database.OpenConnectionAsync(ct);
         var lockKey = $"order:{request.UserId:N}";
+        // Orders charged to one cost centre also queue up, so two buyers cannot both fit under the same monthly budget.
+        // Always taken after the buyer's lock, in this order, so two requests can never wait on each other.
+        var centreKey = request.CostCentreId is { } centre ? $"cost-centre:{centre:N}" : null;
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_lock(hashtextextended({lockKey}, 0))", ct);
         try
         {
-            return await PlaceLockedAsync(request, lines, hash, ct);
+            if (centreKey is not null)
+                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_lock(hashtextextended({centreKey}, 0))", ct);
+            try
+            {
+                return await PlaceLockedAsync(request, lines, hash, ct);
+            }
+            finally
+            {
+                if (centreKey is not null)
+                    await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_unlock(hashtextextended({centreKey}, 0))", CancellationToken.None);
+            }
         }
         finally
         {
@@ -52,7 +65,17 @@ public sealed partial class OrderService(
         if (await ReplayAsync(request.UserId, request.IdempotencyKey, hash, ct) is { } replay) return replay;
 
         await RequireBuyerMayHoldStockAsync(request, ct);
-        if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
+        var member = request.CompanyId is { } companyId ? await RequireCompanyMayBuyAsync(request.UserId, companyId, ct) : null;
+        if (request.CostCentreId is not null && request.CompanyId is null)
+            throw new ValidationException("costCentreId", "A cost centre applies to company orders only.");
+        // A member assigned to cost centres buys for those only (threat model v1, M3).
+        if (member is { CostCentreIds.Count: > 0 })
+        {
+            if (request.CostCentreId is not { } chosen)
+                throw new ValidationException("costCentreId", "Choose one of your cost centres for this order.");
+            if (!member.CostCentreIds.Contains(chosen))
+                throw new ForbiddenException("COST_CENTRE_NOT_ASSIGNED", "You are not assigned to this cost centre.");
+        }
         var shipTo = await ResolveShipToAsync(request, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -66,6 +89,18 @@ public sealed partial class OrderService(
             : null;
         var initialStatus = approvalRule is null ? OrderStatus.PendingPayment : OrderStatus.PendingApproval;
 
+        // Spend limits and budgets (threat model v1, M3): going over one is allowed only through an approval. With no rule to
+        // route it to an approver, the order is refused rather than slipping past the limit.
+        if (member is not null && approvalRule is null)
+        {
+            if (member.SpendLimitMinor is { } limit && priced.GrandTotalMinor > limit)
+                throw new ConflictException("SPEND_LIMIT_EXCEEDED",
+                    "This order is above your spending limit and no approval rule covers it. Ask a company admin.");
+            if (request.CostCentreId is { } centre && await OverBudgetAsync(centre, priced.GrandTotalMinor, now, ct))
+                throw new ConflictException("BUDGET_EXCEEDED",
+                    "This order would take the cost centre over its monthly budget and no approval rule covers it.");
+        }
+
         // A rare clash of two random order numbers is retried with a fresh one rather than shown to the buyer.
         for (var attempt = 0; ; attempt++)
         {
@@ -73,7 +108,7 @@ public sealed partial class OrderService(
             var reserved = await ReserveAsync(orderId, lines, approvalRule is null ? UnpaidOrderLifetime : ApprovalHoldLifetime + UnpaidOrderLifetime, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime);
+                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime, request.CostCentreId);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
@@ -202,13 +237,14 @@ public sealed partial class OrderService(
     /// An order in a company's name needs a buyer of that company and a verified, unsuspended company. A user who is not
     /// a member gets "not found", the same as for any other company they cannot see.
     /// </summary>
-    private async Task RequireCompanyMayBuyAsync(Guid userId, Guid companyId, CancellationToken ct)
+    private async Task<CompanyMember> RequireCompanyMayBuyAsync(Guid userId, Guid companyId, CancellationToken ct)
     {
-        await Companies.CompanyAccess.RequireMemberAsync(db, userId, companyId, Domain.Companies.CompanyRoles.Buyer, ct);
+        var member = await Companies.CompanyAccess.RequireMemberAsync(db, userId, companyId, Domain.Companies.CompanyRoles.Buyer, ct);
         await Companies.CompanyAccess.RequireNotSuspendedAsync(db, companyId, ct);
         var status = await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.Status).FirstAsync(ct);
         if (status != Domain.Companies.CompanyStatus.Active)
             throw new ConflictException("COMPANY_NOT_VERIFIED", "The company has not been verified by MECHWARE yet.");
+        return member;
     }
 
     public static readonly TimeSpan UnpaidOrderLifetime = TimeSpan.FromMinutes(30);
@@ -224,6 +260,25 @@ public sealed partial class OrderService(
             throw new KeyNotFoundException("Cost centre not found.");
         var rules = await db.ApprovalRules.AsNoTracking().Where(r => r.CompanyId == companyId && r.IsActive).ToListAsync(ct);
         return ApprovalRule.Select(rules, amountMinor, request.CostCentreId, categories.ToList());
+    }
+
+    private static readonly TimeZoneInfo Dhaka = TimeZoneInfo.CreateCustomTimeZone("Asia/Dhaka-fixed", TimeSpan.FromHours(6), "Dhaka", "Dhaka");
+
+    /// <summary>
+    /// Whether this order would take the cost centre past its budget for the current month in Bangladesh time. Orders that
+    /// were cancelled do not count; orders waiting for approval or payment do, since they may still go through.
+    /// </summary>
+    private async Task<bool> OverBudgetAsync(Guid costCentreId, long amountMinor, DateTime now, CancellationToken ct)
+    {
+        var budget = await db.CostCentres.AsNoTracking().Where(c => c.Id == costCentreId).Select(c => c.MonthlyBudgetMinor).FirstOrDefaultAsync(ct);
+        if (budget is null) return false;
+
+        var local = TimeZoneInfo.ConvertTimeFromUtc(now, Dhaka);
+        var monthStart = TimeZoneInfo.ConvertTimeToUtc(new DateTime(local.Year, local.Month, 1, 0, 0, 0, DateTimeKind.Unspecified), Dhaka);
+        var spent = await db.Orders.AsNoTracking()
+            .Where(o => o.CostCentreId == costCentreId && o.PlacedAtUtc >= monthStart && o.Status != OrderStatus.Cancelled)
+            .SumAsync(o => (long?)o.GrandTotalMinor, ct) ?? 0;
+        return spent + amountMinor > budget.Value;
     }
 
     public async Task<int> SettleApprovalsAsync(DateTime nowUtc, int batchSize = 200, CancellationToken ct = default)

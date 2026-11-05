@@ -32,6 +32,8 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         b.Property(o => o.ShipToJson).HasColumnName("ship_to").HasColumnType("jsonb");
         b.Property(o => o.PlacedAtUtc).HasColumnName("placed_at");
         b.Property(o => o.PaysOnCredit).HasColumnName("pays_on_credit");
+        b.Property(o => o.CostCentreId).HasColumnName("cost_centre_id");
+        b.HasIndex(o => new { o.CostCentreId, o.PlacedAtUtc }).HasDatabaseName("ix_orders_cost_centre_placed");
         b.Property(o => o.PaymentDueAtUtc).HasColumnName("payment_due_at");
         b.Property(o => o.EventSequence).HasColumnName("event_seq");
 

@@ -1960,6 +1960,10 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
+                    b.Property<Guid?>("CostCentreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_centre_id");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2051,6 +2055,9 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_orders_status");
+
+                    b.HasIndex("CostCentreId", "PlacedAtUtc")
+                        .HasDatabaseName("ix_orders_cost_centre_placed");
 
                     b.HasIndex("UserId", "PlacedAtUtc")
                         .HasDatabaseName("ix_orders_user_placed");

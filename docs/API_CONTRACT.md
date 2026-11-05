@@ -709,3 +709,10 @@ if the credit no longer covers it, it is cancelled); rejection, withdrawal or 24
 registration (`409 COMPANY_NOT_PENDING` otherwise). The company becomes `rejected` (with `rejectionReason` on the company), can no
 longer be activated, suspended or used (`409 COMPANY_REJECTED`), and its BIN is free to register again. `POST /companies` answers
 `409 TOO_MANY_PENDING_COMPANIES` when the caller already administers 2 companies waiting for verification.
+
+### 2.22 Spend controls on company orders (threat model v1, M3)
+
+A member assigned to cost centres must send one of them as `costCentreId` (`400` when missing, `403 COST_CENTRE_NOT_ASSIGNED`
+otherwise); the same holds for approval requests. An order above the member's spend limit or above what is left of the cost
+centre's monthly budget (Bangladesh calendar month, non-cancelled orders) goes to approval when a rule covers it, and is
+refused with `409 SPEND_LIMIT_EXCEEDED` / `409 BUDGET_EXCEEDED` when none does.

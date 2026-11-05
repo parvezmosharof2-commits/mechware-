@@ -140,6 +140,9 @@ public sealed class Order : AggregateRoot<Guid>
     /// <summary>The buyer chose company credit terms; when an approval is needed the credit is held only once it is given.</summary>
     public bool PaysOnCredit { get; private set; }
 
+    /// <summary>The company cost centre the order is charged to, if any; its monthly budget counts this order.</summary>
+    public Guid? CostCentreId { get; private set; }
+
     /// <summary>
     /// When an order waiting for payment is cancelled if still unpaid. Starts when the order becomes payable: at placement, or
     /// when its approval is given (threat model v1, H1), so a long approval does not eat the buyer's time to pay.
@@ -153,7 +156,7 @@ public sealed class Order : AggregateRoot<Guid>
 
     public static Order Place(
         Guid id, string orderNumber, Guid userId, Guid? companyId, PricedOrder priced, TaxMode taxMode, string shipToJson,
-        OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null)
+        OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null, Guid? costCentreId = null)
     {
         if (!OrderNumber_IsValid(orderNumber)) throw new ValidationException("orderNumber", "Invalid order number.");
         if (initialStatus is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
@@ -175,6 +178,7 @@ public sealed class Order : AggregateRoot<Guid>
             ShipToJson = string.IsNullOrWhiteSpace(shipToJson) ? "{}" : shipToJson,
             PlacedAtUtc = nowUtc,
             PaysOnCredit = paysOnCredit,
+            CostCentreId = costCentreId,
             PaymentDueAtUtc = initialStatus == OrderStatus.PendingPayment ? paymentDueAtUtc : null
         };
 
