@@ -36,11 +36,11 @@
 
 | ID | Severity | সারাংশ | প্রমাণ | কবে ঠিক হবে |
 |---|---|---|---|---|
-| P1 | **High** | গেটওয়ের সাময়িক ত্রুটিতে payment event চিরতরে হারায়; টাকা কাটা হয়েছে কিন্তু অর্ডার নিশ্চিত হয় না | RUN | আসল গেটওয়ের আগে (স্প্রিন্ট ১০–১২), আলাদা PR-এ এখনই প্রস্তাবিত |
-| P2 | **High** | একই অর্ডারে দুবার টাকা দিলে দ্বিতীয়টা নীরবে থেকে যায়, refund-এর জন্য চিহ্নিত হয় না | RUN | একই |
+| P1 | **High** | গেটওয়ের সাময়িক ত্রুটিতে payment event চিরতরে হারায়; টাকা কাটা হয়েছে কিন্তু অর্ডার নিশ্চিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
+| P2 | **High** | একই অর্ডারে দুবার টাকা দিলে দ্বিতীয়টা নীরবে থেকে যায়, refund-এর জন্য চিহ্নিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
 | P3 | Medium | `NeedsRefund` পেমেন্টের জন্য কোনো কাজের তালিকা, সতর্কবার্তা বা refund পথ নেই | CODE | স্প্রিন্ট ১০–১২ / ১৫–১৬ |
 | P4 | Medium | ব্যর্থ বা অসম্পূর্ণ webhook-এর কোনো reconciliation নেই (provider-এর তালিকার সাথে দৈনিক মেলানো) | CODE | স্প্রিন্ট ১০–১২ |
-| P5 | Low | এক অর্ডারে যত খুশি payment session খোলা যায় (P2-এর পথ) | CODE | P2-এর সাথে |
+| P5 | Low | এক অর্ডারে যত খুশি payment session খোলা যায় (P2-এর পথ) | TEST | ✅ **ঠিক হয়েছে**: একসাথে সর্বোচ্চ ৩টা খোলা চেষ্টা |
 | P6 | Low | webhook-ও global ১০০/মিনিট/IP সীমার মধ্যে; গেটওয়ের burst-এ 429 → গেটওয়ে retry করে | CODE | স্প্রিন্ট ১৭–১৮ |
 | R1 | Medium | কুপন কোড আছে কিনা বোঝা যায়: অজানা কোডে এক উত্তর, আছে-কিন্তু-চলে-না কোডে আরেক | CODE | স্প্রিন্ট ১০–১২ |
 | R2 | Info | promotion বানানো বা বদলানোর কোনো HTTP পথ নেই; শুধু seed বা database দিয়ে। ভবিষ্যতে admin API এলে নিয়ম লাগবে | CODE | স্প্রিন্ট ১৫–১৬ |
@@ -71,7 +71,16 @@
 - অসম্পূর্ণ row আবার চেষ্টা করা হবে। এর জন্য row lock বা `FOR UPDATE SKIP LOCKED` লাগবে, যাতে দুজন একসাথে না চালায়।
 - বিকল্প পথ: inbox insert আর settle একই transaction-এ রাখা, আর `VerifyAsync` তার আগে ডাকা।
 
-**লাগবে এমন টেস্ট:** `ATransientProviderFailure_IsRetried_NotSwallowedAsDuplicate`, `ADeadlockDuringSettle_IsRetried`।
+**ফিক্স (২০২৬-১১-০৫):** `PaymentService.HandleWebhookAsync` এখন inbox row-কে "দাবি" হিসেবে দেখে:
+- verify, settle বা স্টক commit-এর যেকোনো ধাপে exception হলে দাবি ফেরত দেওয়া হয় (`outcome = 'received'` row মুছে)। ফলে গেটওয়ের retry আবার প্রসেস হয়।
+- প্রসেস নিজেই মারা গেলে (মুছে ফেলার সুযোগ না পেলে), row `PaymentService.StaleClaimAfter` (২ মিনিট) পরে পুরোনো ধরা হয়। পরের delivery conditional `UPDATE` দিয়ে সেটা দখল করে; একাধিক delivery একসাথে এলে ঠিক একজন জেতে।
+- চলমান চেষ্টার (২ মিনিটের কম) row-কে duplicate ধরা হয়, তাই একসাথে দুজন প্রসেস করে না।
+- স্টক commit idempotent, তাই `AlreadyConfirmed` হলেও ডাকা হয়। এতে settle আর commit-এর মাঝখানে crash হলেও কাজ শেষ হয়।
+
+**প্রমাণ:**
+- TEST: `ATransientProviderFailure_IsRetried_NotSwallowedAsDuplicate`, `AnAttemptThatDiedMidway_IsTakenOverOnceStale_ButNotWhileItMayStillBeRunning`।
+- **Mutation check:** দাবি ফেরত বা stale দখল সরালে নিজ নিজ টেস্ট লাল হয়।
+- পুরোনো `EightParallelDeliveriesOfOneEvent_ConfirmExactlyOnce` এখনো পাস করে।
 
 ### P2. দ্বিতীয় পেমেন্ট নীরবে থেকে যায় (High) [RUN]
 
@@ -88,7 +97,15 @@
 1. অর্ডার অন্য payment দিয়ে নিশ্চিত হয়ে থাকলে এই payment `NeedsRefund` হবে।
 2. একটা অর্ডারে একসাথে একটাই খোলা session (P5)। নতুন session চাইলে পুরোনোটা বাতিল বা পুনর্ব্যবহার।
 
-**লাগবে এমন টেস্ট:** `ASecondPaidSessionForAConfirmedOrder_IsFlaggedForRefund`, `StartingTwiceReusesTheOpenSession`।
+**ফিক্স (২০২৬-১১-০৫):**
+- অর্ডার অন্য payment দিয়ে নিশ্চিত হয়ে থাকলে এই payment এখন `NeedsRefund` হয় ("already been paid by another payment"), আর outcome হয় `NeedsRefund`।
+- এক অর্ডারে একসাথে সর্বোচ্চ `MaxOpenAttemptsPerOrder` = ৩টা খোলা চেষ্টা (`TOO_MANY_PAYMENT_ATTEMPTS`)।
+- একাধিক চেষ্টা রাখা হয়েছে ইচ্ছে করেই: ক্রেতা এক গেটওয়ে ছেড়ে আরেকটায় যেতে পারেন।
+
+**প্রমাণ:**
+- TEST: `ASecondPaidSessionForAConfirmedOrder_IsFlaggedForRefund`, `OneOrder_CannotCollectPaymentAttemptsWithoutBound`।
+- **Mutation check:** পুরোনো `AlreadyConfirmed` ফিরিয়ে আনলে বা সীমা তুলে দিলে নিজ নিজ টেস্ট লাল হয়।
+- ফেরতের কাজ নিজে এখনো P3।
 
 ### P3. `NeedsRefund`-এর পরে কিছুই হয় না (Medium) [CODE]
 - কম টাকা দেওয়া, বাতিল অর্ডারে টাকা দেওয়া, আর P2-এর ঠিক হওয়ার পর দ্বিতীয় পেমেন্ট — সবই `NeedsRefund` হবে।
@@ -244,7 +261,7 @@
 
 | কাজ | স্প্রিন্ট | ASVS 5.0 |
 |---|---|---|
-| P1 + P2 + P5 ঠিক করা, টেস্ট ও mutation check সহ | **এখনই, আলাদা PR** (আসল গেটওয়ের আগে বাধ্যতামূলক) | V2.3.3 (L2), V15.4.2 (L3) |
+| ~~P1 + P2 + P5 ঠিক করা, টেস্ট ও mutation check সহ~~ ✅ ২০২৬-১১-০৫ | — | V2.3.3 (L2), V15.4.2 (L3) |
 | P3 refund তালিকা + 4-eyes refund | ১০–১২ / ১৫–১৬ | V2.3.5 (L3) |
 | P4 দৈনিক reconciliation worker | ১০–১২ | — (সরাসরি requirement নেই; ব্যবসায়িক নিয়ন্ত্রণ) |
 | P6 webhook-এর আলাদা rate-limit policy | ১৭–১৮ | V2.4.1 (L2) |
@@ -268,7 +285,7 @@
 | P1 | mock-কে মোড়ানো একটা provider, যার প্রথম `VerifyAsync` `HttpRequestException` ছোড়ে; একই webhook দুবার পাঠানো হয় | `first=threw HttpRequestException retry=Duplicate orderStatus=PendingPayment` |
 | P2 | এক অর্ডারে দুটো `StartAsync`, দুটোতেই `SimulatePayment`, দুটো আলাদা event | `outcome1=Confirmed outcome2=AlreadyConfirmed payments=[Captured 100000; Pending 100000]` |
 
-ফিক্সের PR-এ এই দুটো probe স্থায়ী টেস্ট হয়ে আসবে। ফিক্স ছাড়া তারা লাল হবে, তাতেই mutation check হয়ে যাবে।
+এই দুটো probe এখন স্থায়ী টেস্ট (`PaymentServiceTests`, শেষ ৪টা)। ফিক্সের পর পুরো backend suite পাস করে: unit ৩৬৫/৩৬৫, integration ২০৯/২০৯।
 
 **৩. TEST চিহ্নের সত্যতা:** এই ডকে নাম ধরে বলা প্রতিটা টেস্ট repo-তে আছে কিনা `grep` করে মেলানো হয়েছে। ব্যতিক্রম শুধু "লাগবে এমন টেস্ট" কলামের নামগুলো; সেগুলো এখনো লেখা হয়নি।
 

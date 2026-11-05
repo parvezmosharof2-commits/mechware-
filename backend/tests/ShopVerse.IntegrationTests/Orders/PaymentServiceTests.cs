@@ -247,4 +247,111 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         var (_, again, db2) = await OpenAsync();
         await using (db2) (await Assert.ThrowsAsync<ConflictException>(() => again.StartAsync(p.Buyer, p.Order, "mock"))).Code.Should().Be("ORDER_NOT_PAYABLE");
     }
+
+    // ---- Threat model v2, P1 / P2 / P5 (docs/security/THREAT_MODEL_PRICING_QUOTES_PAYMENTS_INVOICING.md) ----
+
+    /// <summary>The mock gateway, except that verifying can be made to fail the way a real gateway times out.</summary>
+    private sealed class FlakyProvider(MockPaymentProvider inner) : IPaymentProvider
+    {
+        public int FailuresLeft;
+        public string Name => inner.Name;
+        public string WebhookSecret => inner.WebhookSecret;
+        public Task<ProviderSession> CreateSessionAsync(Guid orderId, string orderNumber, long amountMinor, string currency, CancellationToken ct = default) =>
+            inner.CreateSessionAsync(orderId, orderNumber, amountMinor, currency, ct);
+        public Task<ProviderPayment> VerifyAsync(string providerRef, CancellationToken ct = default)
+        {
+            if (FailuresLeft > 0) { FailuresLeft--; throw new HttpRequestException("The gateway timed out."); }
+            return inner.VerifyAsync(providerRef, ct);
+        }
+        public ParsedWebhook? Parse(string rawBody) => inner.Parse(rawBody);
+    }
+
+    private async Task<WebhookOutcome> DeliverThroughAsync(IPaymentProvider provider, (string Body, string Timestamp, string Signature) w, DateTime? clockNow = null)
+    {
+        await using var db = fixture.CreateContext();
+        var clock = clockNow is null ? TimeProvider.System : new FixedClock(clockNow.Value);
+        var payments = new PaymentService(db, [provider], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock);
+        return await payments.HandleWebhookAsync("mock", w.Signature, w.Timestamp, w.Body);
+    }
+
+    private async Task<PaymentStatus> PaymentStatusAsync(string providerRef)
+    {
+        await using var db = fixture.CreateContext();
+        return (await db.Payments.AsNoTracking().SingleAsync(x => x.ProviderRef == providerRef)).Status;
+    }
+
+    [PostgresFact]
+    public async Task ATransientProviderFailure_IsRetried_NotSwallowedAsDuplicate()
+    {
+        var p = await PendingOrderAsync();
+        _mock.SimulatePayment(p.ProviderRef);
+        var flaky = new FlakyProvider(_mock) { FailuresLeft = 1 };
+        var w = Webhook("evt_timeout", p.ProviderRef);
+
+        // The gateway is down while we verify: the delivery fails, so the provider will send the same event again.
+        await Assert.ThrowsAsync<HttpRequestException>(() => DeliverThroughAsync(flaky, w));
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.PendingPayment);
+
+        // That retry must be processed, not answered "duplicate" while the buyer's money sits unconfirmed.
+        (await DeliverThroughAsync(flaky, w)).Should().Be(WebhookOutcome.Confirmed);
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.Confirmed);
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8));
+        (await DeliverThroughAsync(flaky, w)).Should().Be(WebhookOutcome.Duplicate, "once handled, the event is a real duplicate");
+    }
+
+    [PostgresFact]
+    public async Task AnAttemptThatDiedMidway_IsTakenOverOnceStale_ButNotWhileItMayStillBeRunning()
+    {
+        var p = await PendingOrderAsync();
+        _mock.SimulatePayment(p.ProviderRef);
+        var w = Webhook("evt_crashed", p.ProviderRef);
+
+        // A process that was killed after claiming the event leaves its inbox row behind, unfinished.
+        await using (var db = fixture.CreateContext())
+        {
+            db.PaymentEvents.Add(new PaymentEvent("mock", "evt_crashed", p.ProviderRef, DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        // Moments later the claim may belong to an attempt that is still running: leave it alone.
+        (await DeliverAsync(w)).Should().Be(WebhookOutcome.Duplicate);
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.PendingPayment);
+
+        // Once it is stale, the next delivery takes it over and finishes the job.
+        var later = DateTime.UtcNow + PaymentService.StaleClaimAfter + TimeSpan.FromMinutes(1);
+        (await DeliverAsync(Webhook("evt_crashed", p.ProviderRef, later), later)).Should().Be(WebhookOutcome.Confirmed);
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.Confirmed);
+    }
+
+    [PostgresFact]
+    public async Task ASecondPaidSessionForAConfirmedOrder_IsFlaggedForRefund()
+    {
+        var p = await PendingOrderAsync();
+        var (_, payments, db) = await OpenAsync();
+        PaymentSessionResult second;
+        await using (db) second = await payments.StartAsync(p.Buyer, p.Order, "mock");
+        var secondRef = second.RedirectUrl[(second.RedirectUrl.LastIndexOf('/') + 1)..];
+
+        // Two tabs, both paid.
+        _mock.SimulatePayment(p.ProviderRef);
+        _mock.SimulatePayment(secondRef);
+        (await DeliverAsync(Webhook("evt_first", p.ProviderRef))).Should().Be(WebhookOutcome.Confirmed);
+        (await DeliverAsync(Webhook("evt_second", secondRef))).Should().Be(WebhookOutcome.NeedsRefund);
+
+        (await PaymentStatusAsync(p.ProviderRef)).Should().Be(PaymentStatus.Captured);
+        (await PaymentStatusAsync(secondRef)).Should().Be(PaymentStatus.NeedsRefund, "money the order cannot use must go back, never sit as 'pending'");
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8), "the stock is taken once");
+    }
+
+    [PostgresFact]
+    public async Task OneOrder_CannotCollectPaymentAttemptsWithoutBound()
+    {
+        var p = await PendingOrderAsync();   // the first attempt
+        var (_, payments, db) = await OpenAsync();
+        await using (db)
+        {
+            for (var i = 1; i < PaymentService.MaxOpenAttemptsPerOrder; i++) await payments.StartAsync(p.Buyer, p.Order, "mock");
+            (await Assert.ThrowsAsync<ConflictException>(() => payments.StartAsync(p.Buyer, p.Order, "mock"))).Code.Should().Be("TOO_MANY_PAYMENT_ATTEMPTS");
+        }
+    }
 }
