@@ -100,6 +100,19 @@ public sealed class PromotionUserUsage
     private PromotionUserUsage() { }
 }
 
+/// <summary>
+/// Refused coupon codes per user in the current one-hour window (threat model v2, R1): caps how fast one account can probe for
+/// valid codes. Written only with atomic SQL upserts, so concurrent orders cannot both slip under the limit by much.
+/// </summary>
+public sealed class CouponFailureWindow
+{
+    public Guid UserId { get; private set; }
+    public DateTime WindowStartedAtUtc { get; private set; }
+    public int Failures { get; private set; }
+
+    private CouponFailureWindow() { }
+}
+
 /// <summary>Which promotions an order used and what each took off, so a cancellation can give the use back and finance can see it.</summary>
 public sealed class PromotionRedemption : Entity<Guid>
 {

@@ -51,7 +51,7 @@
 | Idempotency (একই key-তে একটাই অর্ডার) | — (সরাসরি requirement নেই; সম্পর্কিত: V2.3.3) | ✅ | `IT/Orders/OrderServiceTests.cs` (একই key-তে ৮ সমান্তরাল retry → ১ অর্ডার) | — |
 | Payment webhook: প্রতি বার্তায় স্বাক্ষর, replay নয় | V4.1.5 (L3) | ✅ | `UT/Payments/WebhookVerifierTests.cs`, `IT/Orders/PaymentServiceTests.cs` | — |
 | Payment event সাময়িক ত্রুটিতে হারায় না; এক অর্ডারে দ্বিতীয় পেমেন্ট refund-এ চিহ্নিত | V2.3.3 (L2), V15.4.2 (L3) | ✅ | `IT/Orders/PaymentServiceTests.cs`: `ATransientProviderFailure_…`, `AnAttemptThatDiedMidway_…`, `ASecondPaidSessionForAConfirmedOrder_…`, `OneOrder_CannotCollectPaymentAttemptsWithoutBound` (mutation-checked) | refund-এর কাজের তালিকা (P3) |
-| কুপন কোড গণনা ঠেকানো | V2.4.1 (L2) | 🔴 | threat model v2 R1 | স্প্রিন্ট ১০–১২ |
+| কুপন কোড গণনা ঠেকানো | V2.4.1 (L2) | ✅ | `IT/Orders/OrderPromotionsTests.cs`: `AnExpiredNotYetStartedOrUsedUpCode_…`, `MixingARealCodeWithAGuess_…`, `TooManyRefusedCodes_…`, `ParallelRefusals_AreAllCounted` (mutation-checked) | — |
 | Proxy-র পেছনে আসল client IP (rate limit) | V15.3.4 (L2), V4.1.3 (L2) | ✅ | `UT/Configuration/ForwardedHeadersSettingsTests.cs` (বাগ #৬) | ডেপ্লয়ে মান সেট করা |
 
 ## V5 — File Handling

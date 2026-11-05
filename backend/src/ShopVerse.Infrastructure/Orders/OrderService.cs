@@ -371,12 +371,12 @@ public sealed partial class OrderService(
         PlaceOrderRequest request, List<OrderLineDraft> drafts, Dictionary<Guid, Guid> categoryOf, DateTime now, CancellationToken ct)
     {
         var codes = NormalisedCodes(request);
+        if (codes.Count > 0) await RequireCouponAttemptsLeftAsync(request.UserId, now, ct);
+
         var candidates = await db.Promotions.AsNoTracking()
             .Where(p => p.IsActive && (p.Code == null || codes.Contains(p.Code)))
             .ToListAsync(ct);
 
-        var unknown = codes.Where(c => !candidates.Any(p => p.Code == c)).ToList();
-        if (unknown.Count > 0) throw new ConflictException("COUPON_INVALID", $"This code is not valid: {string.Join(", ", unknown)}.");
 
         var ids = candidates.Select(p => p.Id).ToList();
         var userUses = await db.PromotionUserUsage.AsNoTracking()
@@ -387,14 +387,55 @@ public sealed partial class OrderService(
         var cart = drafts.Select(d => new CartLine(d.LineId, d.VariantId, d.SellerId, categoryOf[d.LineId], d.Quantity, d.UnitPriceMinor)).ToList();
         var result = PromotionEngine.Apply(cart, candidates.Select(p => p.ToPromotion()).ToList(), now, usage);
 
+        // A code that does not exist, is outside its dates or is used up gets one shared answer, decided over every entered code
+        // at once, so neither the wording nor which codes are named can tell a real code from a made-up one (threat model v2,
+        // R1). Each such code counts against the hourly limit, so entering several per order does not multiply the guesses.
+        string? ReasonFor(string code) =>
+            candidates.FirstOrDefault(p => p.Code == code) is { } promo
+                ? result.Rejected.FirstOrDefault(r => r.PromotionId == promo.Id)?.Reason
+                : NoSuchCode;
+        var dead = codes.Where(c => ReasonFor(c) is NoSuchCode or PromotionEngine.NotYetValid or PromotionEngine.Expired or PromotionEngine.GlobalLimitReached).ToList();
+        if (dead.Count > 0)
+        {
+            await CountCouponFailuresAsync(request.UserId, now, dead.Count, ct);
+            throw new ConflictException("COUPON_INVALID", $"Not valid or no longer available: {string.Join(", ", dead)}.");
+        }
+
+        // The other reasons only make sense to someone who holds the code and can act on them (spend more, change the basket).
         foreach (var code in codes)
         {
-            var promo = candidates.First(p => p.Code == code);
-            if (result.Rejected.FirstOrDefault(r => r.PromotionId == promo.Id) is { } rejected)
-                throw new ConflictException("COUPON_" + rejected.Reason, $"The code {code} cannot be used on this order ({rejected.Reason}).");
+            if (ReasonFor(code) is { } reason)
+            {
+                await CountCouponFailuresAsync(request.UserId, now, 1, ct);
+                throw new ConflictException("COUPON_" + reason, $"The code {code} cannot be used on this order ({reason}).");
+            }
         }
 
         return result;
+    }
+
+    private const string NoSuchCode = "NO_SUCH_CODE";
+
+    /// <summary>Refused coupon codes one user may enter per hour before every code is refused unread (threat model v2, R1).</summary>
+    public const int MaxCouponFailuresPerHour = 10;
+    private static readonly TimeSpan CouponFailureWindowLength = TimeSpan.FromHours(1);
+
+    private async Task RequireCouponAttemptsLeftAsync(Guid userId, DateTime now, CancellationToken ct)
+    {
+        var window = await db.CouponFailureWindows.AsNoTracking().FirstOrDefaultAsync(w => w.UserId == userId, ct);
+        if (window is not null && window.WindowStartedAtUtc > now - CouponFailureWindowLength && window.Failures >= MaxCouponFailuresPerHour)
+            throw new ConflictException("COUPON_ATTEMPTS_EXCEEDED", "Too many coupon codes were refused. Try again in an hour.");
+    }
+
+    /// <summary>One atomic upsert, outside the order's transaction (no order exists yet), so a refusal is counted even though the request fails.</summary>
+    private Task CountCouponFailuresAsync(Guid userId, DateTime now, int failures, CancellationToken ct)
+    {
+        var windowStart = now - CouponFailureWindowLength;
+        return db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO coupon_failure_windows (user_id, window_started_at, failures) VALUES ({userId}, {now}, {failures})
+            ON CONFLICT (user_id) DO UPDATE SET
+                failures = CASE WHEN coupon_failure_windows.window_started_at <= {windowStart} THEN {failures} ELSE coupon_failure_windows.failures + {failures} END,
+                window_started_at = CASE WHEN coupon_failure_windows.window_started_at <= {windowStart} THEN {now} ELSE coupon_failure_windows.window_started_at END", ct);
     }
 
     /// <summary>

@@ -75,6 +75,7 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
     public DbSet<PromotionDefinition> Promotions => Set<PromotionDefinition>();
     public DbSet<PromotionUserUsage> PromotionUserUsage => Set<PromotionUserUsage>();
+    public DbSet<CouponFailureWindow> CouponFailureWindows => Set<CouponFailureWindow>();
     public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
