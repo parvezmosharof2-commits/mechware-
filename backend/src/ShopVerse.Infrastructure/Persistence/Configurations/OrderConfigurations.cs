@@ -204,6 +204,19 @@ internal sealed class PromotionDefinitionConfiguration : IEntityTypeConfiguratio
     }
 }
 
+internal sealed class CouponFailureWindowConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Pricing.CouponFailureWindow>
+{
+    public void Configure(EntityTypeBuilder<ShopVerse.Domain.Pricing.CouponFailureWindow> b)
+    {
+        b.ToTable("coupon_failure_windows", t => t.HasCheckConstraint("ck_coupon_failure_windows_failures", "failures >= 0"));
+        b.HasKey(w => w.UserId);
+        b.Property(w => w.UserId).HasColumnName("user_id");
+        b.Property(w => w.WindowStartedAtUtc).HasColumnName("window_started_at");
+        b.Property(w => w.Failures).HasColumnName("failures");
+        b.HasOne<User>().WithMany().HasForeignKey(w => w.UserId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
 internal sealed class PromotionUserUsageConfiguration : IEntityTypeConfiguration<ShopVerse.Domain.Pricing.PromotionUserUsage>
 {
     public void Configure(EntityTypeBuilder<ShopVerse.Domain.Pricing.PromotionUserUsage> b)

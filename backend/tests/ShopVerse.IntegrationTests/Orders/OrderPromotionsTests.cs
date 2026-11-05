@@ -215,6 +215,101 @@ public class OrderPromotionsTests(PostgresDatabaseFixture fixture) : IClassFixtu
         await act.Should().ThrowAsync<ValidationException>();
     }
 
+    // ---- Threat model v2, R1: coupon codes cannot be found by guessing ----
+
+    private sealed class FixedClock(DateTime utc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(utc, DateTimeKind.Utc));
+    }
+
+    private async Task<T> At<T>(DateTime now, Func<OrderService, Task<T>> action)
+    {
+        await using var db = fixture.CreateContext();
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), new FixedClock(now)));
+    }
+
+    private static async Task<ConflictException> Refused(Func<Task> act) => (await act.Should().ThrowAsync<ConflictException>()).Which;
+
+    [PostgresFact]
+    public async Task AnExpiredNotYetStartedOrUsedUpCode_LooksExactlyLikeOneThatNeverExisted()
+    {
+        var v = await SeedAsync();
+        var now = DateTime.UtcNow;
+        var expired = await AddPromotionAsync(c => PromotionDefinition.Create(Guid.NewGuid(), "Old", c, PromotionKind.PercentOff, PromotionScope.Everything,
+            percent: 10, startsAtUtc: now.AddDays(-10), endsAtUtc: now.AddDays(-1)));
+        var future = await AddPromotionAsync(c => PromotionDefinition.Create(Guid.NewGuid(), "Soon", c, PromotionKind.PercentOff, PromotionScope.Everything,
+            percent: 10, startsAtUtc: now.AddDays(1), endsAtUtc: now.AddDays(10)));
+        var usedUp = await AddPromotionAsync(c => Percent(c, 10, PromotionScope.Everything, global: 1));
+        var first = await Buyer();
+        await With(s => s.PlaceAsync(Req(first, v.VariantId, 1, usedUp.Code!)));   // someone else took the only use
+
+        var buyer = await Buyer();
+        var never = await Refused(() => With(s => s.PlaceAsync(Req(buyer, v.VariantId, 1, "NOSUCHCODE1"))));
+        foreach (var code in new[] { expired.Code!, future.Code!, usedUp.Code! })
+        {
+            var refused = await Refused(() => With(s => s.PlaceAsync(Req(buyer, v.VariantId, 1, code))));
+            refused.Code.Should().Be(never.Code).And.Be("COUPON_INVALID");
+            refused.Message.Replace(code, "X").Should().Be(never.Message.Replace("NOSUCHCODE1", "X"), "the wording must not tell a real code from a made-up one");
+        }
+    }
+
+    [PostgresFact]
+    public async Task MixingARealCodeWithAGuess_DoesNotRevealTheRealOne_AndEveryGuessIsCounted()
+    {
+        var v = await SeedAsync();
+        var now = DateTime.UtcNow;
+        var expired = await AddPromotionAsync(c => PromotionDefinition.Create(Guid.NewGuid(), "Old", c, PromotionKind.PercentOff, PromotionScope.Everything,
+            percent: 10, startsAtUtc: now.AddDays(-10), endsAtUtc: now.AddDays(-1)));
+        var buyer = await Buyer();
+
+        var refused = await Refused(() => With(s => s.PlaceAsync(Req(buyer, v.VariantId, 1, "GUESSA1", expired.Code!, "GUESSB2"))));
+        refused.Code.Should().Be("COUPON_INVALID");
+        refused.Message.Should().Contain("GUESSA1").And.Contain("GUESSB2").And.Contain(expired.Code!, "the expired code is named exactly like the made-up ones");
+
+        await using var db = fixture.CreateContext();
+        (await db.CouponFailureWindows.AsNoTracking().SingleAsync(w => w.UserId == buyer)).Failures.Should().Be(3, "three codes were guessed, not one");
+    }
+
+    [PostgresFact]
+    public async Task TooManyRefusedCodes_StopThatUserForAnHour_ButNoOneElse()
+    {
+        var v = await SeedAsync();
+        var good = await AddPromotionAsync(c => Percent(c, 10, PromotionScope.Everything));
+        var prober = await Buyer();
+        var now = DateTime.UtcNow;
+
+        for (var i = 0; i < OrderService.MaxCouponFailuresPerHour; i++)
+            (await Refused(() => At(now, s => s.PlaceAsync(Req(prober, v.VariantId, 1, $"GUESS{i:D4}"))))).Code.Should().Be("COUPON_INVALID");
+
+        // Even a real code is now refused unread, so further guessing learns nothing.
+        (await Refused(() => At(now.AddMinutes(30), s => s.PlaceAsync(Req(prober, v.VariantId, 1, good.Code!))))).Code.Should().Be("COUPON_ATTEMPTS_EXCEEDED");
+        (await At(now.AddMinutes(30), s => s.PlaceAsync(Req(prober, v.VariantId, 1)))).OrderId.Should().NotBeEmpty("an order without a code is never blocked");
+        var other = await Buyer();
+        (await At(now.AddMinutes(30), s => s.PlaceAsync(Req(other, v.VariantId, 1, good.Code!)))).GrandTotalMinor.Should().Be(90_000, "other buyers are unaffected");
+
+        // A new window starts after an hour: the count starts again from one, not from where it stopped...
+        var later = now.AddMinutes(61);
+        (await Refused(() => At(later, s => s.PlaceAsync(Req(prober, v.VariantId, 1, "GUESSAGAIN"))))).Code.Should().Be("COUPON_INVALID");
+        (await At(later, s => s.PlaceAsync(Req(prober, v.VariantId, 1, good.Code!)))).GrandTotalMinor.Should().Be(90_000);
+
+        // ...and the limit applies again in that window, not only once in an account's life.
+        for (var i = 1; i < OrderService.MaxCouponFailuresPerHour; i++)
+            (await Refused(() => At(later.AddMinutes(1), s => s.PlaceAsync(Req(prober, v.VariantId, 1, $"AGAIN{i:D4}"))))).Code.Should().Be("COUPON_INVALID");
+        (await Refused(() => At(later.AddMinutes(2), s => s.PlaceAsync(Req(prober, v.VariantId, 1, good.Code!))))).Code.Should().Be("COUPON_ATTEMPTS_EXCEEDED");
+    }
+
+    [PostgresFact]
+    public async Task ParallelRefusals_AreAllCounted()
+    {
+        var v = await SeedAsync();
+        var prober = await Buyer();
+        await Task.WhenAll(Enumerable.Range(0, OrderService.MaxCouponFailuresPerHour).Select(i =>
+            Task.Run(async () => { try { await With(s => s.PlaceAsync(Req(prober, v.VariantId, 1, $"RACE{i:D4}"))); } catch (ConflictException) { } })));
+
+        await using var db = fixture.CreateContext();
+        (await db.CouponFailureWindows.AsNoTracking().SingleAsync(w => w.UserId == prober)).Failures.Should().Be(OrderService.MaxCouponFailuresPerHour);
+    }
+
     private async Task<int> Stock(Guid variantId)
     {
         await using var db = fixture.CreateContext();

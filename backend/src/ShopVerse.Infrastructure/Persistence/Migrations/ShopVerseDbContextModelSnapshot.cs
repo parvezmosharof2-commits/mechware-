@@ -2384,6 +2384,28 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("payment_events", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.CouponFailureWindow", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Failures")
+                        .HasColumnType("integer")
+                        .HasColumnName("failures");
+
+                    b.Property<DateTime>("WindowStartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("window_started_at");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("coupon_failure_windows", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_coupon_failure_windows_failures", "failures >= 0");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Pricing.PromotionDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3130,6 +3152,15 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Pricing.CouponFailureWindow", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
