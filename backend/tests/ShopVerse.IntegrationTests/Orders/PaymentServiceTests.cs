@@ -264,6 +264,8 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
             return inner.VerifyAsync(providerRef, ct);
         }
         public ParsedWebhook? Parse(string rawBody) => inner.Parse(rawBody);
+        public Task<ProviderRefund> RefundAsync(string providerRef, long amountMinor, string idempotencyKey, CancellationToken ct = default) =>
+            inner.RefundAsync(providerRef, amountMinor, idempotencyKey, ct);
     }
 
     private async Task<WebhookOutcome> DeliverThroughAsync(IPaymentProvider provider, (string Body, string Timestamp, string Signature) w, DateTime? clockNow = null)

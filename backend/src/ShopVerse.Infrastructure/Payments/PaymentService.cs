@@ -154,6 +154,9 @@ public sealed class PaymentService(
 
         if (payment.Status == PaymentStatus.Captured) return (WebhookOutcome.AlreadyConfirmed, order.Id);
 
+        // A late or repeated event must never pull a refunded payment back into the refund queue.
+        if (payment.Status == PaymentStatus.Refunded) return (WebhookOutcome.AlreadyRefunded, order.Id);
+
         var paidInFull = reported.Paid && reported.AmountMinor == payment.AmountMinor && reported.Currency == payment.Currency;
         if (!reported.Paid) return (WebhookOutcome.NotPaid, order.Id);   // the customer has not finished; nothing to record
 

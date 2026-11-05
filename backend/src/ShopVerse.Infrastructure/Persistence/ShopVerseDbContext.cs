@@ -73,6 +73,7 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<IdempotencyRecord> IdempotencyKeys => Set<IdempotencyRecord>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
+    public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<PromotionDefinition> Promotions => Set<PromotionDefinition>();
     public DbSet<PromotionUserUsage> PromotionUserUsage => Set<PromotionUserUsage>();
     public DbSet<CouponFailureWindow> CouponFailureWindows => Set<CouponFailureWindow>();

@@ -10,7 +10,10 @@ public enum PaymentStatus
     Failed = 3,
 
     /// <summary>Money arrived that the order cannot use (it was cancelled meanwhile, or the amount differed): finance must refund.</summary>
-    NeedsRefund = 4
+    NeedsRefund = 4,
+
+    /// <summary>The whole amount went back to the buyer.</summary>
+    Refunded = 5
 }
 
 /// <summary>One attempt to pay an order through one provider. The amount is what the server asked for, never what a client says.</summary>
@@ -55,9 +58,20 @@ public sealed class Payment : Entity<Guid>
         UpdatedAtUtc = nowUtc;
     }
 
+    /// <summary>Money can go back only from a payment that actually received money.</summary>
+    public bool IsRefundable => Status is PaymentStatus.Captured or PaymentStatus.NeedsRefund;
+
+    public void MarkRefunded(DateTime nowUtc)
+    {
+        if (!IsRefundable) throw new ConflictException("PAYMENT_NOT_REFUNDABLE", $"A {Status} payment cannot be refunded.");
+        Status = PaymentStatus.Refunded;
+        UpdatedAtUtc = nowUtc;
+    }
+
     public void MarkNeedsRefund(string note, DateTime nowUtc)
     {
         if (Status is PaymentStatus.Captured) throw new ConflictException("PAYMENT_ALREADY_CAPTURED", "A captured payment is already settled.");
+        if (Status is PaymentStatus.Refunded) throw new ConflictException("PAYMENT_ALREADY_REFUNDED", "This payment's money was already sent back.");
         Status = PaymentStatus.NeedsRefund;
         Note = note;
         UpdatedAtUtc = nowUtc;

@@ -38,7 +38,7 @@
 |---|---|---|---|---|
 | P1 | **High** | গেটওয়ের সাময়িক ত্রুটিতে payment event চিরতরে হারায়; টাকা কাটা হয়েছে কিন্তু অর্ডার নিশ্চিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
 | P2 | **High** | একই অর্ডারে দুবার টাকা দিলে দ্বিতীয়টা নীরবে থেকে যায়, refund-এর জন্য চিহ্নিত হয় না | RUN → TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫) |
-| P3 | Medium | `NeedsRefund` পেমেন্টের জন্য কোনো কাজের তালিকা, সতর্কবার্তা বা refund পথ নেই | CODE | স্প্রিন্ট ১০–১২ / ১৫–১৬ |
+| P3 | Medium | `NeedsRefund` পেমেন্টের জন্য কোনো কাজের তালিকা, সতর্কবার্তা বা refund পথ নেই | TEST | ✅ **ঠিক হয়েছে** (২০২৬-১১-০৫): refund তালিকা + 4-eyes; সতর্কবার্তা বাকি |
 | P4 | Medium | ব্যর্থ বা অসম্পূর্ণ webhook-এর কোনো reconciliation নেই (provider-এর তালিকার সাথে দৈনিক মেলানো) | CODE | স্প্রিন্ট ১০–১২ |
 | P5 | Low | এক অর্ডারে যত খুশি payment session খোলা যায় (P2-এর পথ) | TEST | ✅ **ঠিক হয়েছে**: একসাথে সর্বোচ্চ ৩টা খোলা চেষ্টা |
 | P6 | Low | webhook-ও global ১০০/মিনিট/IP সীমার মধ্যে; গেটওয়ের burst-এ 429 → গেটওয়ে retry করে | CODE | স্প্রিন্ট ১৭–১৮ |
@@ -118,6 +118,46 @@
 - পুরো প্রক্রিয়া idempotent হবে, আর audit-এ লেখা থাকবে।
 
 **ASVS:** V2.3.5 (L3, বড় অঙ্কে একাধিক জনের অনুমোদন)।
+
+**ফিক্স (২০২৬-১১-০৫):** নতুন `Refund` entity, `RefundService` আর `AdminRefundsController`।
+
+**Endpoint ও permission:**
+
+| Endpoint | কাজ | Permission |
+|---|---|---|
+| `GET /api/v1/admin/refunds` | তালিকা: `NeedsRefund` পেমেন্ট আর শেষ না হওয়া refund | `orders.refund` |
+| `POST /api/v1/admin/payments/{id}/refunds` | refund চাওয়া (অঙ্ক + ৫–৫০০ অক্ষরের কারণ) | `orders.refund` |
+| `POST /api/v1/admin/refunds/{id}/approve` | অনুমোদন | নতুন `payments.refund_approve` (finance, admin) |
+| `POST /api/v1/admin/refunds/{id}/reject` | প্রত্যাখ্যান | নতুন `payments.refund_approve` (finance, admin) |
+
+Support টাকা ফেরত চাইতে পারে, কিন্তু অনুমোদন দিতে পারে না।
+
+**নিয়ম:**
+- **4-eyes:** যিনি চেয়েছেন তিনি কখনো অনুমোদন দিতে পারবেন না (`REFUND_FOUR_EYES`); প্রথম চেষ্টা ব্যর্থ হওয়ার পরেও না।
+- **অঙ্কের সীমা:** payment row-এ `FOR UPDATE` lock নিয়ে চেক হয়, প্রত্যাখ্যাত refund বাদে বাকি সবগুলো গুনে। একসাথে কয়েকজন চাইলেও মোট অঙ্ক payment ছাড়ায় না।
+- **টাকা পাঠানো তিন ধাপে:**
+  1. refund দাবি করা হয় (Processing), row lock নিয়ে।
+  2. গেটওয়েকে refund পাঠানো হয়। **idempotency key = refund id**।
+  3. ফল লেখা হয়।
+- **গেটওয়ে ব্যর্থ হলে:** refund `Failed` হয়, আবার অনুমোদন দিয়ে retry করা যায়।
+- **প্রসেস মাঝপথে মারা গেলে:** `Processing` অবস্থায় ৫ মিনিট পার হলে আবার অনুমোদন দেওয়া যায়।
+- **কোনো অবস্থাতেই** একই refund দুবার টাকা পাঠায় না।
+- **পুরো অঙ্ক ফেরত গেলে:** payment `Refunded` হয়। এরপর গেটওয়ের দেরিতে আসা event সেটাকে আর refund তালিকায় ফেরায় না (`AlreadyRefunded`)।
+  - এই বাগটা code review-এ ধরা পড়েছিল, টেস্টসহ ঠিক করা হয়েছে।
+- প্রতিটা পরিবর্তন audit interceptor-এ লেখা হয়, actor-সহ।
+- `IPaymentProvider`-এ যোগ হয়েছে `RefundAsync(providerRef, amount, idempotencyKey)`। আসল adapter-কে গেটওয়ের refund reference ব্যবহার করতে হবে (SSLCommerz `refund_ref_id`)।
+
+**প্রমাণ:**
+- **TEST:**
+  - `IT/Orders/RefundServiceTests.cs`: ৮টা টেস্ট — 4-eyes, অঙ্কের সীমা, সমান্তরাল চাওয়া, সমান্তরাল অনুমোদন, গেটওয়ে ব্যর্থতা, আটকে থাকা refund, ভুল ইনপুট, তালিকা ও দেরির event।
+  - `IT/Api/RefundEndpointsTests.cs`: anonymous হলে 401, buyer হলে 403।
+  - `UT/Payments/RefundRulesTests.cs`: কোন role-এর কী permission, endpoint-এর permission, অবস্থার নিয়ম।
+- **Mutation check:** ৮টা mutant, সবগুলো ধরা পড়েছে। mutant-গুলো: 4-eyes বন্ধ, সীমা বন্ধ, payment lock বন্ধ, এলোমেলো idempotency key, `Refunded` না করা, Processing সবসময় অনুমোদনযোগ্য, প্রত্যাখ্যাত refund-কেও অঙ্কে গোনা, দেরির event-এর guard সরানো।
+
+**বাকি:**
+- নতুন refund-এর সতর্কবার্তা (ইমেইল বা কনসোল badge)।
+- অনুমোদনে step-up auth: ASVS ম্যাট্রিক্সে "Step-up auth (refund, price list, role)" স্প্রিন্ট ১৫–১৬।
+- কনসোলের UI।
 
 ### P4. Reconciliation নেই (Medium) [CODE]
 - webhook একেবারে না এলে কিছুই ধরা পড়ে না: গেটওয়ের সমস্যা, আমাদের downtime, বা P1।
@@ -288,7 +328,7 @@
 | কাজ | স্প্রিন্ট | ASVS 5.0 |
 |---|---|---|
 | ~~P1 + P2 + P5 ঠিক করা, টেস্ট ও mutation check সহ~~ ✅ ২০২৬-১১-০৫ | — | V2.3.3 (L2), V15.4.2 (L3) |
-| P3 refund তালিকা + 4-eyes refund | ১০–১২ / ১৫–১৬ | V2.3.5 (L3) |
+| ~~P3 refund তালিকা + 4-eyes refund~~ ✅ ২০২৬-১১-০৫ (UI, সতর্কবার্তা, step-up বাকি) | ১৫–১৬ | V2.3.5 (L3) |
 | P4 দৈনিক reconciliation worker | ১০–১২ | — (সরাসরি requirement নেই; ব্যবসায়িক নিয়ন্ত্রণ) |
 | P6 webhook-এর আলাদা rate-limit policy | ১৭–১৮ | V2.4.1 (L2) |
 | ~~R1 কুপন গণনা ঠেকানো~~ ✅ ২০২৬-১১-০৫ | — | V2.4.1 (L2) |

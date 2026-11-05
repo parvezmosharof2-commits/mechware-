@@ -678,3 +678,18 @@ Statuses: `pending`, `approved` (every step approved), `rejected` (any rejection
 
 #### `GET /orders/{orderId}` · `POST /orders/{orderId}/cancel` · `POST /orders/{orderId}/payments`
 Owner only; anyone else gets `404`. Cancel needs `{ "reason": "..." }` and works while the order is pending.
+`POST /orders/{orderId}/payments` answers `409 TOO_MANY_PAYMENT_ATTEMPTS` when the order already has 3 open attempts.
+Coupon refusals: an unknown, expired, not-yet-started or used-up code is `409 COUPON_INVALID` (one shared answer); more
+than 10 refused codes per user per hour gives `409 COUPON_ATTEMPTS_EXCEEDED`.
+
+### 2.19 Refunds (`/admin/refunds`, `/admin/payments/{paymentId}/refunds`) — four eyes
+
+| Endpoint | Permission | Notes |
+|---|---|---|
+| `GET /admin/refunds` | `orders.refund` | Payments flagged `NeedsRefund` and payments with an unfinished refund: `{ paymentId, orderId, orderNumber, provider, paidMinor, refundableMinor, currency, note, refunds[] }`. |
+| `POST /admin/payments/{paymentId}/refunds` | `orders.refund` | `{ "amountMinor": 150000, "reason": "Two lines returned" }` (reason 5–500 chars). `201`. `409 PAYMENT_NOT_REFUNDABLE` (not paid / already refunded), `409 REFUND_EXCEEDS_PAYMENT`, `404` unknown payment. |
+| `POST /admin/refunds/{refundId}/approve` | `payments.refund_approve` | Executes through the provider with the refund id as idempotency key. `200` with status `Completed` or `Failed` (approve again to retry). `409 REFUND_FOUR_EYES` when the approver asked for it, `409 REFUND_NOT_APPROVABLE` when finished or still processing (stale after 5 minutes). |
+| `POST /admin/refunds/{refundId}/reject` | `payments.refund_approve` | `{ "reason": "..." }`. Frees the amount for a new request. |
+
+Refund statuses: `Requested`, `Processing`, `Completed`, `Failed`, `Rejected`. A fully refunded payment becomes `Refunded`;
+a later provider webhook for it answers `AlreadyRefunded` and changes nothing.

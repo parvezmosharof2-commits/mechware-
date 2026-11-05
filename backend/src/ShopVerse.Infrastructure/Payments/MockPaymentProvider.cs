@@ -14,6 +14,14 @@ public sealed class MockPaymentProvider(string webhookSecret = MockPaymentProvid
     public const string DefaultSecret = "whsec_mock_provider_secret_0001";
 
     private readonly ConcurrentDictionary<string, (long Amount, string Currency, bool Paid, long PaidAmount)> _sessions = new();
+    private readonly ConcurrentDictionary<string, (string ProviderRef, long Amount, string RefundRef)> _refunds = new();
+    private readonly object _refundLock = new();
+
+    /// <summary>Refunds actually paid out, as a real provider's ledger would show them.</summary>
+    public long RefundedOn(string providerRef) => _refunds.Values.Where(r => r.ProviderRef == providerRef).Sum(r => r.Amount);
+
+    /// <summary>When set, the next refund calls fail as if the provider were down.</summary>
+    public int FailNextRefunds { get; set; }
 
     public string Name => "mock";
     public string WebhookSecret => webhookSecret;
@@ -36,6 +44,23 @@ public sealed class MockPaymentProvider(string webhookSecret = MockPaymentProvid
         Task.FromResult(_sessions.TryGetValue(providerRef, out var s)
             ? new ProviderPayment(s.Paid, s.Paid ? s.PaidAmount : 0, s.Currency)
             : new ProviderPayment(false, 0, "BDT"));
+
+    public Task<ProviderRefund> RefundAsync(string providerRef, long amountMinor, string idempotencyKey, CancellationToken ct = default)
+    {
+        lock (_refundLock)
+        {
+            if (FailNextRefunds > 0) { FailNextRefunds--; throw new HttpRequestException("The refund API timed out."); }
+
+            // Same key, same refund: a retry is answered with the first result, never paid twice.
+            if (_refunds.TryGetValue(idempotencyKey, out var done)) return Task.FromResult(new ProviderRefund(true, done.RefundRef, null));
+            if (!_sessions.TryGetValue(providerRef, out var s) || !s.Paid) return Task.FromResult(new ProviderRefund(false, null, "Nothing was paid on this session."));
+            if (RefundedOn(providerRef) + amountMinor > s.PaidAmount) return Task.FromResult(new ProviderRefund(false, null, "More than was paid."));
+
+            var refundRef = "mockrf_" + Guid.NewGuid().ToString("N");
+            _refunds[idempotencyKey] = (providerRef, amountMinor, refundRef);
+            return Task.FromResult(new ProviderRefund(true, refundRef, null));
+        }
+    }
 
     public ParsedWebhook? Parse(string rawBody)
     {
