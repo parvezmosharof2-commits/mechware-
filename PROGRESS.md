@@ -11,7 +11,7 @@
 > (seller ledger) ও Phase 12 (Gemini AI) brief v2 অনুযায়ী লঞ্চের পরে সরানো হয়েছে।
 
 - [x] **ভিত্তি:** foundation, design system v1, identity (PostgreSQL), catalog, inventory, outbox, orders, payments (mock), promotions, companies, approvals
-- [ ] **স্প্রিন্ট ০ — স্থিতিশীল করা:** স্বাধীন টেস্টের বাগ #১–#৭, ESLint warning ০, ডকুমেন্ট মেলানো, পুরনো Vite অ্যাপ মোছা, branch protection
+- [ ] **স্প্রিন্ট ০ — স্থিতিশীল করা:** ✅ স্বাধীন টেস্টের বাগ #১–#৭ ঠিক (regression test + mutation check, চলমান API-তে আবার আক্রমণ করে যাচাই; বিস্তারিত `docs/MASTER_PLAN.md` §৮); ✅ branch protection, secret scanning, push protection (মালিক); ✅ gitleaks/Semgrep/Trivy/ZAP CI-তে। বাকি: ESLint warning ০, Semgrep/Trivy ব্লকিং, পুরনো Vite অ্যাপ মোছা, ARCHITECTURE.md
 - [ ] **স্প্রিন্ট ১–২ — ডিসকভারি ও ডিজাইন:** ক্রেতা সাক্ষাৎকার, ১২ স্ক্রিন প্রোটোটাইপ (light-first), threat model v2
 - [ ] **স্প্রিন্ট ৩–৪ — PIM:** attribute + unit, datasheet/CAD (AV scan), বিকল্প/উত্তরসূরি, আসল ছবি
 - [ ] **স্প্রিন্ট ৫–৬ — সার্চ + PLP/PDP:** Meilisearch, part-number normalisation, product/spec table

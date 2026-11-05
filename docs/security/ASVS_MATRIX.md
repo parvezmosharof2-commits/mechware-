@@ -23,15 +23,15 @@
 | দাম শুধু সার্ভার থেকে (price tamper) | ✅ | `IT/Orders/OrdersApiTests.cs` (tamper test), `UT/Orders/OrderPricingTests.cs` | প্রতিটা নতুন endpoint-এ |
 | পরিমাণ / লাইন / কুপনের সীমা | ✅ | `IT/Orders/OrderServiceTests.cs` | — |
 | কুপন ও ক্রেডিটের race | ✅ | `IT/Orders/OrderPromotionsTests.cs`, credit race test | — |
-| অর্ডারের ঠিকানা যাচাই | 🔴 | বাগ #৪: `shipToJson`-এ ভুল JSON → 500, ২ MB গ্রহণ, ঠিকানা ছাড়া অর্ডার | স্প্রিন্ট ০ |
-| স্টক hoarding (abuse) | 🔴 | বাগ #২: যাচাই না করা অ্যাকাউন্ট, unpaid অর্ডারের সীমা নেই | স্প্রিন্ট ০ |
+| অর্ডারের ঠিকানা যাচাই | ✅ | `IT/Orders/ShipToTests.cs`, `OrdersApiTests.TheOldFreeTextAddressField_…` (বাগ #৪) | — |
+| স্টক hoarding (abuse) | ✅ | `IT/Orders/StockHoardingTests.cs` (বাগ #২) | CAPTCHA (স্প্রিন্ট ১৭–১৮) |
 | Approval bypass | 🔴 | threat model H1: approval অর্ডারের সাথে যুক্ত নয় | স্প্রিন্ট ৭–৯ |
 
 ## V3 — Web Frontend Security
 | নিয়ন্ত্রণ | অবস্থা | টেস্ট / প্রমাণ | বাকি |
 |---|---|---|---|
-| API-তে CSP, HSTS, X-Frame-Options, nosniff | ✅ | `SecurityHeadersMiddleware`; স্বাধীন টেস্ট ২০২৬-১১-০৪ | টেস্ট যোগ করা |
-| web / console-এ security header | 🔴 | বাগ #৭ (threat model M5) | স্প্রিন্ট ০ |
+| API-তে CSP, HSTS, X-Frame-Options, nosniff, CORP | ✅ | `SecurityHeadersMiddleware`; স্বাধীন টেস্ট ও ZAP (২০২৬-১১-০৪) | টেস্ট যোগ করা |
+| web / console-এ security header | 🟡 | `frontend/packages/config/security-headers.js`; production build-এ curl দিয়ে যাচাই (বাগ #৭) | header-এর স্বয়ংক্রিয় টেস্ট; CSP nonce |
 | CSP nonce (no `unsafe-inline`) | ❌ | — | স্প্রিন্ট ১৭–১৮ |
 | CORS শুধু অনুমোদিত origin | ✅ | স্বাধীন টেস্ট: `evil.com` প্রত্যাখ্যাত | localhost origin শুধু Development-এ রাখা |
 
@@ -39,7 +39,7 @@
 | নিয়ন্ত্রণ | অবস্থা | টেস্ট / প্রমাণ | বাকি |
 |---|---|---|---|
 | প্রতিটা endpoint সুরক্ষিত বা পর্যালোচিত পাবলিক তালিকায় | ✅ | `IT/Security/ApiSecurityRegressionTests.EveryEndpoint_IsProtectedOrOnTheReviewedPublicAllowList` | — |
-| বিকৃত / শত্রুভাবাপন্ন ইনপুটে 500 নয় | 🟡 | `HostileInput_NeverCausesA500_OrLeaksInternals` | বাগ #৪ এই টেস্টে ধরা পড়েনি — অর্ডার body যোগ করা |
+| বিকৃত / শত্রুভাবাপন্ন ইনপুটে 500 নয় | 🟡 | `HostileInput_NeverCausesA500_OrLeaksInternals`; অর্ডারের ঠিকানা আর client থেকে আসে না (বাগ #৪) | লগইন-করা endpoint-গুলোতে fuzz যোগ করা |
 | বড় body প্রত্যাখ্যান | ✅ | webhook 64 KB সীমা (R3 রিভিউ); Kestrel সীমা | — |
 | Idempotency | ✅ | `IT/Orders/OrderServiceTests.cs` (একই key-তে ৮ সমান্তরাল retry → ১ অর্ডার) | — |
 
@@ -54,8 +54,8 @@
 | পাসওয়ার্ড hashing ও policy | ✅ | `UT/Identity/IdentityPhase3UnitTests.cs` | — |
 | Brute-force throttling ও lockout | ✅ | `IT/Security/ApiSecurityRegressionTests.Production_HidesSwagger_AndThrottlesLoginBruteForce`, `CredentialEndpoints_UseTheStrictRateLimitPolicy` | proxy-এর পেছনে বাগ #৬ |
 | স্টাফের জন্য TOTP + replay guard | ✅ | `IT/Identity/IdentityServiceTests.cs`, console E2E | admin/finance ছাড়া অন্য স্টাফ (M1); passkey |
-| Production-এ demo অ্যাকাউন্ট নেই | 🔴 | `Production_HasNoDemoAccounts_EveryPublishedCredentialIsRefused` পাস করে **খালি DB-তে**; বাগ #১: Development-এ তৈরি অ্যাকাউন্ট DB-তে থাকলে Production পুরো admin দেয় | স্প্রিন্ট ০ |
-| অ্যাকাউন্ট আছে কিনা ফাঁস না করা | 🔴 | forgot-password ঠিক; বাগ #৫: রেজিস্ট্রেশন ফাঁস করে | স্প্রিন্ট ০ |
+| Production-এ demo অ্যাকাউন্ট নেই | ✅ | `Production_HasNoDemoAccounts_…` (খালি DB) + `IT/Security/DemoAccountGuardTests.cs` (Development-এ চালানো DB-তে Production/Staging চালু হয় না) | — |
+| অ্যাকাউন্ট আছে কিনা ফাঁস না করা | ✅ | `IdentityServiceTests.RegisteringAnEmailOrPhoneThatHasAnAccount_…`, `AnInvalidRegistration_IsRefusedTheSameWay_…` (বাগ #৫) | — |
 | Bootstrap admin শুধু পাসওয়ার্ড + TOTP | ✅ | `Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp`, `UT/Identity/BootstrapAdminTests.cs` | — |
 
 ## V7 — Session Management
@@ -106,7 +106,7 @@
 | Mock পেমেন্ট গেটওয়ে শুধু Development-এ | ✅ | `docs/reviews/R3_ORDERS_AND_PAYMENTS.md`; স্বাধীন টেস্ট | — |
 | Dependency vulnerability gate | ✅ | `.github/workflows/security.yml` (NuGet + npm audit) | — |
 | Secret scanning, SAST, config scan | 🟡 | CodeQL; gitleaks, Semgrep, Trivy যোগ হলো (২০২৬-১১-০৪) | GitHub secret scanning চালু (মালিক) |
-| Reverse proxy-র known networks | 🔴 | বাগ #৬ | স্প্রিন্ট ০ |
+| Reverse proxy-র known networks | ✅ | `UT/Configuration/ForwardedHeadersSettingsTests.cs` (বাগ #৬) | ডেপ্লয়ে মান সেট করা |
 
 ## V14 — Data Protection
 | নিয়ন্ত্রণ | অবস্থা | টেস্ট / প্রমাণ | বাকি |
