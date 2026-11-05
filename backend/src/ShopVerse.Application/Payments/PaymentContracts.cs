@@ -66,6 +66,12 @@ public interface IPaymentService
     /// directly whether the payment was made for the right amount, and only then confirms the order.
     /// </summary>
     Task<WebhookOutcome> HandleWebhookAsync(string provider, string? signature, string? timestamp, string rawBody, CancellationToken ct = default);
+
+    /// <summary>
+    /// Asks the provider directly about payment attempts whose webhook has not arrived (threat model v2, P4) and settles any it
+    /// reports as paid, exactly as a webhook would. Returns how many orders it confirmed.
+    /// </summary>
+    Task<int> ReconcileAsync(DateTime nowUtc, int batch, CancellationToken ct = default);
 }
 
 public sealed record RefundDto(

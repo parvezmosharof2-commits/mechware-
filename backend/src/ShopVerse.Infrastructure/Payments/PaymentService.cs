@@ -25,6 +25,12 @@ public sealed class PaymentService(
     /// </summary>
     public static readonly TimeSpan StaleClaimAfter = TimeSpan.FromMinutes(2);
 
+    /// <summary>A payment attempt is reconciled once it is this old without a webhook (the normal webhook arrives within seconds).</summary>
+    public static readonly TimeSpan ReconcileAfter = TimeSpan.FromMinutes(2);
+
+    /// <summary>Attempts older than this are left to the webhook and the refund queue; abandoned sessions are not polled forever.</summary>
+    public static readonly TimeSpan ReconcileWindow = TimeSpan.FromHours(2);
+
     private IPaymentProvider Provider(string name) =>
         providers.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
         ?? throw new ValidationException("provider", $"Unknown payment provider '{name}'.");
@@ -92,6 +98,49 @@ public sealed class PaymentService(
         inbox.Record(outcome.ToString());
         await db.SaveChangesAsync(ct);
         return outcome;
+    }
+
+    public async Task<int> ReconcileAsync(DateTime nowUtc, int batch, CancellationToken ct = default)
+    {
+        var dueBefore = nowUtc - ReconcileAfter;
+        var since = nowUtc - ReconcileWindow;
+
+        // Every attempt still pending, whatever its order's state: a paid attempt on an order that another payment confirmed or
+        // that was cancelled meanwhile must be flagged for refund, not forgotten (the settlement decides which).
+        var due = await db.Payments.AsNoTracking()
+            .Where(p => p.Status == PaymentStatus.Pending && p.CreatedAtUtc < dueBefore && p.CreatedAtUtc > since)
+            .OrderBy(p => p.CreatedAtUtc).Take(batch)
+            .Select(p => new { p.Provider, p.ProviderRef })
+            .ToListAsync(ct);
+
+        var confirmed = 0;
+        foreach (var attempt in due)
+        {
+            var provider = providers.FirstOrDefault(p => string.Equals(p.Name, attempt.Provider, StringComparison.OrdinalIgnoreCase));
+            if (provider is null) continue;
+
+            ProviderPayment reported;
+            try { reported = await provider.VerifyAsync(attempt.ProviderRef, ct); }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One unreachable provider must not stop the others; the next pass asks again.
+                logger.LogWarning(ex, "Reconciliation could not reach {Provider} for {ProviderRef}", attempt.Provider, attempt.ProviderRef);
+                continue;
+            }
+            if (!reported.Paid) continue;
+
+            // The same locked, idempotent settlement a webhook uses, so a webhook arriving at the same moment cannot double anything.
+            db.ChangeTracker.Clear();
+            var (outcome, orderId) = await SettleAsync(attempt.Provider, new ParsedWebhook("reconciliation", attempt.ProviderRef), reported, nowUtc, ct);
+            if (outcome is WebhookOutcome.Confirmed or WebhookOutcome.AlreadyConfirmed) await inventory.CommitAsync(orderId, ct);
+            if (outcome == WebhookOutcome.Confirmed)
+            {
+                confirmed++;
+                logger.LogWarning("Order {OrderId} was paid but its webhook never arrived; confirmed by reconciliation", orderId);
+            }
+        }
+
+        return confirmed;
     }
 
     /// <summary>

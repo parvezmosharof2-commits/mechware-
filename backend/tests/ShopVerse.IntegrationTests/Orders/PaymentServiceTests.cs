@@ -356,4 +356,92 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
             (await Assert.ThrowsAsync<ConflictException>(() => payments.StartAsync(p.Buyer, p.Order, "mock"))).Code.Should().Be("TOO_MANY_PAYMENT_ATTEMPTS");
         }
     }
+
+    // ---- Threat model v2, P4: a lost webhook is caught by asking the provider ----
+
+    private async Task<int> ReconcileAsync(DateTime now, IPaymentProvider? provider = null)
+    {
+        await using var db = fixture.CreateContext();
+        var payments = new PaymentService(db, [provider ?? _mock], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
+        return await payments.ReconcileAsync(now, 1000);
+    }
+
+    [PostgresFact]
+    public async Task APaidAttemptWhoseWebhookNeverCame_IsConfirmedByReconciliation()
+    {
+        var p = await PendingOrderAsync();
+        _mock.SimulatePayment(p.ProviderRef);   // the buyer paid; the webhook is lost
+
+        (await ReconcileAsync(DateTime.UtcNow + PaymentService.ReconcileAfter + TimeSpan.FromMinutes(1))).Should().BeGreaterThanOrEqualTo(1);
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.Confirmed);
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8));
+
+        // The webhook turning up late changes nothing.
+        (await DeliverAsync(Webhook("evt_late_after_reconcile", p.ProviderRef))).Should().Be(WebhookOutcome.AlreadyConfirmed);
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8));
+    }
+
+    [PostgresFact]
+    public async Task Reconciliation_LeavesYoungAndUnpaidAttemptsAlone_AndSurvivesAProviderThatIsDown()
+    {
+        var young = await PendingOrderAsync();
+        _mock.SimulatePayment(young.ProviderRef);
+        (await ReconcileAsync(DateTime.UtcNow)).Should().Be(0);
+        (await StatusAsync(young.Order)).Should().Be(OrderStatus.PendingPayment, "its webhook may still be on the way");
+
+        var unpaid = await PendingOrderAsync();
+        var later = DateTime.UtcNow + PaymentService.ReconcileAfter + TimeSpan.FromMinutes(1);
+
+        var down = new FlakyProvider(_mock) { FailuresLeft = int.MaxValue };
+        (await ReconcileAsync(later, down)).Should().Be(0);
+        (await StatusAsync(young.Order)).Should().Be(OrderStatus.PendingPayment, "an unreachable provider confirms nothing and breaks nothing");
+
+        // Too old: past the window, the webhook and the refund queue handle it, not polling.
+        (await ReconcileAsync(DateTime.UtcNow + PaymentService.ReconcileWindow + TimeSpan.FromMinutes(1))).Should().Be(0);
+        (await StatusAsync(young.Order)).Should().Be(OrderStatus.PendingPayment);
+
+        // Old enough and inside the window: the paid one is confirmed, the unpaid one is left alone.
+        await ReconcileAsync(later);
+        (await StatusAsync(young.Order)).Should().Be(OrderStatus.Confirmed);
+        (await StatusAsync(unpaid.Order)).Should().Be(OrderStatus.PendingPayment, "the provider says it was not paid");
+    }
+
+    [PostgresFact]
+    public async Task ReconciliationAndTheWebhookAtTheSameMoment_ConfirmOnce()
+    {
+        var p = await PendingOrderAsync();
+        _mock.SimulatePayment(p.ProviderRef);
+        var later = DateTime.UtcNow + PaymentService.ReconcileAfter + TimeSpan.FromMinutes(1);
+
+        await Task.WhenAll(
+            Task.Run(() => ReconcileAsync(later)),
+            Task.Run(() => DeliverAsync(Webhook("evt_racing_reconcile", p.ProviderRef))),
+            Task.Run(() => ReconcileAsync(later)));
+
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.Confirmed);
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8), "the stock is taken exactly once");
+        await using var db = fixture.CreateContext();
+        (await db.Payments.AsNoTracking().SingleAsync(x => x.ProviderRef == p.ProviderRef)).Status.Should().Be(PaymentStatus.Captured);
+    }
+
+    [PostgresFact]
+    public async Task ASecondPaidTabWhoseWebhookWasLost_IsFlaggedForRefund_EvenThoughTheOrderIsAlreadyConfirmed()
+    {
+        var p = await PendingOrderAsync();
+        var (_, payments, db) = await OpenAsync();
+        PaymentSessionResult second;
+        await using (db) second = await payments.StartAsync(p.Buyer, p.Order, "mock");
+        var secondRef = second.RedirectUrl[(second.RedirectUrl.LastIndexOf('/') + 1)..];
+        _mock.SimulatePayment(p.ProviderRef);
+        _mock.SimulatePayment(secondRef);
+
+        // The first tab's webhook arrives and confirms the order; the second tab's webhook is lost.
+        (await DeliverAsync(Webhook("evt_first_tab", p.ProviderRef))).Should().Be(WebhookOutcome.Confirmed);
+        await ReconcileAsync(DateTime.UtcNow + PaymentService.ReconcileAfter + TimeSpan.FromMinutes(1));
+
+        (await StatusAsync(p.Order)).Should().Be(OrderStatus.Confirmed);
+        var statuses = new[] { await PaymentStatusAsync(p.ProviderRef), await PaymentStatusAsync(secondRef) };
+        statuses.Should().BeEquivalentTo([PaymentStatus.Captured, PaymentStatus.NeedsRefund], "the extra money must reach the refund queue");
+        (await StockAsync(p.Variant.VariantId)).Should().Be((0, 8));
+    }
 }
