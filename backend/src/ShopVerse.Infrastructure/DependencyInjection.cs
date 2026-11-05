@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<IPaymentService, PaymentService>();
+        services.TryAddScoped<IRefundService, RefundService>();
 
         services.AddScoped<IOutboxPublisher, SearchSyncQueuePublisher>();
         services.AddScoped<IOutboxPublisher, StorefrontCacheInvalidationPublisher>();

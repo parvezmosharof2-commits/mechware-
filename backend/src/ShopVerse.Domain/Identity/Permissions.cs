@@ -9,6 +9,9 @@ public static class Permissions
     public const string OrdersViewAll = "orders.view_all";
     public const string OrdersRefund = "orders.refund";
 
+    /// <summary>Approves a refund someone else asked for (four eyes, threat model v2 P3).</summary>
+    public const string PaymentsRefundApprove = "payments.refund_approve";
+
     public const string CatalogCreate = "catalog.create";
     public const string CatalogUpdateOwn = "catalog.update_own";
     public const string CatalogModerate = "catalog.moderate";
@@ -45,12 +48,13 @@ public static class Permissions
             Roles.Seller => [OrdersViewOwn, CatalogCreate, CatalogUpdateOwn, SellersManageOwn],
             Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
-            Roles.Finance => [OrdersViewAll, OrdersRefund, FinancePayouts, AuditView, CompaniesView, CompaniesCredit],
+            Roles.Finance => [OrdersViewAll, OrdersRefund, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit],
             Roles.Admin =>
             [
                 OrdersViewOwn,
                 OrdersViewAll,
                 OrdersRefund,
+                PaymentsRefundApprove,
                 CatalogCreate,
                 CatalogUpdateOwn,
                 CatalogModerate,

@@ -2384,6 +2384,87 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("payment_events", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Payments.Refund", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("PaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_id");
+
+                    b.Property<string>("ProviderRefundRef")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("provider_refund_ref");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("PaymentId", "Status")
+                        .HasDatabaseName("ix_refunds_payment_status");
+
+                    b.ToTable("refunds", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_refunds_amount", "amount > 0");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Pricing.CouponFailureWindow", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -3151,6 +3232,21 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.HasOne("ShopVerse.Domain.Orders.Order", null)
                         .WithMany()
                         .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Payments.Refund", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Payments.Payment", null)
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

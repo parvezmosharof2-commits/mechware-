@@ -154,6 +154,30 @@ internal sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
     }
 }
 
+internal sealed class RefundConfiguration : IEntityTypeConfiguration<Refund>
+{
+    public void Configure(EntityTypeBuilder<Refund> b)
+    {
+        b.ToTable("refunds", t => t.HasCheckConstraint("ck_refunds_amount", "amount > 0"));
+        b.MapAudit();
+        b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
+        b.Property(r => r.PaymentId).HasColumnName("payment_id");
+        b.Property(r => r.AmountMinor).HasColumnName("amount");
+        b.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3);
+        b.Property(r => r.Reason).HasColumnName("reason").HasMaxLength(Refund.MaxReasonLength).IsRequired();
+        b.Property(r => r.RequestedBy).HasColumnName("requested_by");
+        b.Property(r => r.DecidedBy).HasColumnName("decided_by");
+        b.Property(r => r.DecidedAtUtc).HasColumnName("decided_at");
+        b.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
+        b.Property(r => r.ProviderRefundRef).HasColumnName("provider_refund_ref").HasMaxLength(150);
+        b.Property(r => r.Note).HasColumnName("note").HasMaxLength(Refund.MaxReasonLength);
+        b.Ignore(r => r.HoldsAmount);
+        b.HasOne<Payment>().WithMany().HasForeignKey(r => r.PaymentId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(r => r.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(r => new { r.PaymentId, r.Status }).HasDatabaseName("ix_refunds_payment_status");
+    }
+}
+
 internal sealed class PaymentEventConfiguration : IEntityTypeConfiguration<PaymentEvent>
 {
     public void Configure(EntityTypeBuilder<PaymentEvent> b)
