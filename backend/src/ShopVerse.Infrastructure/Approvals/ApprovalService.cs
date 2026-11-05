@@ -77,11 +77,14 @@ public sealed class ApprovalService(
 
     public async Task<SubmitApprovalResult> SubmitAsync(Guid actorUserId, Guid companyId, SubmitApprovalRequest r, CancellationToken ct = default)
     {
-        await CompanyAccess.RequireMemberAsync(db, actorUserId, companyId, AnyRole, ct);
+        var requester = await CompanyAccess.RequireMemberAsync(db, actorUserId, companyId, AnyRole, ct);
         await CompanyAccess.RequireNotSuspendedAsync(db, companyId, ct);
 
         if (r.CostCentreId is { } cc && !await db.CostCentres.AnyAsync(c => c.Id == cc && c.CompanyId == companyId, ct))
             throw new ValidationException("costCentreId", "The cost centre does not belong to this company.");
+        // A member assigned to cost centres asks for those only (threat model v1, M3).
+        if (requester.CostCentreIds.Count > 0 && (r.CostCentreId is not { } chosen || !requester.CostCentreIds.Contains(chosen)))
+            throw new ForbiddenException("COST_CENTRE_NOT_ASSIGNED", "Choose one of the cost centres you are assigned to.");
         if (r.AmountMinor <= 0) throw new ValidationException("amount", "Amount must be positive.");
 
         // An order's approval is created by placing the order, with the server's own total (threat model v1, H1). Asking for

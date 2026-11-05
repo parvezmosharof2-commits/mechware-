@@ -154,10 +154,32 @@ company's legal name, BIN and TIN with a password alone. Brief §11.1 asks for p
 A company admin can attach any user to their company, or name an arbitrary person as an approver so requests
 stall on them (a form of denial of approvals). The invited user cannot decline.
 
-### M3. Spend limits and cost-centre assignment are stored but not enforced (Medium) [CODE]
+### M3. Spend limits and cost-centre assignment are stored but not enforced (Medium) [CODE] — **FIXED 2026-11-05**
 A requester can submit against any cost centre of the company (`SubmitAsync` only checks it belongs to the
 company, not that the member is assigned to it). `CompanyMember.SpendLimitMinor` and `CostCentre.MonthlyBudgetMinor`
 are never compared with anything.
+
+**Fix (2026-11-05):**
+- **Cost-centre assignment:** orders carry a cost centre (`orders.cost_centre_id`). A member assigned to cost centres must
+  name one of them, both for an order and for an approval request (`COST_CENTRE_NOT_ASSIGNED`). A member with no
+  assignment may use any of the company's cost centres, or none.
+- **Limits only via approval:** above the member's spend limit (`SPEND_LIMIT_EXCEEDED`) or the cost centre's monthly
+  budget (`BUDGET_EXCEEDED`), an order goes ahead only through a matching approval rule; with no rule it is refused.
+- **What the budget counts:** the Bangladesh calendar month, and every non-cancelled order (pending ones too, since they
+  may still go through).
+- **No races:** a per-cost-centre lock, taken after the buyer's lock, stops two buyers fitting under the same budget at
+  once.
+
+**Evidence:**
+- TEST: `IT/Orders/CompanySpendControlTests.cs` (6 tests, including racing buyers and the Dhaka month boundary).
+- **Mutation check:** 8 mutants, all caught:
+  - assignment ignored, for orders and for approval requests
+  - spend limit ignored
+  - budget ignored
+  - cancelled orders counted
+  - UTC month
+  - no cost-centre lock (fails 3 out of 3 runs)
+  - limits applied even when a rule routes the order
 
 ### M4. Staff permissions live in the access token for up to 15 minutes (Medium) [CODE]
 Permission claims come from the JWT (`PermissionAuthorizationHandler`). Removing a staff permission or role
