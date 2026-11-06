@@ -90,6 +90,10 @@ public sealed class Product : AggregateRoot<Guid>
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues.AsReadOnly();
     public IReadOnlyCollection<ProductAlternative> Alternatives => _alternatives.AsReadOnly();
 
+    /// <summary>Whether a buyer can be sent to this product (see <see cref="IsLinkable"/>).</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public bool CanBeLinkedTo => LinkableNow(this);
+
     private Product() { }
 
     public Product(

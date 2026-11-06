@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ShopVerse.Application.Catalog;
 using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Infrastructure.Persistence;
+using ShopVerse.Infrastructure.Persistence.Configurations;
 
 namespace ShopVerse.Infrastructure.Catalog;
 
@@ -22,6 +24,14 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
         var status = ParseStatus(request.SupplyStatus);
 
         Product? successor = null;
+        if (request.SuccessorProductId is null && request.ClearSuccessor != true && status != SupplyStatus.Active
+            && product.SuccessorProductId is not null)
+        {
+            // Nothing says what to do with the successor it has: dropping it (and its note) must be asked for.
+            throw new ValidationException("successorProductId",
+                "This product has a successor. Send it again to keep it, or set clearSuccessor to true to remove it.");
+        }
+
         if (request.SuccessorProductId is { } successorId)
         {
             successor = await db.Products.FirstOrDefaultAsync(p => p.Id == successorId && p.DeletedAtUtc == null, ct)
@@ -29,7 +39,7 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
         }
 
         product.SetSupply(status, successor, request.SuccessorIsDropIn, request.SuccessorNote);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
         return await ToDtoAsync(product, ct);
     }
 
@@ -47,7 +57,7 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
             throw new ValidationException("alternativeProductIds", $"These products do not exist: {string.Join(", ", missing)}.");
 
         product.ReplaceAlternatives([.. ids.Select(id => found[id])]);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
         return await ToDtoAsync(product, ct);
     }
 
@@ -55,8 +65,21 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
     {
         var product = await LoadAsync(productId, ct);
         product.SetOrderUnits(variantId, request.MinOrderQty, request.PackSize);
-        await db.SaveChangesAsync(ct);
+        await SaveAsync(ct);
         return await ToDtoAsync(product, ct);
+    }
+
+    /// <summary>Two staff saving the same new row at once: the second gets a 409 to retry, not a 500.</summary>
+    private async Task SaveAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConflictException("CONCURRENT_MODIFICATION", "Someone else changed this product at the same time. Reload and retry.");
+        }
     }
 
     private async Task<Product> LoadAsync(Guid productId, CancellationToken ct) =>
@@ -72,22 +95,17 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
         _ => throw new ValidationException("supplyStatus", "The supply status must be active, nrnd or obsolete.")
     };
 
-    private static string Name(SupplyStatus s) => s switch
-    {
-        SupplyStatus.Nrnd => "nrnd",
-        SupplyStatus.Obsolete => "obsolete",
-        _ => "active"
-    };
+    // The wire names are the ones stored in the database (PendingReview is "pending_review"), not ToString().ToLowerInvariant().
+    private static string Name(SupplyStatus s) => SnakeCaseEnumConverter<SupplyStatus>.ToSnake(s.ToString());
 
-    private static string Name(ProductStatus s) => s.ToString().ToLowerInvariant();
+    private static string Name(ProductStatus s) => SnakeCaseEnumConverter<ProductStatus>.ToSnake(s.ToString());
 
     private async Task<ProductPimDto> ToDtoAsync(Product product, CancellationToken ct)
     {
         var linkedIds = product.Alternatives.Select(a => a.AlternativeProductId)
             .Concat(product.SuccessorProductId is { } s ? [s] : []).Distinct().ToList();
         var linked = linkedIds.Count == 0 ? []
-            : await db.Products.AsNoTracking().Where(p => linkedIds.Contains(p.Id))
-                .Select(p => new { p.Id, p.Slug, p.TitleEn, p.Status, p.SupplyStatus, p.DeletedAtUtc }).ToDictionaryAsync(p => p.Id, ct);
+            : await db.Products.AsNoTracking().Where(p => linkedIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, ct);
 
         AdminSuccessorDto? successor = product.SuccessorProductId is { } sid && linked.TryGetValue(sid, out var sp)
             ? new AdminSuccessorDto(sid, sp.Slug, sp.TitleEn, Name(sp.Status), product.SuccessorIsDropIn, product.SuccessorNote)
@@ -98,8 +116,7 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
             .Select(a =>
             {
                 var p = linked[a.AlternativeProductId];
-                bool listed = p.Status == ProductStatus.Active && p.DeletedAtUtc == null && p.SupplyStatus != SupplyStatus.Obsolete;
-                return new AdminAlternativeDto(a.AlternativeProductId, p.Slug, p.TitleEn, Name(p.Status), Name(p.SupplyStatus), listed);
+                return new AdminAlternativeDto(a.AlternativeProductId, p.Slug, p.TitleEn, Name(p.Status), Name(p.SupplyStatus), p.CanBeLinkedTo);
             }).ToList();
 
         var variants = product.Variants.OrderByDescending(v => v.IsDefault).ThenBy(v => v.Sku, StringComparer.Ordinal)

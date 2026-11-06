@@ -65,8 +65,8 @@ public sealed class AdminProductsEndpointsTests : IDisposable
         }
 
         await db.SaveChangesAsync();
-        return [.. await db.Products.AsNoTracking().Include(p => p.Variants).Where(p => ids.Contains(p.Id)).ToListAsync()
-            .ContinueWith(t => t.Result.OrderBy(p => ids.IndexOf(p.Id)))];
+        var loaded = await db.Products.AsNoTracking().Include(p => p.Variants).Where(p => ids.Contains(p.Id)).ToListAsync();
+        return [.. ids.Select(id => loaded.Single(p => p.Id == id))];   // in the order they were created
     }
 
     private static string Url(Guid product, string tail) => $"/api/v1/admin/products/{product}/{tail}";
@@ -305,11 +305,87 @@ public sealed class AdminProductsEndpointsTests : IDisposable
         (await FieldOfError(await admin.PutAsJsonAsync(url, new { minOrderQty = 0, packSize = 1 }))).Should().Contain("minOrderQty");
         (await FieldOfError(await admin.PutAsJsonAsync(url, new { minOrderQty = 1, packSize = 0 }))).Should().Contain("packSize");
         (await FieldOfError(await admin.PutAsJsonAsync(Url(p.Id, $"variants/{Guid.NewGuid()}/order-units"), new { minOrderQty = 1, packSize = 1 })))
-            .Should().NotBeNull();
+            .Should().Contain("variantId");
 
         await using var db = Db();
         var after = await db.ProductVariants.AsNoTracking().SingleAsync(v => v.Id == variant);
         (after.MinOrderQty, after.PackSize).Should().Be((100, 50), "the refused calls changed nothing");
+    }
+
+    // ----- status names, under review, a successor is never lost silently, two edits at once -----
+
+    [PostgresFact]
+    public async Task AProductUnderReview_ShowsItsStatusInTheSameWordsAsTheDatabase_AndCannotBeEdited()
+    {
+        var seed = (await SameSellerProductsAsync(1))[0];
+        var other = (await SameSellerProductsAsync(1))[0];
+        Guid underReview;
+        await using (var db = Db())
+        {
+            var template = await db.Products.AsNoTracking().SingleAsync(p => p.Id == seed.Id);
+            var slug = $"pim-review-{Guid.NewGuid():N}"[..24];
+            var p = new Product(Guid.NewGuid(), template.SellerId, template.CategoryId, null, "Under review", "পর্যালোচনায়", slug, "s", "s", "<p>d</p>");
+            p.AddVariant(Guid.NewGuid(), "SKU-" + slug, null, new Dictionary<string, string>(), new Money(1000, Currency.BDT), null, null, 0.4m, true);
+            p.AddMedia(Guid.NewGuid(), null, "/img/a.jpg", "front view", 1200, 1200);
+            p.SubmitForReview();
+            db.Products.Add(p);
+            await db.SaveChangesAsync();
+            underReview = p.Id;
+        }
+
+        using var admin = await AdminAsync();
+        var data = await DataOf(await admin.GetAsync(Url(underReview, "pim")));
+        data.GetProperty("status").GetString().Should().Be("pending_review", "the database and the rest of the API say pending_review");
+
+        (await FieldOfError(await admin.PutAsJsonAsync(Url(underReview, "supply"), new { supplyStatus = "nrnd" }))).Should().Contain("under review");
+        (await FieldOfError(await admin.PutAsJsonAsync(Url(underReview, "alternatives"), new { alternativeProductIds = new[] { other.Id } })))
+            .Should().Contain("under review");
+    }
+
+    [PostgresFact]
+    public async Task AStatusChange_NeverDropsTheSuccessorUnnoticed_ButItCanBeRemovedOnPurpose()
+    {
+        var (old, next) = (await SameSellerProductsAsync(2)) is [var a, var b] ? (a, b) : throw new InvalidOperationException();
+        using var admin = await AdminAsync();
+        await DataOf(await admin.PutAsJsonAsync(Url(old.Id, "supply"),
+            new { supplyStatus = "nrnd", successorProductId = next.Id, successorIsDropIn = true, successorNote = "Same footprint." }));
+
+        // Leaving the successor out while it has one is refused, and nothing changes.
+        (await FieldOfError(await admin.PutAsJsonAsync(Url(old.Id, "supply"), new { supplyStatus = "obsolete" }))).Should().Contain("clearSuccessor");
+        await using (var db = Db())
+        {
+            var stored = await db.Products.AsNoTracking().SingleAsync(p => p.Id == old.Id);
+            (stored.SupplyStatus, stored.SuccessorProductId, stored.SuccessorNote).Should().Be((SupplyStatus.Nrnd, next.Id, "Same footprint."));
+        }
+
+        // Asking for it removes the successor together with its note and flag.
+        var cleared = await DataOf(await admin.PutAsJsonAsync(Url(old.Id, "supply"), new { supplyStatus = "obsolete", clearSuccessor = true }));
+        cleared.GetProperty("successor").ValueKind.Should().Be(JsonValueKind.Null);
+        await using (var db = Db())
+        {
+            var stored = await db.Products.AsNoTracking().SingleAsync(p => p.Id == old.Id);
+            (stored.SupplyStatus, stored.SuccessorProductId, stored.SuccessorNote, stored.SuccessorIsDropIn).Should().Be((SupplyStatus.Obsolete, null, null, false));
+        }
+
+        // Back in supply needs no successor to be named.
+        await DataOf(await admin.PutAsJsonAsync(Url(old.Id, "supply"), new { supplyStatus = "nrnd", successorProductId = next.Id }));
+        (await DataOf(await admin.PutAsJsonAsync(Url(old.Id, "supply"), new { supplyStatus = "active" }))).GetProperty("successor").ValueKind
+            .Should().Be(JsonValueKind.Null);
+    }
+
+    [PostgresFact]
+    public async Task TwoStaffAddingTheSameAlternativeAtOnce_NeverGetA500()
+    {
+        var two = await SameSellerProductsAsync(2);
+        using var admin = await AdminAsync();
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            admin.PutAsJsonAsync(Url(two[0].Id, "alternatives"), new { alternativeProductIds = new[] { two[1].Id } })));
+
+        results.Select(r => r.StatusCode).Should().OnlyContain(c => c == HttpStatusCode.OK || c == HttpStatusCode.Conflict);
+        results.Should().Contain(r => r.StatusCode == HttpStatusCode.OK, "one of them wins");
+        await using var db = Db();
+        (await db.Set<ProductAlternative>().CountAsync(a => a.ProductId == two[0].Id)).Should().Be(1);
     }
 
     // ----- audit -----

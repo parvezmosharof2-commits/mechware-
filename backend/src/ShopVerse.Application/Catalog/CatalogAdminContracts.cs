@@ -19,11 +19,14 @@ public sealed record AdminAlternativeDto(Guid ProductId, string Slug, string Tit
 public sealed record AdminVariantUnitsDto(Guid VariantId, string Sku, int MinOrderQty, int PackSize);
 
 /// <summary>
-/// <c>SupplyStatus</c>: <c>active</c>, <c>nrnd</c> or <c>obsolete</c>. The successor is replaced as a whole: leave it out to have none.
+/// <c>SupplyStatus</c>: <c>active</c>, <c>nrnd</c> or <c>obsolete</c>. <c>active</c> has no successor. For the other two, name the
+/// successor, or send it again: a call that leaves it out while the product has one is refused, so a status change cannot drop a
+/// successor unnoticed. To remove it on purpose, send <c>ClearSuccessor: true</c>.
 /// Leave <c>SuccessorIsDropIn</c> and <c>SuccessorNote</c> out to keep what is stored while the successor stays the same one;
 /// a blank note clears it.
 /// </summary>
-public sealed record SetSupplyRequest(string? SupplyStatus, Guid? SuccessorProductId, bool? SuccessorIsDropIn, string? SuccessorNote);
+public sealed record SetSupplyRequest(
+    string? SupplyStatus, Guid? SuccessorProductId, bool? SuccessorIsDropIn, string? SuccessorNote, bool? ClearSuccessor = null);
 
 /// <summary>The complete list of alternatives, in display order.</summary>
 public sealed record SetAlternativesRequest(IReadOnlyList<Guid>? AlternativeProductIds);
