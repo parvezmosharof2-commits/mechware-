@@ -14,6 +14,9 @@ public static class CompanyBinIndex
 
     public static string Of(string bin) => FieldEncryption.Current.BlindIndex(bin);
 
+    /// <summary>The fingerprint under every configured key (current first), for lookups during a key rotation.</summary>
+    public static IReadOnlyList<string> AllOf(string bin) => FieldEncryption.Current.BlindIndexes(bin);
+
     /// <summary>Called by ShopVerseDbContext before every save.</summary>
     public static void Refresh(DbContext db)
     {

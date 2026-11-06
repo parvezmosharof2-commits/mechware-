@@ -272,7 +272,11 @@ them in audit values, restrict who can read `audit_logs`.
 
 **Fix:** the identifying numbers BIN, TIN and trade licence are now encrypted at application level, in line with brief §11.1.
 - **Encryption.** AES-256-GCM with a random nonce, through EF value converters (`FieldProtector`). The columns hold
-  `enc:v1:` ciphertext and the entity holds plain values. A changed byte fails to decrypt.
+  `enc:v2:<key id>:` ciphertext and the entity holds plain values. A changed byte fails to decrypt. The first release's
+  `enc:v1:` values (no key id) are still read.
+- **Anything typed is encrypted.** `Protect` used to skip values that already looked like ciphertext, so a licence number
+  typed as `enc:...` was stored in clear and then broke every read of that company (one company could make the admin's
+  company list fail). It now always encrypts (follow-up, with a regression test).
 - **Keys.** Encryption and index keys are derived with HKDF from one 32-byte master key, `Encryption__FieldKey`. Outside
   Development the API refuses to start without it, or with the published development key.
 - **BIN lookups use a keyed fingerprint.** Equal BINs no longer look equal in the database, so uniqueness (the partial
@@ -282,18 +286,29 @@ them in audit values, restrict who can read `audit_logs`.
   that and was fixed; the rule is written in `CompanyBinIndex`.
 - **The audit log no longer copies them.** BIN, TIN, trade licence and the fingerprint are `[REDACTED]` in old/new values.
 - **Rows written before encryption** are read as they are, and a start-up backfill encrypts and indexes them.
+- **Key rotation** (follow-up). Put the new master key in `Encryption__FieldKey` and the old one(s) in
+  `Encryption__PreviousFieldKeys` (comma-separated). Old keys only read. The "BIN taken" check matches the fingerprint
+  under every configured key. At start-up the backfill rewrites every row not under the current key, with value and
+  fingerprint together. Once a start logs nothing left to re-encrypt, remove the old key. A value whose key is no longer
+  configured fails to decrypt with a clear error; it is never misread.
 - **Legal name stays in clear.** It is public business information and is searched.
 
 **Residual:**
-- Key rotation is not built: the format is versioned (`v1`) but holds one key.
+- During a rotation the database's unique index on `bin_index` cannot see an old-key fingerprint. The application check
+  covers that case, but two registrations racing against a not-yet-rewritten row are only caught by the check. The window
+  closes when the backfill finishes at start-up.
+- Keys come from configuration, not from a KMS or HSM.
 - `audit.view` holders still read other audit values.
 
 **Evidence:**
 - TEST: `IT/Companies/CompanyFieldEncryptionTests.cs` covers ciphertext in the database and plain values in the app, no
   identifiers in the audit log, and the backfill.
 - TEST: the start-up guard (2 cases).
-- Unit: `FieldProtectorTests` (8).
-- **Mutation check:** started on 9 mutants but not finished (stopped mid-run); the guards are covered by the tests above.
+- TEST: `AfterAKeyRotation_RowsUnderTheOldKey_StayReadable_KeepTheirBin_AndTheBackfillMovesThemToTheNewKey`,
+  `ALicenceNumberThatLooksEncrypted_IsStillEncrypted_AndReadsBack`.
+- Unit: `FieldProtectorTests` (15): rotation, the first format, unknown key, unknown format, and configuration.
+- **Mutation check (rotation):** 12 mutants. 11 were caught, one only after a test was added. The 12th behaves the same as
+  the original code (it rebuilds an identical protector), so no test can catch it.
 
 ### M1. Staff roles other than admin / finance sign in without a second factor (Medium vs brief) [TEST] — **FIXED 2026-11-05** (passkeys still open)
 `RequiresMandatoryTwoFactor` covered admin and finance only. `support` holds `companies.view` and could read every

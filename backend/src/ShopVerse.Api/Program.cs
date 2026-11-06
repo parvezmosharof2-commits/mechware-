@@ -57,13 +57,11 @@ builder.Services.AddOptions<StorageOptions>()
 // 2.0a Application-level encryption of business identifiers (threat model v1, H4). Outside Development the key must come
 // from the secret store: the development key is published in this repository.
 {
-    byte[]? fieldKey = ShopVerse.Infrastructure.Security.FieldEncryption.ParseKey(builder.Configuration["Encryption:FieldKey"]);
-    bool relaxed = builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing";
-    if (fieldKey is null && !relaxed)
-        throw new InvalidOperationException("Encryption:FieldKey is not set; set Encryption__FieldKey (32 bytes, base64) from the secret store.");
-    if (fieldKey is not null && !relaxed && fieldKey.AsSpan().SequenceEqual(ShopVerse.Infrastructure.Security.FieldEncryption.DevelopmentKey))
-        throw new InvalidOperationException("Encryption:FieldKey is the published development key; set a real one from the secret store.");
-    if (fieldKey is not null) ShopVerse.Infrastructure.Security.FieldEncryption.Configure(fieldKey);
+    // Rotation: the new key goes in FieldKey and the old one in PreviousFieldKeys (comma-separated) until the backfill has
+    // rewritten every row; then the old key is removed.
+    ShopVerse.Infrastructure.Security.FieldEncryption.ConfigureFrom(
+        builder.Configuration["Encryption:FieldKey"], builder.Configuration["Encryption:PreviousFieldKeys"],
+        requireRealKey: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 }
 builder.Services.AddHostedService<ShopVerse.Infrastructure.Workers.FieldEncryptionBackfillWorker>();
 

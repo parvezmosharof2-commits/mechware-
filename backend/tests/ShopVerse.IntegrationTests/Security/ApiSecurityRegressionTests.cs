@@ -307,6 +307,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Jwt:Secret"] = "staging-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
+            ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
             ["Storage:SecretKey"] = "test-secret-key"
         });
         var client = factory.CreateClient();
@@ -342,6 +343,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
+            ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
             ["Storage:SecretKey"] = "test-secret-key",
             ["Identity:BootstrapAdmin:Email"] = email,
             ["Identity:BootstrapAdmin:Password"] = password,
@@ -372,6 +374,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Jwt:Secret"] = jwtSecret,
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
+            ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
             ["Storage:SecretKey"] = "test-secret-key"
         });
 }

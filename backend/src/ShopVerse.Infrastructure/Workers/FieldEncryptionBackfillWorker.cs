@@ -8,8 +8,10 @@ using ShopVerse.Infrastructure.Security;
 namespace ShopVerse.Infrastructure.Workers;
 
 /// <summary>
-/// Once at start-up: encrypts business identifiers written before encryption existed and fills their BIN fingerprints.
-/// Rows are read through the converters (which pass old plain values through) and saved again (which encrypts them).
+/// Once at start-up: brings every company's business identifiers up to the current key. That covers values written before
+/// encryption existed, values in the first format (no key id), values under a previous key after a rotation, and missing BIN
+/// fingerprints. Rows are read through the converters (which read all of those) and saved again (which writes the BIN, its
+/// fingerprint and the other identifiers under the current key). When it reports nothing left, previous keys can be retired.
 /// </summary>
 public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, ILogger<FieldEncryptionBackfillWorker> logger) : BackgroundService
 {
@@ -21,7 +23,7 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
         {
             await using var scope = scopes.CreateAsyncScope();
             int done = await RunAsync(scope.ServiceProvider.GetRequiredService<ShopVerseDbContext>(), stoppingToken);
-            if (done > 0) logger.LogInformation("Encrypted business identifiers of {Count} companies written before encryption", done);
+            if (done > 0) logger.LogInformation("Re-encrypted business identifiers of {Count} companies under the current key", done);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -31,7 +33,7 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
 
     public static async Task<int> RunAsync(ShopVerseDbContext db, CancellationToken ct)
     {
-        string like = FieldProtector.Prefix + "%";
+        string like = FieldEncryption.Current.CurrentPrefix + "%";
         int total = 0;
         while (true)
         {
