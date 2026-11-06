@@ -24,9 +24,11 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var lockKey = $"company-register:{actorUserId:N}";
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", ct);
-        var pending = await (from m in db.CompanyMembers
+        // Accepted only: otherwise anyone could block a person's registrations by inviting them as admin.
+        var pending = await (from m in db.CompanyMembers.Effective()
                              join c in db.Companies on m.CompanyId equals c.Id
-                             where m.UserId == actorUserId && (m.Roles & CompanyRoles.Admin) != 0 && c.Status == CompanyStatus.Pending
+                             where m.UserId == actorUserId && (m.Roles & CompanyRoles.Admin) != 0
+                                   && c.Status == CompanyStatus.Pending
                              select c.Id).CountAsync(ct);
         if (pending >= MaxPendingRegistrationsPerUser)
             throw new ConflictException("TOO_MANY_PENDING_COMPANIES",
@@ -37,7 +39,7 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
 
         db.Companies.Add(company);
         // The registrant becomes the first Company Admin; the company stays Pending until MECHWARE verifies it.
-        db.CompanyMembers.Add(new CompanyMember(Guid.NewGuid(), company.Id, actorUserId, CompanyRoles.Admin, null, null));
+        db.CompanyMembers.Add(new CompanyMember(Guid.NewGuid(), company.Id, actorUserId, CompanyRoles.Admin, null, null, accepted: true));
 
         try
         {
@@ -54,9 +56,9 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
 
     public async Task<IReadOnlyList<MyCompanyDto>> ListMineAsync(Guid actorUserId, CancellationToken ct = default)
     {
-        var rows = await (from m in db.CompanyMembers.AsNoTracking()
+        var rows = await (from m in db.CompanyMembers.AsNoTracking().Effective()
                           join c in db.Companies.AsNoTracking() on m.CompanyId equals c.Id
-                          where m.UserId == actorUserId && m.IsActive
+                          where m.UserId == actorUserId
                           orderby c.LegalName
                           select new { Company = c, m.Roles }).ToListAsync(ct);
         return rows.Select(r => new MyCompanyDto(ToDto(r.Company), r.Roles)).ToList();
@@ -234,7 +236,21 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         bool losesAdmin = member.Has(CompanyRoles.Admin) && (!r.IsActive || (r.Roles & CompanyRoles.Admin) == 0);
         if (losesAdmin) await EnsureAnotherAdminAsync(companyId, member.Id, ct);
 
+        // Switching an unanswered invitation off withdraws it, so it neither lingers out of the invitee's sight nor blocks a
+        // later invitation.
+        if (!member.IsAccepted && !r.IsActive)
+        {
+            db.CompanyMembers.Remove(member);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return ToDto(member) with { IsActive = false };
+        }
+
+        // Consent covers the roles that were offered: a new role (say, Approver) is offered again and needs a new "yes". An
+        // admin changing their own roles has consented by doing it (and the company keeps the acting admin either way).
+        bool gainsRoles = member.IsAccepted && member.UserId != actorUserId && (r.Roles & ~member.Roles) != 0;
         member.Update(r.Roles, r.SpendLimitMinor, r.CostCentreIds, r.IsActive);
+        if (gainsRoles) member.Reinvite(DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ToDto(member);
@@ -254,12 +270,53 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         await tx.CommitAsync(ct);
     }
 
+    // ---------- invitations (the invited person's side) ----------
+
+    public async Task<IReadOnlyList<InvitationDto>> ListInvitationsAsync(Guid actorUserId, CancellationToken ct = default) =>
+        await (from m in db.CompanyMembers.AsNoTracking()
+               join c in db.Companies.AsNoTracking() on m.CompanyId equals c.Id
+               where m.UserId == actorUserId && m.AcceptedAtUtc == null && m.IsActive && c.Status != CompanyStatus.Rejected
+               orderby m.CreatedAtUtc
+               select new InvitationDto(c.Id, c.LegalName, m.Roles, m.CreatedAtUtc)).ToListAsync(ct);
+
+    public async Task<MyCompanyDto> AcceptInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default)
+    {
+        // Only the invited person can accept, and only their own invitation: anything else reads as "not found".
+        var member = await db.CompanyMembers.FirstOrDefaultAsync(
+                         m => m.CompanyId == companyId && m.UserId == actorUserId && m.AcceptedAtUtc == null && m.IsActive, ct)
+                     ?? throw new KeyNotFoundException("Invitation not found.");
+        var company = await LoadCompanyAsync(companyId, ct);
+        if (company.Status == CompanyStatus.Rejected)
+            throw new ConflictException("COMPANY_REJECTED", "MECHWARE did not accept this company's registration.");
+
+        member.Accept(DateTime.UtcNow);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // The admin withdrew or changed the invitation at the same moment: what was accepted no longer exists as offered.
+            throw new KeyNotFoundException("Invitation not found.");
+        }
+        return new MyCompanyDto(ToDto(company), member.Roles);
+    }
+
+    public async Task DeclineInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default)
+    {
+        var member = await db.CompanyMembers.FirstOrDefaultAsync(
+                         m => m.CompanyId == companyId && m.UserId == actorUserId && m.AcceptedAtUtc == null, ct)
+                     ?? throw new KeyNotFoundException("Invitation not found.");
+        db.CompanyMembers.Remove(member);
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>A company must always keep one active admin. The company row is locked so two admins cannot demote each other concurrently.</summary>
     private async Task EnsureAnotherAdminAsync(Guid companyId, Guid exceptMemberId, CancellationToken ct)
     {
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM companies WHERE id = {companyId} FOR UPDATE", ct);
-        bool other = await db.CompanyMembers.AnyAsync(
-            m => m.CompanyId == companyId && m.Id != exceptMemberId && m.IsActive && (m.Roles & CompanyRoles.Admin) != 0, ct);
+        bool other = await db.CompanyMembers.Effective().AnyAsync(
+            m => m.CompanyId == companyId && m.Id != exceptMemberId && (m.Roles & CompanyRoles.Admin) != 0, ct);
         if (!other) throw new ConflictException("LAST_ADMIN", "A company must keep at least one active admin.");
     }
 
@@ -350,5 +407,5 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
 
     private static CostCentreDto ToDto(CostCentre c) => new(c.Id, c.Code, c.Name, c.MonthlyBudgetMinor);
 
-    private static MemberDto ToDto(CompanyMember m) => new(m.Id, m.UserId, m.Roles, m.SpendLimitMinor, m.IsActive, m.CostCentreIds);
+    private static MemberDto ToDto(CompanyMember m) => new(m.Id, m.UserId, m.Roles, m.SpendLimitMinor, m.IsActive, m.CostCentreIds, m.IsAccepted);
 }

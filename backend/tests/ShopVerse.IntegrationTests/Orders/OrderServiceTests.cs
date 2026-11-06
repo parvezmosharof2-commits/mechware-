@@ -257,7 +257,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         var svc = new ShopVerse.Infrastructure.Companies.CompanyService(db);
         var bin = (9_000_000_000_000L + Random.Shared.NextInt64(0, 999_999_999_999L)).ToString("D13");
         var company = await svc.RegisterAsync(admin, new ShopVerse.Application.Companies.RegisterCompanyRequest("Orders Ltd", "TL-O-1", bin, null, null));
-        if (buyer is { } b) await svc.AddMemberAsync(admin, company.Id, new ShopVerse.Application.Companies.AddMemberRequest(b, buyerRoles, null, null));
+        if (buyer is { } b) await svc.AddAcceptedMemberAsync(admin, company.Id, new ShopVerse.Application.Companies.AddMemberRequest(b, buyerRoles, null, null));
         if (activate) await svc.AdminActivateAsync(company.Id);
         return company.Id;
     }

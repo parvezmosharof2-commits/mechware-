@@ -12,11 +12,18 @@ namespace ShopVerse.Infrastructure.Companies;
 /// </summary>
 internal static class CompanyAccess
 {
+    /// <summary>
+    /// Memberships that count: active and accepted. An invitation not yet accepted grants nothing (threat model v1, M2), so
+    /// every query that asks "who is a member" goes through this one filter.
+    /// </summary>
+    public static IQueryable<CompanyMember> Effective(this IQueryable<CompanyMember> members) =>
+        members.Where(m => m.IsActive && m.AcceptedAtUtc != null);
+
     public static async Task<CompanyMember> RequireMemberAsync(
         ShopVerseDbContext db, Guid actorUserId, Guid companyId, CompanyRoles? role, CancellationToken ct)
     {
-        var member = await db.CompanyMembers.AsNoTracking()
-            .FirstOrDefaultAsync(m => m.CompanyId == companyId && m.UserId == actorUserId && m.IsActive, ct)
+        var member = await db.CompanyMembers.AsNoTracking().Effective()
+            .FirstOrDefaultAsync(m => m.CompanyId == companyId && m.UserId == actorUserId, ct)
             ?? throw new KeyNotFoundException("Company not found.");
         if (role is { } needed && !member.Has(needed))
             throw new ForbiddenException("COMPANY_ROLE_REQUIRED", "Your company role does not allow this action.");

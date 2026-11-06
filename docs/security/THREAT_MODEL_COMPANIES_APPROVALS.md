@@ -268,11 +268,39 @@ setup needed a session, so there was no way to enrol the first authenticator.
 - **Code review:** two passes. The first found the trust-on-first-use flaw (a leaked password could enrol an attacker's
   phone), which led to the setup-code design.
 
-### M2. Members are added without consent (Medium) [CODE] (existence part fixed)
-*Fixed:* a membership must name a live account: `company_members.user_id` has a foreign key to `users` and `RegisterCompany` / `AddMember` refuse an unknown or erased id (tests `AddMember_RefusesAnIdThatIsNotAnAccount_AndAnErasedAccount`, `TheDatabaseItselfRefusesAMembershipWithoutAnAccount`).
-*Still open:* there is no invitation to accept.
-A company admin can attach any user to their company, or name an arbitrary person as an approver so requests
-stall on them (a form of denial of approvals). The invited user cannot decline.
+### M2. Members are added without consent (Medium) [TEST] — **FIXED 2026-11-06**
+A company admin could attach any user to their company, or name an arbitrary person as an approver so requests stall on
+them (a form of denial of approvals), and the user could not decline. The existence part was fixed earlier:
+`company_members.user_id` has a foreign key to `users`.
+
+**Fix:** a membership is an **invitation** until its holder accepts it (`company_members.accepted_at`).
+- **An invitation grants nothing.** Every "who is a member" query goes through one filter, `CompanyAccess.Effective()`
+  (active and accepted). That covers:
+  - company access;
+  - "my companies";
+  - the last-admin rule;
+  - the pending-registration cap;
+  - approver eligibility for rules, requests and order approvals.
+- **No invitation-based blocking.** Inviting someone as an admin of pending companies cannot block their own registrations.
+- **Consent covers the roles offered.** Giving someone else a new role (say, Approver) turns the membership back into an
+  invitation for the new roles. Removing a role or changing a limit needs no new consent, and an admin changing their own
+  roles has consented by doing it.
+- **Answering is the invitee's alone.** The invitee accepts or declines (declining removes it); nobody else can answer, and
+  an accepted membership cannot be "declined".
+- **The admin can withdraw.** Switching an unanswered invitation off withdraws it.
+- **Existing members** were backfilled as accepted.
+- **Web:** the invitee sees invitations on their companies page with Accept / Decline, and the admin's team list marks
+  "Invited".
+
+**Residual:** a declined invitation is not remembered, so an admin can invite the same person again. There is no
+invitation e-mail yet either.
+
+**Evidence:**
+- TEST: `IT/Companies/MemberInvitationTests.cs` (11 tests).
+- TEST: `OrderApprovalTests.AnApproverWhoHasNotAcceptedTheMembership_IsNeverAskedToApproveAnOrder`.
+- Unit: `AnInvitation_GrantsNothing_UntilAccepted_AndIsAcceptedOnce`.
+- E2E: the admin sees "Invited"; the buyer accepts in their own browser before the rule can name them.
+- **Mutation check:** 16 mutants, all caught. `/code-review`: 4 findings fixed; the residual is noted above.
 
 ### M3. Spend limits and cost-centre assignment are stored but not enforced (Medium) [CODE] — **FIXED 2026-11-05**
 A requester can submit against any cost centre of the company (`SubmitAsync` only checks it belongs to the

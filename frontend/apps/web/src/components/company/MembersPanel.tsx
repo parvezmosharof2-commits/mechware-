@@ -172,6 +172,7 @@ export function MembersPanel({ companyId, canWrite }: { companyId: string; canWr
                   <span className="break-all font-mono text-xs">{m.userId}</span>
                   {user?.id === m.userId && <Badge variant="outline">{t('members.you')}</Badge>}
                   {!m.isActive && <Badge variant="deal">{t('common.inactive')}</Badge>}
+                  {m.isActive && !m.accepted && <Badge variant="low-stock">{t('members.invited')}</Badge>}
                 </div>
                 <div className="mt-1 text-fg-secondary">{roleNames(m.roles).map((r) => t(`roles.${r}`)).join(', ')}</div>
                 {m.spendLimitMinor != null && (

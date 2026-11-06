@@ -30,8 +30,12 @@ public sealed record AddMemberRequest(Guid UserId, CompanyRoles Roles, long? Spe
 
 public sealed record UpdateMemberRequest(CompanyRoles Roles, long? SpendLimitMinor, IReadOnlyList<Guid>? CostCentreIds, bool IsActive);
 
+/// <param name="Accepted">False while the membership is only an invitation the person has not accepted.</param>
 public sealed record MemberDto(
-    Guid Id, Guid UserId, CompanyRoles Roles, long? SpendLimitMinor, bool IsActive, IReadOnlyList<Guid> CostCentreIds);
+    Guid Id, Guid UserId, CompanyRoles Roles, long? SpendLimitMinor, bool IsActive, IReadOnlyList<Guid> CostCentreIds, bool Accepted);
+
+/// <summary>An invitation waiting for the invited person: which company, and with what roles.</summary>
+public sealed record InvitationDto(Guid CompanyId, string CompanyLegalName, CompanyRoles Roles, DateTime InvitedAtUtc);
 
 public sealed record SetCreditRequest(CreditTerms Terms, long LimitMinorUnits);
 
@@ -62,6 +66,11 @@ public interface ICompanyService
     Task<MemberDto> AddMemberAsync(Guid actorUserId, Guid companyId, AddMemberRequest request, CancellationToken ct = default);
     Task<MemberDto> UpdateMemberAsync(Guid actorUserId, Guid companyId, Guid memberId, UpdateMemberRequest request, CancellationToken ct = default);
     Task RemoveMemberAsync(Guid actorUserId, Guid companyId, Guid memberId, CancellationToken ct = default);
+
+    // The invited person's side (threat model v1, M2): a membership grants nothing until its holder accepts it.
+    Task<IReadOnlyList<InvitationDto>> ListInvitationsAsync(Guid actorUserId, CancellationToken ct = default);
+    Task<MyCompanyDto> AcceptInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default);
+    Task DeclineInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default);
 
     // MECHWARE staff. Authorised by permission at the API; not scoped to membership.
     Task<PagedResult<CompanyDto>> AdminListAsync(string? status, int page, int pageSize, CancellationToken ct = default);

@@ -55,8 +55,8 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
         await using var db = fixture.CreateContext();
         var companies = new CompanyService(db);
         var company = (await companies.RegisterAsync(admin, new RegisterCompanyRequest("Approving Buyers Ltd", "TL-OA-1", NextBin(), null, null))).Id;
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null));
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(approver, CompanyRoles.Approver, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(approver, CompanyRoles.Approver, null, null));
         var costCentre = (await companies.AddCostCentreAsync(admin, company, new CostCentreRequest("CC-204", "Dyeing maintenance", null))).Id;
         await companies.AdminActivateAsync(company);
         if (creditLimit > 0) await companies.AdminSetCreditAsync(company, new SetCreditRequest(CreditTerms.Net30, creditLimit));
@@ -121,6 +121,21 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
         var payments = new PaymentService(db, [new MockPaymentProvider()], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
         (await FluentActions.Awaiting(() => payments.StartAsync(t.Buyer, big.OrderId, "mock")).Should().ThrowAsync<ConflictException>())
             .Which.Code.Should().Be("ORDER_NOT_PAYABLE", "nobody can pay their way past the approval");
+    }
+
+    [PostgresFact]
+    public async Task AnApproverWhoHasNotAcceptedTheMembership_IsNeverAskedToApproveAnOrder()
+    {
+        var t = await TeamAsync();
+        var v = await StockAsync();
+        // The rule's only approver is (again) just an invitation: nobody who agreed is left to decide.
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE company_members SET accepted_at = NULL WHERE company_id = {t.Company} AND user_id = {t.Approver}");
+
+        Func<Task> place = () => Orders(s => s.PlaceAsync(Order(t, v.VariantId, 3, costCentre: t.CostCentre)));
+        (await place.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("NO_ELIGIBLE_APPROVER");
+        (await StockOf(v.VariantId)).Reserved.Should().Be(0, "a refused order holds no stock");
     }
 
     [PostgresFact]

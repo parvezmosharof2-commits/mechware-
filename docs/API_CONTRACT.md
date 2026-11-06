@@ -673,8 +673,11 @@ Access inside a company is decided from the caller's `company_members` row in th
 | `GET/POST /companies/{companyId}/cost-centres` | member / Admin | `{ code, name, monthlyBudgetMinor? }`; code upper-cased, unique per company (`409 COST_CENTRE_CODE_EXISTS`). |
 | `PUT/DELETE /companies/{companyId}/cost-centres/{id}` | Admin | Delete also strips the id from members. |
 | `GET /companies/{companyId}/members` | Admin | |
-| `POST /companies/{companyId}/members` | Admin | `{ userId, roles, spendLimitMinor?, costCentreIds? }`. `409 MEMBER_EXISTS`. Cost centres must belong to the same company (`400`). |
-| `PUT /companies/{companyId}/members/{memberId}` | Admin | `{ roles, spendLimitMinor?, costCentreIds?, isActive }`. |
+| `POST /companies/{companyId}/members` | Admin | `{ userId, roles, spendLimitMinor?, costCentreIds? }` creates an **invitation** (`accepted: false`). It grants nothing until the person accepts. `409 MEMBER_EXISTS`. Cost centres must belong to the same company (`400`). |
+| `PUT /companies/{companyId}/members/{memberId}` | Admin | `{ roles, spendLimitMinor?, costCentreIds?, isActive }`. **Adding a role** to someone else turns the membership back into an invitation for the new roles. **`isActive: false`** on an unanswered invitation withdraws it. |
+| `GET /companies/invitations` | Signed in | My unanswered invitations: `[{ companyId, companyLegalName, roles, invitedAtUtc }]`. |
+| `POST /companies/{companyId}/invitations/accept` | The invitee | Returns `{ company, roles }`. `404` if it is not my invitation. `409 COMPANY_REJECTED`. |
+| `POST /companies/{companyId}/invitations/decline` | The invitee | Removes the invitation, `204`. |
 | `DELETE /companies/{companyId}/members/{memberId}` | Admin | `409 LAST_ADMIN` for the last active admin (also on demotion / deactivation). |
 
 Writes on a suspended company answer `409 COMPANY_SUSPENDED`.

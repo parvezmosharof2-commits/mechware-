@@ -113,17 +113,41 @@ public sealed class CompanyMember : Entity<Guid>
     public bool IsActive { get; private set; } = true;
     public List<Guid> CostCentreIds { get; private set; } = [];
 
+    /// <summary>
+    /// When the person accepted the membership (threat model v1, M2). Until then it is only an invitation: it grants nothing,
+    /// and its holder cannot be named as an approver, so nobody is made to act for a company without agreeing to.
+    /// </summary>
+    public DateTime? AcceptedAtUtc { get; private set; }
+
+    public bool IsAccepted => AcceptedAtUtc.HasValue;
+
     private CompanyMember() { }
 
+    /// <param name="accepted">True only for the person who registers the company; everyone else starts as an invitation.</param>
     public CompanyMember(Guid id, Guid companyId, Guid userId, CompanyRoles roles, long? spendLimitMinor,
-        IEnumerable<Guid>? costCentreIds) : base(id)
+        IEnumerable<Guid>? costCentreIds, bool accepted = false) : base(id)
     {
         CompanyId = companyId;
         UserId = userId;
         Update(roles, spendLimitMinor, costCentreIds, true);
+        if (accepted) AcceptedAtUtc = DateTime.UtcNow;
     }
 
-    public bool Has(CompanyRoles role) => IsActive && (Roles & role) != 0;
+    public bool Has(CompanyRoles role) => IsActive && IsAccepted && (Roles & role) != 0;
+
+    /// <summary>Turns an accepted membership back into an invitation, e.g. when new roles are offered that need a new "yes".</summary>
+    public void Reinvite(DateTime utcNow)
+    {
+        AcceptedAtUtc = null;
+        UpdatedAtUtc = utcNow;
+    }
+
+    public void Accept(DateTime utcNow)
+    {
+        if (IsAccepted) throw new ConflictException("INVITATION_ALREADY_ACCEPTED", "This membership is already accepted.");
+        AcceptedAtUtc = utcNow;
+        UpdatedAtUtc = utcNow;
+    }
 
     public void Update(CompanyRoles roles, long? spendLimitMinor, IEnumerable<Guid>? costCentreIds, bool isActive)
     {

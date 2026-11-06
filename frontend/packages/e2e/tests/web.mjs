@@ -137,6 +137,28 @@ async function login(page, email, password) {
   await a.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
   await a.getByText(buyerId, { exact: false }).first().waitFor();
   check('admin adds the buyer as an Approver member', true);
+  await a.getByText('Invited', { exact: true }).first().waitFor();
+  check('the new member shows as Invited until they accept', true);
+
+  // M2: the buyer must agree before anything changes for them; they accept on their own companies page.
+  const ctxInv = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const inv = await ctxInv.newPage();
+  inv.on('pageerror', (e) => errors.push('Invitee pageerror: ' + e.message));
+  await inv.goto(`${WEB}/auth/login`);
+  await login(inv, USERS.buyer.email, USERS.buyer.password);
+  await inv.waitForURL(`${WEB}/`);
+  await inv.goto(`${WEB}/account/company`);
+  const invitation = inv.locator('section[aria-labelledby="invitations-title"] li').filter({ hasText: 'Gazipur Textile Mills Ltd' });
+  await invitation.waitFor();
+  check('the buyer sees the invitation before being a member', true);
+  await invitation.getByRole('button', { name: 'Accept' }).click();
+  await inv.getByText('You joined the company.').waitFor();
+  await inv.getByRole('link', { name: 'Open' }).first().waitFor();
+  check('accepting makes the company appear in the buyer\'s list', true);
+  await ctxInv.close();
+  await a.reload();
+  await a.getByRole('tab', { name: 'Members' }).click();
+  await a.getByText(buyerId, { exact: false }).first().waitFor();
 
   await a.getByRole('tab', { name: 'Approvals' }).click();
   await a.getByText('No approval rules yet').waitFor();
