@@ -232,7 +232,9 @@ just before the action, after the permission check.
 - **A correct code clears earlier misses.**
 - **Console:** the credit dialog asks for the code and shows the API's own message.
 
-**Residual:** the code is spent even when the action itself then fails, so a retry needs the next code (up to 30 s).
+**Residual (accepted):** the code is spent even when the action itself then fails, so a retry needs the next code (up to
+30 s). This is deliberate: a code that survived a failed action could be replayed by whoever saw it, and two parallel
+requests could share one code.
 
 **Evidence:**
 - TEST: `IT/Api/StepUpTests.cs` (4 tests).
@@ -338,14 +340,19 @@ setup needed a session, so there was no way to enrol the first authenticator.
   (`403 STAFF_ENROLL_WITH_SETUP_CODE`), so an old session or a stolen token cannot get around the setup code.
 - **No code for a disabled account.** No setup code is issued for a suspended or banned account.
 - **Console:** sign-in → setup code → key + recovery codes → first code.
+- **Admin console page** (follow-up). "Staff authenticator setup" lists active staff who have no authenticator yet
+  (`GET /admin/users/awaiting-two-factor`, `users.manage`) and whether a code is already out. "Issue code" asks for the
+  admin's own fresh authenticator code (step-up) and shows the setup code once. The admin's own row has no button.
 
 **Residual:**
 - Passkeys (WebAuthn) are not built.
-- There is no console screen yet for administrators to issue codes; it is API only.
 - Staff roles are still assigned in the database, because there is no staff-management feature.
 
 **Evidence:**
-- TEST: `IT/Identity/StaffTwoFactorEnrollmentTests.cs` (22 tests).
+- TEST: `IT/Identity/StaffTwoFactorEnrollmentTests.cs` (23 tests, including the list for the console).
+- E2E: the admin opens the staff authenticator page.
+- **Mutation check (console list):** 7 mutants. All were caught, one only after the test was strengthened (an enrolment token
+  must not count as a setup code).
 - **Mutation check:** 22 mutants on the design, plus 11 on the code-review fixes, all caught.
 - **Code review:** two passes. The first found the trust-on-first-use flaw (a leaked password could enrol an attacker's
   phone), which led to the setup-code design.
@@ -471,6 +478,14 @@ in memory, which stops theft from storage but not use by injected script.
   its nonce.
 - **What is unchanged:** styles keep `'unsafe-inline'`, because the UI and next/font use inline styles and CSS cannot
   run code. Google sign-in, once built, must load through `next/script`.
+- **Violations are reported** (follow-up, 2026-11-06). The policy has `report-uri /api/csp-report`, a route in each app.
+  - The route reads the report, trims every field and strips control characters (no forged log lines), and logs one
+    `csp_violation` JSON line.
+  - Limits: 16 KB per body, 10 reports per body, 60 logged reports per minute per process. The rest are dropped and only
+    counted. It always answers `204`.
+  - Same origin, so no CORS and no third party sees the URLs.
+  - There is deliberately no `report-to`: with it Chrome switches to the batched Reporting API, which delivered nothing
+    over plain HTTP in testing.
 
 **Evidence:**
 - RUN (Playwright, production builds):
@@ -484,6 +499,15 @@ in memory, which stops theft from storage but not use by injected script.
   - a fresh nonce per response;
   - public files are covered.
 - **E2E result:** web 31/31, console 28/28.
+- TEST: `packages/config/tests/csp-report.test.mjs` (7) covers:
+  - both report formats;
+  - junk input;
+  - log-line forging;
+  - the per-body and per-minute caps;
+  - a lying `content-length`.
+- E2E: both apps check that the blocked handler is reported and answered with `204`.
+- RUN: a production build of the console logged two `csp_violation` lines for one injected handler (`img-src` and
+  `script-src-attr`).
 
 ### M6. Threshold splitting and collusion cannot be stopped in software (Medium, accepted business risk)
 Rules look at one request's amount. Splitting a purchase below a threshold, or two colluding people (one
@@ -516,9 +540,10 @@ whole office signing in at 9 am. Raising it is a trade-off against credential st
 ### L2. Other (Low / Info)
 - Session marker cookies (`mw_session`, `mw_console_session`) are forgeable by design: they only pick a redirect, the API authorises everything [CODE].
 - No `Idempotency-Key` on these endpoints (brief §6.6). Double submits are blocked by a unique index and a second decision is a conflict, so the practical impact is small [TEST: `SameItem_CannotHaveTwoPendingRequests_*`].
-- Global rate limit is per IP, 100 / minute with a queue: several office users behind one NAT share it (seen as 30 s stalls in E2E) [RUN].
+- ~~Global rate limit is per IP with a queue~~: fixed in L3 (per-user budgets, an IP ceiling, immediate 429).
 - Lists inside a company (members, sites, inbox) are unbounded; they are company-scoped, so only a company can slow itself.
-- Identity is in-memory (Phase 3): restart loses users, deleting a user leaves member rows pointing at an id with no row.
+- ~~Identity is in-memory~~: users are in PostgreSQL; `company_members.user_id` has a foreign key, and users are only
+  soft-deleted and anonymised.
 
 ---
 

@@ -93,8 +93,12 @@ export async function cspProbe(browser, url, assetPath = '/favicon.ico') {
   const nonced = nonce.length >= 16 && tags.length > 0 && tags.every((t) => t.includes(`nonce="${nonce}"`));
 
   await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
+  // The blocked handler must also be reported to the app's own endpoint, which accepts it with 204.
+  const report = page.waitForResponse((r) => r.url().endsWith('/api/csp-report') && r.request().method() === 'POST', { timeout: 15000 })
+    .then((r) => r.status(), () => 0);
   await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<img src="x:" onerror="window.__xss=1">'));
   await page.waitForTimeout(300);
+  const reportStatus = await report;
   const injectedRan = await page.evaluate(() => window.__xss === 1);
   const again = (await page.request.get(url)).headers()['content-security-policy'] ?? '';
   const asset = (await page.request.get(new URL(assetPath, url).href)).headers()['content-security-policy'] ?? '';
@@ -104,6 +108,7 @@ export async function cspProbe(browser, url, assetPath = '/favicon.ico') {
     noUnsafeInlineScripts: !/script-src[^;]*'unsafe-inline'/.test(csp),
     injectedBlocked: !injectedRan,
     freshPerRequest: again !== '' && again !== csp,
-    assetCovered: /frame-ancestors 'none'/.test(asset)
+    assetCovered: /frame-ancestors 'none'/.test(asset),
+    reported: reportStatus === 204
   };
 }

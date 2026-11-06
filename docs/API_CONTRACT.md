@@ -40,6 +40,7 @@
 Some actions need a fresh authenticator code in the `X-Step-Up-Code` header, on top of the session:
 - `PUT /admin/companies/{id}/credit`
 - `POST /admin/refunds/{id}/approve`
+- `GET /admin/users/awaiting-two-factor`
 - `POST /admin/users/{id}/two-factor-setup-code`
 
 The rules:
@@ -145,6 +146,12 @@ The rules:
   |---|---|
   | `400` | The code is wrong. It counts as a failed login. |
   | `401` | The token is unknown, expired, used, or has had 3 wrong codes. Start again with password + setup code. |
+
+#### `GET /admin/users/awaiting-two-factor`
+- **Auth**: Bearer + `users.manage`
+- **Response**: `200 { data: [{ userId, email, fullName, roles, hasActiveSetupCode }] }`. Active staff whose role demands an
+  authenticator and who have none yet (at most 500, by e-mail). `hasActiveSetupCode` is true while an issued code is unused,
+  unexpired and has tries left. The console's "Staff authenticator setup" page uses it.
 
 #### `POST /admin/users/{id}/two-factor-setup-code`
 - **Auth**: Bearer + `users.manage`

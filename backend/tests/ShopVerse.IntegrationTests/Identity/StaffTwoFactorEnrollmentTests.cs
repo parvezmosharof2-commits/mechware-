@@ -367,6 +367,52 @@ public class StaffTwoFactorEnrollmentTests(PostgresDatabaseFixture fixture) : IC
     }
 
     [PostgresFact]
+    public async Task TheConsoleList_ShowsStaffAwaitingAnAuthenticator_AndWhetherACodeIsOut()
+    {
+        var waiting = await StaffAsync(Permissions.Roles.Support);
+        var enrolled = await StaffAsync(Permissions.Roles.Moderator);
+        var suspended = await StaffAsync(Permissions.Roles.Finance);
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE users SET status = {UserStatus.Suspended.ToString()} WHERE id = {suspended.UserId}");
+        var redeemed = await RedeemAsync(enrolled);
+        await IdentityTestKit.With(fixture, s => s.CompleteTwoFactorEnrollmentAsync(redeemed.EnrollmentToken!, Code(redeemed.TwoFactorSetup!.Secret), Ip));
+
+        var list = await IdentityTestKit.With(fixture, s => s.ListStaffAwaitingTwoFactorAsync());
+        var row = list.Should().ContainSingle(r => r.UserId == waiting.UserId).Subject;
+        row.Email.Should().Be(waiting.Email);
+        row.Roles.Should().Contain(Permissions.Roles.Support);
+        row.HasActiveSetupCode.Should().BeFalse();
+        list.Should().NotContain(r => r.UserId == enrolled.UserId, "they already use an authenticator");
+        list.Should().NotContain(r => r.UserId == suspended.UserId, "no code can be issued for them");
+        list.Should().OnlyContain(r => r.Roles.Any(Permissions.Roles.RequiresMandatoryTwoFactor), "buyers and sellers need no code");
+
+        // Issued and used to start enrolment: an enrolment token for the same person now exists next to the code.
+        await RedeemAsync(waiting);
+        async Task<bool> CodeOut() => (await IdentityTestKit.With(fixture, s => s.ListStaffAwaitingTwoFactorAsync()))
+            .Single(r => r.UserId == waiting.UserId).HasActiveSetupCode;
+        (await CodeOut()).Should().BeTrue();
+
+        // An expired, spent or exhausted code is not "out": the admin should issue a new one.
+        string recipient = waiting.UserId.ToString("N");
+        string setupType = nameof(OtpType.TwoFactorSetupCode);
+        foreach (var (spoil, restore) in new (FormattableString, FormattableString)[]
+                 {
+                     ($"UPDATE otp_codes SET expires_at = now() - interval '1 minute' WHERE recipient = {recipient} AND type = {setupType}",
+                      $"UPDATE otp_codes SET expires_at = now() + interval '1 day' WHERE recipient = {recipient} AND type = {setupType}"),
+                     ($"UPDATE otp_codes SET is_consumed = TRUE WHERE recipient = {recipient} AND type = {setupType}",
+                      $"UPDATE otp_codes SET is_consumed = FALSE WHERE recipient = {recipient} AND type = {setupType}"),
+                     ($"UPDATE otp_codes SET attempts = {OtpCode.MaxVerificationAttempts} WHERE recipient = {recipient} AND type = {setupType}",
+                      $"UPDATE otp_codes SET attempts = 0 WHERE recipient = {recipient} AND type = {setupType}")
+                 })
+        {
+            await using (var db = fixture.CreateContext()) await db.Database.ExecuteSqlAsync(spoil);
+            (await CodeOut()).Should().BeFalse(spoil.Format);
+            await using (var db = fixture.CreateContext()) await db.Database.ExecuteSqlAsync(restore);
+            (await CodeOut()).Should().BeTrue();
+        }
+    }
+
+    [PostgresFact]
     public async Task ABuyer_StillSignsInWithAPasswordAlone()
     {
         var login = await Login(PublishedDemoCredentials.BuyerEmail, "BuyerPass#2026!");

@@ -130,7 +130,7 @@ public sealed class CompanyInvitationDecline
 public sealed class CompanyMember : Entity<Guid>
 {
     public Guid CompanyId { get; private set; }
-    /// <summary>Identity user id. No database FK: identity is not yet DB-backed (Phase 3 uses an in-memory store).</summary>
+    /// <summary>The member's user id (foreign key to <c>users</c>; users are soft-deleted, never removed).</summary>
     public Guid UserId { get; private set; }
     public CompanyRoles Roles { get; private set; }
     public long? SpendLimitMinor { get; private set; }

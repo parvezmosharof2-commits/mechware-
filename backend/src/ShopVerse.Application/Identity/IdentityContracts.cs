@@ -84,6 +84,9 @@ public sealed record TwoFactorEnrollmentCompleteDto(string EnrollmentToken, stri
 /// <summary>Shown once to the administrator, who hands it to the staff member in person or by another trusted channel.</summary>
 public sealed record TwoFactorSetupCodeDto(Guid UserId, string SetupCode, DateTime ExpiresAtUtc);
 
+/// <summary>A staff member who must use an authenticator and has none yet; the console lists them so an admin can issue a code.</summary>
+public sealed record StaffAwaitingTwoFactorDto(Guid UserId, string Email, string FullName, IReadOnlyList<string> Roles, bool HasActiveSetupCode);
+
 /// <summary>Only the ID token Google issued; who the user is comes from its verified claims, never from the request body.</summary>
 public sealed record GoogleLoginRequestDto(string IdToken);
 
@@ -319,6 +322,9 @@ public interface IIdentityService
     /// <param name="target">What the action is about (e.g. the company id), recorded in the audit log.</param>
     Task VerifyStepUpAsync(Guid userId, string? code, string action, string? target = null, string? clientIp = null,
         DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Active staff accounts that must use an authenticator and have none yet (M1 onboarding, console).</summary>
+    Task<IReadOnlyList<StaffAwaitingTwoFactorDto>> ListStaffAwaitingTwoFactorAsync(CancellationToken cancellationToken = default);
 
     /// <summary>An administrator lets a staff member who must use 2FA enrol their first authenticator.</summary>
     Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(

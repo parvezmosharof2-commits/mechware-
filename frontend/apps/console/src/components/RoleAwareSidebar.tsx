@@ -41,9 +41,10 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     badge: '2FA REQUIRED'
   },
   {
-    id: 'users-rbac',
-    label: 'Users, Roles & Session Families',
-    requiredPermission: 'users.manage'
+    id: 'staff-2fa',
+    label: 'Staff authenticator setup',
+    requiredPermission: 'users.manage',
+    href: '/staff'
   },
   {
     id: 'audit-logs',

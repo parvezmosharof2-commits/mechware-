@@ -114,6 +114,10 @@ jobs:
         working-directory: frontend
         run: pnpm --filter @mechware/api-client test
 
+      - name: Run Shared Config Unit Tests (CSP reports)
+        working-directory: frontend
+        run: pnpm --filter @mechware/config test
+
       - name: Build Frontend Apps
         working-directory: frontend
         run: pnpm build
