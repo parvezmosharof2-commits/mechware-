@@ -119,6 +119,19 @@ public class FieldProtectorTests
         act.Should().Throw<CryptographicException>().WithMessage("*format*");
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(27)]   // one byte short of nonce + tag
+    public void ATruncatedValue_IsRefusedAsCorrupt_NotAsAnUnrelatedError(int bytes)
+    {
+        // Callers treat CryptographicException as "this stored value is unreadable"; an OverflowException from a negative
+        // buffer length would escape that handling.
+        string stored = P.CurrentPrefix + Convert.ToBase64String(new byte[bytes]);
+        var act = () => P.Unprotect(stored);
+        act.Should().Throw<CryptographicException>().WithMessage("*truncated*");
+    }
+
     [Fact]
     public void AValueUnderAKeyThatIsNotConfigured_IsRefused()
     {
