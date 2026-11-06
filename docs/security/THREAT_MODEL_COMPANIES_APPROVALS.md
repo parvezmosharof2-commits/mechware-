@@ -293,6 +293,9 @@ them in audit values, restrict who can read `audit_logs`.
   under every configured key. At start-up the backfill rewrites every row not under the current key, with value and
   fingerprint together. Once a start logs nothing left to re-encrypt, remove the old key. A value whose key is no longer
   configured fails to decrypt with a clear error; it is never misread.
+- **The backfill always finishes** (follow-up). Each row is tried at most once per run, so a row that cannot be brought up
+  to the current key neither loops the start-up worker for ever nor holds back other rows. At the end the worker logs an
+  error that counts such rows. Found by the H4 mutation run: with encryption removed, the old loop never ended.
 - **Legal name stays in clear.** It is public business information and is searched.
 
 **Residual:**
@@ -309,6 +312,11 @@ them in audit values, restrict who can read `audit_logs`.
 - TEST: `AfterAKeyRotation_RowsUnderTheOldKey_StayReadable_KeepTheirBin_AndTheBackfillMovesThemToTheNewKey`,
   `ALicenceNumberThatLooksEncrypted_IsStillEncrypted_AndReadsBack`.
 - Unit: `FieldProtectorTests` (15): rotation, the first format, unknown key, unknown format, and configuration.
+- TEST: `TheBackfill_StopsInsteadOfLooping_WhenARowCannotBeRewritten`, `OneStuckRow_DoesNotHoldBackTheOthers` (a trigger
+  scoped to one row undoes its rewrite).
+- **Mutation check (H4 base, re-run on current code):** 7 mutants, all caught. Three were caught only by a timeout, which
+  is what revealed the endless backfill loop.
+- **Mutation check (backfill loop):** 4 mutants, all caught.
 - **Mutation check (rotation):** 12 mutants. 11 were caught, one only after a test was added. The 12th behaves the same as
   the original code (it rebuilds an identical protector), so no test can catch it.
 
