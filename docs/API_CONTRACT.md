@@ -470,6 +470,22 @@ The rules:
   - At most 10, no duplicates, not the product itself. Each must exist, be published and not be obsolete. An alternative that has since gone obsolete must be dropped before the list can be saved again.
 - `PUT /variants/{variantId}/order-units`: `{ minOrderQty, packSize }`. The minimum must be a whole number of packs. Both are between 1 and 10,000.
 
+#### Product documents (staff): `/admin/products/{productId}/documents`
+- **Auth**: Bearer, permission `catalog.manage`. Anonymous 401, other roles 403.
+- `GET`: the product's documents `[{ id, kind, fileName, contentType, sizeBytes, sha256, createdAtUtc }]`. The storage location is never returned.
+- `POST` (`multipart/form-data`: `kind` = `datasheet` | `cad` | `certificate`, and `file`): 201 with the document. Accepted only when all of these hold, in order, and nothing is stored when one fails:
+  1. `kind` is one of the three words (a number is refused). The product exists and is not under review.
+  2. The file name (a directory, control characters and the like are stripped; it is only a label) ends in an extension the kind allows: datasheet `.pdf`, cad `.step`/`.stp`, certificate `.pdf`/`.png`/`.jpg`/`.jpeg`.
+  3. The size stays within the limit for the kind while it is read (413 `FILE_TOO_LARGE`): datasheet 25 MB, cad 50 MB, certificate 10 MB (`Documents:MaxDatasheetBytes` and so on). The declared length is not trusted.
+  4. The file is not empty, and its first bytes are the signature of a type the kind allows (`%PDF-`, `ISO-10303-21;`, the PNG or JPEG signature), at the very first byte. The extension must agree with it. The `Content-Type` the client sends is ignored.
+  5. The malware scan is clean. Infected: 400 (the file is refused). Scanner unreachable or unclear: 503 `SCAN_UNAVAILABLE`, nothing stored. A file is never accepted without a clean answer.
+  - The same content (SHA-256) cannot be attached twice to a product: 409 `DOCUMENT_EXISTS`, also when two identical uploads arrive at the same moment (one wins). At most 20 documents per product.
+  - Files are stored under a name the server chooses (`products/{productId}/{documentId}.{ext}`), never the client's.
+- `DELETE /{documentId}`: 204. The row goes first, then the stored file.
+- **Public download**: `GET /api/v1/storefront/products/{slug}/documents/{documentId}`: always an attachment (`Content-Disposition: attachment`), with the content type detected at upload and `X-Content-Type-Options: nosniff`. 404 for a product that is not published or is obsolete, for another product's document, or a file that has gone missing.
+- The product page (`GET /storefront/products/{slug}`) lists them as `documents: [{ id, kind, fileName, contentType, sizeBytes, url }]`.
+- **Operations**: outside Development the API refuses to start without `Documents:LocalPath` (a directory on a persistent volume) and `Antivirus:Host` (and `Antivirus:Port`, default 3310) for a ClamAV daemon. clamd's `StreamMaxLength` must be above the largest limit. Development and tests use a temp directory and a scanner that only knows the EICAR test string.
+
 #### `POST /admin/finance/payouts/execute-weekly`
 - **Auth**: Bearer (`[RequirePermission(Permissions.FinancePayout)]`)
 - **Behavior**: Calculates matured seller balances (`completed` sub-orders > 7 days), creates balanced ledger payout entries, generates bank/bKash transfer files.
