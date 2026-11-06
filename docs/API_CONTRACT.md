@@ -280,12 +280,16 @@ The rules:
 - **Response**: Full aggregate: Product, Variants (with prices and stock status), grouped `specs`, `highlights`, `datasheetUrl`, `cadModelUrl`, Brand, Seller card, Breadcrumbs, and SEO tags.
 - **PIM fields (2026-11-06):**
   - `supplyStatus`: `active`, `nrnd` (not recommended for new designs, still sold) or `obsolete`.
-  - `successor`: `{ slug, titleEn, titleBn }` of the replacing product, or `null`.
+  - `successor`: `{ slug, titleEn, titleBn, isDropIn, note }` of the replacing product, or `null`.
+    - `isDropIn`: fits without wiring, mounting or program changes. `note`: what changes otherwise.
+    - It is only shown; it is never swapped into an order.
     - Only a phased-out product has one, and it is always the same seller's product.
     - It is shown only while that product is itself on sale and not obsolete.
   - `variants[].minOrderQty` and `variants[].packSize` (both default `1`).
     - A line's quantity must be at least `minOrderQty` and a multiple of `packSize`.
     - `minOrderQty` is always whole packs.
+    - `POST /api/v1/orders` refuses a line that breaks either rule. The response is 400 `VALIDATION_ERROR` naming the SKU and the rule. The quantity is never rounded.
+  - `alternatives`: `[{ slug, titleEn, titleBn, brandName }]`, parts that can be used instead, in the order staff set. Only products on sale and not obsolete are listed.
 
 #### `GET /search/autocomplete`
 - **Auth**: Public | **Rate Limit**: 30 req/10s | **SLA**: < 50ms p95

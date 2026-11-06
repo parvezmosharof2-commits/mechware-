@@ -54,6 +54,18 @@
     - Review-এ ৩টা সমস্যা পাওয়া গিয়েছিল: mm² দৈর্ঘ্য হিসেবে পড়া হচ্ছিল, লম্বা লেখায় 500 error হচ্ছিল, আর মানের দৈর্ঘ্যের কোনো সীমা ছিল না। তিনটাই ঠিক করা হয়েছে।
   - পরের ধাপ: datasheet/CAD আপলোড (virus scan সহ), বিকল্প পণ্য।
 
+## ১গ. তৃতীয় দফা (২০২৬-১১-০৬, রাত): তিনটা session একীভূত
+
+- **কী হয়েছিল:** তিনটা session একই সময়ে একই repo-তে কাজ করছিল, ফলে H4 mutation আর PIM ধাপ ১ দুবার তৈরি হয়েছিল।
+  - এখন থেকে **একটাই session** চলবে।
+  - পুরনো কাজ আছে `backup/galileo-before-rebase` branch-এ, আর অন্য session-এর `claude/hopeful-mendel-k1dmso`-তে।
+- **`main`-এর উপর নতুন করে যোগ হয়েছে** (branch `claude/inspiring-galileo-lqeixj`):
+  - **H4-এর বাকি ফাঁক বন্ধ:** কাটা ciphertext, key derivation-এর known-answer test, fingerprint না থাকলে যেকোনো save-এ ফিরে আসা, audit log-এ fingerprint না যাওয়া, আর backfill-এর তিনটা কেস (শুধু fingerprint নেই, শুধু TIN পুরনো, শুধু licence পুরনো) আর একাধিক batch। প্রতিটা টেস্ট তার mutant-এর অধীনে ব্যর্থ হয়।
+  - **অর্ডারে MOQ/pack যাচাই:** `POST /orders` সরাসরি ডাকলে ভুল পরিমাণ যেত। এখন 400 আসে, পরিমাণ রাউন্ড করা হয় না। মজুদ থাকলে obsolete পার্ট এখনো অর্ডার করা যায়।
+  - **উত্তরসূরির `isDropIn` আর `note`, আর বিকল্প পার্ট** (সর্বোচ্চ ১০টা, শুধু বিক্রিতে থাকা)। Mutation: ১০টা mutant, সব ধরা পড়ে।
+  - **স্প্রিন্ট ১–২ বন্ধ:** ৫টা কাল্পনিক (AI) সাক্ষাৎকার আছে `docs/discovery/`-এ। মালিক রিভিউ মওকুফ করেছেন।
+- **শিক্ষা:** `StorefrontCatalogReader`-এর product query একটা static compiled query। তাই টেস্টে reader-কে fixture-এর context দিয়ে বানানো যাবে না, HTTP দিয়ে টেস্ট করতে হবে। নইলে পরে API-তে 500 আসে।
+
 ## ২. বাকি কাজ (পরের বার এখান থেকে শুরু)
 
 1. ~~**H4-এর mutation check শেষ করা।**~~ **শেষ হয়েছে।** (নিচের তিনটা লাইন এখন আর প্রযোজ্য নয়)
@@ -68,7 +80,7 @@
    - **H6:** চালু authenticator বদলানোর আলাদা নিরাপদ ব্যবস্থা নেই।
    - **M5:** CSP violation report **হয়েছে** (`/api/csp-report`)। Style-এ এখনো `unsafe-inline` আছে। CSS দিয়ে code চালানো যায় না, তাই এটা মেনে নেওয়া ঝুঁকি।
 3. **Threat model v2-এর বাকি অংশ:** Q1–Q9 (quotes) আর I1–I10 (invoicing)। এগুলো ওই মডিউলগুলো তৈরি হওয়ার সাথে সাথে করতে হবে (রোডম্যাপের স্প্রিন্ট ৭–৯ আর ১০–১২)।
-4. **রোডম্যাপের পরের স্প্রিন্ট:** `PROGRESS.md` আর `docs/MASTER_PLAN.md` দেখুন। স্প্রিন্ট ১–২-এ ক্রেতা সাক্ষাৎকার বাকি।
+4. **রোডম্যাপের পরের কাজ:** PIM-এর বাকি অংশ: datasheet/CAD আপলোড (magic-byte, ClamAV, signed URL), staff-এর product edit API, আসল ছবি। স্প্রিন্ট ১–২ বন্ধ।
 
 ## ৩. মালিকের সিদ্ধান্ত বা কাজ দরকার
 
@@ -90,7 +102,8 @@
 
 ## ৪. আবার শুরু করার আগে
 
-- **Branch:** `claude/practical-gauss-qjujs4`, প্রতিটা merge-এর পর `main`-এর সাথে sync করা।
+- **Branch:** `claude/inspiring-galileo-lqeixj`, প্রতিটা merge-এর পর `main`-এর সাথে sync করা। **একসাথে একটাই session চালান।**
+- **নতুন container-এ:** `apt-get install -y dotnet-sdk-10.0`, `dotnet tool install -g dotnet-ef`, তারপর `pg_ctlcluster 16 main start` আর `redis-server --daemonize yes`। Migration বানাতে startup project হবে `ShopVerse.Infrastructure`।
 - **লোকাল টেস্টের জন্য:**
   - PostgreSQL 16-এ একটা user লাগবে (`shopverse` / `shopverse_secret`), আর Redis চালু থাকতে হবে।
   - চালানোর কমান্ড: `MECHWARE_TEST_PG=... dotnet test backend/ShopVerse.slnx`।

@@ -1,6 +1,8 @@
 # Threat model v2: Pricing, Quotes, Payments, Invoicing (মানুষের রিভিউর জন্য খসড়া)
 
 > **অবস্থা:** AI সহকারীর লেখা খসড়া, ২০২৬-১১-০৫। কোনো মানুষ এখনো রিভিউ করেননি; এটা penetration test নয়।
+>
+> **২০২৬-১১-০৬:** মালিক মানুষের রিভিউ মওকুফ করেছেন, তাই এটাকে কাজের ভিত্তি ধরা হচ্ছে। তবে কোনো মানুষ এটা যাচাই করেননি, এই কথাটা সত্যই থাকছে। বাইরের পেন-টেস্ট (স্প্রিন্ট ১৭–১৮) এখনো পরিকল্পনায় আছে।
 > **কেন:** `docs/MASTER_PLAN.md` স্প্রিন্ট ১–২-এর Exit gate চায় "threat model v2: Pricing, Quotes, Payments, Invoicing"।
 > v1 (`THREAT_MODEL_COMPANIES_APPROVALS.md`) Companies আর Approvals ঢেকেছে, আর সেটা লেখা হয়েছিল কোড বানানোর পরে।
 
