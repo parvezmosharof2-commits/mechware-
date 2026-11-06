@@ -178,7 +178,8 @@ public static class CatalogSeeder
                 var code = AttributeCode(label);
                 if (!attributes.TryGetValue(code, out var def))
                 {
-                    def = new AttributeDefinition(DeterministicGuid.From("attr:" + code), label, label, code, AttributeDataType.String, null, true);
+                    var (type, unit) = NumericAttributes.GetValueOrDefault(label, (AttributeDataType.String, null));
+                    def = new AttributeDefinition(DeterministicGuid.From("attr:" + code), label, label, code, type, unit, true);
                     attributes[code] = def;
                     db.Attributes.Add(def);
                 }
@@ -457,6 +458,23 @@ public static class CatalogSeeder
 
     private static string? FindSpec(ProductPlan plan, string label) =>
         plan.Specs.SelectMany(g => g.Items).Where(i => i.Key == label).Select(i => i.Value).FirstOrDefault();
+
+    /// <summary>
+    /// Filterable specs that are measurements, with the unit their values are stored in (PIM). A seed value these cannot
+    /// read stops the seed, so a typo never becomes a silently unfilterable product. Everything else stays text.
+    /// </summary>
+    private static readonly Dictionary<string, (AttributeDataType Type, string? Unit)> NumericAttributes = new()
+    {
+        ["Motor power"] = (AttributeDataType.Number, "kW"),
+        ["Motor power at 400 V"] = (AttributeDataType.Number, "kW"),
+        ["Rated power"] = (AttributeDataType.Number, "kW"),
+        ["Rated current"] = (AttributeDataType.Number, "A"),
+        ["AC-3 current"] = (AttributeDataType.Number, "A"),
+        ["Piston diameter"] = (AttributeDataType.Number, "mm"),
+        ["Efficiency (IE3)"] = (AttributeDataType.Number, "%"),
+        ["Pressure range"] = (AttributeDataType.Range, "bar"),
+        ["Supply voltage"] = (AttributeDataType.Range, "V")
+    };
 
     private static string AttributeCode(string label) =>
         new string(label.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '_').ToArray()).Trim('_');

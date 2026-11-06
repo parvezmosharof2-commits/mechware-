@@ -25,6 +25,12 @@ public sealed class AttributeDefinition : Entity<Guid>
     {
         if (string.IsNullOrWhiteSpace(nameEn)) throw new ValidationException("nameEn", "Attribute name is required.");
         if (string.IsNullOrWhiteSpace(code)) throw new ValidationException("code", "Attribute code is required.");
+        if (!Enum.IsDefined(dataType)) throw new ValidationException("dataType", "Unknown attribute type.");
+        bool numeric = dataType is AttributeDataType.Number or AttributeDataType.Range;
+        if (numeric && !UnitCatalog.IsKnown(unit))
+            throw new ValidationException("unit", "A numeric attribute needs a known unit (e.g. kW, A, mm, bar).");
+        if (!numeric && unit is not null)
+            throw new ValidationException("unit", "Only a numeric attribute has a unit.");
         NameEn = nameEn.Trim();
         NameBn = nameBn.Trim();
         Code = code.Trim().ToLowerInvariant();
@@ -33,9 +39,21 @@ public sealed class AttributeDefinition : Entity<Guid>
         IsFilterable = isFilterable;
     }
 
+    /// <summary>
+    /// Adds a value. For a numeric attribute the number is read from the text in the attribute's unit (a Range keeps both
+    /// ends), so "750 W" and "0.75 kW" are the same value; text that holds no such number is refused.
+    /// </summary>
     public AttributeValue AddValue(Guid id, string valueEn, string valueBn, int sortOrder)
     {
-        var value = new AttributeValue(id, Id, valueEn, valueBn, sortOrder);
+        if (valueEn?.Trim().Length > UnitCatalog.MaxTextLength || valueBn?.Trim().Length > UnitCatalog.MaxTextLength)
+            throw new ValidationException("valueEn", $"A value is at most {UnitCatalog.MaxTextLength} characters.");
+        if (_values.Any(v => string.Equals(v.ValueEn, valueEn?.Trim(), StringComparison.OrdinalIgnoreCase)))
+            throw new ValidationException("valueEn", $"'{valueEn}' is already a value of this attribute.");
+
+        (decimal Min, decimal Max)? number = DataType is AttributeDataType.Number or AttributeDataType.Range
+            ? UnitCatalog.Parse(valueEn ?? string.Empty, Unit!, allowRange: DataType == AttributeDataType.Range)
+            : null;
+        var value = new AttributeValue(id, Id, valueEn!, valueBn, sortOrder, number?.Min, number?.Max);
         _values.Add(value);
         return value;
     }
@@ -47,11 +65,18 @@ public sealed class AttributeValue : Entity<Guid>
     public string ValueEn { get; private set; } = string.Empty;
     public string ValueBn { get; private set; } = string.Empty;
     public int SortOrder { get; private set; }
+    /// <summary>For a numeric attribute: the value (or a range's low end) in the attribute's unit.</summary>
+    public decimal? NumericValue { get; private set; }
+    /// <summary>For a numeric attribute: the range's high end, equal to <see cref="NumericValue"/> for a single value.</summary>
+    public decimal? NumericMax { get; private set; }
 
     private AttributeValue() { }
 
-    internal AttributeValue(Guid id, Guid attributeId, string valueEn, string valueBn, int sortOrder) : base(id)
+    internal AttributeValue(Guid id, Guid attributeId, string valueEn, string valueBn, int sortOrder,
+        decimal? numericValue = null, decimal? numericMax = null) : base(id)
     {
+        NumericValue = numericValue;
+        NumericMax = numericMax;
         if (string.IsNullOrWhiteSpace(valueEn)) throw new ValidationException("valueEn", "Attribute value is required.");
         AttributeId = attributeId;
         ValueEn = valueEn.Trim();
