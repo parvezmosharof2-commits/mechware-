@@ -139,7 +139,7 @@ public class ShipToTests(PostgresDatabaseFixture fixture) : IClassFixture<Postgr
         {
             var svc = new CompanyService(db);
             company = (await svc.RegisterAsync(admin, new RegisterCompanyRequest("Site Ltd", "TL-S-1", Bin(), null, null))).Id;
-            await svc.AddMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null));
+            await svc.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null));
             await svc.AddSiteAsync(admin, company, new SiteRequest("Gazipur plant", "Store Keeper", "+8801911000000", "Plot 7, BSCIC",
                 null, "Kaliakair", "Gazipur", "Dhaka", "1750", IsDefaultDelivery: true));
             await svc.AdminActivateAsync(company);

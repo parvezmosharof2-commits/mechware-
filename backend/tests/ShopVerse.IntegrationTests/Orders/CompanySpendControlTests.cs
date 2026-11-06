@@ -42,7 +42,7 @@ public class CompanySpendControlTests(PostgresDatabaseFixture fixture) : IClassF
         var company = (await companies.RegisterAsync(admin, new RegisterCompanyRequest("Spend Control Ltd", "TL-SC-1", NextBin(), null, null))).Id;
         var cc = (await companies.AddCostCentreAsync(admin, company, new CostCentreRequest("CC-204", "Dyeing maintenance", budget))).Id;
         var other = (await companies.AddCostCentreAsync(admin, company, new CostCentreRequest("CC-310", "Boiler house", null))).Id;
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(approver, CompanyRoles.Approver, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(approver, CompanyRoles.Approver, null, null));
         await companies.AdminActivateAsync(company);
         return new Team(company, admin, approver, cc, other);
     }
@@ -51,7 +51,7 @@ public class CompanySpendControlTests(PostgresDatabaseFixture fixture) : IClassF
     {
         var buyer = await TestUsers.CreateAsync(fixture);
         await using var db = fixture.CreateContext();
-        await new CompanyService(db).AddMemberAsync(t.Admin, t.Company, new AddMemberRequest(buyer, CompanyRoles.Buyer, spendLimit, costCentres));
+        await new CompanyService(db).AddAcceptedMemberAsync(t.Admin, t.Company, new AddMemberRequest(buyer, CompanyRoles.Buyer, spendLimit, costCentres));
         return buyer;
     }
 

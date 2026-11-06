@@ -62,12 +62,12 @@ public sealed class ApprovalService(
         var approvers = (r.ApproverUserIds ?? []).Distinct().ToList();
         if (approvers.Count > 0)
         {
-            var eligible = await db.CompanyMembers.AsNoTracking()
-                .Where(m => m.CompanyId == companyId && m.IsActive && approvers.Contains(m.UserId)
+            var eligible = await db.CompanyMembers.AsNoTracking().Effective()
+                .Where(m => m.CompanyId == companyId && approvers.Contains(m.UserId)
                             && ((m.Roles & CompanyRoles.Approver) != 0 || (m.Roles & CompanyRoles.Admin) != 0))
                 .Select(m => m.UserId).ToListAsync(ct);
             if (eligible.Count != approvers.Count)
-                throw new ValidationException("approverUserIds", "Every approver must be an active member of this company with the Approver or Admin role.");
+                throw new ValidationException("approverUserIds", "Every approver must be an active member of this company, who has accepted the membership, with the Approver or Admin role.");
         }
         if (r.CostCentreId is { } cc && !await db.CostCentres.AnyAsync(c => c.Id == cc && c.CompanyId == companyId, ct))
             throw new ValidationException("costCentreId", "The cost centre does not belong to this company.");
@@ -97,8 +97,8 @@ public sealed class ApprovalService(
         var rule = ApprovalRule.Select(rules, r.AmountMinor, r.CostCentreId, categories);
         if (rule is null) return new SubmitApprovalResult(false, null);
 
-        var eligible = (await db.CompanyMembers.AsNoTracking()
-            .Where(m => m.CompanyId == companyId && m.IsActive && rule.ApproverUserIds.Contains(m.UserId)
+        var eligible = (await db.CompanyMembers.AsNoTracking().Effective()
+            .Where(m => m.CompanyId == companyId && rule.ApproverUserIds.Contains(m.UserId)
                         && ((m.Roles & CompanyRoles.Approver) != 0 || (m.Roles & CompanyRoles.Admin) != 0))
             .Select(m => m.UserId).ToListAsync(ct)).ToHashSet();
 

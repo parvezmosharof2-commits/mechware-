@@ -32,9 +32,9 @@ public class ApprovalServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         await using var db = fixture.CreateContext();
         var companies = new CompanyService(db);
         var company = (await companies.RegisterAsync(admin, new RegisterCompanyRequest("Approvals Ltd", "TL-A-1", NextBin(), null, null))).Id;
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(requester, CompanyRoles.Requester, null, null));
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(a1, CompanyRoles.Approver, null, null));
-        await companies.AddMemberAsync(admin, company, new AddMemberRequest(a2, CompanyRoles.Approver, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(requester, CompanyRoles.Requester, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(a1, CompanyRoles.Approver, null, null));
+        await companies.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(a2, CompanyRoles.Approver, null, null));
         return new Team(company, admin, requester, a1, a2);
     }
 
@@ -229,7 +229,7 @@ public class ApprovalServiceTests(PostgresDatabaseFixture fixture) : IClassFixtu
         var t = await SeedTeamAsync();
         var bystander = await TestUsers.CreateAsync(fixture);
         await using (var dbm = fixture.CreateContext())
-            await new CompanyService(dbm).AddMemberAsync(t.Admin, t.Company, new AddMemberRequest(bystander, CompanyRoles.Buyer, null, null));
+            await new CompanyService(dbm).AddAcceptedMemberAsync(t.Admin, t.Company, new AddMemberRequest(bystander, CompanyRoles.Buyer, null, null));
         await AddRuleAsync(t, 0, t.Approver1);
         var (db, svc) = Open();
         await using var _ = db;

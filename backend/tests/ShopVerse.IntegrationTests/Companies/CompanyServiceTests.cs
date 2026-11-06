@@ -41,7 +41,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
     {
         var user = await TestUsers.CreateAsync(fixture);
         var (db, svc) = Open();
-        await using (db) await svc.AddMemberAsync(admin, company, new AddMemberRequest(user, roles, null, null));
+        await using (db) await svc.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(user, roles, null, null));
         return user;
     }
 
@@ -52,7 +52,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         var (db, svc) = Open();
         await using var _ = db;
 
-        var ghost = () => svc.AddMemberAsync(admin, company, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Buyer, null, null));
+        var ghost = () => svc.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Buyer, null, null));
         await ghost.Should().ThrowAsync<ValidationException>();
 
         var erased = await TestUsers.CreateAsync(fixture);
@@ -62,7 +62,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
             await edit.SaveChangesAsync();
         }
 
-        var gone = () => svc.AddMemberAsync(admin, company, new AddMemberRequest(erased, CompanyRoles.Buyer, null, null));
+        var gone = () => svc.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(erased, CompanyRoles.Buyer, null, null));
         await gone.Should().ThrowAsync<ValidationException>();
     }
 
@@ -134,7 +134,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
             ["updateCc"] = () => svc.UpdateCostCentreAsync(outsider, company, ccId, new CostCentreRequest("X", "X", null)),
             ["removeCc"] = () => svc.RemoveCostCentreAsync(outsider, company, ccId),
             ["listMembers"] = () => svc.ListMembersAsync(outsider, company),
-            ["addMember"] = () => svc.AddMemberAsync(outsider, company, new AddMemberRequest(outsider, CompanyRoles.Admin, null, null)),
+            ["addMember"] = () => svc.AddAcceptedMemberAsync(outsider, company, new AddMemberRequest(outsider, CompanyRoles.Admin, null, null)),
             ["updateMember"] = () => svc.UpdateMemberAsync(outsider, company, memberId, new UpdateMemberRequest(CompanyRoles.Admin, null, null, true)),
             ["removeMember"] = () => svc.RemoveMemberAsync(outsider, company, memberId),
         };
@@ -183,7 +183,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         var ccB = await svc.AddCostCentreAsync(adminB, companyB, new CostCentreRequest("B1", "B", null));
 
         var someone = await TestUsers.CreateAsync(fixture);
-        var act = () => svc.AddMemberAsync(adminA, companyA, new AddMemberRequest(someone, CompanyRoles.Buyer, null, [ccB.Id]));
+        var act = () => svc.AddAcceptedMemberAsync(adminA, companyA, new AddMemberRequest(someone, CompanyRoles.Buyer, null, [ccB.Id]));
         await act.Should().ThrowAsync<ValidationException>();
     }
 
@@ -199,7 +199,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         (await svc.ListSitesAsync(buyer, company)).Should().BeEmpty();
         (await Assert.ThrowsAsync<ForbiddenException>(() => svc.AddSiteAsync(buyer, company, Site()))).Code.Should().Be("COMPANY_ROLE_REQUIRED");
         await Assert.ThrowsAsync<ForbiddenException>(() => svc.ListMembersAsync(buyer, company));
-        await Assert.ThrowsAsync<ForbiddenException>(() => svc.AddMemberAsync(buyer, company, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Admin, null, null)));
+        await Assert.ThrowsAsync<ForbiddenException>(() => svc.AddAcceptedMemberAsync(buyer, company, new AddMemberRequest(Guid.NewGuid(), CompanyRoles.Admin, null, null)));
 
         var memberId = (await svc.ListMembersAsync(admin, company)).Single(m => m.UserId == buyer).Id;
         await svc.UpdateMemberAsync(admin, company, memberId, new UpdateMemberRequest(CompanyRoles.Buyer, null, null, false));
@@ -303,7 +303,7 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         await svc.AddCostCentreAsync(otherAdmin, otherCompany, new CostCentreRequest("PROD", "Other tenant, same code is fine", null));
 
         var user = await TestUsers.CreateAsync(fixture);
-        await svc.AddMemberAsync(admin, company, new AddMemberRequest(user, CompanyRoles.Buyer, 25000, [cc.Id]));
+        await svc.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(user, CompanyRoles.Buyer, 25000, [cc.Id]));
         await svc.RemoveCostCentreAsync(admin, company, cc.Id);
         (await svc.ListMembersAsync(admin, company)).Single(m => m.UserId == user).CostCentreIds.Should().BeEmpty();
     }

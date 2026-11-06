@@ -94,6 +94,16 @@ export interface MemberDto {
   spendLimitMinor: number | null;
   isActive: boolean;
   costCentreIds: string[];
+  /** False while the membership is only an invitation the person has not accepted; it grants nothing until then. */
+  accepted: boolean;
+}
+
+/** A company that invited the signed-in user, waiting for their answer. */
+export interface InvitationDto {
+  companyId: string;
+  companyLegalName: string;
+  roles: number;
+  invitedAtUtc: string;
 }
 
 export interface SetCreditRequest {

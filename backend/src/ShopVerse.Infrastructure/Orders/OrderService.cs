@@ -1,3 +1,4 @@
+using ShopVerse.Infrastructure.Companies;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -613,8 +614,8 @@ public sealed partial class OrderService(
         {
             // Created with the order, in the same transaction and pointing at it: an order never waits for an approval that
             // does not exist, and no approval can be asked for an amount other than the order's.
-            var eligible = (await db.CompanyMembers.AsNoTracking()
-                .Where(m => m.CompanyId == request.CompanyId && m.IsActive && approvalRule.ApproverUserIds.Contains(m.UserId)
+            var eligible = (await db.CompanyMembers.AsNoTracking().Effective()
+                .Where(m => m.CompanyId == request.CompanyId && approvalRule.ApproverUserIds.Contains(m.UserId)
                             && ((m.Roles & CompanyRoles.Approver) != 0 || (m.Roles & CompanyRoles.Admin) != 0))
                 .Select(m => m.UserId).ToListAsync(ct)).ToHashSet();
             db.ApprovalRequests.Add(ApprovalRequest.Create(Guid.NewGuid(), request.UserId, PlaceOrderRequest.ApprovalSubjectType, order.Id,

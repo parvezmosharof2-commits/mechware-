@@ -99,6 +99,8 @@ internal sealed class CompanyMemberConfiguration : IEntityTypeConfiguration<Comp
         b.Property(m => m.Roles).HasColumnName("roles").HasConversion<int>();
         b.Property(m => m.SpendLimitMinor).HasColumnName("spend_limit");
         b.Property(m => m.IsActive).HasColumnName("is_active");
+        b.Property(m => m.AcceptedAtUtc).HasColumnName("accepted_at");
+        b.Ignore(m => m.IsAccepted);
         b.Property(m => m.CostCentreIds).HasColumnName("cost_centre_ids").HasColumnType("uuid[]");
 
         b.HasOne<Company>().WithMany().HasForeignKey(m => m.CompanyId).OnDelete(DeleteBehavior.Cascade);

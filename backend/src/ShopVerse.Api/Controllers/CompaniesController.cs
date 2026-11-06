@@ -32,6 +32,24 @@ public sealed class CompaniesController(ICompanyService companies, ICurrentUserS
     public async Task<IActionResult> Get(Guid companyId, CancellationToken ct) =>
         Ok(new { data = await companies.GetAsync(Actor, companyId, ct) });
 
+    // ----- invitations (the invited person's side, threat model v1 M2) -----
+
+    /// <summary>Companies that invited me and that I have not answered yet.</summary>
+    [HttpGet("invitations")]
+    public async Task<IActionResult> ListInvitations(CancellationToken ct) =>
+        Ok(new { data = await companies.ListInvitationsAsync(Actor, ct) });
+
+    [HttpPost("{companyId:guid}/invitations/accept")]
+    public async Task<IActionResult> AcceptInvitation(Guid companyId, CancellationToken ct) =>
+        Ok(new { data = await companies.AcceptInvitationAsync(Actor, companyId, ct) });
+
+    [HttpPost("{companyId:guid}/invitations/decline")]
+    public async Task<IActionResult> DeclineInvitation(Guid companyId, CancellationToken ct)
+    {
+        await companies.DeclineInvitationAsync(Actor, companyId, ct);
+        return NoContent();
+    }
+
     // ----- sites -----
 
     [HttpGet("{companyId:guid}/sites")]

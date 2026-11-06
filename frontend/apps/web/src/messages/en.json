@@ -167,7 +167,7 @@
       "addTitle": "Add member",
       "editTitle": "Edit member",
       "userId": "User ID",
-      "userIdHint": "Ask the person for the user ID shown in their profile. Invitations by e-mail are coming later.",
+      "userIdHint": "Ask the person for the user ID shown in their profile. They join only after accepting the invitation in their account.",
       "roles": "Roles",
       "spendLimit": "Spend limit per order (BDT, optional)",
       "costCentres": "Cost centres",
@@ -175,7 +175,8 @@
       "adminsOnly": "Only company admins can see the team.",
       "exists": "This user is already a member.",
       "lastAdmin": "A company must keep at least one active admin.",
-      "you": "You"
+      "you": "You",
+      "invited": "Invited"
     },
     "approvals": {
       "tab": "Approvals",
@@ -275,6 +276,15 @@
         "alreadyPending": "An approval for this item is already pending.",
         "noApprover": "No approver can decide on this request. Ask a company admin to update the rule."
       }
+    },
+    "invitations": {
+      "title": "Invitations",
+      "help": "These companies added you. Nothing changes for you until you accept, and you can decline.",
+      "accept": "Accept",
+      "decline": "Decline",
+      "accepted": "You joined the company.",
+      "declined": "Invitation declined.",
+      "failed": "Could not answer the invitation."
     }
   }
 }

@@ -144,10 +144,25 @@ public class CompanyTests
     [Fact]
     public void InactiveMember_HasNoRoles()
     {
-        var m = new CompanyMember(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CompanyRoles.Admin, null, null);
+        var m = new CompanyMember(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CompanyRoles.Admin, null, null, accepted: true);
         m.Has(CompanyRoles.Admin).Should().BeTrue();
         m.Update(CompanyRoles.Admin, null, null, isActive: false);
         m.Has(CompanyRoles.Admin).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AnInvitation_GrantsNothing_UntilAccepted_AndIsAcceptedOnce()
+    {
+        var m = new CompanyMember(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), CompanyRoles.Admin | CompanyRoles.Approver, null, null);
+        m.IsAccepted.Should().BeFalse();
+        m.Has(CompanyRoles.Admin).Should().BeFalse("an invitation the person has not accepted is not a membership");
+        m.Has(CompanyRoles.Approver).Should().BeFalse();
+
+        m.Accept(DateTime.UtcNow);
+        m.Has(CompanyRoles.Admin).Should().BeTrue();
+
+        var again = () => m.Accept(DateTime.UtcNow);
+        again.Should().Throw<ConflictException>().Which.Code.Should().Be("INVITATION_ALREADY_ACCEPTED");
     }
 
     [Fact]

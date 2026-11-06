@@ -4,6 +4,7 @@ import type {
   CompanyDto,
   CostCentreDto,
   CostCentreRequest,
+  InvitationDto,
   MemberDto,
   MyCompanyDto,
   PagedResult,
@@ -31,6 +32,12 @@ export function createCompaniesApi(client: MechWareApiClient) {
     register: (body: RegisterCompanyRequest) => client.fetch<Data<CompanyDto>>('/api/v1/companies', json('POST', body)),
     listMine: () => client.fetch<Data<MyCompanyDto[]>>('/api/v1/companies'),
     get: (companyId: string) => client.fetch<Data<CompanyDto>>(base(companyId)),
+
+    /** Companies that invited the signed-in user; a membership grants nothing until it is accepted. */
+    listInvitations: () => client.fetch<Data<InvitationDto[]>>('/api/v1/companies/invitations'),
+    acceptInvitation: (companyId: string) =>
+      client.fetch<Data<MyCompanyDto>>(`${base(companyId)}/invitations/accept`, json('POST')),
+    declineInvitation: (companyId: string) => client.fetch<unknown>(`${base(companyId)}/invitations/decline`, json('POST')),
 
     listSites: (companyId: string) => client.fetch<Data<SiteDto[]>>(`${base(companyId)}/sites`),
     addSite: (companyId: string, body: SiteRequest) => client.fetch<Data<SiteDto>>(`${base(companyId)}/sites`, json('POST', body)),
