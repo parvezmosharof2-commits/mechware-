@@ -1,13 +1,14 @@
+using System.Net;
+using System.Text.Json;
 using FluentAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using ShopVerse.Application.Orders;
 using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Common.Exceptions;
-using ShopVerse.Infrastructure.Catalog;
 using ShopVerse.Infrastructure.Inventory;
 using ShopVerse.Infrastructure.Orders;
 using ShopVerse.IntegrationTests.Support;
-using StackExchange.Redis;
 
 namespace ShopVerse.IntegrationTests.Catalog;
 
@@ -158,27 +159,35 @@ public class ProductPimTests(PostgresDatabaseFixture fixture) : IClassFixture<Po
             slug = p.Slug;
         }
 
-        using var redis = await ConnectionMultiplexer.ConnectAsync(TestInfra.RedisConnection);
-        await using var readDb = fixture.CreateContext();
-        var reader = new StorefrontCatalogReader(readDb, redis, TimeProvider.System);
-
-        var page = (await reader.GetProductBySlugAsync(slug)).Value!;
-
-        page.Lifecycle.Should().Be("nrnd");
-        page.Successor!.IsDropIn.Should().BeTrue();
-        page.Successor.Note.Should().Be("Same footprint and wiring.");
+        // Through the HTTP API, as a buyer sees it. (Not by building StorefrontCatalogReader on the fixture's context: its
+        // product query is compiled once per process, against whichever model runs it first.)
         await using var check = fixture.CreateContext();
         var successorSlug = await check.Products.Where(x => x.Id == successor.ProductId).Select(x => x.Slug).SingleAsync();
         var alternativeSlug = await check.Products.Where(x => x.Id == alternative.ProductId).Select(x => x.Slug).SingleAsync();
-        page.Successor.Product.Slug.Should().Be(successorSlug);
-        page.Alternatives!.Select(a => a.Slug).Should().Equal([alternativeSlug], "an archived alternative is not linked");
-        page.Variants.Single().MinOrderQty.Should().Be(10);
-        page.Variants.Single().PackSize.Should().Be(5);
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
+        {
+            b.UseSetting("ConnectionStrings:DefaultConnection", fixture.ConnectionString);
+            b.UseSetting("ConnectionStrings:Redis", TestInfra.RedisConnection);
+        });
+        var client = factory.CreateClient();
 
-        // The cached copy (second read comes from Redis) carries the same fields.
-        var cached = (await reader.GetProductBySlugAsync(slug)).Value!;
-        cached.Lifecycle.Should().Be("nrnd");
-        cached.Successor!.Product.Slug.Should().Be(successorSlug);
-        cached.Variants.Single().PackSize.Should().Be(5);
+        foreach (var source in new[] { "database", "redis" })   // the second read is served from the cached copy
+        {
+            var response = await client.GetAsync($"/api/v1/storefront/products/{slug}");
+            response.StatusCode.Should().Be(HttpStatusCode.OK, source);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var page = doc.RootElement.GetProperty("data");
+
+            page.GetProperty("lifecycle").GetString().Should().Be("nrnd", source);
+            var next = page.GetProperty("successor");
+            next.GetProperty("isDropIn").GetBoolean().Should().BeTrue(source);
+            next.GetProperty("note").GetString().Should().Be("Same footprint and wiring.", source);
+            next.GetProperty("product").GetProperty("slug").GetString().Should().Be(successorSlug, source);
+            page.GetProperty("alternatives").EnumerateArray().Select(a => a.GetProperty("slug").GetString())
+                .Should().Equal([alternativeSlug], "an archived alternative is not linked ({0})", source);
+            var variant = page.GetProperty("variants")[0];
+            variant.GetProperty("minOrderQty").GetInt32().Should().Be(10, source);
+            variant.GetProperty("packSize").GetInt32().Should().Be(5, source);
+        }
     }
 }

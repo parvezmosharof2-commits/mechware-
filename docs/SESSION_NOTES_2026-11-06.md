@@ -34,10 +34,16 @@
 
 ## ২. বাকি কাজ (পরের বার এখান থেকে শুরু)
 
-1. **H4-এর mutation check শেষ করা।**
-   - দুবার শুরু করে থামাতে হয়েছে, কারণ প্রতিটা mutant-এ build সহ দেড় মিনিটের মতো লাগে।
-   - একটা আলাদা git worktree-তে background-এ পুরোটা চালাতে হবে।
-   - কোনো mutant বেঁচে গেলে সেটার জন্য টেস্ট যোগ করতে হবে।
+1. ~~**H4-এর mutation check শেষ করা।**~~ **হয়েছে (২০২৬-১১-০৬, দ্বিতীয় সেশন):**
+   - আলাদা worktree-তে ৩৩টা mutant চালানো হয়েছে, প্রতিটার জন্য ৫ মিনিটের timeout।
+   - ২৫টা আগে থেকেই কোনো টেস্টে ধরা পড়ত। এর মধ্যে ৫টায় টেস্ট আটকে যায় (hang), সেটাকেও "ধরা পড়েছে" হিসেবে গোনা হয়েছে।
+   - বাকি ৮টার প্রতিটার জন্য নতুন টেস্ট যোগ হয়েছে। প্রতিটা নতুন টেস্ট তার mutant-এর অধীনে ব্যর্থ হয়।
+   - ৮টা ফাঁক:
+     - কাটা (truncated) ciphertext-এ ভুল ধরনের exception;
+     - blind index-এর key derivation pinned ছিল না (এখন known-answer test);
+     - fingerprint না থাকলে সাধারণ save-এ আবার তৈরি হতো কিনা, টেস্ট ছিল না;
+     - audit log-এ BIN fingerprint যাচ্ছে কিনা, টেস্ট ছিল না;
+     - backfill-এর চারটা শর্ত: fingerprint নেই, শুধু TIN পুরনো, শুধু licence পুরনো, ২০০-র বেশি row।
 2. **ছোট বাকি কাজ (নথিভুক্ত, ঝুঁকি কম):**
    - ~~**M2:** প্রত্যাখ্যান করা আমন্ত্রণ মনে রাখা হয় না।~~ **ঠিক হয়েছে:** ৩০ দিন একই company আবার আমন্ত্রণ পাঠাতে পারে না।
    - **H3:** step-up কোড action ব্যর্থ হলেও খরচ হয়ে যায়। **ইচ্ছাকৃতভাবে এভাবেই রাখা হয়েছে (accepted):** কোড ফেরত দিলে কেউ সেটা আবার ব্যবহার (replay) করতে পারত।
@@ -47,6 +53,29 @@
    - **M5:** CSP violation report **হয়েছে** (`/api/csp-report`)। Style-এ এখনো `unsafe-inline` আছে। CSS দিয়ে code চালানো যায় না, তাই এটা মেনে নেওয়া ঝুঁকি।
 3. **Threat model v2-এর বাকি অংশ:** Q1–Q9 (quotes) আর I1–I10 (invoicing)। এগুলো ওই মডিউলগুলো তৈরি হওয়ার সাথে সাথে করতে হবে (রোডম্যাপের স্প্রিন্ট ৭–৯ আর ১০–১২)।
 4. **রোডম্যাপের পরের স্প্রিন্ট:** `PROGRESS.md` আর `docs/MASTER_PLAN.md` দেখুন। স্প্রিন্ট ১–২-এ ক্রেতা সাক্ষাৎকার বাকি।
+
+## ২ক. দ্বিতীয় সেশনে যা হয়েছে (২০২৬-১১-০৬)
+
+- **স্প্রিন্ট ১–২ বন্ধ:**
+  - মালিকের সাক্ষাৎকার নেওয়ার লোক নেই। তাই ৫টা AI agent কাল্পনিক ক্রেতা হয়ে উত্তর দিয়েছে: `docs/discovery/`, সারাংশ `SYNTHESIS.md`-এ।
+  - মালিক সাইন-অফ আর threat model v2-এর মানুষের রিভিউ মওকুফ করেছেন।
+  - সাক্ষাৎকারগুলো **অনুমান, প্রমাণ নয়।**
+- **স্প্রিন্ট ৩–৪ (PIM), প্রথম অংশ:**
+  - lifecycle (active / nrnd / obsolete);
+  - উত্তরসূরি পার্ট, সাথে drop-in কিনা আর কী বদলাতে হবে তার নোট। শুধু দেখানো হয়, অর্ডারে নিজে থেকে বসানো হয় না;
+  - বিকল্প পার্ট, সর্বোচ্চ ১০টা;
+  - MOQ আর pack size, DB check constraint সহ। অর্ডারে ভুল পরিমাণ এলে 400, পরিমাণ রাউন্ড করা হয় না;
+  - পণ্যের পাতায় নতুন সব ফিল্ড।
+  - PIM-এর ২১টা mutant-এর সবগুলো টেস্টে ধরা পড়ে।
+- **শিক্ষা:**
+  - `StorefrontCatalogReader`-এর product query একটা static compiled query। ফলে process-এ প্রথম যে model দিয়ে এটা চলে, সেই model-এর সাথেই বাঁধা পড়ে যায়।
+  - টেস্টে reader-কে fixture-এর context দিয়ে সরাসরি বানালে পরে API-র অনুরোধে 500 আসে।
+  - তাই storefront-এর টেস্ট সবসময় HTTP দিয়ে চালাতে হবে।
+- **শেষ রান:** unit ৪৩৬, integration ৩৮২, সব সবুজ।
+- **পরের ধাপ (PIM-এর বাকি অংশ):**
+  - unit-সহ সংখ্যাভিত্তিক attribute (ETIM ধাঁচে);
+  - datasheet আর CAD আপলোড: magic-byte, ClamAV, signed URL। এর জন্য storage আর ClamAV-এর ব্যবস্থা লাগবে;
+  - staff-এর জন্য product edit API।
 
 ## ৩. মালিকের সিদ্ধান্ত বা কাজ দরকার
 
@@ -68,7 +97,8 @@
 
 ## ৪. আবার শুরু করার আগে
 
-- **Branch:** `claude/practical-gauss-qjujs4`, প্রতিটা merge-এর পর `main`-এর সাথে sync করা।
+- **Branch:** `claude/inspiring-galileo-lqeixj` (দ্বিতীয় সেশন)। আগের branch ছিল `claude/practical-gauss-qjujs4`।
+- **এই container-এ .NET নেই:** `apt-get install -y dotnet-sdk-10.0` দিয়ে বসাতে হয়, dot.net-এর install script এখানে আটকে যায়। EF tool: `dotnet tool install -g dotnet-ef`। Migration-এর startup project হবে `ShopVerse.Infrastructure`।
 - **লোকাল টেস্টের জন্য:**
   - PostgreSQL 16-এ একটা user লাগবে (`shopverse` / `shopverse_secret`), আর Redis চালু থাকতে হবে।
   - চালানোর কমান্ড: `MECHWARE_TEST_PG=... dotnet test backend/ShopVerse.slnx`।
