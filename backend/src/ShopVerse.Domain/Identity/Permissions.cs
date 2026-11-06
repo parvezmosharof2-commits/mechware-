@@ -15,6 +15,8 @@ public static class Permissions
     public const string CatalogCreate = "catalog.create";
     public const string CatalogUpdateOwn = "catalog.update_own";
     public const string CatalogModerate = "catalog.moderate";
+    /// <summary>Edit any product's product-information data (supply status, successor, alternatives, order units).</summary>
+    public const string CatalogManage = "catalog.manage";
 
     public const string SellersManageOwn = "sellers.manage_own";
     public const string SellersKycReview = "sellers.kyc_review";
@@ -61,6 +63,7 @@ public static class Permissions
                 CatalogCreate,
                 CatalogUpdateOwn,
                 CatalogModerate,
+                CatalogManage,
                 SellersManageOwn,
                 SellersKycReview,
                 UsersManage,

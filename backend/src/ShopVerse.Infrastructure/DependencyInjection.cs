@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.TryAddSingleton<IStorefrontCacheInvalidator, RedisStorefrontCacheInvalidator>();
         services.TryAddScoped<IInventoryService, InventoryService>();
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
+        services.TryAddScoped<ICatalogAdminService, CatalogAdminService>();
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
