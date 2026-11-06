@@ -14,8 +14,14 @@ public sealed record StockDto(int Available, string Status);
 public sealed record VariantPriceDto(
     MoneyDto Price, MoneyDto? CompareAt, int DiscountPercent, bool SaleActive, bool TaxIncluded, MoneyDto? Tax);
 
+/// <param name="MinOrderQty">Smallest quantity per order line; always whole packs.</param>
+/// <param name="PackSize">A line's quantity must be a multiple of this.</param>
 public sealed record VariantDto(
-    Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock);
+    Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock,
+    int MinOrderQty, int PackSize);
+
+/// <summary>The product that replaces a phased-out one; only shown while it is itself on sale.</summary>
+public sealed record SuccessorDto(string Slug, string TitleEn, string TitleBn);
 
 public sealed record ProductDetailDto(
     Guid Id,
@@ -39,7 +45,9 @@ public sealed record ProductDetailDto(
     string? DatasheetUrl,
     string? CadModelUrl,
     IReadOnlyList<MediaDto> Media,
-    IReadOnlyList<VariantDto> Variants);
+    IReadOnlyList<VariantDto> Variants,
+    string SupplyStatus,
+    SuccessorDto? Successor);
 
 public sealed record ProductCardDto(
     Guid Id, string Slug, string TitleEn, string TitleBn, string? BrandName, string? ImageUrl, string? ImageAlt,

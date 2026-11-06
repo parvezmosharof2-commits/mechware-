@@ -11,6 +11,13 @@ public enum ProductStatus { Draft = 1, PendingReview = 2, Active = 3, Rejected =
 public enum ProductCondition { BrandNew = 1, Refurbished = 2, Used = 3 }
 
 /// <summary>
+/// Whether the manufacturer still supplies the part (PIM): <see cref="Nrnd"/> is "not recommended for new designs" (still
+/// sold, but a successor should be used for new work); <see cref="Obsolete"/> is end of life. Separate from
+/// <see cref="ProductStatus"/>, which is about publishing on MECHWARE.
+/// </summary>
+public enum SupplyStatus { Active = 1, Nrnd = 2, Obsolete = 3 }
+
+/// <summary>
 /// Product aggregate root. Lifecycle: Draft → PendingReview → Active | Rejected → Archived.
 /// A rejected product returns to Draft for correction; an archived product can be restored to Draft.
 /// </summary>
@@ -51,6 +58,9 @@ public sealed class Product : AggregateRoot<Guid>
     public int RatingCount { get; private set; }
     public int SoldCount { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
+    public SupplyStatus SupplyStatus { get; private set; } = SupplyStatus.Active;
+    /// <summary>The product that replaces this one; only for a product that is not <see cref="SupplyStatus.Active"/>.</summary>
+    public Guid? SuccessorProductId { get; private set; }
 
     public IReadOnlyCollection<ProductVariant> Variants => _variants.AsReadOnly();
     public IReadOnlyCollection<ProductMedia> Media => _media.AsReadOnly();
@@ -114,6 +124,42 @@ public sealed class Product : AggregateRoot<Guid>
         LengthCm = lengthCm;
         WidthCm = widthCm;
         HeightCm = heightCm;
+        MarkUpdated();
+    }
+
+    /// <summary>
+    /// Sets the supply status and, for a product at or near end of life, the product that replaces it. The successor must
+    /// be another of the same seller's products, published and itself in supply, so a buyer is never sent to a dead end or
+    /// to a different seller's catalogue. Back in supply, the successor is cleared.
+    /// </summary>
+    public void SetSupply(SupplyStatus status, Product? successor)
+    {
+        EnsureEditable();
+        if (!Enum.IsDefined(status)) throw new ValidationException("supplyStatus", "Unknown supply status.");
+        if (successor is not null)
+        {
+            if (status == SupplyStatus.Active)
+                throw new ValidationException("successorProductId", "Only a product that is being phased out can name a successor.");
+            if (successor.Id == Id)
+                throw new ValidationException("successorProductId", "A product cannot be its own successor.");
+            if (successor.SellerId != SellerId)
+                throw new ValidationException("successorProductId", "The successor must be a product of the same seller.");
+            if (successor.Status != ProductStatus.Active || successor.DeletedAtUtc is not null || successor.SupplyStatus != SupplyStatus.Active)
+                throw new ValidationException("successorProductId", "The successor must be published and still in supply.");
+        }
+
+        SupplyStatus = status;
+        SuccessorProductId = successor?.Id; // never set for an Active product: refused above
+        MarkUpdated();   // raises ProductUpdatedEvent, which evicts the cached product page
+    }
+
+    /// <summary>Sets one SKU's order units (see <see cref="ProductVariant.SetOrderUnits"/>) and refreshes the product page.</summary>
+    public void SetOrderUnits(Guid variantId, int minOrderQty, int packSize)
+    {
+        EnsureEditable();
+        var variant = _variants.FirstOrDefault(v => v.Id == variantId)
+                      ?? throw new ValidationException("variantId", "No such SKU on this product.");
+        variant.SetOrderUnits(minOrderQty, packSize);
         MarkUpdated();
     }
 

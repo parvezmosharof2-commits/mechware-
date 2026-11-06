@@ -90,6 +90,12 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         var seller = await _db.Sellers.AsNoTracking().Where(s => s.Id == product.SellerId)
             .Select(s => new SellerSummaryDto(s.StoreName, s.Slug, s.LogoUrl, s.RatingAvg, s.RatingCount)).FirstAsync(ct);
 
+        // Only a successor that is itself on sale; otherwise the page would point the buyer at a dead end.
+        var successor = product.SuccessorProductId is null ? null
+            : await _db.Products.AsNoTracking()
+                .Where(p => p.Id == product.SuccessorProductId && p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .Select(p => new SuccessorDto(p.Slug, p.TitleEn, p.TitleBn)).FirstOrDefaultAsync(ct);
+
         var category = await _db.Categories.AsNoTracking().FirstAsync(c => c.Id == product.CategoryId, ct);
         var slugs = category.MaterializedPath.Split('.').Skip(1).ToArray();
         var chain = await _db.Categories.AsNoTracking().Where(c => slugs.Contains(c.Slug)).OrderBy(c => c.Depth)
@@ -118,6 +124,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             DatasheetUrl = product.DatasheetUrl,
             CadModelUrl = product.CadModelUrl,
             VatRate = category.VatRate,
+            SupplyStatus = SnakeCaseName(product.SupplyStatus),
+            Successor = successor,
             Media = product.Media.OrderBy(m => m.Position)
                 .Select(m => new MediaDto(m.Url, m.AltText, m.Type == MediaType.Video ? "video" : "image", m.Width, m.Height, m.BlurDataUrl, m.VariantId))
                 .ToList(),
@@ -134,7 +142,9 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
                     CompareAtMinor = v.CompareAtPriceMinor,
                     SalePriceMinor = v.SalePriceMinor,
                     SaleStartsAtUtc = v.SaleStartsAtUtc,
-                    SaleEndsAtUtc = v.SaleEndsAtUtc
+                    SaleEndsAtUtc = v.SaleEndsAtUtc,
+                    MinOrderQty = v.MinOrderQty,
+                    PackSize = v.PackSize
                 }).ToList()
         };
     }
@@ -179,7 +189,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         d.RatingCount, d.SoldCount, d.DatasheetUrl, d.CadModelUrl, d.Media,
         d.Variants.Select(v => new VariantDto(
             v.Id, v.Sku, v.Options, v.IsDefault, PriceFor(v, d.VatRate, nowUtc),
-            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0))).ToList());
+            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize)).ToList(),
+        d.SupplyStatus, d.Successor);
 
     internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
     {
@@ -215,6 +226,13 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         ProductCondition.BrandNew => "brand_new",
         ProductCondition.Refurbished => "refurbished",
         _ => "used"
+    };
+
+    private static string SnakeCaseName(SupplyStatus s) => s switch
+    {
+        SupplyStatus.Nrnd => "nrnd",
+        SupplyStatus.Obsolete => "obsolete",
+        _ => "active"
     };
 
     private static TimeSpan Jitter(TimeSpan ttl) => ttl + TimeSpan.FromSeconds(Random.Shared.Next(0, 30));
@@ -354,6 +372,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public decimal VatRate { get; set; }
         public List<MediaDto> Media { get; set; } = [];
         public List<CachedVariant> Variants { get; set; } = [];
+        public string SupplyStatus { get; set; } = "active";
+        public SuccessorDto? Successor { get; set; }
     }
 
     internal sealed class CachedVariant
@@ -368,6 +388,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public long? SalePriceMinor { get; set; }
         public DateTime? SaleStartsAtUtc { get; set; }
         public DateTime? SaleEndsAtUtc { get; set; }
+        public int MinOrderQty { get; set; } = 1;
+        public int PackSize { get; set; } = 1;
     }
 
     #endregion

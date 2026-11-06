@@ -100,6 +100,76 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
     }
 
     [PostgresAndRedisFact]
+    public async Task ProductPage_ShowsSupplyStatus_ItsPublicSuccessor_AndOrderUnits()
+    {
+        // Two products of one seller: the older one is phased out in favour of the newer one.
+        Guid oldId, newId;
+        string oldSlug, newSlug;
+        await using (var db = _seed.Db.CreateContext())
+        {
+            var pair = await db.Products.AsNoTracking()
+                .Where(p => p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .GroupBy(p => p.SellerId).Where(g => g.Count() >= 2)
+                .Select(g => g.OrderBy(p => p.Slug).Select(p => new { p.Id, p.Slug }).Take(2).ToList())
+                .FirstAsync();
+            (oldId, oldSlug, newId, newSlug) = (pair[0].Id, pair[0].Slug, pair[1].Id, pair[1].Slug);
+        }
+
+        var client = _factory!.CreateClient();
+        using (var before = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{oldSlug}")))
+        {
+            var d = before.RootElement.GetProperty("data");
+            d.GetProperty("supplyStatus").GetString().Should().Be("active");
+            d.GetProperty("successor").ValueKind.Should().Be(JsonValueKind.Null);
+            d.GetProperty("variants")[0].GetProperty("minOrderQty").GetInt32().Should().Be(1);
+        }
+
+        await using (var db = _seed.Db.CreateContext())
+        {
+            var old = await db.Products.Include(p => p.Variants).SingleAsync(p => p.Id == oldId);
+            var successor = await db.Products.SingleAsync(p => p.Id == newId);
+            old.SetSupply(SupplyStatus.Nrnd, successor);
+            old.SetOrderUnits(old.Variants.OrderByDescending(v => v.IsDefault).First().Id, 20, 10);
+            await db.SaveChangesAsync();
+        }
+        // The change raises ProductUpdatedEvent (unit-tested), whose relay evicts the page. Relaying here would drain the shared
+        // outbox that ChangedSlug_* counts, so evict directly.
+        await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(oldSlug));
+
+        using (var after = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{oldSlug}")))
+        {
+            var d = after.RootElement.GetProperty("data");
+            d.GetProperty("supplyStatus").GetString().Should().Be("nrnd");
+            d.GetProperty("successor").GetProperty("slug").GetString().Should().Be(newSlug);
+            d.GetProperty("successor").GetProperty("titleEn").GetString().Should().NotBeNullOrEmpty();
+            var variant = d.GetProperty("variants")[0];
+            variant.GetProperty("minOrderQty").GetInt32().Should().Be(20);
+            variant.GetProperty("packSize").GetInt32().Should().Be(10);
+        }
+
+        // A successor that is no longer on sale is not shown: the buyer is never sent to a dead page.
+        await using (var db = _seed.Db.CreateContext())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'archived' WHERE id = {newId}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET updated_at = now() WHERE id = {oldId}");
+        }
+        await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(oldSlug));
+        using (var hidden = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{oldSlug}")))
+            hidden.RootElement.GetProperty("data").GetProperty("successor").ValueKind.Should().Be(JsonValueKind.Null);
+
+        // Leave the shared seed as it was for the other tests.
+        await using (var db = _seed.Db.CreateContext())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'active' WHERE id = {newId}");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL WHERE id = {oldId}");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE product_variants SET min_order_qty = 1, pack_size = 1 WHERE product_id = {oldId}");
+        }
+        await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(oldSlug));
+    }
+
+    [PostgresAndRedisFact]
     public async Task UnknownSlug_Returns404Problem_AndIsNegativelyCached()
     {
         var client = _factory!.CreateClient();
