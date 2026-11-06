@@ -176,6 +176,43 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
                 .Should().Be(current.BlindIndex(bin));
     }
 
+    [PostgresFact]
+    public async Task TheBackfill_StopsInsteadOfLooping_WhenARowCannotBeRewritten()
+    {
+        var owner = await TestUsers.CreateAsync(fixture);
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Stuck Ltd", "TL-STUCK", NextBin(), null, null))).Id;
+
+        // The row reads as written before encryption, and a trigger (this row only) undoes every rewrite of it.
+        string trigger = "stuck_" + id.ToString("N")[..12];
+        await ExecAsync($"""
+            UPDATE companies SET trade_licence_no = 'TL-STUCK' WHERE id = '{id}';
+            CREATE FUNCTION {trigger}() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN NEW.trade_licence_no := OLD.trade_licence_no; RETURN NEW; END $$;
+            CREATE TRIGGER {trigger} BEFORE UPDATE ON companies FOR EACH ROW WHEN (OLD.id = '{id}') EXECUTE FUNCTION {trigger}();
+            """);
+        try
+        {
+            await using var db = fixture.CreateContext();
+            var run = () => FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+            (await run.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*could not be re-encrypted*");
+        }
+        finally
+        {
+            await ExecAsync($"DROP TRIGGER {trigger} ON companies; DROP FUNCTION {trigger}(); " +
+                            $"DELETE FROM company_members WHERE company_id = '{id}'; DELETE FROM companies WHERE id = '{id}';");
+        }
+    }
+
+    private async Task ExecAsync(string sql)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     private sealed class FixedUser(Guid id) : ShopVerse.Application.Identity.ICurrentUserService
     {
         public Guid? UserId => id;
