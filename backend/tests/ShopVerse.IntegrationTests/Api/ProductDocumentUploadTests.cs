@@ -368,7 +368,6 @@ public sealed class ProductDocumentUploadTests : IDisposable
         var factory = Factory();
         var (product, _) = await PublishedProductAsync(factory);
         using var admin = await AdminAsync(factory);
-        var before = Directory.GetParent(_storage)!.GetFiles("*.pdf", SearchOption.AllDirectories).Select(f => f.FullName).ToHashSet();
 
         var upload = await admin.PostAsync(Url(product), Form("datasheet", "../../../../tmp/evil.pdf", Pdf("x")));
 
@@ -379,9 +378,17 @@ public sealed class ProductDocumentUploadTests : IDisposable
         Path.GetFullPath(stored).Should().StartWith(Path.GetFullPath(_storage));
         Path.GetFileName(stored).Should().NotContain("evil");
         Regex.IsMatch(Path.GetFileName(stored), "^[0-9a-f]{32}\\.pdf$").Should().BeTrue();
-        Directory.GetParent(_storage)!.GetFiles("evil*", SearchOption.TopDirectoryOnly).Should().BeEmpty();
-        Directory.GetParent(_storage)!.GetFiles("*.pdf", SearchOption.AllDirectories).Select(f => f.FullName).ToHashSet()
-            .Except(before).Should().OnlyContain(f => f.StartsWith(Path.GetFullPath(_storage)), "no new file anywhere else");
+
+        // Every place a name like that could have put the file if it had been used as a path. Named one by one: the temp
+        // directory is shared and may hold directories this process may not read, so it is not searched.
+        string[] wherever =
+        [
+            Path.Combine(_storage, "evil.pdf"), Path.Combine(_storage, "products", "evil.pdf"),
+            Path.GetFullPath(Path.Combine(_storage, "..", "evil.pdf")), Path.GetFullPath(Path.Combine(_storage, "..", "..", "evil.pdf")),
+            Path.GetFullPath(Path.Combine(_storage, "../../../../tmp/evil.pdf")), Path.Combine(Path.GetTempPath(), "evil.pdf"),
+            Path.Combine(Directory.GetCurrentDirectory(), "evil.pdf")
+        ];
+        wherever.Where(File.Exists).Should().BeEmpty("the client's name is a label, never a path");
     }
 
     [PostgresFact]
