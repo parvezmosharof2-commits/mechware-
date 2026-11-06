@@ -31,6 +31,7 @@ public sealed class AdminRefundsController(IRefundService refunds, ICurrentUserS
 
     [HttpPost("refunds/{refundId:guid}/approve")]
     [RequirePermission(Permissions.PaymentsRefundApprove)]
+    [RequireStepUp("refund.approve")]
     public async Task<IActionResult> Approve(Guid refundId, CancellationToken ct) => Ok(new { data = await refunds.ApproveAsync(Actor, refundId, ct) });
 
     [HttpPost("refunds/{refundId:guid}/reject")]

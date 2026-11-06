@@ -684,6 +684,49 @@ public sealed class IdentityService : IIdentityService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task VerifyStepUpAsync(Guid userId, string? code, string action, string? target = null, string? clientIp = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default)
+    {
+        var now = utcNowOverride ?? DateTime.UtcNow;
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new ForbiddenException("STEP_UP_REQUIRED", "This action needs a fresh code from your authenticator app.");
+        }
+
+        User user = await GetUserByIdOrThrowAsync(userId, cancellationToken);
+        if (SessionRefusal(user, now) is { } refusal)
+        {
+            throw refusal;
+        }
+
+        // Only a current authenticator code: a recovery code is for a lost phone, not for confirming money moves. The
+        // replay guard means one code confirms one action.
+        if (user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TwoFactorSecret)
+            && _totpService.TryVerifyTotpCode(user.TwoFactorSecret, code.Trim(), new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
+        {
+            user.RecordTotpTimeStepUsed(step, now);
+            user.RecordStepUpSuccess(now);
+        }
+        else
+        {
+            RecordAudit(user.Id, clientIp, "user.step_up_failed", "users", user.Id.ToString(), null, new { action, target });
+            if (user.RecordStepUpFailure(now))
+            {
+                // Someone holding this session cannot produce the authenticator code: end every session. The owner can
+                // still sign in (with password and authenticator); a thief has to start again.
+                await RevokeAllUserSessionsAsync(user.Id, now, cancellationToken);
+                RecordAudit(user.Id, clientIp, "security.sessions_revoked_step_up_failures", "users", user.Id.ToString(), null, new { action, target });
+                await _db.SaveChangesAsync(cancellationToken);
+                throw new UnauthorizedAccessException("Too many wrong authenticator codes. Please sign in again.");
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+            throw new ForbiddenException("STEP_UP_FAILED", "That authenticator code is not right, or was already used. Use the next code.");
+        }
+
+        RecordAudit(user.Id, clientIp, "user.step_up_passed", "users", user.Id.ToString(), null, new { action, target });
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
         Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default)
     {

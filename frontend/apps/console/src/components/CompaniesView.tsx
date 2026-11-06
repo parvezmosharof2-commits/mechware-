@@ -9,7 +9,7 @@ import {
   buildCreditRequest, creditUsagePercent, creditTermsValue,
   type CompanyDto, type CompanyStatus, type CreditFormError, type CreditTermsName, type CreditTermsValue
 } from '@mechware/api-client';
-import { companiesApi, problemMessage, problemStatus } from '../lib/api';
+import { companiesApi, problemCode, problemMessage, problemStatus } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
@@ -33,6 +33,8 @@ function StatusBadge({ status }: { status: CompanyStatus }) {
 
 function errorText(err: unknown): string {
   const status = problemStatus(err);
+  // A step-up refusal is a 403 too, but it is about the code, not the role: show what the API says.
+  if (status === 403 && (problemCode(err) ?? '').startsWith('STEP_UP_')) return problemMessage(err, 'The authenticator code was not accepted.');
   if (status === 403) return 'Your role does not allow this action.';
   if (status === 404) return 'This company no longer exists.';
   if (status === 409 || status === 400) return problemMessage(err, 'The change was rejected.');
@@ -93,9 +95,13 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
   const [fieldError, setFieldError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [stepUpCode, setStepUpCode] = React.useState('');
+  const [codeError, setCodeError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!company) return;
+    setStepUpCode('');
+    setCodeError(null);
     setTerms(creditTermsValue(company.creditTerms));
     setLimit(company.creditLimit.minorUnits === 0 ? '' : String(company.creditLimit.minorUnits / 100));
     setFieldError(null);
@@ -111,15 +117,22 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
       return;
     }
     setFieldError(null);
+    if (!/^\d{6}$/.test(stepUpCode.trim())) {
+      setCodeError('Enter the 6-digit code your authenticator app shows now.');
+      return;
+    }
+    setCodeError(null);
     setBusy(true);
     setError(null);
     try {
-      await companiesApi.admin.setCredit(company.id, built.request);
+      await companiesApi.admin.setCredit(company.id, built.request, stepUpCode.trim());
       toast({ title: 'Credit terms saved.', variant: 'success' });
       onDone();
       onClose();
     } catch (err) {
       setError(errorText(err));
+      // A code works once; the next attempt needs the next one.
+      setStepUpCode('');
     } finally {
       setBusy(false);
     }
@@ -150,6 +163,15 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
             </select>
           </div>
           <Input label="Credit limit (BDT)" value={limit} onChange={(e) => setLimit(e.target.value)} error={fieldError ?? undefined} inputMode="decimal" />
+          <Input
+            label="Authenticator code"
+            helperText="Changing credit needs a fresh code, even when you are signed in."
+            value={stepUpCode}
+            onChange={(e) => setStepUpCode(e.target.value)}
+            error={codeError ?? undefined}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+          />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
             <Button type="submit" isLoading={busy}>Save</Button>

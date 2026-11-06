@@ -1678,6 +1678,10 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<int>("StepUpFailedAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("step_up_failed_attempts");
+
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("boolean")
                         .HasColumnName("two_factor_enabled");

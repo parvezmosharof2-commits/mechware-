@@ -37,6 +37,29 @@ public sealed class User : AggregateRoot<Guid>
     public Guid? SellerId { get; private set; }
 
     public int FailedLoginAttempts { get; private set; }
+
+    /// <summary>
+    /// Wrong step-up codes in a row. Kept apart from the login lockout: a stolen session guessing codes must not lock the
+    /// real owner out of signing in; instead, too many ends the sessions.
+    /// </summary>
+    public int StepUpFailedAttempts { get; private set; }
+
+    public const int MaxStepUpFailures = 5;
+
+    /// <summary>Counts a wrong step-up code; true when the limit is reached (the counter then starts again).</summary>
+    public bool RecordStepUpFailure(DateTime utcNow)
+    {
+        UpdatedAtUtc = utcNow;
+        if (++StepUpFailedAttempts < MaxStepUpFailures) return false;
+        StepUpFailedAttempts = 0;
+        return true;
+    }
+
+    public void RecordStepUpSuccess(DateTime utcNow)
+    {
+        StepUpFailedAttempts = 0;
+        UpdatedAtUtc = utcNow;
+    }
     public DateTime? LockoutUntilUtc { get; private set; }
     public DateTime? EmailVerifiedAtUtc { get; private set; }
     public DateTime? PhoneVerifiedAtUtc { get; private set; }
