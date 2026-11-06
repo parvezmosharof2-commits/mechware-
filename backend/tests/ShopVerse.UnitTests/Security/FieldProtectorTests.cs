@@ -168,4 +168,27 @@ public class FieldProtectorTests
         var previous = () => new FieldProtector(new byte[32], [new byte[16]]);
         previous.Should().Throw<ArgumentException>();
     }
+
+    [Fact]
+    public void TheKeyDerivation_IsPinned_SoStoredIndexesKeepMatching()
+    {
+        // Known answer, computed independently (RFC 5869 HKDF-SHA256, then HMAC-SHA256). If the derivation or the use of the
+        // separate index key changes, every bin_index already in the database stops matching and duplicate BINs slip through.
+        var pinned = new FieldProtector([.. Enumerable.Range(0, 32).Select(i => (byte)i)]);
+        pinned.CurrentPrefix.Should().Be("enc:v2:7dd75252:");
+        pinned.BlindIndex(" bin-000123 ").Should().Be("74827eefb70818eac6fee0cdda2a62f8a69c3480b9b44968206e6c47e0795e12");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(27)]   // one byte short of nonce + tag
+    public void ATruncatedValue_IsRefusedAsCorrupt_NotAsAnUnrelatedError(int bytes)
+    {
+        // Callers treat CryptographicException as "this stored value is unreadable"; an OverflowException from a negative
+        // buffer length would escape that handling.
+        string stored = P.CurrentPrefix + Convert.ToBase64String(new byte[bytes]);
+        var act = () => P.Unprotect(stored);
+        act.Should().Throw<CryptographicException>().WithMessage("*truncated*");
+    }
 }
