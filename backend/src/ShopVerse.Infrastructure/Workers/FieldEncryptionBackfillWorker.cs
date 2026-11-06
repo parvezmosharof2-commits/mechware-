@@ -15,7 +15,7 @@ namespace ShopVerse.Infrastructure.Workers;
 /// </summary>
 public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, ILogger<FieldEncryptionBackfillWorker> logger) : BackgroundService
 {
-    private const int Batch = 200;
+    private const int DefaultBatch = 200;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -31,7 +31,7 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
         }
     }
 
-    public static async Task<int> RunAsync(ShopVerseDbContext db, CancellationToken ct)
+    public static async Task<int> RunAsync(ShopVerseDbContext db, CancellationToken ct, int batch = DefaultBatch)
     {
         string like = FieldEncryption.Current.CurrentPrefix + "%";
         int total = 0;
@@ -41,7 +41,7 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
                 SELECT id AS "Value" FROM companies
                  WHERE bin NOT LIKE {like} OR trade_licence_no NOT LIKE {like} OR (tin IS NOT NULL AND tin NOT LIKE {like})
                     OR bin_index IS NULL
-                 LIMIT {Batch}
+                 LIMIT {batch}
                 """).ToListAsync(ct);
             if (ids.Count == 0) return total;
 

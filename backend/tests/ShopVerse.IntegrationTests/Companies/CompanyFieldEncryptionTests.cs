@@ -139,6 +139,26 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
             .Should().Be(CompanyBinIndex.Of(bin));
     }
 
+    [PostgresFact]
+    public async Task TheBackfill_KeepsGoingPastTheFirstBatch()
+    {
+        var ids = new List<Guid>();
+        for (int i = 0; i < 3; i++)
+        {
+            var owner = await TestUsers.CreateAsync(fixture);   // one account may hold at most 2 pending registrations
+            await using var db = fixture.CreateContext();
+            ids.Add((await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest($"Batch {i} Ltd", $"TL-B-{i}", NextBin(), null, null))).Id);
+        }
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE companies SET bin_index = NULL WHERE id = ANY({ids.ToArray()})");
+
+        await using (var db = fixture.CreateContext())
+            (await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None, batch: 2)).Should().BeGreaterThanOrEqualTo(3);
+
+        await using var check = fixture.CreateContext();
+        (await check.Companies.CountAsync(c => ids.Contains(c.Id) && EF.Property<string?>(c, CompanyBinIndex.Property) == null)).Should().Be(0);
+    }
+
     [PostgresTheory]
     [InlineData("tin")]
     [InlineData("trade_licence_no")]
