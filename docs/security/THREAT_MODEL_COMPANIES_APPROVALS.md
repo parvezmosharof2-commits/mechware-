@@ -359,15 +359,19 @@ them (a form of denial of approvals), and the user could not decline. The existe
 - **Web:** the invitee sees invitations on their companies page with Accept / Decline, and the admin's team list marks
   "Invited".
 
-**Residual:** a declined invitation is not remembered, so an admin can invite the same person again. There is no
-invitation e-mail yet either.
+- **A "no" is remembered** (2026-11-06, follow-up). Declining records `company_invitation_declines`, and the same company
+  cannot invite the person again for 30 days (`409 INVITATION_DECLINED`); a second "no" restarts the period. Other
+  companies are not affected.
+
+**Residual:** there is no invitation e-mail yet.
 
 **Evidence:**
-- TEST: `IT/Companies/MemberInvitationTests.cs` (11 tests).
+- TEST: `IT/Companies/MemberInvitationTests.cs` (13 tests).
 - TEST: `OrderApprovalTests.AnApproverWhoHasNotAcceptedTheMembership_IsNeverAskedToApproveAnOrder`.
 - Unit: `AnInvitation_GrantsNothing_UntilAccepted_AndIsAcceptedOnce`.
 - E2E: the admin sees "Invited"; the buyer accepts in their own browser before the rule can name them.
 - **Mutation check:** 16 mutants, all caught. `/code-review`: 4 findings fixed; the residual is noted above.
+- **Mutation check (follow-up):** 5 mutants on the decline memory, all caught (one survived first and got a test).
 
 ### M3. Spend limits and cost-centre assignment are stored but not enforced (Medium) [CODE] — **FIXED 2026-11-05**
 A requester can submit against any cost centre of the company (`SubmitAsync` only checks it belongs to the

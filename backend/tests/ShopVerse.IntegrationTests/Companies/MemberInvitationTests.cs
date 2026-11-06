@@ -131,6 +131,49 @@ public class MemberInvitationTests(PostgresDatabaseFixture fixture) : IClassFixt
     }
 
     [PostgresFact]
+    public async Task ADeclinedInvitation_CannotBeSentAgainStraightAway()
+    {
+        // Without this an admin could re-invite after every "no" and fill the person's inbox.
+        var (company, admin) = await CompanyAsync();
+        var invited = await InviteAsync(company, admin, CompanyRoles.Buyer);
+        await Companies(s => s.DeclineInvitationAsync(invited, company));
+
+        Func<Task> again = () => Companies(s => s.AddMemberAsync(admin, company, new AddMemberRequest(invited, CompanyRoles.Approver, null, null)));
+        (await again.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("INVITATION_DECLINED");
+
+        // Another company is not affected by this company's "no".
+        var (other, otherAdmin) = await CompanyAsync("Other Mills Ltd");
+        (await Companies(s => s.AddMemberAsync(otherAdmin, other, new AddMemberRequest(invited, CompanyRoles.Buyer, null, null))))
+            .Accepted.Should().BeFalse();
+
+        // Once the cooling-off period has passed the company may ask again.
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE company_invitation_declines SET declined_at = now() - interval '31 days' WHERE company_id = {company} AND user_id = {invited}");
+        (await Companies(s => s.AddMemberAsync(admin, company, new AddMemberRequest(invited, CompanyRoles.Buyer, null, null))))
+            .Accepted.Should().BeFalse();
+
+        // A second "no" starts a new cooling-off period.
+        await Companies(s => s.DeclineInvitationAsync(invited, company));
+        (await again.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("INVITATION_DECLINED");
+    }
+
+    [PostgresFact]
+    public async Task DecliningANewRole_IsAlsoRemembered()
+    {
+        var (company, admin) = await CompanyAsync();
+        var buyer = await TestUsers.CreateAsync(fixture);
+        var member = await Companies(s => s.AddAcceptedMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null)));
+        await Companies(s => s.UpdateMemberAsync(admin, company, member.Id,
+            new UpdateMemberRequest(CompanyRoles.Buyer | CompanyRoles.Approver, null, null, true)));
+
+        await Companies(s => s.DeclineInvitationAsync(buyer, company));
+
+        Func<Task> again = () => Companies(s => s.AddMemberAsync(admin, company, new AddMemberRequest(buyer, CompanyRoles.Buyer, null, null)));
+        (await again.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("INVITATION_DECLINED");
+    }
+
+    [PostgresFact]
     public async Task NobodyCanAcceptOrDeclineSomeoneElsesInvitation_OrAMembershipTheyAlreadyHave()
     {
         var (company, admin) = await CompanyAsync();

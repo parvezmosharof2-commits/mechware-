@@ -72,6 +72,7 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<CompanySite> CompanySites => Set<CompanySite>();
     public DbSet<CostCentre> CostCentres => Set<CostCentre>();
     public DbSet<CompanyMember> CompanyMembers => Set<CompanyMember>();
+    public DbSet<CompanyInvitationDecline> CompanyInvitationDeclines => Set<CompanyInvitationDecline>();
 
     // Approvals
     public DbSet<ApprovalRule> ApprovalRules => Set<ApprovalRule>();

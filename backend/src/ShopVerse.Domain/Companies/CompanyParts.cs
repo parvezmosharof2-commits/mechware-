@@ -102,6 +102,30 @@ public sealed class CostCentre : Entity<Guid>
     }
 }
 
+/// <summary>
+/// A person's "no" to a company's invitation (threat model v1, M2). The invitation itself is removed; this row only stops the
+/// same company from inviting the person again during the cooling-off period, so a "no" cannot be answered with spam.
+/// </summary>
+public sealed class CompanyInvitationDecline
+{
+    public static readonly TimeSpan CoolingOff = TimeSpan.FromDays(30);
+
+    public Guid CompanyId { get; private set; }
+    public Guid UserId { get; private set; }
+    public DateTime DeclinedAtUtc { get; private set; }
+
+    private CompanyInvitationDecline() { }
+
+    public CompanyInvitationDecline(Guid companyId, Guid userId, DateTime utcNow)
+    {
+        CompanyId = companyId;
+        UserId = userId;
+        DeclinedAtUtc = utcNow;
+    }
+
+    public void Renew(DateTime utcNow) => DeclinedAtUtc = utcNow;
+}
+
 /// <summary>Membership of a user in a company. Authorisation inside a company is derived from these rows only.</summary>
 public sealed class CompanyMember : Entity<Guid>
 {
