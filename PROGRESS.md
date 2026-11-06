@@ -15,7 +15,7 @@
 - [x] **ভিত্তি:** foundation, design system v1, identity (PostgreSQL), catalog, inventory, outbox, orders, payments (mock), promotions, companies, approvals
 - [x] **স্প্রিন্ট ০ — স্থিতিশীল করা (সম্পূর্ণ, ২০২৬-১১-০৫):** ✅ স্বাধীন টেস্টের বাগ #১–#৭ ঠিক (regression test + mutation check, চলমান API-তে আবার আক্রমণ করে যাচাই; বিস্তারিত `docs/MASTER_PLAN.md` §৮); ✅ branch protection, secret scanning, push protection (মালিক); ✅ gitleaks/Semgrep/Trivy/ZAP CI-তে। ✅ ESLint warning ০ (`--max-warnings 0`), ✅ Semgrep/Trivy ব্লকিং, ✅ পুরনো Vite অ্যাপ মোছা ও পুরনো নোট archive, ✅ `docs/ARCHITECTURE.md` v2, ✅ ASVS 5.0.0 অফিসিয়াল ID (৮২টা, যাচাই করা) আর CSP `base-uri 'none'`
 - [ ] **স্প্রিন্ট ১–২ — ডিসকভারি ও ডিজাইন:** ক্রেতা সাক্ষাৎকার, ১২ স্ক্রিন প্রোটোটাইপ (light-first), threat model v2
-- [ ] **স্প্রিন্ট ৩–৪ — PIM:** attribute + unit, datasheet/CAD (AV scan), বিকল্প/উত্তরসূরি, আসল ছবি
+- [ ] **স্প্রিন্ট ৩–৪ — PIM:** attribute + unit, datasheet/CAD (AV scan), বিকল্প/উত্তরসূরি, আসল ছবি — ⏳ চলছে: ✅ ধাপ ১ (supply status, উত্তরসূরি, MOQ/pack size)
 - [ ] **স্প্রিন্ট ৫–৬ — সার্চ + PLP/PDP:** Meilisearch, part-number normalisation, product/spec table
 - [ ] **স্প্রিন্ট ৭–৯ — B2B মূল অংশ:** price list / contract price, RFQ ও quote, approval ↔ order, quick order / CSV
 - [ ] **স্প্রিন্ট ১০–১২ — কার্ট, চেকআউট, পেমেন্ট, ইনভয়েস:** SSLCommerz, bKash, COD-OTP, Mushak-6.3, Guideline 2021

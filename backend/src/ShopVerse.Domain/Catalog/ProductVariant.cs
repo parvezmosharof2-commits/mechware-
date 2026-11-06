@@ -34,6 +34,10 @@ public sealed class ProductVariant : Entity<Guid>
     public decimal WeightKg { get; private set; } = 0.5m;
     public bool IsDefault { get; private set; }
     public VariantStatus Status { get; private set; } = VariantStatus.Active;
+    /// <summary>Smallest quantity sold on one order line (PIM); always whole packs.</summary>
+    public int MinOrderQty { get; private set; } = 1;
+    /// <summary>Units per pack; a line's quantity must be a multiple of it.</summary>
+    public int PackSize { get; private set; } = 1;
 
     internal string OptionKey => OptionKeyOf(OptionValues);
 
@@ -101,6 +105,23 @@ public sealed class ProductVariant : Entity<Guid>
         SaleEndsAtUtc = null;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    /// <summary>Sets the order units. The minimum must be whole packs, and both must fit on one cart line.</summary>
+    public void SetOrderUnits(int minOrderQty, int packSize)
+    {
+        // No upper bound of its own: a pack larger than one line could ever hold leaves no valid minimum (checked below).
+        if (packSize < 1) throw new ValidationException("packSize", "Pack size must be at least 1.");
+        if (minOrderQty < 1 || minOrderQty > Cart.CartEngine.MaxQuantityPerLine)
+            throw new ValidationException("minOrderQty", $"Minimum order quantity must be between 1 and {Cart.CartEngine.MaxQuantityPerLine}.");
+        if (minOrderQty % packSize != 0)
+            throw new ValidationException("minOrderQty", "The minimum order quantity must be a whole number of packs.");
+        MinOrderQty = minOrderQty;
+        PackSize = packSize;
+    }
+
+    /// <summary>What the cart needs to know about this SKU, with its order units.</summary>
+    public Cart.VariantFacts ToCartFacts(bool sellable, long unitNetMinor, int available) =>
+        new(Id, sellable, unitNetMinor, available, MinOrderQty, PackSize);
 
     public void Deactivate() => Status = VariantStatus.Inactive;
     public void Activate() => Status = VariantStatus.Active;

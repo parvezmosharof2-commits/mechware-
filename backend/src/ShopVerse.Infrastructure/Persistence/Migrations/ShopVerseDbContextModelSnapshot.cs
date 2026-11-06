@@ -567,6 +567,18 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<Guid?>("SuccessorProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("successor_product_id");
+
+                    b.Property<string>("SupplyStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("active")
+                        .HasColumnName("supply_status");
+
                     b.Property<string>("TitleBn")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -618,13 +630,19 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SpecsJson"), "gin");
 
+                    b.HasIndex("SuccessorProductId")
+                        .HasDatabaseName("ix_products_successor");
+
                     b.HasIndex("CategoryId", "Status")
                         .HasDatabaseName("ix_products_category_status");
 
                     b.HasIndex("SellerId", "Status")
                         .HasDatabaseName("ix_products_seller_status");
 
-                    b.ToTable("products", (string)null);
+                    b.ToTable("products", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_products_successor", "successor_product_id IS NULL OR (supply_status <> 'active' AND successor_product_id <> id)");
+                        });
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAttributeValue", b =>
@@ -739,10 +757,22 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
 
+                    b.Property<int>("MinOrderQty")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("min_order_qty");
+
                     b.Property<string>("OptionValues")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("option_values");
+
+                    b.Property<int>("PackSize")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("pack_size");
 
                     b.Property<long>("PriceMinor")
                         .HasColumnType("bigint")
@@ -802,6 +832,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.ToTable("product_variants", null, t =>
                         {
+                            t.HasCheckConstraint("ck_variants_order_units", "pack_size >= 1 AND min_order_qty >= 1 AND min_order_qty <= 10000 AND min_order_qty % pack_size = 0");
+
                             t.HasCheckConstraint("ck_variants_price", "price_minor > 0");
 
                             t.HasCheckConstraint("ck_variants_sale_price", "sale_price_minor IS NULL OR sale_price_minor > 0");
@@ -3108,6 +3140,11 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SellerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("SuccessorProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAttributeValue", b =>

@@ -278,6 +278,14 @@ The rules:
 #### `GET /products/{slug}` (PDP Detail)
 - **Auth**: Public | **Caching**: Redis Tagged (`cache:product:{slug}`), TTL 1h | **Rate Limit**: 100 req/min
 - **Response**: Full aggregate: Product, Variants (with prices and stock status), grouped `specs`, `highlights`, `datasheetUrl`, `cadModelUrl`, Brand, Seller card, Breadcrumbs, and SEO tags.
+- **PIM fields (2026-11-06):**
+  - `supplyStatus`: `active`, `nrnd` (not recommended for new designs, still sold) or `obsolete`.
+  - `successor`: `{ slug, titleEn, titleBn }` of the replacing product, or `null`.
+    - Only a phased-out product has one, and it is always the same seller's product.
+    - It is shown only while that product is itself on sale and not obsolete.
+  - `variants[].minOrderQty` and `variants[].packSize` (both default `1`).
+    - A line's quantity must be at least `minOrderQty` and a multiple of `packSize`.
+    - `minOrderQty` is always whole packs.
 
 #### `GET /search/autocomplete`
 - **Auth**: Public | **Rate Limit**: 30 req/10s | **SLA**: < 50ms p95

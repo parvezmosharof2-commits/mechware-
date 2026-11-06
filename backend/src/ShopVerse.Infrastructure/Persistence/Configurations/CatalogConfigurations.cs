@@ -104,7 +104,12 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
     public void Configure(EntityTypeBuilder<Product> b)
     {
-        b.ToTable("products");
+        b.ToTable("products", t =>
+        {
+            // An Active product never names a successor, and a product never names itself (the domain refuses both too).
+            t.HasCheckConstraint("ck_products_successor",
+                "successor_product_id IS NULL OR (supply_status <> 'active' AND successor_product_id <> id)");
+        });
         b.MapAudit();
         b.IgnoreEvents();
         b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
@@ -134,6 +139,9 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.Property(p => p.RatingCount).HasColumnName("rating_count");
         b.Property(p => p.SoldCount).HasColumnName("sold_count");
         b.Property(p => p.DeletedAtUtc).HasColumnName("deleted_at");
+        b.Property(p => p.SupplyStatus).HasColumnName("supply_status").HasMaxLength(30)
+            .HasConversion(new SnakeCaseEnumConverter<SupplyStatus>()).HasDefaultValue(SupplyStatus.Active).HasSentinel(0);
+        b.Property(p => p.SuccessorProductId).HasColumnName("successor_product_id");
 
         b.HasIndex(p => p.Slug).IsUnique().HasDatabaseName("ux_products_slug").HasFilter("deleted_at IS NULL");
         b.HasIndex(p => new { p.SellerId, p.Status }).HasDatabaseName("ix_products_seller_status");
@@ -144,6 +152,8 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.HasOne<Seller>().WithMany().HasForeignKey(p => p.SellerId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Category>().WithMany().HasForeignKey(p => p.CategoryId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Brand>().WithMany().HasForeignKey(p => p.BrandId).OnDelete(DeleteBehavior.SetNull);
+        b.HasOne<Product>().WithMany().HasForeignKey(p => p.SuccessorProductId).OnDelete(DeleteBehavior.SetNull);
+        b.HasIndex(p => p.SuccessorProductId).HasDatabaseName("ix_products_successor");
 
         b.HasMany(p => p.Variants).WithOne().HasForeignKey(v => v.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.Media).WithOne().HasForeignKey(m => m.ProductId).OnDelete(DeleteBehavior.Cascade);
@@ -164,6 +174,9 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
         {
             t.HasCheckConstraint("ck_variants_price", "price_minor > 0");
             t.HasCheckConstraint("ck_variants_sale_price", "sale_price_minor IS NULL OR sale_price_minor > 0");
+            // Mirrors ProductVariant.SetOrderUnits: at least one, whole packs, within one cart line.
+            t.HasCheckConstraint("ck_variants_order_units",
+                "pack_size >= 1 AND min_order_qty >= 1 AND min_order_qty <= 10000 AND min_order_qty % pack_size = 0");
         });
         b.MapAudit();
         b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
@@ -194,6 +207,8 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
             .HasConversion(c => c.ToIsoCode(), s => CurrencyExtensions.Parse(s));
         b.Property(v => v.IsDefault).HasColumnName("is_default");
         b.Property(v => v.Status).HasColumnName("status").HasMaxLength(30).HasConversion(new SnakeCaseEnumConverter<VariantStatus>());
+        b.Property(v => v.MinOrderQty).HasColumnName("min_order_qty").HasDefaultValue(1).HasSentinel(0);
+        b.Property(v => v.PackSize).HasColumnName("pack_size").HasDefaultValue(1).HasSentinel(0);
         b.Ignore(v => v.Price);
         b.Ignore(v => v.SalePrice);
         b.Ignore(v => v.CompareAtPrice);
