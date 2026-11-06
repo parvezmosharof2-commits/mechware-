@@ -168,6 +168,7 @@ public sealed class ProductDocumentUploadTests : IDisposable
         download.Content.Headers.ContentDisposition!.DispositionType.Should().Be("attachment");
         download.Content.Headers.ContentDisposition.FileName.Should().Contain("VFD007 datasheet.pdf");
         download.Headers.GetValues("X-Content-Type-Options").Should().Contain("nosniff");
+        download.Headers.CacheControl!.MaxAge.Should().BeLessThanOrEqualTo(TimeSpan.FromMinutes(1), "a deleted document must stop being served soon");
     }
 
     [PostgresFact]
@@ -416,6 +417,66 @@ public sealed class ProductDocumentUploadTests : IDisposable
         (await RowsAsync(factory, product)).Should().Be(1);
     }
 
+    private async Task FillWithDocumentsAsync(DbBackedFactory factory, Guid product, int count)
+    {
+        await using var db = Db(factory);
+        var p = await db.Products.Include(x => x.Documents).SingleAsync(x => x.Id == product);
+        for (int i = 0; i < count; i++)
+            p.AddDocument(Guid.NewGuid(), DocumentKind.Datasheet, $"seed-{i}.pdf", DetectedFileType.Pdf, 10,
+                Convert.ToHexStringLower(SHA256.HashData(Encoding.ASCII.GetBytes("seed" + i))), $"products/seed/{Guid.NewGuid():N}.pdf", null);
+        await db.SaveChangesAsync();
+    }
+
+    [PostgresFact]
+    public async Task SixUploadsAtOnce_ToAProductWithOnePlaceLeft_TakeThePlaceOnce_NeverTwenty_One()
+    {
+        var factory = Factory();
+        var (product, _) = await PublishedProductAsync(factory);
+        await FillWithDocumentsAsync(factory, product, Product.MaxDocuments - 1);
+        using var admin = await AdminAsync(factory);
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 6).Select(i => admin.PostAsync(Url(product), Form("datasheet", $"late-{i}.pdf", Pdf("late " + i)))));
+
+        results.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1);
+        results.Where(r => r.StatusCode != HttpStatusCode.Created).Should().OnlyContain(r => r.StatusCode == HttpStatusCode.BadRequest);
+        (await RowsAsync(factory, product)).Should().Be(Product.MaxDocuments);
+        StoredFiles().Should().ContainSingle("only the winner's file is kept; the others are never written or are removed");
+    }
+
+    [PostgresFact]
+    public async Task ADuplicate_OrAFullProduct_IsRefusedBeforeTheScan_SoAScannerThatIsDownDoesNotMatter()
+    {
+        int closedPort;
+        using (var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0)) { probe.Start(); closedPort = ((IPEndPoint)probe.LocalEndpoint).Port; }
+        var factory = Factory(("Antivirus:Host", "127.0.0.1"), ("Antivirus:Port", closedPort.ToString()), ("Antivirus:TimeoutSeconds", "2"));
+        var (product, _) = await PublishedProductAsync(factory);
+        byte[] existing = Pdf("already here");
+        await using (var db = Db(factory))
+        {
+            var p = await db.Products.Include(x => x.Documents).SingleAsync(x => x.Id == product);
+            p.AddDocument(Guid.NewGuid(), DocumentKind.Datasheet, "existing.pdf", DetectedFileType.Pdf, existing.Length,
+                Convert.ToHexStringLower(SHA256.HashData(existing)), $"products/seed/{Guid.NewGuid():N}.pdf", null);
+            await db.SaveChangesAsync();
+        }
+
+        using var admin = await AdminAsync(factory);
+
+        // The same content: refused for what it is. The scanner is down, and would have answered 503 had it been asked.
+        var duplicate = await admin.PostAsync(Url(product), Form("datasheet", "again.pdf", existing));
+        duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict, await duplicate.Content.ReadAsStringAsync());
+        (await ErrorCodeOf(duplicate)).Should().Be("DOCUMENT_EXISTS");
+
+        // A different file is asked of the scanner, which is down.
+        (await admin.PostAsync(Url(product), Form("datasheet", "new.pdf", Pdf("new")))).StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+
+        // A full product: refused before the scan too.
+        await FillWithDocumentsAsync(factory, product, Product.MaxDocuments - 1);
+        var full = await admin.PostAsync(Url(product), Form("datasheet", "overflow.pdf", Pdf("overflow")));
+        full.StatusCode.Should().Be(HttpStatusCode.BadRequest, await full.Content.ReadAsStringAsync());
+        (await full.Content.ReadAsStringAsync()).Should().Contain("at most");
+        StoredFiles().Should().BeEmpty();
+    }
+
     [PostgresFact]
     public async Task AProductUnderReview_CannotGetADocument_AndAnUnknownProductIs404()
     {
@@ -485,9 +546,13 @@ public sealed class ProductDocumentUploadTests : IDisposable
         await using (var db = Db(factory))
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'archived' WHERE id = {published}");
         (await anonymous.GetAsync(Get(publishedSlug, mine))).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        // An obsolete or end-of-life product still has its page, and its datasheet is what people replacing the part need most.
         await using (var db = Db(factory))
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'active', supply_status = 'obsolete' WHERE id = {published}");
-        (await anonymous.GetAsync(Get(publishedSlug, mine))).StatusCode.Should().Be(HttpStatusCode.NotFound, "an obsolete product is not linked to, so neither are its files");
+        (await anonymous.GetAsync(Get(publishedSlug, mine))).StatusCode.Should().Be(HttpStatusCode.OK, "the page lists it, so the link must work");
+        await using (var db = Db(factory))
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'nrnd' WHERE id = {published}");
+        (await anonymous.GetAsync(Get(publishedSlug, mine))).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [PostgresAndRedisFact]

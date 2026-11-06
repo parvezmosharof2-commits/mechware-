@@ -72,8 +72,22 @@ public class ProductDocumentRulesTests
     [InlineData(null, "")]
     [InlineData("....", "")]
     [InlineData("dir/", "")]
+    [InlineData("invoice\u202Efdp.pdf", "invoicefdp.pdf")]        // right-to-left override
+    [InlineData("a\u200Bb\u200Dc.pdf", "abc.pdf")]               // zero-width space and joiner
+    [InlineData("a\u2028b\u2029c.pdf", "abc.pdf")]               // line and paragraph separators
+    [InlineData("a\u00ADb.pdf", "ab.pdf")]                        // soft hyphen
+    [InlineData("a\uFEFFb.pdf", "ab.pdf")]                        // byte order mark inside the name
+    [InlineData("a\uE000b.pdf", "ab.pdf")]                        // private use
+    [InlineData("datenblatt-ü-数据表.pdf", "datenblatt-ü-数据表.pdf")]   // ordinary letters of any script stay
     public void AFileNameIsOnlyALabel_StrippedOfDirectoriesAndControlCharacters(string? raw, string expected) =>
         DocumentFileRules.CleanFileName(raw).Should().Be(expected);
+
+    [Fact]
+    public void ALoneSurrogate_IsDropped()
+    {
+        // Built at run time: a theory row with a lone surrogate does not survive xunit's own serialisation.
+        DocumentFileRules.CleanFileName("a" + (char)0xD800 + "b" + (char)0xDFFF + ".pdf").Should().Be("ab.pdf");
+    }
 
     [Fact]
     public void ALongName_IsCut_KeepingItsExtension()

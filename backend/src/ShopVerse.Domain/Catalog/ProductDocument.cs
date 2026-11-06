@@ -60,7 +60,12 @@ public static class DocumentFileRules
     {
         string name = (raw ?? string.Empty).Replace('\\', '/');
         name = name[(name.LastIndexOf('/') + 1)..];
-        name = new string([.. name.Where(c => !char.IsControl(c) && c is not ('"' or '<' or '>' or '|' or ':' or '*' or '?'))]).Trim().Trim('.');
+        // Also the invisible "format" characters (right-to-left override, zero-width characters) and line or paragraph
+        // separators: they let a label read as something it is not ("invoice<RLO>fdp.pdf").
+        name = new string([.. name.Where(c => !char.IsControl(c) && c is not ('"' or '<' or '>' or '|' or ':' or '*' or '?')
+            && char.GetUnicodeCategory(c) is not (System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
+                or System.Globalization.UnicodeCategory.ParagraphSeparator or System.Globalization.UnicodeCategory.Surrogate
+                or System.Globalization.UnicodeCategory.PrivateUse or System.Globalization.UnicodeCategory.OtherNotAssigned))]).Trim().Trim('.');
         if (name.Length > 150)
         {
             string ext = Path.GetExtension(name);

@@ -128,6 +128,23 @@ public class DocumentInfrastructureTests : IDisposable
     }
 
     [Fact]
+    public async Task ACallerThatGivesUp_IsNotAScannerOutage_ItPropagates()
+    {
+        // A client closing the browser mid-upload cancels the request token. That must not look like "the scanner is down".
+        using var clamd = new FakeClamd(_ => string.Empty, hangAfterRequest: true);
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        var scanner = new ClamAvScanner("127.0.0.1", clamd.Port, TimeSpan.FromSeconds(20));
+
+        var act = () => scanner.ScanAsync(new MemoryStream([1, 2, 3]), cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        using var already = new CancellationTokenSource();
+        already.Cancel();
+        var again = () => scanner.ScanAsync(new MemoryStream([1]), already.Token);
+        await again.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
     public async Task ADaemonThatHangsUp_IsUnavailable()
     {
         using var clamd = new FakeClamd(_ => string.Empty);

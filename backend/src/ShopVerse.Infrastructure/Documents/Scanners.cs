@@ -52,7 +52,10 @@ public sealed class ClamAvScanner(string host, int port, TimeSpan timeout) : IVi
 
             return Parse(Encoding.UTF8.GetString(response.ToArray()));
         }
-        catch (Exception ex) when (ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException)
+        // The caller giving up (the request was aborted) is not a scanner outage: it propagates. Only our own timeout, a refused
+        // connection or a dropped one say "unavailable".
+        catch (Exception ex) when (!ct.IsCancellationRequested
+            && ex is IOException or SocketException or OperationCanceledException or ObjectDisposedException)
         {
             return new ScanResult(ScanOutcome.Unavailable);
         }

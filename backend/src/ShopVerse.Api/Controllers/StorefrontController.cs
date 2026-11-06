@@ -31,7 +31,8 @@ public sealed class StorefrontController : ControllerBase
     {
         if (!ShopVerse.Domain.Catalog.Slug.IsValid(slug)) return NotFound();
         var file = await _documents.OpenPublicAsync(slug, documentId, ct);
-        Response.Headers.CacheControl = "public, max-age=300";
+        // Short: a deleted or unpublished document must stop being served soon, and downloads are rare enough not to need more.
+        Response.Headers.CacheControl = "public, max-age=60";
         return File(file.Content, file.ContentType, file.FileName, enableRangeProcessing: false);
     }
 

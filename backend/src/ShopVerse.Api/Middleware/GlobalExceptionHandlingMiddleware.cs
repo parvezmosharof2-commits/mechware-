@@ -62,6 +62,25 @@ public sealed class GlobalExceptionHandlingMiddleware
                 forbiddenEx.Message,
                 Array.Empty<object>()
             ),
+            // Kestrel or the form reader refusing a body over the request limit throws before any action runs.
+            Microsoft.AspNetCore.Http.BadHttpRequestException badRequestEx when badRequestEx.StatusCode == 413 => (
+                HttpStatusCode.RequestEntityTooLarge,
+                "FILE_TOO_LARGE",
+                "The request is larger than the server accepts.",
+                Array.Empty<object>()
+            ),
+            Microsoft.AspNetCore.Http.BadHttpRequestException badRequestEx => (
+                (HttpStatusCode)badRequestEx.StatusCode,
+                "BAD_REQUEST",
+                "The request could not be read.",
+                Array.Empty<object>()
+            ),
+            System.IO.InvalidDataException formEx when formEx.Message.Contains("limit", StringComparison.OrdinalIgnoreCase) => (
+                HttpStatusCode.RequestEntityTooLarge,
+                "FILE_TOO_LARGE",
+                "The request is larger than the server accepts.",
+                Array.Empty<object>()
+            ),
             PayloadTooLargeException tooLargeEx => (
                 HttpStatusCode.RequestEntityTooLarge,
                 tooLargeEx.Code,

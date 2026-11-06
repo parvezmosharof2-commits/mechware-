@@ -80,7 +80,7 @@ services:
       CLAMD_CONF_StreamMaxLength: 64M
       CLAMD_CONF_MaxFileSize: 64M
     ports:
-      - "3310:3310"
+      - "127.0.0.1:3310:3310"   # clamd has no authentication: reachable from this host only, never published
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:

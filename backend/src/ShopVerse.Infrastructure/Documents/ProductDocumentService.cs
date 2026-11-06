@@ -27,8 +27,9 @@ public sealed class ProductDocumentService(
     {
         var documentKind = ParseKind(kind);
 
-        var product = await db.Products.Include(p => p.Documents).FirstOrDefaultAsync(p => p.Id == productId && p.DeletedAtUtc == null, ct)
-                      ?? throw new KeyNotFoundException("The product does not exist.");
+        // Only whether it exists, here: the aggregate is loaded again, under a lock, right before it is changed (see below).
+        if (!await db.Products.AnyAsync(p => p.Id == productId && p.DeletedAtUtc == null, ct))
+            throw new KeyNotFoundException("The product does not exist.");
 
         string name = DocumentFileRules.CleanFileName(fileName);
         string extension = DocumentFileRules.ExtensionOf(name);
@@ -42,6 +43,10 @@ public sealed class ProductDocumentService(
             FileOptions.DeleteOnClose | FileOptions.Asynchronous);
 
         var (size, sha256, type) = await CopyCheckedAsync(content, temp, documentKind, extension, limit, ct);
+
+        // The cheap refusals come before the expensive scan: a file the product already has, or a full product, would otherwise
+        // tie the scanner up for nothing. They are repeated under the lock below, where they decide.
+        await RefuseIfDuplicateOrFullAsync(productId, sha256, ct);
 
         temp.Position = 0;
         var scan = await scanner.ScanAsync(temp, ct);
@@ -59,6 +64,13 @@ public sealed class ProductDocumentService(
 
         Guid id = Guid.NewGuid();
         string key = $"products/{productId:N}/{id:N}.{DocumentFileRules.Extensions(type)[0]}";
+
+        // The scan can take seconds. The product is locked and loaded again only now, so the count of documents and the
+        // duplicate check are made on what is there at this moment, and two uploads at once cannot both take the last place.
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.SqlQuery<int>($"SELECT 1 AS \"Value\" FROM products WHERE id = {productId} FOR UPDATE").ToListAsync(ct);
+        var product = await db.Products.Include(p => p.Documents).FirstOrDefaultAsync(p => p.Id == productId && p.DeletedAtUtc == null, ct)
+                      ?? throw new KeyNotFoundException("The product does not exist.");
         // Added first: a duplicate or a full product is refused before anything is written to the store.
         var document = product.AddDocument(id, documentKind, name, type, size, sha256, key, uploadedBy);
 
@@ -67,10 +79,10 @@ public sealed class ProductDocumentService(
         try
         {
             await db.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // The same file uploaded at the same moment: the other request won the unique index.
             await TryDeleteAsync(key);
             throw new ConflictException("DOCUMENT_EXISTS", "This exact file is already attached to the product.");
         }
@@ -81,6 +93,14 @@ public sealed class ProductDocumentService(
         }
 
         return ToDto(document);
+    }
+
+    private async Task RefuseIfDuplicateOrFullAsync(Guid productId, string sha256, CancellationToken ct)
+    {
+        if (await db.ProductDocuments.AnyAsync(d => d.ProductId == productId && d.Sha256 == sha256, ct))
+            throw new ConflictException("DOCUMENT_EXISTS", "This exact file is already attached to the product.");
+        if (await db.ProductDocuments.CountAsync(d => d.ProductId == productId, ct) >= Product.MaxDocuments)
+            throw new ValidationException("file", $"A product can hold at most {Product.MaxDocuments} documents.");
     }
 
     public async Task<IReadOnlyList<DocumentDto>> ListAsync(Guid productId, CancellationToken ct = default)
@@ -101,7 +121,9 @@ public sealed class ProductDocumentService(
 
     public async Task<DocumentDownload> OpenPublicAsync(string slug, Guid documentId, CancellationToken ct = default)
     {
-        var document = await (from p in db.Products.AsNoTracking().Where(Product.IsLinkable)
+        // The files of every product whose page is served, obsolete and end-of-life ones included: those are the parts people
+        // most need a datasheet for. (Not Product.IsLinkable, which is about other pages sending buyers here.)
+        var document = await (from p in db.Products.AsNoTracking().Where(p => p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
                               where p.Slug == slug
                               from d in p.Documents
                               where d.Id == documentId
