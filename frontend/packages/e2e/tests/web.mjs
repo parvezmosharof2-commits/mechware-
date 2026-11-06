@@ -19,6 +19,7 @@ async function login(page, email, password) {
   check('CSP: an injected inline event handler does not run', csp.injectedBlocked);
   check('CSP: a fresh nonce on every response', csp.freshPerRequest);
   check('CSP: public files are covered too', csp.assetCovered);
+  check('CSP: the blocked handler is reported to the app (204)', csp.reported);
   const errors = [];
   let expectNoise = false; // negative-path steps legitimately produce 4xx network logs
   const ctxA = await browser.newContext({ viewport: { width: 1280, height: 900 } });

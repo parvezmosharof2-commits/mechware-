@@ -14,6 +14,8 @@
  * which Next.js stamps with the nonce.
  */
 
+const CSP_REPORT_PATH = '/api/csp-report';
+
 /**
  * @param {{ apiBaseUrl?: string, googleSignIn?: boolean, isDev?: boolean, nonce: string }} options
  * @returns {string}
@@ -37,7 +39,11 @@ function contentSecurityPolicy(options) {
     "frame-ancestors 'none'",
     "object-src 'none'",
     "base-uri 'none'",
-    "form-action 'self'"
+    "form-action 'self'",
+    // Violations are reported to this same app (see csp-report.js), so no CORS and no third party sees the URLs. Only
+    // report-uri: every major browser sends it at once, while adding report-to makes Chrome switch to the batched
+    // Reporting API, which was not delivered at all over plain HTTP in testing.
+    `report-uri ${CSP_REPORT_PATH}`
   ].join('; ');
 }
 
