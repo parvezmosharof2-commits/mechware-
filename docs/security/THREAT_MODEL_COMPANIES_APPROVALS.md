@@ -380,6 +380,25 @@ requests, the other approves, both under one admin), is not detectable here. Mit
 When checkout uses it, it must run in the **same transaction and on the same loaded company row** as order creation.
 The existing concurrency test exercises the aggregate directly, not checkout.
 
+### L3. One office behind one IP shared a single 100/min budget, and excess requests hung (Medium, availability) [TEST] — **FIXED 2026-11-05**
+Found while running the browser E2E. The global limiter was per IP only (100 / min), with a queue of 10. That caused two problems:
+- **A whole company shared one budget.** Behind NAT, every buyer in the office drew from it.
+- **Requests over the limit hung.** They waited up to a minute instead of failing; the E2E saw a 30 s hang on an admin action.
+
+**Fix:**
+- **Authentication now runs before the limiter.** A signed-in user (verified token, live session) gets their own budget.
+- **Anonymous traffic is limited per IP.** That includes a forged token.
+- **No queue.** Over the limit is an immediate `429` with `Retry-After` and the usual error envelope.
+- **A ceiling per IP, before authentication.** It is 3000 / min and runs before authentication (which costs a DB query per
+  bearer token). A flood stops before the database, and many accounts behind one IP cannot add up past it.
+
+**Open for the owner:** the strict auth limit is 5 / min per IP in Production, from the brief §11.1. Behind NAT it can slow a
+whole office signing in at 9 am. Raising it is a trade-off against credential stuffing.
+
+**Evidence:**
+- TEST: `IT/Security/PerUserRateLimitTests.cs` (3 tests).
+- **Mutation check:** 6 mutants, all caught.
+
 ### L2. Other (Low / Info)
 - Session marker cookies (`mw_session`, `mw_console_session`) are forgeable by design: they only pick a redirect, the API authorises everything [CODE].
 - No `Idempotency-Key` on these endpoints (brief §6.6). Double submits are blocked by a unique index and a second decision is a conflict, so the practical impact is small [TEST: `SameItem_CannotHaveTwoPendingRequests_*`].

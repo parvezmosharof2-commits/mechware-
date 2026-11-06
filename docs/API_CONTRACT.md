@@ -35,6 +35,20 @@
 }
 ```
 
+### 1.2a Rate limits (all routes)
+
+| Who | Budget | Config key |
+|---|---|---|
+| Signed-in user (verified token, live session) | 600 / min **per user** | `RateLimiting:UserPermitPerMinute` |
+| Anonymous (no token, or a forged / ended one) | 100 / min per IP | `RateLimiting:GlobalPermitPerMinute` |
+| Everything from one IP together, checked before authentication | 3000 / min | `RateLimiting:IpCeilingPerMinute` |
+| Storefront reads | 1200 / min per IP | `RateLimiting:StorefrontPermitPerMinute` |
+| Payment webhooks | 1000 / min per IP | `RateLimiting:WebhookPermitPerMinute` |
+
+- **Signed-in budgets are per user, not per IP.** A company's office usually shares one public IP (NAT), and a shared 100 / min would stall its buyers.
+- **Over the limit is answered at once.** There is no queue: the response is `429` with `Retry-After` and the usual error envelope, code `RATE_LIMITED`.
+- **Credential endpoints are stricter.** Login, register, OTP and password reset keep the strict per-IP auth limit on top of these budgets (5 / min in Production, from the brief §11.1).
+
 ### 1.3 Standard Pagination Query Parameters & Shape
 - **Pagination Style**: Cursor-based for storefront high-velocity feeds; Page & Limit (`page`, `pageSize`) for data tables in Console.
 ```json

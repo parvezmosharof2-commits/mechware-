@@ -51,6 +51,8 @@ public class DbBackedFactory : WebApplicationFactory<Program>
 
         builder.UseSetting("ConnectionStrings:DefaultConnection", ConnectionString);
         builder.UseSetting("RateLimiting:GlobalPermitPerMinute", "1000000");
+        builder.UseSetting("RateLimiting:UserPermitPerMinute", "1000000");
+        builder.UseSetting("RateLimiting:IpCeilingPerMinute", "1000000");
         foreach (var (key, value) in _settings)
         {
             builder.UseSetting(key, value);

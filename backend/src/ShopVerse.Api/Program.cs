@@ -217,6 +217,12 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// Budgets read once at startup.
+int userPermitPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:UserPermitPerMinute") ?? 600;
+int anonymousPermitPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:GlobalPermitPerMinute") ?? 100;
+int webhookPermitPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:WebhookPermitPerMinute") ?? 1000;
+int ipCeilingPerMinute = builder.Configuration.GetValue<int?>("RateLimiting:IpCeilingPerMinute") ?? 3000;
+
 // 5. Rate Limiting Middleware (Global 100 req/min + AuthStrictPolicy 5 req/min per IP per Brief §11.1)
 builder.Services.AddRateLimiter(options =>
 {
@@ -257,7 +263,20 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:WebhookPermitPerMinute") ?? 1000,
+                PermitLimit = webhookPermitPerMinute,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        // A signed-in user has a budget of their own. A company's whole office usually shares one public IP (NAT), and
+        // 100 requests a minute between 20 buyers would stall real work. Authentication runs before this limiter, so the
+        // user id here comes from a verified token and a live session; a forged token counts as anonymous.
+        : httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "user:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = userPermitPerMinute,
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             })
@@ -266,11 +285,30 @@ builder.Services.AddRateLimiter(options =>
             factory: _ => new FixedWindowRateLimiterOptions
             {
                 AutoReplenishment = true,
-                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:GlobalPermitPerMinute") ?? 100,
-                QueueLimit = 10,
+                PermitLimit = anonymousPermitPerMinute,
+                // No queue: a request over the limit is told at once (429 + Retry-After) instead of hanging for up to a minute.
+                QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));
+
+    options.OnRejected = (context, ct) => TooManyRequests.WriteAsync(context.HttpContext, context.Lease, ct);
 });
+
+// The ceiling per IP, checked before authentication (which costs a database query for a bearer token): a flood is refused
+// before it reaches the database, and many accounts behind one address cannot add up to more than this.
+// Storefront reads and payment webhooks keep their own per-IP budgets (see above) and stay outside it.
+var ipCeiling = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    httpContext.Request.Path.StartsWithSegments("/api/v1/storefront") || httpContext.Request.Path.StartsWithSegments("/api/v1/payments/webhooks")
+    ? RateLimitPartition.GetNoLimiter("own-budget")
+    : RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            AutoReplenishment = true,
+            PermitLimit = ipCeilingPerMinute,
+            QueueLimit = 0,
+            Window = TimeSpan.FromMinutes(1)
+        }));
 
 // 6. CORS Policy
 builder.Services.AddCors(options =>
@@ -337,8 +375,19 @@ app.UseSerilogRequestLogging(options =>
 });
 
 app.UseCors("MechWareCors");
-app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    using RateLimitLease lease = await ipCeiling.AcquireAsync(context, cancellationToken: context.RequestAborted);
+    if (!lease.IsAcquired)
+    {
+        await TooManyRequests.WriteAsync(context, lease, context.RequestAborted);
+        return;
+    }
+    await next(context);
+});
+// Authentication next, so the limiter can give each signed-in user their own budget (see AddRateLimiter).
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 // Swagger Documentation UI — Development only unless explicitly enabled (do not publish the API map in production).
@@ -389,3 +438,28 @@ app.Run();
 
 // Required for WebApplicationFactory in integration tests
 public partial class Program { }
+
+/// <summary>A 429 in the API's usual error envelope, with Retry-After when the limiter knows it.</summary>
+internal static class TooManyRequests
+{
+    public static async ValueTask WriteAsync(HttpContext context, RateLimitLease lease, CancellationToken ct)
+    {
+        context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter))
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        const string message = "Too many requests. Please wait a moment and try again.";
+        string traceId = context.TraceIdentifier;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            type = "https://api.mechware.com.bd/errors/RATE_LIMITED",
+            title = message,
+            status = 429,
+            detail = message,
+            instance = context.Request.Path.Value,
+            traceId,
+            error = new { code = "RATE_LIMITED", message, details = Array.Empty<object>(), traceId }
+        }, options: (System.Text.Json.JsonSerializerOptions?)null, contentType: "application/problem+json", cancellationToken: ct);
+    }
+}
