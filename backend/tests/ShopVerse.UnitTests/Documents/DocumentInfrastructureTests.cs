@@ -114,13 +114,17 @@ public class DocumentInfrastructureTests : IDisposable
     }
 
     [Fact]
-    public async Task ADaemonThatDoesNotAnswerInTime_IsUnavailable()
+    public async Task ADaemonThatDoesNotAnswerInTime_IsUnavailable_AfterTheTimeout_NotWhenItHangsUp()
     {
+        // The stand-in hangs for 30 seconds and then closes the connection, which would also end as "unavailable", only slowly.
+        // So the time is checked: the answer must come when the timeout runs out, not when the daemon gives up.
         using var clamd = new FakeClamd(_ => string.Empty, hangAfterRequest: true);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
 
         var result = await new ClamAvScanner("127.0.0.1", clamd.Port, TimeSpan.FromMilliseconds(500)).ScanAsync(new MemoryStream([1, 2, 3]));
 
         result.Outcome.Should().Be(ScanOutcome.Unavailable);
+        watch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10));
     }
 
     [Fact]
@@ -200,6 +204,23 @@ public class DocumentInfrastructureTests : IDisposable
         await read.Should().ThrowAsync<ArgumentException>();
         var delete = () => store.DeleteAsync(key);
         await delete.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task TheStore_RefusesAKeyThatLooksInside_ButIsNotOneOfOurs()
+    {
+        // Both stay inside the store, so the check on where the path ends up would let them through. They are still not keys
+        // the server makes: no '..' anywhere, and never an absolute path (not even one that names a place inside the store).
+        var store = new LocalObjectStorage(_root);
+        string[] keys = ["products/../products/x.pdf", "products/a/../b/x.pdf", Path.Combine(_root, "products", "x.pdf").Replace('\\', '/')];
+
+        foreach (var key in keys)
+        {
+            var put = () => store.PutAsync(key, new MemoryStream([1]));
+            await put.Should().ThrowAsync<ArgumentException>(key);
+        }
+
+        Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
     [Fact]

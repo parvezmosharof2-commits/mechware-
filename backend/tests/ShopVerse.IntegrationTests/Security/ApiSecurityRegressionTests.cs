@@ -46,6 +46,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "POST api/v1/auth/2fa/enroll/complete",   // authority is the single-use, 10-minute token that password + admin setup code earn (M1)
         "GET api/v1/locations/bd",
         "GET api/v1/storefront/products/{slug}",
+        "GET api/v1/storefront/products/{slug}/documents/{documentId:guid}",   // a published product's datasheet, public like its page; unpublished or obsolete products, other products' ids and missing files are 404 (ProductDocumentUploadTests)
         "GET api/v1/storefront/categories",
         "POST api/v1/payments/webhooks/{provider}",   // provider-to-server; its authority is the HMAC signature over the raw body, checked in PaymentService
         "GET api/v1/storefront/categories/{slug}/products",

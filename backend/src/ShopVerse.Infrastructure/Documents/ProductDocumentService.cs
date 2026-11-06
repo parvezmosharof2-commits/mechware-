@@ -32,7 +32,8 @@ public sealed class ProductDocumentService(
 
         string name = DocumentFileRules.CleanFileName(fileName);
         string extension = DocumentFileRules.ExtensionOf(name);
-        if (name.Length == 0 || !AllowedExtensions(documentKind).Contains(extension))
+        // An empty or extension-less name has extension "", which no kind allows, so it is refused here too.
+        if (!AllowedExtensions(documentKind).Contains(extension))
             throw new ValidationException("file", $"A {documentKind.ToString().ToLowerInvariant()} must be a file ending in {string.Join(", ", AllowedExtensions(documentKind).Select(e => "." + e))}.");
 
         long limit = LimitFor(documentKind);

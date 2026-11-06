@@ -52,6 +52,7 @@ public sealed class LocalObjectStorage : IObjectStorage
         if (string.IsNullOrEmpty(key) || key.Length > 200 || key.Contains("..", StringComparison.Ordinal) || key.StartsWith('/')
             || !key.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '/' or '-' or '.'))
             throw new ArgumentException("Not a valid storage key.", nameof(key));
+        // Belt and braces: the checks above already make an escape impossible, this stays if they are ever loosened.
         string full = Path.GetFullPath(Path.Combine(_root, key));
         if (!full.StartsWith(_root, StringComparison.Ordinal)) throw new ArgumentException("Not a valid storage key.", nameof(key));
         return full;
