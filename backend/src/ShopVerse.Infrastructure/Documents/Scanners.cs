@@ -61,13 +61,20 @@ public sealed class ClamAvScanner(string host, int port, TimeSpan timeout) : IVi
         }
     }
 
+    /// <summary>
+    /// The name a daemon gives a signature ends up in logs and messages. It is cut to 100 printable ASCII characters, so a
+    /// reply with line breaks or control characters cannot add fake lines to a log.
+    /// </summary>
+    internal static string SafeName(string name) =>
+        new string([.. name.Where(c => c is >= ' ' and <= '~').Take(100)]);
+
     /// <summary>Reads clamd's answer; only an exact OK is clean.</summary>
     public static ScanResult Parse(string answer)
     {
         string text = answer.Trim('\0', '\n', '\r', ' ');
         if (text == "stream: OK") return new ScanResult(ScanOutcome.Clean);
         if (text.StartsWith("stream: ", StringComparison.Ordinal) && text.EndsWith(" FOUND", StringComparison.Ordinal))
-            return new ScanResult(ScanOutcome.Infected, text["stream: ".Length..^" FOUND".Length]);
+            return new ScanResult(ScanOutcome.Infected, SafeName(text["stream: ".Length..^" FOUND".Length]));
         return new ScanResult(ScanOutcome.Unavailable);
     }
 }

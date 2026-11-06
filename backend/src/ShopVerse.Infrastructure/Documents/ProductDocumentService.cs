@@ -58,7 +58,9 @@ public sealed class ProductDocumentService(
 
         if (scan.Outcome == ScanOutcome.Infected)
         {
-            logger.LogWarning("Infected upload refused for product {ProductId}: {Signature}", productId, scan.Signature);
+            // The signature name comes from the scanner's reply, which follows the file's content: no line breaks in a log.
+            logger.LogWarning("Infected upload refused for product {ProductId}: {Signature}", productId,
+                scan.Signature?.Replace("\r", string.Empty).Replace("\n", string.Empty));
             throw new ValidationException("file", "The file contains malware and was not accepted.");
         }
 

@@ -35,6 +35,17 @@ public class DocumentInfrastructureTests : IDisposable
     public void OnlyAnExactOk_IsClean_AndAnythingUnclearIsUnavailable(string answer, ScanOutcome outcome, string? signature) =>
         ClamAvScanner.Parse(answer).Should().Be(new ScanResult(outcome, signature));
 
+    [Fact]
+    public void ASignatureName_CannotCarryLineBreaksOrControlCharacters_IntoALog()
+    {
+        var result = ClamAvScanner.Parse("stream: Evil\r\n[ERROR] forged log line\u001b[31m FOUND\0");
+
+        result.Outcome.Should().Be(ScanOutcome.Infected, "the file is still refused");
+        result.Signature.Should().Be("Evil[ERROR] forged log line[31m").And.NotContainAny("\r", "\n", "\u001b", "\0");
+        ClamAvScanner.Parse("stream: " + new string('a', 500) + " FOUND").Signature!.Length.Should().Be(100);
+        ClamAvScanner.Parse("stream: Ünï-cödé FOUND").Signature.Should().Be("n-cd", "only printable ASCII is kept");
+    }
+
     /// <summary>A stand-in for clamd: records what it was sent and answers.</summary>
     private sealed class FakeClamd : IDisposable
     {
