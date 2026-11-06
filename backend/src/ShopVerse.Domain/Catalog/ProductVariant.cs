@@ -119,6 +119,12 @@ public sealed class ProductVariant : Entity<Guid>
         PackSize = packSize;
     }
 
+    /// <summary>Why <paramref name="quantity"/> cannot be ordered on one line, or null when it can.</summary>
+    public string? QuantityProblem(int quantity) =>
+        quantity < MinOrderQty ? $"{Sku}: the minimum order is {MinOrderQty}."
+        : quantity % PackSize != 0 ? $"{Sku}: sold in packs of {PackSize}; order a multiple of {PackSize}."
+        : null;
+
     /// <summary>What the cart needs to know about this SKU, with its order units.</summary>
     public Cart.VariantFacts ToCartFacts(bool sellable, long unitNetMinor, int available) =>
         new(Id, sellable, unitNetMinor, available, MinOrderQty, PackSize);

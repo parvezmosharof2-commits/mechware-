@@ -177,4 +177,29 @@ public class ProductSupplyTests
         notAPack.Should().Throw<ValidationException>().WithMessage("*packs of 10*");
         CartEngine.Set(cart, facts, 30).Items.Single().Quantity.Should().Be(30);
     }
+
+    [Theory]
+    [InlineData(50, 50, 50, true)]
+    [InlineData(50, 50, 100, true)]
+    [InlineData(50, 50, 49, false)]   // below the minimum
+    [InlineData(50, 50, 75, false)]   // not whole packs
+    [InlineData(100, 50, 50, false)]  // one pack, but the minimum is two
+    [InlineData(100, 50, 150, true)]
+    [InlineData(3, 1, 2, false)]
+    [InlineData(3, 1, 4, true)]
+    public void AnOrderLine_FollowsTheMinimumAndThePack(int min, int pack, int quantity, bool allowed)
+    {
+        var v = Published("units-" + Guid.NewGuid().ToString("N")[..6]).Variants.Single();
+        v.SetOrderUnits(min, pack);
+        (v.QuantityProblem(quantity) is null).Should().Be(allowed);
+    }
+
+    [Fact]
+    public void AnOrderLineProblem_NamesTheSkuAndTheRule()
+    {
+        var v = Published("tb").Variants.Single();
+        v.SetOrderUnits(100, 50);
+        v.QuantityProblem(50).Should().Contain("SKU-TB").And.Contain("minimum order is 100");
+        v.QuantityProblem(120).Should().Contain("packs of 50");
+    }
 }
