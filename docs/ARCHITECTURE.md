@@ -186,6 +186,7 @@ Requirement-by-requirement evidence: `docs/security/ASVS_MATRIX.md`. Threat mode
 | Database reachable at boot (outside Development) | the demo-account check reads `users` at startup |
 | `ForwardedHeaders__KnownNetworks` / `__KnownProxies` behind a proxy | otherwise every visitor shares the proxy's rate limit |
 | `Identity__BootstrapAdmin__*` for the first administrator | Production starts with no accounts |
+| `Encryption__FieldKey` (32 bytes, base64; not the published development key) | the API will not start without it: it encrypts BIN, TIN and trade-licence numbers |
 | `Authentication__Google__ClientId` (optional; the API needs to reach `www.googleapis.com` for Google's keys) | without it Google sign-in answers `403 GOOGLE_SIGNIN_DISABLED` |
 
 Local development: `infra/docker/docker-compose.yml` (PostgreSQL, Redis, MinIO, Meilisearch, Mailpit) and the steps in

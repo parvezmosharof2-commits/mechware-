@@ -103,7 +103,10 @@ public class CompanyRegistrationAbuseTests(PostgresDatabaseFixture fixture) : IC
         outcomes.Count(o => o == "ok").Should().Be(1);
         outcomes.Where(o => o != "ok").Should().OnlyContain(o => o == "COMPANY_BIN_EXISTS");
         await using var db = fixture.CreateContext();
-        (await db.Companies.AsNoTracking().CountAsync(c => c.Bin == bin)).Should().Be(2, "the rejected record stays for the audit trail");
+        // The BIN is stored encrypted with a random nonce, so equal BINs are found through the keyed index, never by c.Bin == bin.
+        string index = ShopVerse.Infrastructure.Persistence.CompanyBinIndex.Of(bin);
+        (await db.Companies.AsNoTracking().CountAsync(c => EF.Property<string>(c, ShopVerse.Infrastructure.Persistence.CompanyBinIndex.Property) == index))
+            .Should().Be(2, "the rejected record stays for the audit trail");
     }
 
     [PostgresFact]
