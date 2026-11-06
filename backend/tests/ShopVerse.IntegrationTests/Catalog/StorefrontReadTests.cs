@@ -100,6 +100,52 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
     }
 
     [PostgresAndRedisFact]
+    public async Task ProductPage_ListsAlternatives_InOrder_OnlyThoseOnSale()
+    {
+        Guid[] ids, chosen = [];
+        string[] slugs;
+        await using (var db = _seed.Db.CreateContext())
+        {
+            var four = await db.Products.AsNoTracking()
+                .Where(p => p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .OrderByDescending(p => p.Slug).Select(p => new { p.Id, p.Slug }).Take(4).ToListAsync();
+            (ids, slugs) = ([.. four.Select(x => x.Id)], [.. four.Select(x => x.Slug)]);
+        }
+
+        try
+        {
+            await using (var db = _seed.Db.CreateContext())
+            {
+                var main = await db.Products.Include(p => p.Alternatives).SingleAsync(p => p.Id == ids[0]);
+                // The order staff chose: descending by id, so neither id order nor the table's key order gives the same list.
+                chosen = [.. new[] { ids[1], ids[2] }.OrderByDescending(id => id)];
+                foreach (var id in chosen.Append(ids[3]))
+                    main.AddAlternative(await db.Products.SingleAsync(p => p.Id == id));
+                await db.SaveChangesAsync();
+                // One alternative has since gone obsolete: listing it would send the buyer to a dead end.
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'obsolete' WHERE id = {ids[3]}");
+            }
+            await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(slugs[0]));
+
+            var client = _factory!.CreateClient();
+            foreach (var source in new[] { "database", "redis" })
+            {
+                using var doc = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{slugs[0]}"));
+                doc.RootElement.GetProperty("data").GetProperty("alternatives").EnumerateArray()
+                    .Select(a => a.GetProperty("slug").GetString())
+                    .Should().Equal(chosen.Select(id => slugs[Array.IndexOf(ids, id)]), source);
+            }
+        }
+        finally
+        {
+            await using var db = _seed.Db.CreateContext();
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM product_alternatives WHERE product_id = {ids[0]}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'active' WHERE id = {ids[3]}");
+            await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(slugs[0]));
+        }
+    }
+
+    [PostgresAndRedisFact]
     public async Task ProductPage_ShowsSupplyStatus_ItsPublicSuccessor_AndOrderUnits()
     {
         // Two products of one seller: the older one is phased out in favour of the newer one.
@@ -128,7 +174,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         {
             var old = await db.Products.Include(p => p.Variants).SingleAsync(p => p.Id == oldId);
             var successor = await db.Products.SingleAsync(p => p.Id == newId);
-            old.SetSupply(SupplyStatus.Nrnd, successor);
+            old.SetSupply(SupplyStatus.Nrnd, successor, successorIsDropIn: false, successorNote: "Firmware V4: migrate the project.");
             old.SetOrderUnits(old.Variants.OrderByDescending(v => v.IsDefault).First().Id, 20, 10);
             await db.SaveChangesAsync();
         }
@@ -142,6 +188,8 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
             d.GetProperty("supplyStatus").GetString().Should().Be("nrnd");
             d.GetProperty("successor").GetProperty("slug").GetString().Should().Be(newSlug);
             d.GetProperty("successor").GetProperty("titleEn").GetString().Should().NotBeNullOrEmpty();
+            d.GetProperty("successor").GetProperty("isDropIn").GetBoolean().Should().BeFalse();
+            d.GetProperty("successor").GetProperty("note").GetString().Should().Be("Firmware V4: migrate the project.");
             var variant = d.GetProperty("variants")[0];
             variant.GetProperty("minOrderQty").GetInt32().Should().Be(20);
             variant.GetProperty("packSize").GetInt32().Should().Be(10);
@@ -171,7 +219,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'active' WHERE id = {newId}");
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL WHERE id = {oldId}");
+                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL, successor_note = NULL WHERE id = {oldId}");
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE product_variants SET min_order_qty = 1, pack_size = 1 WHERE product_id = {oldId}");
         }

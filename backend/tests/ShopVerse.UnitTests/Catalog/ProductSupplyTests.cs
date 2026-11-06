@@ -202,4 +202,53 @@ public class ProductSupplyTests
         v.QuantityProblem(50).Should().Contain("SKU-TB").And.Contain("minimum order is 100");
         v.QuantityProblem(120).Should().Contain("packs of 50");
     }
+
+    [Fact]
+    public void ASuccessor_CarriesWhetherItFitsAsItIs_AndWhatChanges()
+    {
+        var old = Published("old-cpu");
+        var successor = Published("new-cpu");
+        old.SetSupply(SupplyStatus.Obsolete, successor, successorIsDropIn: false, successorNote: "  Firmware V4: migrate the project.  ");
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((false, "Firmware V4: migrate the project."));
+
+        old.SetSupply(SupplyStatus.Active, null);
+        (old.SuccessorProductId, old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((null, false, null));
+    }
+
+    [Fact]
+    public void CompatibilityNotes_NeedASuccessor_AndAreBounded()
+    {
+        var p = Published("lonely");
+        ((Action)(() => p.SetSupply(SupplyStatus.Obsolete, null, successorIsDropIn: true))).Should().Throw<ValidationException>();
+        ((Action)(() => p.SetSupply(SupplyStatus.Obsolete, null, successorNote: "x"))).Should().Throw<ValidationException>();
+        var tooLong = () => p.SetSupply(SupplyStatus.Nrnd, Published("next"), false, new string('x', Product.MaxSuccessorNoteLength + 1));
+        tooLong.Should().Throw<ValidationException>().Which.Errors.Single().Field.Should().Be("successorNote");
+    }
+
+    [Fact]
+    public void Alternatives_AreKeptInOrder_WithoutDuplicates_AndCanBeRemoved()
+    {
+        var p = Published("plc");
+        Product a = Published("alt-a", Guid.NewGuid()), b = Published("alt-b");   // another seller is fine for an alternative
+        p.AddAlternative(a);
+        p.AddAlternative(b);
+        p.AddAlternative(a);
+
+        p.Alternatives.Select(x => (x.AlternativeProductId, x.Position)).Should().Equal((a.Id, 0), (b.Id, 1));
+        p.RemoveAlternative(a.Id);
+        p.Alternatives.Select(x => x.AlternativeProductId).Should().Equal(b.Id);
+    }
+
+    [Fact]
+    public void AnAlternative_IsAnotherPublishedProduct_AndTheListIsCapped()
+    {
+        var p = Published("hmi");
+        ((Action)(() => p.AddAlternative(p))).Should().Throw<ValidationException>();
+        var draft = new Product(Guid.NewGuid(), Seller, Guid.NewGuid(), null, "Draft", "খসড়া", "draft-x", "s", "s", "<p>d</p>");
+        ((Action)(() => p.AddAlternative(draft))).Should().Throw<ValidationException>();
+
+        for (int i = 0; i < Product.MaxAlternatives; i++) p.AddAlternative(Published($"alt-{i}"));
+        ((Action)(() => p.AddAlternative(Published("one-more")))).Should().Throw<ValidationException>();
+        p.Alternatives.Should().HaveCount(Product.MaxAlternatives);
+    }
 }

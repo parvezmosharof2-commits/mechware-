@@ -20,8 +20,12 @@ public sealed record VariantDto(
     Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock,
     int MinOrderQty, int PackSize);
 
-/// <summary>The product that replaces a phased-out one; only shown while it is itself on sale.</summary>
-public sealed record SuccessorDto(string Slug, string TitleEn, string TitleBn);
+/// <summary>The product that replaces a phased-out one; only shown while it is itself on sale. <c>IsDropIn</c>: fits without
+/// wiring, mounting or program changes; <c>Note</c> says what changes otherwise. Never swapped into an order.</summary>
+public sealed record SuccessorDto(string Slug, string TitleEn, string TitleBn, bool IsDropIn = false, string? Note = null);
+
+/// <summary>A published product that can be used instead of this one.</summary>
+public sealed record AlternativeDto(string Slug, string TitleEn, string TitleBn, string? BrandName);
 
 public sealed record ProductDetailDto(
     Guid Id,
@@ -47,7 +51,8 @@ public sealed record ProductDetailDto(
     IReadOnlyList<MediaDto> Media,
     IReadOnlyList<VariantDto> Variants,
     string SupplyStatus,
-    SuccessorDto? Successor);
+    SuccessorDto? Successor,
+    IReadOnlyList<AlternativeDto>? Alternatives = null);
 
 public sealed record ProductCardDto(
     Guid Id, string Slug, string TitleEn, string TitleBn, string? BrandName, string? ImageUrl, string? ImageAlt,

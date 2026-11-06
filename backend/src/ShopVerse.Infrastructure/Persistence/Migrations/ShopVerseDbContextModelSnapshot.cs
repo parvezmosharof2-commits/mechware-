@@ -581,6 +581,15 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<bool>("SuccessorIsDropIn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("successor_is_drop_in");
+
+                    b.Property<string>("SuccessorNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("successor_note");
+
                     b.Property<Guid?>("SuccessorProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("successor_product_id");
@@ -656,6 +665,31 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("products", null, t =>
                         {
                             t.HasCheckConstraint("ck_products_successor", "successor_product_id IS NULL OR (supply_status <> 'active' AND successor_product_id <> id)");
+                        });
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAlternative", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("AlternativeProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alternative_product_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.HasKey("ProductId", "AlternativeProductId");
+
+                    b.HasIndex("AlternativeProductId")
+                        .HasDatabaseName("ix_product_alternatives_alternative");
+
+                    b.ToTable("product_alternatives", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_product_alternatives_not_self", "product_id <> alternative_product_id");
                         });
                 });
 
@@ -3161,6 +3195,21 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAlternative", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("AlternativeProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany("Alternatives")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAttributeValue", b =>
                 {
                     b.HasOne("ShopVerse.Domain.Catalog.AttributeValue", null)
@@ -3486,6 +3535,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.Product", b =>
                 {
+                    b.Navigation("Alternatives");
+
                     b.Navigation("AttributeValues");
 
                     b.Navigation("Media");

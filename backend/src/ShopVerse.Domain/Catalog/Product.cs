@@ -26,6 +26,12 @@ public sealed class Product : AggregateRoot<Guid>
     private readonly List<ProductVariant> _variants = [];
     private readonly List<ProductMedia> _media = [];
     private readonly List<ProductAttributeValue> _attributeValues = [];
+    private readonly List<ProductAlternative> _alternatives = [];
+
+    /// <summary>At most this many alternatives per product: a product page lists them, it is not a cross-reference database.</summary>
+    public const int MaxAlternatives = 10;
+
+    public const int MaxSuccessorNoteLength = 500;
 
     public Guid SellerId { get; private set; }
     public Guid CategoryId { get; private set; }
@@ -62,9 +68,17 @@ public sealed class Product : AggregateRoot<Guid>
     /// <summary>The product that replaces this one; only for a product that is not <see cref="SupplyStatus.Active"/>.</summary>
     public Guid? SuccessorProductId { get; private set; }
 
+    /// <summary>True when the successor fits without changes (wiring, mounting, program). Buyers replacing a part in a running
+    /// machine need to know before they order (discovery, 2026-11-06).</summary>
+    public bool SuccessorIsDropIn { get; private set; }
+
+    /// <summary>What changes when moving to the successor, e.g. "firmware V4: migrate the TIA Portal project".</summary>
+    public string? SuccessorNote { get; private set; }
+
     public IReadOnlyCollection<ProductVariant> Variants => _variants.AsReadOnly();
     public IReadOnlyCollection<ProductMedia> Media => _media.AsReadOnly();
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues.AsReadOnly();
+    public IReadOnlyCollection<ProductAlternative> Alternatives => _alternatives.AsReadOnly();
 
     private Product() { }
 
@@ -130,12 +144,19 @@ public sealed class Product : AggregateRoot<Guid>
     /// <summary>
     /// Sets the supply status and, for a product at or near end of life, the product that replaces it. The successor must
     /// be another of the same seller's products, published and itself in supply, so a buyer is never sent to a dead end or
-    /// to a different seller's catalogue. Back in supply, the successor is cleared.
+    /// to a different seller's catalogue. Back in supply, the successor is cleared. <paramref name="successorIsDropIn"/> and
+    /// <paramref name="successorNote"/> tell the buyer whether the successor fits as it is or what changes; the successor is
+    /// only shown, never swapped into an order.
     /// </summary>
-    public void SetSupply(SupplyStatus status, Product? successor)
+    public void SetSupply(SupplyStatus status, Product? successor, bool successorIsDropIn = false, string? successorNote = null)
     {
         EnsureEditable();
         if (!Enum.IsDefined(status)) throw new ValidationException("supplyStatus", "Unknown supply status.");
+        successorNote = string.IsNullOrWhiteSpace(successorNote) ? null : successorNote.Trim();
+        if (successor is null && (successorIsDropIn || successorNote is not null))
+            throw new ValidationException("successorProductId", "Compatibility notes need a successor.");
+        if (successorNote is { Length: > MaxSuccessorNoteLength })
+            throw new ValidationException("successorNote", $"The note can be at most {MaxSuccessorNoteLength} characters.");
         if (successor is not null)
         {
             if (status == SupplyStatus.Active)
@@ -150,6 +171,8 @@ public sealed class Product : AggregateRoot<Guid>
 
         SupplyStatus = status;
         SuccessorProductId = successor?.Id; // never set for an Active product: refused above
+        SuccessorIsDropIn = successorIsDropIn;
+        SuccessorNote = successorNote;
         MarkUpdated();   // raises ProductUpdatedEvent, which evicts the cached product page
     }
 
@@ -262,6 +285,34 @@ public sealed class Product : AggregateRoot<Guid>
 
     #endregion
 
+    #region Alternatives
+
+    /// <summary>
+    /// Adds a part that can be used instead (same function, possibly another brand or seller). It must be published, so the
+    /// list never leads to a dead end; adding it twice changes nothing. One direction only: a newer part often replaces an
+    /// older one but not the reverse.
+    /// </summary>
+    public void AddAlternative(Product alternative)
+    {
+        EnsureEditable();
+        if (alternative.Id == Id) throw new ValidationException("alternativeProductId", "A product cannot be its own alternative.");
+        if (alternative.Status != ProductStatus.Active || alternative.DeletedAtUtc is not null)
+            throw new ValidationException("alternativeProductId", "An alternative must be a published product.");
+        if (_alternatives.Any(a => a.AlternativeProductId == alternative.Id)) return;
+        if (_alternatives.Count >= MaxAlternatives)
+            throw new ValidationException("alternativeProductId", $"A product can list at most {MaxAlternatives} alternatives.");
+        _alternatives.Add(new ProductAlternative(Id, alternative.Id, _alternatives.Count));
+        MarkUpdated();
+    }
+
+    public void RemoveAlternative(Guid alternativeProductId)
+    {
+        EnsureEditable();
+        if (_alternatives.RemoveAll(a => a.AlternativeProductId == alternativeProductId) > 0) MarkUpdated();
+    }
+
+    #endregion
+
     #region Slug
 
     /// <summary>Changes the slug; returns the retired <see cref="SlugHistory"/> (null when unchanged).</summary>
@@ -348,6 +399,23 @@ public sealed class Product : AggregateRoot<Guid>
     {
         UpdatedAtUtc = DateTime.UtcNow;
         AddDomainEvent(new ProductUpdatedEvent(Id, Slug, Status));
+    }
+}
+
+/// <summary>Join row: <c>AlternativeProductId</c> can be used instead of <c>ProductId</c>.</summary>
+public sealed class ProductAlternative
+{
+    public Guid ProductId { get; private set; }
+    public Guid AlternativeProductId { get; private set; }
+    public int Position { get; private set; }
+
+    private ProductAlternative() { }
+
+    internal ProductAlternative(Guid productId, Guid alternativeProductId, int position)
+    {
+        ProductId = productId;
+        AlternativeProductId = alternativeProductId;
+        Position = position;
     }
 }
 
