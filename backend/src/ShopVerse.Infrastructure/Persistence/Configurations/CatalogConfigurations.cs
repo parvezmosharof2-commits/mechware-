@@ -161,6 +161,8 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.HasMany(p => p.Media).WithOne().HasForeignKey(m => m.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.AttributeValues).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.Alternatives).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(p => p.Documents).WithOne().HasForeignKey(d => d.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.Navigation(p => p.Documents).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Alternatives).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Variants).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Media).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -278,6 +280,25 @@ internal sealed class AttributeValueConfiguration : IEntityTypeConfiguration<Att
         b.Property(v => v.NumericMax).HasColumnName("numeric_max").HasPrecision(18, 6);
         // Range filters ("0.5–2 kW") read values of one attribute by number.
         b.HasIndex(v => new { v.AttributeId, v.NumericValue }).HasDatabaseName("ix_attribute_values_numeric");
+    }
+}
+
+internal sealed class ProductDocumentConfiguration : IEntityTypeConfiguration<ProductDocument>
+{
+    public void Configure(EntityTypeBuilder<ProductDocument> b)
+    {
+        b.ToTable("product_documents", t => t.HasCheckConstraint("ck_product_documents_size", "size_bytes > 0"));
+        b.MapAudit(updated: false);
+        b.Property(d => d.ProductId).HasColumnName("product_id");
+        b.Property(d => d.Kind).HasColumnName("kind").HasMaxLength(20).HasConversion(new SnakeCaseEnumConverter<DocumentKind>());
+        b.Property(d => d.FileName).HasColumnName("file_name").HasMaxLength(150).IsRequired();
+        b.Property(d => d.ContentType).HasColumnName("content_type").HasMaxLength(100).IsRequired();
+        b.Property(d => d.SizeBytes).HasColumnName("size_bytes");
+        b.Property(d => d.Sha256).HasColumnName("sha256").HasMaxLength(64).IsFixedLength().IsRequired();
+        b.Property(d => d.StorageKey).HasColumnName("storage_key").HasMaxLength(200).IsRequired();
+        b.Property(d => d.UploadedBy).HasColumnName("uploaded_by");
+        b.HasIndex(d => new { d.ProductId, d.Sha256 }).IsUnique().HasDatabaseName("ux_product_documents_product_sha256");
+        b.HasIndex(d => d.StorageKey).IsUnique().HasDatabaseName("ux_product_documents_storage_key");
     }
 }
 

@@ -52,7 +52,8 @@ public sealed record ProductDetailDto(
     IReadOnlyList<VariantDto> Variants,
     string SupplyStatus,
     SuccessorDto? Successor,
-    IReadOnlyList<AlternativeDto>? Alternatives = null);
+    IReadOnlyList<AlternativeDto>? Alternatives = null,
+    IReadOnlyList<PublicDocumentDto>? Documents = null);
 
 public sealed record ProductCardDto(
     Guid Id, string Slug, string TitleEn, string TitleBn, string? BrandName, string? ImageUrl, string? ImageAlt,

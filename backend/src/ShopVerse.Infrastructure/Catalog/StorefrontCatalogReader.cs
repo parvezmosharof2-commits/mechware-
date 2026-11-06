@@ -28,6 +28,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
                 .Include(p => p.Variants)
                 .Include(p => p.Media)
                 .Include(p => p.Alternatives)
+                .Include(p => p.Documents)
                 .FirstOrDefault(p => p.Slug == slug && p.DeletedAtUtc == null && p.Status == ProductStatus.Active));
 
     private readonly ShopVerseDbContext _db;
@@ -142,6 +143,9 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             SupplyStatus = SnakeCaseName(product.SupplyStatus),
             Successor = successor,
             Alternatives = alternatives,
+            Documents = [.. product.Documents.OrderBy(d => d.Kind).ThenBy(d => d.FileName, StringComparer.Ordinal)
+                .Select(d => new PublicDocumentDto(d.Id, d.Kind.ToString().ToLowerInvariant(), d.FileName, d.ContentType, d.SizeBytes,
+                    $"/api/v1/storefront/products/{product.Slug}/documents/{d.Id}"))],
             Media = product.Media.OrderBy(m => m.Position)
                 .Select(m => new MediaDto(m.Url, m.AltText, m.Type == MediaType.Video ? "video" : "image", m.Width, m.Height, m.BlurDataUrl, m.VariantId))
                 .ToList(),
@@ -206,7 +210,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         d.Variants.Select(v => new VariantDto(
             v.Id, v.Sku, v.Options, v.IsDefault, PriceFor(v, d.VatRate, nowUtc),
             ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize)).ToList(),
-        d.SupplyStatus, d.Successor, d.Alternatives);
+        d.SupplyStatus, d.Successor, d.Alternatives, d.Documents);
 
     internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
     {
@@ -391,6 +395,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public string SupplyStatus { get; set; } = "active";
         public SuccessorDto? Successor { get; set; }
         public List<AlternativeDto> Alternatives { get; set; } = [];
+        public List<PublicDocumentDto> Documents { get; set; } = [];
     }
 
     internal sealed class CachedVariant

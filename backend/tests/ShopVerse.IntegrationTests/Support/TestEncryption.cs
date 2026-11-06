@@ -12,6 +12,9 @@ namespace ShopVerse.IntegrationTests.Support;
 /// </summary>
 public static class TestEncryption
 {
+    /// <summary>Production-like hosts refuse to start without a documents directory and a scanner host; tests point at these.</summary>
+    public static readonly string DocumentsPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "mechware-test-documents");
+
     public static readonly byte[] Key = SHA256.HashData(Encoding.UTF8.GetBytes("mechware-integration-tests-field-key"));
     public static readonly string KeyBase64 = Convert.ToBase64String(Key);
 

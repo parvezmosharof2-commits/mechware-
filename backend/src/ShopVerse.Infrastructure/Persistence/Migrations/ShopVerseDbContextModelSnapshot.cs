@@ -711,6 +711,75 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.ToTable("product_attribute_values", (string)null);
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("content_type");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("file_name");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("sha256")
+                        .IsFixedLength();
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<Guid?>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_product_documents_storage_key");
+
+                    b.HasIndex("ProductId", "Sha256")
+                        .IsUnique()
+                        .HasDatabaseName("ux_product_documents_product_sha256");
+
+                    b.ToTable("product_documents", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_product_documents_size", "size_bytes > 0");
+                        });
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductMedia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3225,6 +3294,15 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductDocument", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany("Documents")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductMedia", b =>
                 {
                     b.HasOne("ShopVerse.Domain.Catalog.Product", null)
@@ -3538,6 +3616,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                     b.Navigation("Alternatives");
 
                     b.Navigation("AttributeValues");
+
+                    b.Navigation("Documents");
 
                     b.Navigation("Media");
 

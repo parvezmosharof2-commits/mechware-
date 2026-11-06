@@ -54,6 +54,7 @@ public sealed class ShopVerseDbContext : DbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<ProductVariant> ProductVariants => Set<ProductVariant>();
     public DbSet<ProductMedia> ProductMedia => Set<ProductMedia>();
+    public DbSet<ProductDocument> ProductDocuments => Set<ProductDocument>();
     public DbSet<AttributeDefinition> Attributes => Set<AttributeDefinition>();
     public DbSet<AttributeValue> AttributeValues => Set<AttributeValue>();
     public DbSet<ProductAttributeValue> ProductAttributeValues => Set<ProductAttributeValue>();

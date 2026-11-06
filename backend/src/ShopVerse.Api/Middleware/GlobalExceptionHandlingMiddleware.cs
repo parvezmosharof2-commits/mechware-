@@ -62,6 +62,18 @@ public sealed class GlobalExceptionHandlingMiddleware
                 forbiddenEx.Message,
                 Array.Empty<object>()
             ),
+            PayloadTooLargeException tooLargeEx => (
+                HttpStatusCode.RequestEntityTooLarge,
+                tooLargeEx.Code,
+                tooLargeEx.Message,
+                Array.Empty<object>()
+            ),
+            ServiceUnavailableException unavailableEx => (
+                HttpStatusCode.ServiceUnavailable,
+                unavailableEx.Code,
+                unavailableEx.Message,
+                Array.Empty<object>()
+            ),
             ConflictException conflictEx => (
                 HttpStatusCode.Conflict,
                 conflictEx.Code,

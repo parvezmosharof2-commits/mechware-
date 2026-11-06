@@ -242,8 +242,42 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
             ["Storage:SecretKey"] = "test-secret-key",
+            ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
+            ["Antivirus:Host"] = "127.0.0.1",
             ["Encryption:FieldKey"] = key is null ? "" : Convert.ToBase64String(ShopVerse.Infrastructure.Security.FieldEncryption.DevelopmentKey)
         });
+        FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Where(e => e.ToString().Contains(message));
+    }
+
+    [PostgresTheory]
+    [InlineData(false, true, "Documents:LocalPath is not set")]
+    [InlineData(true, false, "Antivirus:Host is not set")]
+    [InlineData(false, false, "Documents:LocalPath is not set")]
+    public async Task Production_RefusesToStart_WithoutAStoragePathOrAMalwareScanner(bool withPath, bool withScanner, string message)
+    {
+        // Uploads in production need a persistent directory and a real scanner; the temp directory and the EICAR-only
+        // development scanner are for Development and tests.
+        var settings = new Dictionary<string, string>
+        {
+            ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Storage:AccessKey"] = "test-access-key",
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Encryption:FieldKey"] = TestFieldKey,
+            ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64
+        };
+        if (withPath) settings["Documents:LocalPath"] = TestEncryption.DocumentsPath;
+        if (withScanner) settings["Antivirus:Host"] = "127.0.0.1";
+        await using var factory = new DbBackedFactory("Production", settings);
+        FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Where(e => e.ToString().Contains(message));
+    }
+
+    [PostgresTheory]
+    [InlineData("Documents:MaxCadBytes", "0", "every size limit must be above zero")]
+    [InlineData("Documents:MaxDatasheetBytes", "-1", "every size limit must be above zero")]
+    [InlineData("Documents:MaxCadBytes", "70000000", "must stay below")]
+    public async Task TheApi_RefusesToStart_WithAnUploadLimitThatCannotWork(string key, string value, string message)
+    {
+        await using var factory = new DbBackedFactory(settings: new Dictionary<string, string> { [key] = value });
         FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Where(e => e.ToString().Contains(message));
     }
 
@@ -308,7 +342,9 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
-            ["Storage:SecretKey"] = "test-secret-key"
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
+            ["Antivirus:Host"] = "127.0.0.1"
         });
         var client = factory.CreateClient();
 
@@ -345,6 +381,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
             ["Storage:SecretKey"] = "test-secret-key",
+            ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
+            ["Antivirus:Host"] = "127.0.0.1",
             ["Identity:BootstrapAdmin:Email"] = email,
             ["Identity:BootstrapAdmin:Password"] = password,
             ["Identity:BootstrapAdmin:TotpSecret"] = secret
@@ -375,6 +413,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
-            ["Storage:SecretKey"] = "test-secret-key"
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
+            ["Antivirus:Host"] = "127.0.0.1"
         });
 }

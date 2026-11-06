@@ -14,8 +14,26 @@ public sealed class StorefrontController : ControllerBase
     private const string PublicCache = "public, max-age=30, stale-while-revalidate=60";
 
     private readonly IStorefrontCatalogReader _catalog;
+    private readonly IProductDocumentService _documents;
 
-    public StorefrontController(IStorefrontCatalogReader catalog) => _catalog = catalog;
+    public StorefrontController(IStorefrontCatalogReader catalog, IProductDocumentService documents)
+    {
+        _catalog = catalog;
+        _documents = documents;
+    }
+
+    /// <summary>
+    /// A datasheet, CAD model or certificate of a published product. Always a download (never shown in the page), with the type we
+    /// detected when it was uploaded, not one the client chose. Anything else, including a product that is not published, is a 404.
+    /// </summary>
+    [HttpGet("products/{slug}/documents/{documentId:guid}")]
+    public async Task<IActionResult> DownloadDocument(string slug, Guid documentId, CancellationToken ct)
+    {
+        if (!ShopVerse.Domain.Catalog.Slug.IsValid(slug)) return NotFound();
+        var file = await _documents.OpenPublicAsync(slug, documentId, ct);
+        Response.Headers.CacheControl = "public, max-age=300";
+        return File(file.Content, file.ContentType, file.FileName, enableRangeProcessing: false);
+    }
 
     /// <summary>Product detail page payload. Retired slugs answer 301 to the current slug.</summary>
     [HttpGet("products/{slug}")]
