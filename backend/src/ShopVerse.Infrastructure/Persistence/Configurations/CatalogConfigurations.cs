@@ -134,6 +134,12 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.Property(p => p.RatingCount).HasColumnName("rating_count");
         b.Property(p => p.SoldCount).HasColumnName("sold_count");
         b.Property(p => p.DeletedAtUtc).HasColumnName("deleted_at");
+        b.Property(p => p.Lifecycle).HasColumnName("lifecycle").HasMaxLength(20)
+            .HasConversion(new SnakeCaseEnumConverter<ProductLifecycle>()).IsRequired();
+        b.Property(p => p.SuccessorProductId).HasColumnName("successor_product_id");
+        b.Property(p => p.SuccessorIsDropIn).HasColumnName("successor_is_drop_in");
+        b.Property(p => p.SuccessorNote).HasColumnName("successor_note").HasMaxLength(Product.MaxSuccessorNoteLength);
+        b.HasOne<Product>().WithMany().HasForeignKey(p => p.SuccessorProductId).OnDelete(DeleteBehavior.Restrict);
 
         b.HasIndex(p => p.Slug).IsUnique().HasDatabaseName("ux_products_slug").HasFilter("deleted_at IS NULL");
         b.HasIndex(p => new { p.SellerId, p.Status }).HasDatabaseName("ix_products_seller_status");
@@ -148,6 +154,8 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.HasMany(p => p.Variants).WithOne().HasForeignKey(v => v.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.Media).WithOne().HasForeignKey(m => m.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.AttributeValues).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(p => p.Alternatives).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.Navigation(p => p.Alternatives).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Variants).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Media).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.AttributeValues).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -164,6 +172,8 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
         {
             t.HasCheckConstraint("ck_variants_price", "price_minor > 0");
             t.HasCheckConstraint("ck_variants_sale_price", "sale_price_minor IS NULL OR sale_price_minor > 0");
+            t.HasCheckConstraint("ck_variants_ordering_rules",
+                "pack_size >= 1 AND min_order_qty >= 1 AND min_order_qty % pack_size = 0");
         });
         b.MapAudit();
         b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();   // optimistic concurrency
@@ -193,6 +203,8 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
         b.Property(v => v.Currency).HasColumnName("currency").HasMaxLength(3)
             .HasConversion(c => c.ToIsoCode(), s => CurrencyExtensions.Parse(s));
         b.Property(v => v.IsDefault).HasColumnName("is_default");
+        b.Property(v => v.MinOrderQty).HasColumnName("min_order_qty");
+        b.Property(v => v.PackSize).HasColumnName("pack_size");
         b.Property(v => v.Status).HasColumnName("status").HasMaxLength(30).HasConversion(new SnakeCaseEnumConverter<VariantStatus>());
         b.Ignore(v => v.Price);
         b.Ignore(v => v.SalePrice);
@@ -252,6 +264,21 @@ internal sealed class AttributeValueConfiguration : IEntityTypeConfiguration<Att
         b.Property(v => v.ValueEn).HasColumnName("value_en").HasMaxLength(150).IsRequired();
         b.Property(v => v.ValueBn).HasColumnName("value_bn").HasMaxLength(150).IsRequired();
         b.Property(v => v.SortOrder).HasColumnName("sort_order");
+    }
+}
+
+internal sealed class ProductAlternativeConfiguration : IEntityTypeConfiguration<ProductAlternative>
+{
+    public void Configure(EntityTypeBuilder<ProductAlternative> b)
+    {
+        b.ToTable("product_alternatives", t =>
+            t.HasCheckConstraint("ck_product_alternatives_not_self", "product_id <> alternative_product_id"));
+        b.HasKey(a => new { a.ProductId, a.AlternativeProductId });
+        b.Property(a => a.ProductId).HasColumnName("product_id");
+        b.Property(a => a.AlternativeProductId).HasColumnName("alternative_product_id");
+        b.Property(a => a.Position).HasColumnName("position");
+        b.HasOne<Product>().WithMany().HasForeignKey(a => a.AlternativeProductId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(a => a.AlternativeProductId).HasDatabaseName("ix_product_alternatives_alternative");
     }
 }
 

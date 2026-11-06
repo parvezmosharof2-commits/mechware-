@@ -15,7 +15,15 @@ public sealed record VariantPriceDto(
     MoneyDto Price, MoneyDto? CompareAt, int DiscountPercent, bool SaleActive, bool TaxIncluded, MoneyDto? Tax);
 
 public sealed record VariantDto(
-    Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock);
+    Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock,
+    int MinOrderQty = 1, int PackSize = 1);
+
+/// <summary>A listed product another one points to (successor or alternative).</summary>
+public sealed record RelatedProductDto(string Slug, string TitleEn, string TitleBn, string? BrandName);
+
+/// <summary>The part that replaces an NRND or obsolete one. <c>IsDropIn</c>: fits without wiring, mounting or program changes;
+/// <c>Note</c> says what changes otherwise. Shown to the buyer, never swapped into an order automatically.</summary>
+public sealed record SuccessorDto(RelatedProductDto Product, bool IsDropIn, string? Note);
 
 public sealed record ProductDetailDto(
     Guid Id,
@@ -39,7 +47,10 @@ public sealed record ProductDetailDto(
     string? DatasheetUrl,
     string? CadModelUrl,
     IReadOnlyList<MediaDto> Media,
-    IReadOnlyList<VariantDto> Variants);
+    IReadOnlyList<VariantDto> Variants,
+    string Lifecycle = "active",
+    SuccessorDto? Successor = null,
+    IReadOnlyList<RelatedProductDto>? Alternatives = null);
 
 public sealed record ProductCardDto(
     Guid Id, string Slug, string TitleEn, string TitleBn, string? BrandName, string? ImageUrl, string? ImageAlt,

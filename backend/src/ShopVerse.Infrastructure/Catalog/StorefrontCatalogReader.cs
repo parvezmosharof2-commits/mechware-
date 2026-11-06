@@ -27,6 +27,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             db.Products.AsNoTracking().AsSplitQuery()
                 .Include(p => p.Variants)
                 .Include(p => p.Media)
+                .Include(p => p.Alternatives)
                 .FirstOrDefault(p => p.Slug == slug && p.DeletedAtUtc == null && p.Status == ProductStatus.Active));
 
     private readonly ShopVerseDbContext _db;
@@ -95,8 +96,25 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         var chain = await _db.Categories.AsNoTracking().Where(c => slugs.Contains(c.Slug)).OrderBy(c => c.Depth)
             .Select(c => new BreadcrumbDto(c.NameEn, c.NameBn, c.Slug)).ToListAsync(ct);
 
+        // Successor and alternatives: only listed products are linked; a successor that is not listed is left out rather
+        // than shown as a dead link, and the lifecycle still tells the buyer the part is NRND or obsolete.
+        var relatedIds = product.Alternatives.Select(a => a.AlternativeProductId)
+            .Concat(product.SuccessorProductId is { } sid ? [sid] : []).Distinct().ToList();
+        var related = relatedIds.Count == 0 ? []
+            : await (from p in _db.Products.AsNoTracking()
+                     where relatedIds.Contains(p.Id) && p.DeletedAtUtc == null && p.Status == ProductStatus.Active
+                     join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
+                     from b in bs.DefaultIfEmpty()
+                     select new { p.Id, Dto = new RelatedProductDto(p.Slug, p.TitleEn, p.TitleBn, b == null ? null : b.Name) })
+                .ToDictionaryAsync(r => r.Id, r => r.Dto, ct);
+
         return new CachedProduct
         {
+            Lifecycle = LifecycleName(product.Lifecycle),
+            Successor = product.SuccessorProductId is { } successorId && related.TryGetValue(successorId, out var successor)
+                ? new SuccessorDto(successor, product.SuccessorIsDropIn, product.SuccessorNote) : null,
+            Alternatives = [.. product.Alternatives.OrderBy(a => a.Position)
+                .Where(a => related.ContainsKey(a.AlternativeProductId)).Select(a => related[a.AlternativeProductId])],
             Id = product.Id,
             Slug = product.Slug,
             TitleEn = product.TitleEn,
@@ -134,7 +152,9 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
                     CompareAtMinor = v.CompareAtPriceMinor,
                     SalePriceMinor = v.SalePriceMinor,
                     SaleStartsAtUtc = v.SaleStartsAtUtc,
-                    SaleEndsAtUtc = v.SaleEndsAtUtc
+                    SaleEndsAtUtc = v.SaleEndsAtUtc,
+                    MinOrderQty = v.MinOrderQty,
+                    PackSize = v.PackSize
                 }).ToList()
         };
     }
@@ -179,7 +199,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         d.RatingCount, d.SoldCount, d.DatasheetUrl, d.CadModelUrl, d.Media,
         d.Variants.Select(v => new VariantDto(
             v.Id, v.Sku, v.Options, v.IsDefault, PriceFor(v, d.VatRate, nowUtc),
-            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0))).ToList());
+            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize)).ToList(),
+        d.Lifecycle, d.Successor, d.Alternatives);
 
     internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
     {
@@ -209,6 +230,13 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         var parsed = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, string>>>(json, CacheJson.Options) ?? [];
         return parsed.ToDictionary(g => g.Key, g => (IReadOnlyDictionary<string, string>)g.Value);
     }
+
+    private static string LifecycleName(ProductLifecycle l) => l switch
+    {
+        ProductLifecycle.Nrnd => "nrnd",
+        ProductLifecycle.Obsolete => "obsolete",
+        _ => "active"
+    };
 
     private static string SnakeCaseEnumConverterName(ProductCondition c) => c switch
     {
@@ -354,6 +382,9 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public decimal VatRate { get; set; }
         public List<MediaDto> Media { get; set; } = [];
         public List<CachedVariant> Variants { get; set; } = [];
+        public string Lifecycle { get; set; } = "active";
+        public SuccessorDto? Successor { get; set; }
+        public List<RelatedProductDto> Alternatives { get; set; } = [];
     }
 
     internal sealed class CachedVariant
@@ -368,6 +399,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public long? SalePriceMinor { get; set; }
         public DateTime? SaleStartsAtUtc { get; set; }
         public DateTime? SaleEndsAtUtc { get; set; }
+        public int MinOrderQty { get; set; } = 1;
+        public int PackSize { get; set; } = 1;
     }
 
     #endregion

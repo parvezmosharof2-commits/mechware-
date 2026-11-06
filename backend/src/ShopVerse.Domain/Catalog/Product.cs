@@ -11,6 +11,13 @@ public enum ProductStatus { Draft = 1, PendingReview = 2, Active = 3, Rejected =
 public enum ProductCondition { BrandNew = 1, Refurbished = 2, Used = 3 }
 
 /// <summary>
+/// Where the manufacturer is with the part, separate from <see cref="ProductStatus"/> (whether we list it). NRND = "not
+/// recommended for new designs": still made and sold, but a project should pick the successor. Obsolete: no longer made; we
+/// sell what stock is left.
+/// </summary>
+public enum ProductLifecycle { Active = 1, Nrnd = 2, Obsolete = 3 }
+
+/// <summary>
 /// Product aggregate root. Lifecycle: Draft → PendingReview → Active | Rejected → Archived.
 /// A rejected product returns to Draft for correction; an archived product can be restored to Draft.
 /// </summary>
@@ -19,6 +26,10 @@ public sealed class Product : AggregateRoot<Guid>
     private readonly List<ProductVariant> _variants = [];
     private readonly List<ProductMedia> _media = [];
     private readonly List<ProductAttributeValue> _attributeValues = [];
+    private readonly List<ProductAlternative> _alternatives = [];
+
+    /// <summary>At most this many alternatives per product: a PDP lists them, it is not a cross-reference database.</summary>
+    public const int MaxAlternatives = 10;
 
     public Guid SellerId { get; private set; }
     public Guid CategoryId { get; private set; }
@@ -51,10 +62,24 @@ public sealed class Product : AggregateRoot<Guid>
     public int RatingCount { get; private set; }
     public int SoldCount { get; private set; }
     public DateTime? DeletedAtUtc { get; private set; }
+    public ProductLifecycle Lifecycle { get; private set; } = ProductLifecycle.Active;
+
+    /// <summary>The part that replaces this one; only an NRND or obsolete product has one.</summary>
+    public Guid? SuccessorProductId { get; private set; }
+
+    /// <summary>True when the successor fits without changes (wiring, mounting, program); buyers replacing a part in a running
+    /// machine need to know before they order (discovery 2026-11-06).</summary>
+    public bool SuccessorIsDropIn { get; private set; }
+
+    /// <summary>What changes when moving to the successor, e.g. "firmware V4: migrate the TIA Portal project".</summary>
+    public string? SuccessorNote { get; private set; }
+
+    public const int MaxSuccessorNoteLength = 500;
 
     public IReadOnlyCollection<ProductVariant> Variants => _variants.AsReadOnly();
     public IReadOnlyCollection<ProductMedia> Media => _media.AsReadOnly();
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues.AsReadOnly();
+    public IReadOnlyCollection<ProductAlternative> Alternatives => _alternatives.AsReadOnly();
 
     private Product() { }
 
@@ -216,6 +241,53 @@ public sealed class Product : AggregateRoot<Guid>
 
     #endregion
 
+    #region Manufacturer lifecycle and related parts
+
+    /// <summary>
+    /// Records the manufacturer's lifecycle. A successor may only be named for an NRND or obsolete part, and never the part
+    /// itself; an active part has none. The successor is shown, never swapped in automatically. Whether the successor exists and is listed is checked by the caller, which has
+    /// the database.
+    /// </summary>
+    public void SetLifecycle(ProductLifecycle lifecycle, Guid? successorProductId, bool successorIsDropIn = false,
+        string? successorNote = null)
+    {
+        if (!Enum.IsDefined(lifecycle)) throw new ValidationException("lifecycle", "Unknown lifecycle.");
+        if (successorProductId == Guid.Empty) successorProductId = null;
+        successorNote = string.IsNullOrWhiteSpace(successorNote) ? null : successorNote.Trim();
+        if (successorProductId == Id) throw new ValidationException("successorProductId", "A product cannot succeed itself.");
+        if (lifecycle == ProductLifecycle.Active && successorProductId is not null)
+            throw new ValidationException("successorProductId", "Only an NRND or obsolete product has a successor.");
+        if (successorProductId is null && (successorIsDropIn || successorNote is not null))
+            throw new ValidationException("successorProductId", "Compatibility notes need a successor.");
+        if (successorNote is { Length: > MaxSuccessorNoteLength })
+            throw new ValidationException("successorNote", $"The note can be at most {MaxSuccessorNoteLength} characters.");
+
+        Lifecycle = lifecycle;
+        SuccessorProductId = successorProductId;
+        SuccessorIsDropIn = successorIsDropIn;
+        SuccessorNote = successorNote;
+        MarkUpdated();
+    }
+
+    /// <summary>Adds a part that can be used instead (same function, possibly another brand); adding it twice changes nothing.</summary>
+    public void AddAlternative(Guid alternativeProductId)
+    {
+        if (alternativeProductId == Guid.Empty || alternativeProductId == Id)
+            throw new ValidationException("alternativeProductId", "A product cannot be its own alternative.");
+        if (_alternatives.Any(a => a.AlternativeProductId == alternativeProductId)) return;
+        if (_alternatives.Count >= MaxAlternatives)
+            throw new ValidationException("alternativeProductId", $"A product can list at most {MaxAlternatives} alternatives.");
+        _alternatives.Add(new ProductAlternative(Id, alternativeProductId, _alternatives.Count));
+        MarkUpdated();
+    }
+
+    public void RemoveAlternative(Guid alternativeProductId)
+    {
+        if (_alternatives.RemoveAll(a => a.AlternativeProductId == alternativeProductId) > 0) MarkUpdated();
+    }
+
+    #endregion
+
     #region Slug
 
     /// <summary>Changes the slug; returns the retired <see cref="SlugHistory"/> (null when unchanged).</summary>
@@ -302,6 +374,24 @@ public sealed class Product : AggregateRoot<Guid>
     {
         UpdatedAtUtc = DateTime.UtcNow;
         AddDomainEvent(new ProductUpdatedEvent(Id, Slug, Status));
+    }
+}
+
+/// <summary>Join row: <c>AlternativeProductId</c> can be used instead of <c>ProductId</c> (one direction; A→B does not imply B→A,
+/// since a newer part often replaces an older one but not the reverse).</summary>
+public sealed class ProductAlternative
+{
+    public Guid ProductId { get; private set; }
+    public Guid AlternativeProductId { get; private set; }
+    public int Position { get; private set; }
+
+    private ProductAlternative() { }
+
+    internal ProductAlternative(Guid productId, Guid alternativeProductId, int position)
+    {
+        ProductId = productId;
+        AlternativeProductId = alternativeProductId;
+        Position = position;
     }
 }
 

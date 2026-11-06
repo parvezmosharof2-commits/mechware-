@@ -35,6 +35,15 @@ public sealed class ProductVariant : Entity<Guid>
     public bool IsDefault { get; private set; }
     public VariantStatus Status { get; private set; } = VariantStatus.Active;
 
+    /// <summary>The smallest quantity sold on one order line (a multiple of <see cref="PackSize"/>).</summary>
+    public int MinOrderQty { get; private set; } = 1;
+
+    /// <summary>Units per pack; a line's quantity must be a whole number of packs (e.g. terminal blocks in boxes of 50).</summary>
+    public int PackSize { get; private set; } = 1;
+
+    /// <summary>Upper bound for both rules; one order line cannot exceed this many units either.</summary>
+    public const int MaxOrderingUnit = 10_000;
+
     internal string OptionKey => OptionKeyOf(OptionValues);
 
     private ProductVariant() { }
@@ -101,6 +110,27 @@ public sealed class ProductVariant : Entity<Guid>
         SaleEndsAtUtc = null;
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    /// <summary>Sets the minimum order quantity and pack size. The minimum must be a whole number of packs, so the smallest
+    /// valid quantity is the minimum itself and there is no quantity that satisfies one rule and breaks the other.</summary>
+    public void SetOrderingRules(int minOrderQty, int packSize)
+    {
+        if (packSize is < 1 or > MaxOrderingUnit)
+            throw new ValidationException("packSize", $"Pack size must be between 1 and {MaxOrderingUnit}.");
+        if (minOrderQty is < 1 or > MaxOrderingUnit)
+            throw new ValidationException("minOrderQty", $"Minimum order quantity must be between 1 and {MaxOrderingUnit}.");
+        if (minOrderQty % packSize != 0)
+            throw new ValidationException("minOrderQty", "Minimum order quantity must be a whole number of packs.");
+        MinOrderQty = minOrderQty;
+        PackSize = packSize;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Why <paramref name="quantity"/> cannot be ordered, or null when it can.</summary>
+    public string? QuantityProblem(int quantity) =>
+        quantity < MinOrderQty ? $"{Sku}: the minimum order is {MinOrderQty}."
+        : quantity % PackSize != 0 ? $"{Sku}: sold in packs of {PackSize}; order a multiple of {PackSize}."
+        : null;
 
     public void Deactivate() => Status = VariantStatus.Inactive;
     public void Activate() => Status = VariantStatus.Active;

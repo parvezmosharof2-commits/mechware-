@@ -278,6 +278,11 @@ The rules:
 #### `GET /products/{slug}` (PDP Detail)
 - **Auth**: Public | **Caching**: Redis Tagged (`cache:product:{slug}`), TTL 1h | **Rate Limit**: 100 req/min
 - **Response**: Full aggregate: Product, Variants (with prices and stock status), grouped `specs`, `highlights`, `datasheetUrl`, `cadModelUrl`, Brand, Seller card, Breadcrumbs, and SEO tags.
+- **PIM fields (sprint 3–4):**
+  - `lifecycle`: `active`, `nrnd` (not recommended for new designs) or `obsolete`.
+  - `successor`: `{ product: { slug, titleEn, titleBn, brandName }, isDropIn, note }` or `null`. It is only shown, never swapped into an order. It is `null` when the successor is not listed.
+  - `alternatives`: listed products only, in the order staff set.
+  - Each variant has `minOrderQty` and `packSize`. `POST /api/v1/orders` refuses a line below the minimum, or one that is not a whole number of packs. The response is 400 `VALIDATION_ERROR` naming the SKU and the rule. The quantity is never rounded.
 
 #### `GET /search/autocomplete`
 - **Auth**: Public | **Rate Limit**: 30 req/10s | **SLA**: < 50ms p95

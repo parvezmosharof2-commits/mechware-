@@ -515,6 +515,12 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(8,2)")
                         .HasColumnName("length_cm");
 
+                    b.Property<string>("Lifecycle")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("lifecycle");
+
                     b.Property<decimal>("RatingAvg")
                         .HasPrecision(3, 2)
                         .HasColumnType("numeric(3,2)")
@@ -567,6 +573,19 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
+                    b.Property<bool>("SuccessorIsDropIn")
+                        .HasColumnType("boolean")
+                        .HasColumnName("successor_is_drop_in");
+
+                    b.Property<string>("SuccessorNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("successor_note");
+
+                    b.Property<Guid?>("SuccessorProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("successor_product_id");
+
                     b.Property<string>("TitleBn")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -618,6 +637,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("SpecsJson"), "gin");
 
+                    b.HasIndex("SuccessorProductId");
+
                     b.HasIndex("CategoryId", "Status")
                         .HasDatabaseName("ix_products_category_status");
 
@@ -625,6 +646,31 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_products_seller_status");
 
                     b.ToTable("products", (string)null);
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAlternative", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("AlternativeProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("alternative_product_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.HasKey("ProductId", "AlternativeProductId");
+
+                    b.HasIndex("AlternativeProductId")
+                        .HasDatabaseName("ix_product_alternatives_alternative");
+
+                    b.ToTable("product_alternatives", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_product_alternatives_not_self", "product_id <> alternative_product_id");
+                        });
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAttributeValue", b =>
@@ -739,10 +785,18 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
 
+                    b.Property<int>("MinOrderQty")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_order_qty");
+
                     b.Property<string>("OptionValues")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("option_values");
+
+                    b.Property<int>("PackSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("pack_size");
 
                     b.Property<long>("PriceMinor")
                         .HasColumnType("bigint")
@@ -802,6 +856,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.ToTable("product_variants", null, t =>
                         {
+                            t.HasCheckConstraint("ck_variants_ordering_rules", "pack_size >= 1 AND min_order_qty >= 1 AND min_order_qty % pack_size = 0");
+
                             t.HasCheckConstraint("ck_variants_price", "price_minor > 0");
 
                             t.HasCheckConstraint("ck_variants_sale_price", "sale_price_minor IS NULL OR sale_price_minor > 0");
@@ -3108,6 +3164,26 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SellerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("SuccessorProductId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAlternative", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("AlternativeProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Catalog.Product", null)
+                        .WithMany("Alternatives")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.ProductAttributeValue", b =>
@@ -3435,6 +3511,8 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.Product", b =>
                 {
+                    b.Navigation("Alternatives");
+
                     b.Navigation("AttributeValues");
 
                     b.Navigation("Media");

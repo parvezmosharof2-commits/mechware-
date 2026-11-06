@@ -505,6 +505,13 @@ public sealed partial class OrderService(
         if (unavailable.Count > 0)
             throw new ConflictException("VARIANT_UNAVAILABLE", $"These items are not available: {string.Join(", ", unavailable)}.");
 
+        // Minimum order quantity and pack size (PIM): the buyer is told which line breaks which rule; nothing is rounded for
+        // them, because a silently changed quantity on a company order is a different order from the one approved.
+        var quantityErrors = lines
+            .Select(l => byId[l.VariantId].Variant.QuantityProblem(l.Quantity))
+            .OfType<string>().Select(m => new ValidationError("quantity", m)).ToList();
+        if (quantityErrors.Count > 0) throw new ValidationException(quantityErrors);
+
         var drafts = new List<OrderLineDraft>();
         var categoryOf = new Dictionary<Guid, Guid>();
         var terms = new Dictionary<Guid, SellerTerms>();
