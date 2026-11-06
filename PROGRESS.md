@@ -2,6 +2,8 @@
 
 > **Target Standard:** USD 100,000+ Enterprise Industrial Commerce & Automation Platform
 > **Architecture:** C# 13 / .NET 10 Clean Architecture + Next.js 15 Monorepo + PostgreSQL 16 + Redis 7 + Meilisearch
+>
+> **📌 সর্বশেষ অবস্থা (২০২৬-১১-০৬):** নিরাপত্তা অডিটের কাজ কোথায় থেমেছে, কী বাকি আর কোন সিদ্ধান্ত মালিকের, সব আছে [`docs/SESSION_NOTES_2026-11-06.md`](docs/SESSION_NOTES_2026-11-06.md)-এ। পরের বার ওখান থেকে শুরু করুন।
 
 ---
 
