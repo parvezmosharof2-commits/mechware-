@@ -172,4 +172,35 @@ public class CatalogSeedTests : IClassFixture<CatalogSeedFixture>
         again.AlreadySeeded.Should().BeTrue();
         (await db.Products.CountAsync()).Should().Be(_f.Report.Products);
     }
+
+    [PostgresFact]
+    public async Task NumericAttributes_AreStoredInTheirUnit_AndFilterByRange()
+    {
+        await using var db = _f.Db.CreateContext();
+        var attributes = await db.Attributes.AsNoTracking().Include(a => a.Values).ToListAsync();
+
+        var power = attributes.Single(a => a.Code == "motor_power");
+        (power.DataType, power.Unit).Should().Be((AttributeDataType.Number, "kW"));
+        power.Values.Should().OnlyContain(v => v.NumericValue != null && v.NumericMax == v.NumericValue);
+        power.Values.Single(v => v.ValueEn == "0.75 kW (1 HP)").NumericValue.Should().Be(0.75m);
+
+        // Written in W and in kW, compared in kW.
+        var rated = attributes.Single(a => a.Code == "rated_power");
+        rated.Values.Single(v => v.ValueEn == "750 W").NumericValue.Should().Be(0.75m);
+
+        var pressure = attributes.Single(a => a.Code == "pressure_range");
+        (pressure.DataType, pressure.Unit).Should().Be((AttributeDataType.Range, "bar"));
+        var p16 = pressure.Values.Single(v => v.ValueEn == "0–16 bar");
+        (p16.NumericValue, p16.NumericMax).Should().Be((0m, 16m));
+
+        // Text attributes keep no number.
+        attributes.Single(a => a.Code == "body_thread").Values.Should().OnlyContain(v => v.NumericValue == null);
+
+        // A range filter: products whose motor power is between 0.5 and 2 kW.
+        var inRange = await (from pav in db.ProductAttributeValues
+                             join v in db.AttributeValues on pav.AttributeValueId equals v.Id
+                             where v.AttributeId == power.Id && v.NumericValue >= 0.5m && v.NumericValue <= 2m
+                             select v.NumericValue!.Value).ToListAsync();
+        inRange.Should().NotBeEmpty().And.OnlyContain(x => x >= 0.5m && x <= 2m);
+    }
 }

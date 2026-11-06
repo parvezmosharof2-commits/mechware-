@@ -126,7 +126,12 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 - ⏳ **PDP-তে banner আর quantity ধাপ:** স্প্রিন্ট ৫–৬-এর PDP পাতার সাথে হবে (web-এ PDP পাতা এখনো নেই)।
 - ⏳ **Seller বা admin-এর সম্পাদনার API:** product লেখার API এলে সেখানে `SetSupply`/`SetOrderUnits` ব্যবহার হবে।
   - উত্তরসূরি "একই seller-এর পণ্য" কিনা, সেই যাচাই domain-এ আছে, তাই ওই API-কে আলাদা করে এটা যাচাই করতে হবে না।
-- ⏳ **পরের ধাপ:** unit-সহ attribute, datasheet/CAD আপলোড (AV scan), বিকল্প পণ্য।
+- ✅ **ধাপ ২: unit-সহ attribute।** সংখ্যাভিত্তিক attribute-এর মান এখন attribute-এর নিজের unit-এ সংখ্যা হিসেবে রাখা হয় (`numeric_value`)। Range attribute-এ দুই প্রান্তই থাকে।
+  - "750 W" আর "0.75 kW" একই মান হিসেবে গণ্য হয়।
+  - ভুল ধরনের unit আটকায়: যেমন কারেন্ট, ক্ষেত্রফল (mm²) বা শক্তি (kWh)।
+  - Seed-এর ৯টা attribute সংখ্যা হিসেবে আছে।
+  - স্প্রিন্ট ৫–৬-এর range filter এর উপর দাঁড়াবে।
+- ⏳ **পরের ধাপ:** datasheet/CAD আপলোড (AV scan), বিকল্প পণ্য।
 
 ### স্প্রিন্ট ৫–৬ — সার্চ + পণ্যের তালিকা ও পেজ
 - Meilisearch adapter (outbox থেকে sync), parametric facet, পার্ট-নম্বর normalisation (`6ES7 214-1AG40-0XB0` = `6ES72141AG400XB0`), Banglish প্রতিশব্দ।

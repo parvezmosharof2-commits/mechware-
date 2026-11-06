@@ -261,12 +261,19 @@ internal sealed class AttributeValueConfiguration : IEntityTypeConfiguration<Att
 {
     public void Configure(EntityTypeBuilder<AttributeValue> b)
     {
-        b.ToTable("attribute_values");
+        b.ToTable("attribute_values", t =>
+            // Both ends present or both absent, never a range that runs backwards (mirrors AttributeDefinition.AddValue).
+            t.HasCheckConstraint("ck_attribute_values_numeric",
+                "(numeric_value IS NULL AND numeric_max IS NULL) OR (numeric_value >= 0 AND numeric_max >= numeric_value)"));
         b.MapAudit(updated: false);
         b.Property(v => v.AttributeId).HasColumnName("attribute_id");
         b.Property(v => v.ValueEn).HasColumnName("value_en").HasMaxLength(150).IsRequired();
         b.Property(v => v.ValueBn).HasColumnName("value_bn").HasMaxLength(150).IsRequired();
         b.Property(v => v.SortOrder).HasColumnName("sort_order");
+        b.Property(v => v.NumericValue).HasColumnName("numeric_value").HasPrecision(18, 6);
+        b.Property(v => v.NumericMax).HasColumnName("numeric_max").HasPrecision(18, 6);
+        // Range filters ("0.5–2 kW") read values of one attribute by number.
+        b.HasIndex(v => new { v.AttributeId, v.NumericValue }).HasDatabaseName("ix_attribute_values_numeric");
     }
 }
 

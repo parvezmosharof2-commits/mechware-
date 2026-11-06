@@ -287,6 +287,16 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<decimal?>("NumericMax")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("numeric_max");
+
+                    b.Property<decimal?>("NumericValue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("numeric_value");
+
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
@@ -305,9 +315,13 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AttributeId");
+                    b.HasIndex("AttributeId", "NumericValue")
+                        .HasDatabaseName("ix_attribute_values_numeric");
 
-                    b.ToTable("attribute_values", (string)null);
+                    b.ToTable("attribute_values", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_attribute_values_numeric", "(numeric_value IS NULL AND numeric_max IS NULL) OR (numeric_value >= 0 AND numeric_max >= numeric_value)");
+                        });
                 });
 
             modelBuilder.Entity("ShopVerse.Domain.Catalog.Brand", b =>

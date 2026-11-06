@@ -48,7 +48,11 @@
 
 - **#56 merge হয়েছে (স্প্রিন্ট ৩–৪, PIM ধাপ ১):** supply status, উত্তরসূরি পণ্য আর MOQ/pack size।
   - টেস্ট, mutation check আর code review হয়েছে।
-  - পরের ধাপ: attribute unit, datasheet/CAD আপলোড (virus scan সহ), বিকল্প পণ্য। শুরু করতে মালিকের অনুমোদন লাগবে।
+  - ধাপ ২ (মালিকের বেছে নেওয়া): unit-সহ সংখ্যাভিত্তিক attribute।
+    - `UnitCatalog` আর `numeric_value`/`numeric_max` যোগ হয়েছে।
+    - টেস্ট: unit ৪৬টা, seed integration ১টা। Mutation: ১৮টা mutant, সবগুলো ধরা পড়েছে।
+    - Review-এ ৩টা সমস্যা পাওয়া গিয়েছিল: mm² দৈর্ঘ্য হিসেবে পড়া হচ্ছিল, লম্বা লেখায় 500 error হচ্ছিল, আর মানের দৈর্ঘ্যের কোনো সীমা ছিল না। তিনটাই ঠিক করা হয়েছে।
+  - পরের ধাপ: datasheet/CAD আপলোড (virus scan সহ), বিকল্প পণ্য।
 
 ## ২. বাকি কাজ (পরের বার এখান থেকে শুরু)
 
