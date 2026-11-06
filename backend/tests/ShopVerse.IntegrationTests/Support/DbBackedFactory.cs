@@ -40,6 +40,7 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         ConnectionString = new NpgsqlConnectionStringBuilder(TestInfra.AdminConnection) { Database = _dbName }.ConnectionString;
         using var db = new ShopVerseDbContext(new DbContextOptionsBuilder<ShopVerseDbContext>().UseNpgsql(ConnectionString).Options);
         db.Database.EnsureCreated();
+        db.Database.ExecuteSqlRaw(AuditChainSql.Install);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

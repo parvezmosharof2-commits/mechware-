@@ -129,6 +129,9 @@ if (IdentitySeedPolicy.ForEnvironment(builder.Environment.EnvironmentName).SeedD
 // Asks the providers about payments whose webhook never arrived (threat model v2, P4). It lives in the API host because that
 // is where the payment providers are registered; with no provider registered it finds nothing to ask.
 builder.Services.AddHostedService<ShopVerse.Infrastructure.Workers.PaymentReconciliationWorker>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<ShopVerse.Application.Audit.IAuditChain, ShopVerse.Infrastructure.Persistence.AuditChain>();
+builder.Services.AddHostedService<ShopVerse.Infrastructure.Workers.AuditChainWorker>();
 // First administrator for environments without demo accounts; secrets come from deployment configuration only.
 var bootstrapAdmin = BootstrapAdminSettings.FromValues(
     builder.Configuration["Identity:BootstrapAdmin:Email"],

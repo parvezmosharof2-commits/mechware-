@@ -215,7 +215,7 @@ dispute.
 - KYC document upload before a BIN is held.
 - A dispute path for the real owner (they contact MECHWARE today).
 
-### H3. No step-up or second person for credit changes; audit is not tamper-evident (High) [CODE] — **step-up FIXED 2026-11-06**; tamper-evident audit still open
+### H3. No step-up or second person for credit changes; audit is not tamper-evident (High) [CODE] — **FIXED 2026-11-06** (step-up and tamper-evident audit)
 Brief §11.1 requires step-up authentication for credit limits. `PUT /admin/companies/{id}/credit` needs only
 `companies.credit` plus the login-time TOTP. Every change is recorded (before / after, actor, IP) by
 `AuditLogSaveChangesInterceptor` in the same transaction [CODE], but the log is an ordinary table: no hash chain, no
@@ -238,6 +238,30 @@ just before the action, after the permission check.
 - TEST: `IT/Api/StepUpTests.cs` (4 tests).
 - E2E: no code, a wrong code, then the next code.
 - **Mutation check:** 8 mutants, all caught.
+
+**Tamper-evident audit (2026-11-06):** the audit log is now append-only and sealed into a hash chain.
+- **Append-only.** A trigger blocks `UPDATE`, `DELETE` and `TRUNCATE`. The only update allowed is sealing a row, once, and it
+  cannot touch the content.
+- **Sealed into a hash chain.** Each minute `AuditChainWorker` runs `seal_audit_logs()`. Each sealed row stores the previous
+  row's hash and SHA-256(previous hash ‖ canonical JSON of its content); timestamps are in microseconds, so the session time
+  zone cannot change them.
+- **Tampering is detected where it happened.** `verify_audit_chain()` finds an edited, removed or reordered row even when a
+  database owner switched the trigger off; it runs daily and on request (`GET /admin/audit/chain`, `audit.view`, cached for
+  5 minutes).
+- **The head is anchored outside the database.** The chain head is logged every minute, and the worker raises a critical
+  alarm if the head ever goes back or changes. That catches a truncated or consistently rewritten tail, which the chain
+  alone cannot show.
+
+**Residual:**
+- Rows are sealed 30 s to a minute after they are written; until then the trigger alone protects them.
+- The anchor is only as safe as the log store it is shipped to.
+
+**Evidence:**
+- TEST: `IT/Security/AuditChainTests.cs` (19 cases).
+- TEST: `IT/Api/AuditChainEndpointTests.cs`.
+- Unit: `AuditChainHeadTests`.
+- **Mutation check:** 10 mutants, all caught.
+- The migration runs in `CatalogHardeningTests` (`MigrateAsync`).
 
 ### H4. Business identifiers stored in clear and copied into the audit log (High vs brief) [CODE]
 BIN, TIN, trade-licence number and legal name are plain columns. Nothing in the code base encrypts at
