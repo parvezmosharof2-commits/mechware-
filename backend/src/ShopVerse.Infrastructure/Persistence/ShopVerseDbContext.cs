@@ -118,6 +118,7 @@ public sealed class ShopVerseDbContext : DbContext
         builder.Property(u => u.GoogleSubjectId).HasColumnName("google_subject_id").HasMaxLength(128);
         builder.Property(u => u.SellerId).HasColumnName("seller_id");
         builder.Property(u => u.FailedLoginAttempts).HasColumnName("failed_login_attempts");
+        builder.Property(u => u.StepUpFailedAttempts).HasColumnName("step_up_failed_attempts");
         builder.Property(u => u.LockoutUntilUtc).HasColumnName("lockout_until");
         builder.Property(u => u.EmailVerifiedAtUtc).HasColumnName("email_verified_at");
         builder.Property(u => u.PhoneVerifiedAtUtc).HasColumnName("phone_verified_at");

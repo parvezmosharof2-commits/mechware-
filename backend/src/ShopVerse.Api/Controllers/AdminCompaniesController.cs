@@ -38,6 +38,7 @@ public sealed class AdminCompaniesController(ICompanyService companies) : Contro
 
     [HttpPut("{companyId:guid}/credit")]
     [RequirePermission(Permissions.CompaniesCredit)]
+    [RequireStepUp("company.credit")]
     public async Task<IActionResult> SetCredit(Guid companyId, [FromBody] SetCreditRequest request, CancellationToken ct) =>
         Ok(new { data = await companies.AdminSetCreditAsync(companyId, request, ct) });
 }

@@ -518,6 +518,7 @@ public sealed class AdminUserSecurityController(IIdentityService identity, ICurr
 {
     [HttpPost("{userId:guid}/two-factor-setup-code")]
     [RequirePermission(Permissions.UsersManage)]
+    [RequireStepUp("user.two_factor_setup_code")]
     public async Task<IActionResult> IssueSetupCode(Guid userId, CancellationToken ct)
     {
         Guid adminId = currentUser.UserId ?? throw new UnauthorizedAccessException("Authentication required.");

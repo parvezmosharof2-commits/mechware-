@@ -311,6 +311,15 @@ public interface IIdentityService
 
     Task<TotpSetupResponseDto> SetupTwoFactorAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Step-up (brief §11.1): a fresh authenticator code for one sensitive action, on top of the session. Throws
+    /// ForbiddenException STEP_UP_REQUIRED / STEP_UP_FAILED. Five wrong codes in a row end every session of the account
+    /// (not the login lockout, which would let a session thief lock the owner out).
+    /// </summary>
+    /// <param name="target">What the action is about (e.g. the company id), recorded in the audit log.</param>
+    Task VerifyStepUpAsync(Guid userId, string? code, string action, string? target = null, string? clientIp = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
     /// <summary>An administrator lets a staff member who must use 2FA enrol their first authenticator.</summary>
     Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
         Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);

@@ -35,6 +35,25 @@
 }
 ```
 
+### 1.2b Step-up (sensitive staff actions)
+
+Some actions need a fresh authenticator code in the `X-Step-Up-Code` header, on top of the session:
+- `PUT /admin/companies/{id}/credit`
+- `POST /admin/refunds/{id}/approve`
+- `POST /admin/users/{id}/two-factor-setup-code`
+
+The rules:
+- **Only a current TOTP code counts, once.** A recovery code is not accepted, and a used code is spent.
+- **Errors:**
+
+  | Status | Code | When |
+  |---|---|---|
+  | `403` | `STEP_UP_REQUIRED` | No code was sent. |
+  | `403` | `STEP_UP_FAILED` | The code is wrong or was already used. |
+  | `401` | — | The fifth wrong code in a row; every session of the account is ended. |
+
+- **Order of checks:** the permission is checked first; without it the answer is a plain `403` and no code is looked at.
+
 ### 1.2a Rate limits (all routes)
 
 | Who | Budget | Config key |

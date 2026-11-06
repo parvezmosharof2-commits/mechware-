@@ -76,8 +76,12 @@ export function createCompaniesApi(client: MechWareApiClient) {
         client.fetch<Data<CompanyDto>>(`/api/v1/admin/companies/${encodeURIComponent(companyId)}/activate`, json('POST')),
       suspend: (companyId: string) =>
         client.fetch<Data<CompanyDto>>(`/api/v1/admin/companies/${encodeURIComponent(companyId)}/suspend`, json('POST')),
-      setCredit: (companyId: string, body: SetCreditRequest) =>
-        client.fetch<Data<CompanyDto>>(`/api/v1/admin/companies/${encodeURIComponent(companyId)}/credit`, json('PUT', body))
+      /** Needs a fresh authenticator code (step-up, brief §11.1): the server checks it just before changing credit. */
+      setCredit: (companyId: string, body: SetCreditRequest, stepUpCode: string) =>
+        client.fetch<Data<CompanyDto>>(`/api/v1/admin/companies/${encodeURIComponent(companyId)}/credit`, {
+          ...json('PUT', body),
+          headers: { 'X-Step-Up-Code': stepUpCode }
+        })
     }
   };
 }

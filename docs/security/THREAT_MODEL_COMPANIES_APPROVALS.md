@@ -215,11 +215,29 @@ dispute.
 - KYC document upload before a BIN is held.
 - A dispute path for the real owner (they contact MECHWARE today).
 
-### H3. No step-up or second person for credit changes; audit is not tamper-evident (High) [CODE]
+### H3. No step-up or second person for credit changes; audit is not tamper-evident (High) [CODE] — **step-up FIXED 2026-11-06**; tamper-evident audit still open
 Brief §11.1 requires step-up authentication for credit limits. `PUT /admin/companies/{id}/credit` needs only
 `companies.credit` plus the login-time TOTP. Every change is recorded (before / after, actor, IP) by
 `AuditLogSaveChangesInterceptor` in the same transaction [CODE], but the log is an ordinary table: no hash chain, no
 write-once anchor (brief §6.11), so someone with database write access can alter history.
+
+**Step-up fix (2026-11-06):** sensitive staff actions now need a fresh authenticator code in `X-Step-Up-Code`, checked
+just before the action, after the permission check.
+- **Which actions:** changing a company's credit, approving a refund, and issuing a 2FA setup code.
+- **What counts as a code:** only a current TOTP code, not a recovery code. Its time step is spent, so one code confirms
+  one action.
+- **The audit records the target.** The entry names what the code confirmed (company, refund or user).
+- **Wrong codes are counted apart from the login lockout,** so a stolen session guessing codes cannot lock the owner out.
+  The fifth wrong code in a row ends every session instead.
+- **A correct code clears earlier misses.**
+- **Console:** the credit dialog asks for the code and shows the API's own message.
+
+**Residual:** the code is spent even when the action itself then fails, so a retry needs the next code (up to 30 s).
+
+**Evidence:**
+- TEST: `IT/Api/StepUpTests.cs` (4 tests).
+- E2E: no code, a wrong code, then the next code.
+- **Mutation check:** 8 mutants, all caught.
 
 ### H4. Business identifiers stored in clear and copied into the audit log (High vs brief) [CODE]
 BIN, TIN, trade-licence number and legal name are plain columns. Nothing in the code base encrypts at

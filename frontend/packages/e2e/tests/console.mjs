@@ -109,6 +109,18 @@ async function signIn(page, email, password) {
   check('a limit with no terms is refused in the form', true);
   await p.getByLabel('Terms', { exact: true }).selectOption('30');
   await p.getByLabel('Credit limit (BDT)').fill('1,00,000');
+  // H3 step-up: no code, then a wrong code, are refused; the next authenticator code goes through.
+  await p.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await p.getByText('Enter the 6-digit code your authenticator app shows now.').waitFor();
+  check('changing credit asks for a fresh authenticator code', true);
+  noise = true;
+  await p.getByLabel('Authenticator code').fill('000000');
+  await p.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
+  await p.getByRole('dialog').getByText(/not right, or was already used/).waitFor();
+  check('a wrong step-up code is refused by the API', true);
+  noise = false;
+  // The sign-in used the current time step; the next one is the fresh code a person would type.
+  await p.getByLabel('Authenticator code').fill(await totp(USERS.admin.totpSecret, Date.now() + 30_000));
   await p.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
   await row.getByText('Net 30').waitFor();
   const afterCredit = await apiCall(buyerToken, 'GET', `/api/v1/companies/${companyId}`);
