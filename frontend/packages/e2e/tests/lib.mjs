@@ -76,3 +76,34 @@ export async function apiCall(token, method, path, body) {
   });
   return { status: r.status, json: await r.json().catch(() => ({})) };
 }
+
+/**
+ * Threat model M5: the page's CSP carries a fresh nonce, every script in the server-rendered HTML carries that same nonce,
+ * 'unsafe-inline' is not allowed for scripts, attacker HTML (an inline event handler) does not run, and a public file
+ * gets the policy too. Uses its own page, because the blocked probe logs a CSP error that the caller's "no console
+ * errors" check must not see.
+ */
+export async function cspProbe(browser, url, assetPath = '/favicon.ico') {
+  const page = await browser.newPage();
+  // The HTML exactly as served, with the header that came with it.
+  const raw = await page.request.get(url);
+  const csp = raw.headers()['content-security-policy'] ?? '';
+  const nonce = (csp.match(/'nonce-([^']+)'/) ?? [])[1] ?? '';
+  const tags = (await raw.text()).match(/<script\b[^>]*>/gi) ?? [];
+  const nonced = nonce.length >= 16 && tags.length > 0 && tags.every((t) => t.includes(`nonce="${nonce}"`));
+
+  await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
+  await page.evaluate(() => document.body.insertAdjacentHTML('beforeend', '<img src="x:" onerror="window.__xss=1">'));
+  await page.waitForTimeout(300);
+  const injectedRan = await page.evaluate(() => window.__xss === 1);
+  const again = (await page.request.get(url)).headers()['content-security-policy'] ?? '';
+  const asset = (await page.request.get(new URL(assetPath, url).href)).headers()['content-security-policy'] ?? '';
+  await page.close();
+  return {
+    nonced,
+    noUnsafeInlineScripts: !/script-src[^;]*'unsafe-inline'/.test(csp),
+    injectedBlocked: !injectedRan,
+    freshPerRequest: again !== '' && again !== csp,
+    assetCovered: /frame-ancestors 'none'/.test(asset)
+  };
+}

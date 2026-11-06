@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import createMiddleware from 'next-intl/middleware';
+import { applyNonceCsp, isAssetOrApiPath } from '@mechware/config/security-headers';
 
 const intlMiddleware = createMiddleware({
   locales: ['en', 'bn'],
@@ -25,6 +26,28 @@ export function sanitizeReturnToPath(rawPath: string | null | undefined): string
 }
 
 export default function middleware(request: NextRequest) {
+  // A per-request CSP nonce, so only scripts this server rendered run (threat model M5). The request carries it to the
+  // renderer; the response carries the policy to the browser.
+  const requestHeaders = new Headers(request.headers);
+  const csp = applyNonceCsp(requestHeaders);
+  const forward = () => NextResponse.next({ request: { headers: requestHeaders } });
+
+  let response: NextResponse;
+  if (isAssetOrApiPath(request.nextUrl.pathname)) {
+    response = forward();
+  } else {
+    response = route(new NextRequest(request, { headers: requestHeaders }));
+    // next-intl forwards the request headers when it routes, but not on every path (e.g. a URL it cannot decode). A
+    // page rendered without the nonce would have all its scripts blocked, so such a pass-through is redone here.
+    if (response.headers.get('x-middleware-next') && !response.headers.has('x-middleware-override-headers')) {
+      response = forward();
+    }
+  }
+  response.headers.set('Content-Security-Policy', csp);
+  return response;
+}
+
+function route(request: NextRequest): NextResponse {
   const { pathname, search } = request.nextUrl;
 
   const isProtectedRoute = PROTECTED_PATH_SEGMENTS.some(
@@ -56,5 +79,6 @@ export default function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next|_vercel|.*\\..*).*)']
+  // Only Next's own hashed build output skips the middleware; every page and public file gets the CSP.
+  matcher: ['/((?!_next/static|_next/image).*)']
 };

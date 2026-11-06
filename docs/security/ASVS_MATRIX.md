@@ -36,8 +36,8 @@
 | নিয়ন্ত্রণ | ASVS ID | অবস্থা | টেস্ট / প্রমাণ | বাকি |
 |---|---|---|---|---|
 | API-তে HSTS, CSP, nosniff, frame-ancestors, CORP | V3.4.1 (L1), V3.4.3 (L2), V3.4.4 (L2), V3.4.6 (L2), V3.5.8 (L3) | ✅ | `IT/Security/ApiSecurityRegressionTests.EveryResponse_CarriesTheSecurityHeaders`; ZAP (`dast.yml`) | — |
-| web / console-এ HSTS, CSP (`object-src 'none'`, `base-uri 'none'`), nosniff, frame-ancestors, COOP | V3.4.1, V3.4.3, V3.4.4, V3.4.6, V3.4.8 (L3) | 🟡 | `frontend/packages/config/security-headers.js`; production build-এ curl দিয়ে যাচাই (বাগ #৭) | header-এর স্বয়ংক্রিয় টেস্ট |
-| CSP nonce (no `unsafe-inline`), violation report | V3.4.3 (L3 অংশ), V3.4.7 (L3) | ❌ | — | স্প্রিন্ট ১৭–১৮ |
+| web / console-এ HSTS, CSP (`object-src 'none'`, `base-uri 'none'`), nosniff, frame-ancestors, COOP | V3.4.1, V3.4.3, V3.4.4, V3.4.6, V3.4.8 (L3) | ✅ | `frontend/packages/config/security-headers.js`; E2E `cspProbe` (দুই অ্যাপ, public file-সহ) | — |
+| CSP nonce (no `unsafe-inline`), violation report | V3.4.3 (L3 অংশ), V3.4.7 (L3) | 🟡 | প্রতি response-এ নতুন nonce + `strict-dynamic`, script-এ `unsafe-inline` নেই; injected handler চলে না (E2E) | violation report endpoint; style-এ এখনো `unsafe-inline` |
 | CORS শুধু অনুমোদিত origin | V3.4.2 (L1) | ✅ | স্বাধীন টেস্ট: `evil.com` প্রত্যাখ্যাত | localhost origin শুধু Development-এ রাখা |
 | Cookie: Secure, SameSite, HttpOnly | V3.3.1 (L1), V3.3.2 (L2), V3.3.4 (L2) | 🟡 | স্বাধীন টেস্ট ২০২৬-১১-০৪ (`secure; samesite=lax; httponly`) | `__Host-` / `__Secure-` prefix (V3.3.1, V3.3.3) — স্প্রিন্ট ১৭–১৮ |
 | HSTS preload তালিকা | V3.7.4 (L3) | ❌ | — | ডোমেইন চালু হলে |

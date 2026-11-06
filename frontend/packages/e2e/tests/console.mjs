@@ -1,4 +1,4 @@
-import { CONSOLE as WEB, SHOTS, USERS, apiCall, apiLogin, launch, totp, uniqueBin } from './lib.mjs';
+import { CONSOLE as WEB, SHOTS, USERS, apiCall, apiLogin, cspProbe, launch, totp, uniqueBin } from './lib.mjs';
 
 const results = [];
 const check = (name, ok, extra = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? '  -> ' + extra : ''}`); };
@@ -12,6 +12,14 @@ async function signIn(page, email, password) {
 
 (async () => {
   const browser = await launch();
+
+  // 0 M5: nonce CSP; attacker HTML does not run
+  const csp = await cspProbe(browser, `${WEB}/login`);
+  check('CSP: every rendered script carries this response\'s nonce', csp.nonced);
+  check('CSP: no unsafe-inline for scripts', csp.noUnsafeInlineScripts);
+  check('CSP: an injected inline event handler does not run', csp.injectedBlocked);
+  check('CSP: a fresh nonce on every response', csp.freshPerRequest);
+  check('CSP: public files are covered too', csp.assetCovered);
   const errors = []; let noise = false;
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const p = await ctx.newPage();

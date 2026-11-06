@@ -342,10 +342,34 @@ Fixed along the way (found by the code review):
 **Cost:** one indexed query per authenticated request. A database outage shows as `500`, not `401`, so clients do not
 throw away good sessions.
 
-### M5. No Content-Security-Policy on the web and console apps (Medium) [CODE]
-Neither Next.js app sets a CSP (the API does). The access token is kept in memory, which blocks theft from
-storage but not use by injected script. Current mitigation: no `dangerouslySetInnerHTML` anywhere in `apps/` or
-`packages/ui/src` [CODE], and React escapes text, so approver comments and company names render as text.
+### M5. No Content-Security-Policy on the web and console apps (Medium) [TEST] — **FIXED 2026-11-05**
+Neither Next.js app set a CSP at first. The first fix (2026-11-04) added one, but it still allowed
+`script-src 'unsafe-inline'`. An injected inline event handler or `<script>` would therefore run. The access token lives
+in memory, which stops theft from storage but not use by injected script.
+
+**Fix:**
+- **Every response gets its own nonce.** Each app's middleware creates a fresh nonce for every response and sends
+  `script-src 'self' 'nonce-…' 'strict-dynamic'`, with no `'unsafe-inline'`. Next.js stamps the nonce on its own scripts.
+  - Pages are rendered per request for this (`dynamic = 'force-dynamic'`).
+  - The cost is server-side rendering on every hit; the benefit is that injected script cannot use the in-memory token.
+- **Every public file gets the policy too.** The middleware now covers all paths except Next's hashed build output.
+- **A next-intl gap is closed.** next-intl's pass-through without forwarded headers is caught, so no page renders without
+  its nonce.
+- **What is unchanged:** styles keep `'unsafe-inline'`, because the UI and next/font use inline styles and CSS cannot
+  run code. Google sign-in, once built, must load through `next/script`.
+
+**Evidence:**
+- RUN (Playwright, production builds):
+  - every server-rendered script carries the response's nonce;
+  - an injected `<img onerror>` and a parsed inline `<script>` do not run;
+  - under the old policy the same `onerror` handler did run.
+- TEST: the E2E suites (`packages/e2e`) now check on both apps:
+  - the nonce on every script;
+  - no `'unsafe-inline'` for scripts;
+  - the injected handler is blocked;
+  - a fresh nonce per response;
+  - public files are covered.
+- **E2E result:** web 31/31, console 28/28.
 
 ### M6. Threshold splitting and collusion cannot be stopped in software (Medium, accepted business risk)
 Rules look at one request's amount. Splitting a purchase below a threshold, or two colluding people (one
