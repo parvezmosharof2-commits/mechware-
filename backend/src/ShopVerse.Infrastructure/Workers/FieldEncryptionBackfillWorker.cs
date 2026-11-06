@@ -31,19 +31,30 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
         }
     }
 
-    public static async Task<int> RunAsync(ShopVerseDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Rewrites every company not yet under the current key, each row at most once per run. Throws at the end when some rows
+    /// are still not under the current key (they stay readable while the previous keys stay configured).
+    /// </summary>
+    public static async Task<int> RunAsync(ShopVerseDbContext db, CancellationToken ct, int batchSize = Batch)
     {
         string like = FieldEncryption.Current.CurrentPrefix + "%";
         int total = 0;
+        // A row still selected after its save was not brought up to the current key. Skipping rows already tried ends the
+        // run (no endless loop) and keeps one such row from holding back the rest.
+        var tried = new List<Guid>();
         while (true)
         {
+            Guid[] exclude = [.. tried];
             var ids = await db.Database.SqlQuery<Guid>($"""
                 SELECT id AS "Value" FROM companies
-                 WHERE bin NOT LIKE {like} OR trade_licence_no NOT LIKE {like} OR (tin IS NOT NULL AND tin NOT LIKE {like})
-                    OR bin_index IS NULL
-                 LIMIT {Batch}
+                 WHERE (bin NOT LIKE {like} OR trade_licence_no NOT LIKE {like} OR (tin IS NOT NULL AND tin NOT LIKE {like})
+                        OR bin_index IS NULL)
+                   AND NOT (id = ANY({exclude}))
+                 ORDER BY id
+                 LIMIT {batchSize}
                 """).ToListAsync(ct);
-            if (ids.Count == 0) return total;
+            if (ids.Count == 0) break;
+            tried.AddRange(ids);
 
             var companies = await db.Companies.Where(c => ids.Contains(c.Id)).ToListAsync(ct);
             foreach (var company in companies)
@@ -57,5 +68,17 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
             db.ChangeTracker.Clear();
             total += companies.Count;
         }
+
+        int stuck = await db.Database.SqlQuery<int>($"""
+            SELECT count(*)::int AS "Value" FROM companies
+             WHERE bin NOT LIKE {like} OR trade_licence_no NOT LIKE {like} OR (tin IS NOT NULL AND tin NOT LIKE {like})
+                OR bin_index IS NULL
+            """).SingleAsync(ct);
+        if (stuck > 0)
+        {
+            throw new InvalidOperationException(
+                $"{stuck} companies' identifiers could not be re-encrypted under the current key ({total} rewritten); keep the previous keys configured.");
+        }
+        return total;
     }
 }
