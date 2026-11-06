@@ -95,17 +95,15 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         // otherwise the page would point the buyer at a dead end.
         var successor = product.SuccessorProductId is null ? null
             : await _db.Products.AsNoTracking()
-                .Where(p => p.Id == product.SuccessorProductId && p.Status == ProductStatus.Active && p.DeletedAtUtc == null
-                            && p.SupplyStatus != SupplyStatus.Obsolete)
+                .Where(p => p.Id == product.SuccessorProductId).Where(Product.IsLinkable)
                 .Select(p => new SuccessorDto(p.Slug, p.TitleEn, p.TitleBn, product.SuccessorIsDropIn, product.SuccessorNote))
                 .FirstOrDefaultAsync(ct);
 
         // Alternatives: the same rule as the successor, only parts on sale and not obsolete, in the order staff set.
         var alternativeIds = product.Alternatives.Select(a => a.AlternativeProductId).ToList();
         var listed = alternativeIds.Count == 0 ? []
-            : await (from p in _db.Products.AsNoTracking()
-                     where alternativeIds.Contains(p.Id) && p.Status == ProductStatus.Active && p.DeletedAtUtc == null
-                           && p.SupplyStatus != SupplyStatus.Obsolete
+            : await (from p in _db.Products.AsNoTracking().Where(Product.IsLinkable)
+                     where alternativeIds.Contains(p.Id)
                      join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
                      from b in bs.DefaultIfEmpty()
                      select new { p.Id, Dto = new AlternativeDto(p.Slug, p.TitleEn, p.TitleBn, b == null ? null : b.Name) })

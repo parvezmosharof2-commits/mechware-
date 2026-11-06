@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using ShopVerse.Domain.Common;
 using ShopVerse.Domain.Common.Enums;
 using ShopVerse.Domain.Common.Exceptions;
@@ -32,6 +33,15 @@ public sealed class Product : AggregateRoot<Guid>
     public const int MaxAlternatives = 10;
 
     public const int MaxSuccessorNoteLength = 500;
+
+    /// <summary>
+    /// Whether a buyer can be sent to this product: published, not deleted and not obsolete. One definition for every place
+    /// that links to another product (successor, alternatives), usable inside a query.
+    /// </summary>
+    public static readonly Expression<Func<Product, bool>> IsLinkable = p =>
+        p.Status == ProductStatus.Active && p.DeletedAtUtc == null && p.SupplyStatus != SupplyStatus.Obsolete;
+
+    private static readonly Func<Product, bool> LinkableNow = IsLinkable.Compile();
 
     public Guid SellerId { get; private set; }
     public Guid CategoryId { get; private set; }
@@ -147,15 +157,21 @@ public sealed class Product : AggregateRoot<Guid>
     /// to a different seller's catalogue. Back in supply, the successor is cleared. <paramref name="successorIsDropIn"/> and
     /// <paramref name="successorNote"/> tell the buyer whether the successor fits as it is or what changes; the successor is
     /// only shown, never swapped into an order.
+    /// Leaving them out (null) keeps what is stored while the successor stays the same one, so a call that only changes the
+    /// status does not erase the note; a different successor starts without a note. A blank note clears it.
     /// </summary>
-    public void SetSupply(SupplyStatus status, Product? successor, bool successorIsDropIn = false, string? successorNote = null)
+    public void SetSupply(SupplyStatus status, Product? successor, bool? successorIsDropIn = null, string? successorNote = null)
     {
         EnsureEditable();
         if (!Enum.IsDefined(status)) throw new ValidationException("supplyStatus", "Unknown supply status.");
-        successorNote = string.IsNullOrWhiteSpace(successorNote) ? null : successorNote.Trim();
-        if (successor is null && (successorIsDropIn || successorNote is not null))
+        if (successor is null && (successorIsDropIn == true || !string.IsNullOrWhiteSpace(successorNote)))
             throw new ValidationException("successorProductId", "Compatibility notes need a successor.");
-        if (successorNote is { Length: > MaxSuccessorNoteLength })
+        bool sameSuccessor = successor is not null && successor.Id == SuccessorProductId;
+        bool dropIn = successor is not null && (successorIsDropIn ?? (sameSuccessor && SuccessorIsDropIn));
+        string? note = successorNote is null
+            ? (sameSuccessor ? SuccessorNote : null)
+            : (string.IsNullOrWhiteSpace(successorNote) ? null : successorNote.Trim());
+        if (note is { Length: > MaxSuccessorNoteLength })
             throw new ValidationException("successorNote", $"The note can be at most {MaxSuccessorNoteLength} characters.");
         if (successor is not null)
         {
@@ -171,8 +187,8 @@ public sealed class Product : AggregateRoot<Guid>
 
         SupplyStatus = status;
         SuccessorProductId = successor?.Id; // never set for an Active product: refused above
-        SuccessorIsDropIn = successorIsDropIn;
-        SuccessorNote = successorNote;
+        SuccessorIsDropIn = dropIn;
+        SuccessorNote = note;
         MarkUpdated();   // raises ProductUpdatedEvent, which evicts the cached product page
     }
 
@@ -296,8 +312,8 @@ public sealed class Product : AggregateRoot<Guid>
     {
         EnsureEditable();
         if (alternative.Id == Id) throw new ValidationException("alternativeProductId", "A product cannot be its own alternative.");
-        if (alternative.Status != ProductStatus.Active || alternative.DeletedAtUtc is not null)
-            throw new ValidationException("alternativeProductId", "An alternative must be a published product.");
+        if (!LinkableNow(alternative))
+            throw new ValidationException("alternativeProductId", "An alternative must be a published product that is not obsolete.");
         if (_alternatives.Any(a => a.AlternativeProductId == alternative.Id)) return;
         if (_alternatives.Count >= MaxAlternatives)
             throw new ValidationException("alternativeProductId", $"A product can list at most {MaxAlternatives} alternatives.");
@@ -308,7 +324,10 @@ public sealed class Product : AggregateRoot<Guid>
     public void RemoveAlternative(Guid alternativeProductId)
     {
         EnsureEditable();
-        if (_alternatives.RemoveAll(a => a.AlternativeProductId == alternativeProductId) > 0) MarkUpdated();
+        if (_alternatives.RemoveAll(a => a.AlternativeProductId == alternativeProductId) == 0) return;
+        // Close the gap, so the next one added (Position = Count) never ties with one that is already there.
+        for (int i = 0; i < _alternatives.Count; i++) _alternatives[i].MoveTo(i);
+        MarkUpdated();
     }
 
     #endregion
@@ -417,6 +436,8 @@ public sealed class ProductAlternative
         AlternativeProductId = alternativeProductId;
         Position = position;
     }
+
+    internal void MoveTo(int position) => Position = position;
 }
 
 public sealed class InvalidProductTransitionException : DomainException

@@ -251,4 +251,95 @@ public class ProductSupplyTests
         ((Action)(() => p.AddAlternative(Published("one-more")))).Should().Throw<ValidationException>();
         p.Alternatives.Should().HaveCount(Product.MaxAlternatives);
     }
+
+    [Fact]
+    public void RemovingAnAlternative_ClosesTheGap_SoTheNextOneNeverTiesInPosition()
+    {
+        var p = Published("switch");
+        Product a = Published("pos-a"), b = Published("pos-b"), c = Published("pos-c");
+        p.AddAlternative(a);
+        p.AddAlternative(b);
+        p.RemoveAlternative(a.Id);
+        p.AddAlternative(c);
+
+        p.Alternatives.Select(x => (x.AlternativeProductId, x.Position)).Should().Equal((b.Id, 0), (c.Id, 1));
+    }
+
+    [Fact]
+    public void ChangingOnlyTheStatus_KeepsTheSuccessorsNoteAndDropInFlag()
+    {
+        var old = Published("keep-old");
+        var successor = Published("keep-new");
+        old.SetSupply(SupplyStatus.Nrnd, successor, successorIsDropIn: true, successorNote: "Same footprint.");
+
+        old.SetSupply(SupplyStatus.Obsolete, successor);   // a status change that says nothing about the note
+
+        (old.SupplyStatus, old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((SupplyStatus.Obsolete, true, "Same footprint."));
+    }
+
+    [Fact]
+    public void ADifferentSuccessor_StartsWithoutTheOldNote_AndABlankNoteClearsIt()
+    {
+        var old = Published("swap-old");
+        old.SetSupply(SupplyStatus.Nrnd, Published("swap-a"), true, "About A.");
+
+        old.SetSupply(SupplyStatus.Nrnd, Published("swap-b"));
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((false, null));
+
+        var same = Published("swap-c");
+        old.SetSupply(SupplyStatus.Nrnd, same, true, "About C.");
+        old.SetSupply(SupplyStatus.Nrnd, same, successorNote: "   ");
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((true, null), "only the note was cleared");
+    }
+
+    [Fact]
+    public void AnObsoleteProduct_CannotBeAddedAsAnAlternative()
+    {
+        var p = Published("cpu");
+        var gone = Published("gone");
+        gone.SetSupply(SupplyStatus.Obsolete, null);
+
+        var act = () => p.AddAlternative(gone);
+        act.Should().Throw<ValidationException>().Which.Errors.Single().Message.Should().Contain("not obsolete");
+        p.Alternatives.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AlternativesCannotBeChanged_WhileTheProductIsUnderReview()
+    {
+        var p = new Product(Guid.NewGuid(), Seller, Guid.NewGuid(), null, "Under review", "পর্যালোচনায়", "under-review", "s", "s", "<p>d</p>");
+        p.AddVariant(Guid.NewGuid(), "SKU-UR", null, new Dictionary<string, string>(), new Money(1000, Currency.BDT), null, null, 0.4m, true);
+        p.AddMedia(Guid.NewGuid(), null, "/img/a.jpg", "front view", 1200, 1200);
+        var other = Published("ur-other");
+        p.AddAlternative(other);
+        p.SubmitForReview();
+
+        ((Action)(() => p.AddAlternative(Published("ur-two")))).Should().Throw<ValidationException>();
+        ((Action)(() => p.RemoveAlternative(other.Id))).Should().Throw<ValidationException>();
+        p.Alternatives.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void IsLinkable_IsTrueOnlyForAPublishedNonObsoleteProduct()
+    {
+        var test = Product.IsLinkable.Compile();
+        var live = Published("live");
+        test(live).Should().BeTrue();
+
+        var nrnd = Published("nrnd");
+        nrnd.SetSupply(SupplyStatus.Nrnd, null);
+        test(nrnd).Should().BeTrue("still sold");
+
+        var obsolete = Published("obs");
+        obsolete.SetSupply(SupplyStatus.Obsolete, null);
+        test(obsolete).Should().BeFalse();
+
+        var archived = Published("arch");
+        archived.Archive();
+        test(archived).Should().BeFalse();
+
+        var deleted = Published("del");
+        deleted.SoftDelete(DateTime.UtcNow);
+        test(deleted).Should().BeFalse();
+    }
 }
