@@ -214,6 +214,10 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
         await EnsureUserExistsAsync(r.UserId, ct);
         if (await db.CompanyMembers.AnyAsync(m => m.CompanyId == companyId && m.UserId == r.UserId, ct))
             throw new ConflictException("MEMBER_EXISTS", "This user is already a member of the company.");
+        var declinedSince = DateTime.UtcNow - CompanyInvitationDecline.CoolingOff;
+        if (await db.CompanyInvitationDeclines.AnyAsync(
+                d => d.CompanyId == companyId && d.UserId == r.UserId && d.DeclinedAtUtc > declinedSince, ct))
+            throw new ConflictException("INVITATION_DECLINED", "This person recently declined an invitation from this company.");
 
         await EnsureCostCentresBelongAsync(companyId, r.CostCentreIds, ct);
         var member = new CompanyMember(Guid.NewGuid(), companyId, r.UserId, r.Roles, r.SpendLimitMinor, r.CostCentreIds);
@@ -309,7 +313,22 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
                          m => m.CompanyId == companyId && m.UserId == actorUserId && m.AcceptedAtUtc == null, ct)
                      ?? throw new KeyNotFoundException("Invitation not found.");
         db.CompanyMembers.Remove(member);
-        await db.SaveChangesAsync(ct);
+
+        // Remember the "no" so the company cannot simply ask again (see CompanyInvitationDecline).
+        var now = DateTime.UtcNow;
+        var decline = await db.CompanyInvitationDeclines.FindAsync([companyId, actorUserId], ct);
+        if (decline is null) db.CompanyInvitationDeclines.Add(new CompanyInvitationDecline(companyId, actorUserId, now));
+        else decline.Renew(now);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is DbUpdateConcurrencyException
+                                   || ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
+        {
+            // A second "decline" (double click) or the admin withdrawing at the same moment: the invitation is already gone.
+            throw new KeyNotFoundException("Invitation not found.");
+        }
     }
 
     /// <summary>A company must always keep one active admin. The company row is locked so two admins cannot demote each other concurrently.</summary>

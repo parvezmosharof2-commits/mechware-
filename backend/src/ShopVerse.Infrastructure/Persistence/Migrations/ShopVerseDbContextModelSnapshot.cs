@@ -956,6 +956,27 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShopVerse.Domain.Companies.CompanyInvitationDecline", b =>
+                {
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("DeclinedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("declined_at");
+
+                    b.HasKey("CompanyId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("company_invitation_declines", (string)null);
+                });
+
             modelBuilder.Entity("ShopVerse.Domain.Companies.CompanyMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3124,6 +3145,21 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .WithMany("Variants")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShopVerse.Domain.Companies.CompanyInvitationDecline", b =>
+                {
+                    b.HasOne("ShopVerse.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShopVerse.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

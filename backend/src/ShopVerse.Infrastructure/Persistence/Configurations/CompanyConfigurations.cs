@@ -116,3 +116,18 @@ internal sealed class CompanyMemberConfiguration : IEntityTypeConfiguration<Comp
         b.HasIndex(m => m.UserId).HasDatabaseName("ix_company_members_user");
     }
 }
+
+internal sealed class CompanyInvitationDeclineConfiguration : IEntityTypeConfiguration<CompanyInvitationDecline>
+{
+    public void Configure(EntityTypeBuilder<CompanyInvitationDecline> b)
+    {
+        b.ToTable("company_invitation_declines");
+        b.HasKey(d => new { d.CompanyId, d.UserId });
+        b.Property(d => d.CompanyId).HasColumnName("company_id");
+        b.Property(d => d.UserId).HasColumnName("user_id");
+        b.Property(d => d.DeclinedAtUtc).HasColumnName("declined_at");
+
+        b.HasOne<Company>().WithMany().HasForeignKey(d => d.CompanyId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<User>().WithMany().HasForeignKey(d => d.UserId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
