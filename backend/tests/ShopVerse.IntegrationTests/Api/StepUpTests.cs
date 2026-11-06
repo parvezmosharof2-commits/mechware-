@@ -164,7 +164,8 @@ public sealed class StepUpTests : IDisposable
         HttpClient owner = _factory.CreateClient();
         HttpResponseMessage login = await owner.PostAsJsonAsync("/api/v1/auth/login", new
         {
-            identifier = AdminEmail, password = AdminPassword,
+            identifier = AdminEmail,
+            password = AdminPassword,
             totpCode = Totp.ComputeTotpCode(AdminSecret, DateTimeOffset.UtcNow.AddSeconds(30))
         });
         login.StatusCode.Should().Be(HttpStatusCode.OK);
