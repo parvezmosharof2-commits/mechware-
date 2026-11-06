@@ -84,6 +84,11 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
         var rows = await check.AuditLogs.Where(a => a.EntityId == created.Id.ToString()).Select(a => a.NewValuesJson).ToListAsync();
         rows.Should().NotBeEmpty();
         rows.Should().AllSatisfy(json => json.Should().NotContain(bin).And.NotContain("987654321098").And.NotContain("TL-AUD-9"));
+
+        // Nor the BIN's fingerprint: whoever reads the audit log could match it against the companies table (or a later
+        // leak of the index key) and link entries to a BIN.
+        string fingerprint = CompanyBinIndex.Of(bin);
+        rows.Should().AllSatisfy(json => json.Should().NotContain(fingerprint));
     }
 
     [PostgresFact]
@@ -257,5 +262,103 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
         public string? UserAgent => null;
         public string? CorrelationId => null;
         public bool HasPermission(string permission) => false;
+    }
+
+    [PostgresFact]
+    public async Task ARowMissingItsFingerprint_GetsItOnTheNextSave_EvenWhenTheBinIsUnchanged()
+    {
+        // Without a fingerprint the BIN is invisible to the duplicate check; any save of the row must restore it, not only
+        // the start-up backfill.
+        var owner = await TestUsers.CreateAsync(fixture);
+        string bin = NextBin();
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Gap Ltd", "TL-GAP-1", bin, null, null))).Id;
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE companies SET bin_index = NULL WHERE id = {id}");
+
+        await using (var db = fixture.CreateContext())
+        {
+            var company = await db.Companies.SingleAsync(c => c.Id == id);
+            db.Entry(company).Property(c => c.LegalName).IsModified = true;   // some other change; the BIN is untouched
+            await db.SaveChangesAsync();
+        }
+
+        var other = await TestUsers.CreateAsync(fixture);
+        await using (var db = fixture.CreateContext())
+        {
+            Func<Task> dup = () => new CompanyService(db).RegisterAsync(other, new RegisterCompanyRequest("Copycat Ltd", "TL-Y", bin, null, null));
+            (await dup.Should().ThrowAsync<ShopVerse.Domain.Common.Exceptions.ConflictException>()).Which.Code.Should().Be("COMPANY_BIN_EXISTS");
+        }
+    }
+
+    [PostgresFact]
+    public async Task TheBackfill_RestoresAMissingFingerprint_OnARowThatIsAlreadyEncrypted()
+    {
+        var owner = await TestUsers.CreateAsync(fixture);
+        string bin = NextBin();
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Index Gap Ltd", "TL-IG-1", bin, null, null))).Id;
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE companies SET bin_index = NULL WHERE id = {id}");
+        (await RawAsync(id)).Bin.Should().StartWith(FieldEncryption.Current.CurrentPrefix, "only the fingerprint is missing");
+
+        await using (var db = fixture.CreateContext())
+            await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+
+        await using var check = fixture.CreateContext();
+        (await check.Companies.Where(c => c.Id == id).Select(c => EF.Property<string?>(c, CompanyBinIndex.Property)).SingleAsync())
+            .Should().Be(CompanyBinIndex.Of(bin));
+    }
+
+    [PostgresFact]
+    public async Task TheBackfill_KeepsGoingPastTheFirstBatch()
+    {
+        var ids = new List<Guid>();
+        for (int i = 0; i < 3; i++)
+        {
+            var owner = await TestUsers.CreateAsync(fixture);   // one account may hold at most 2 pending registrations
+            await using var db = fixture.CreateContext();
+            ids.Add((await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest($"Batch {i} Ltd", $"TL-B-{i}", NextBin(), null, null))).Id);
+        }
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE companies SET bin_index = NULL WHERE id = ANY({ids.ToArray()})");
+
+        await using (var db = fixture.CreateContext())
+            (await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None, batchSize: 2)).Should().BeGreaterThanOrEqualTo(3);
+
+        await using var check = fixture.CreateContext();
+        (await check.Companies.CountAsync(c => ids.Contains(c.Id) && EF.Property<string?>(c, CompanyBinIndex.Property) == null)).Should().Be(0);
+    }
+
+    [PostgresTheory]
+    [InlineData("tin")]
+    [InlineData("trade_licence_no")]
+    public async Task TheBackfill_FindsARow_WhenOnlyOneIdentifierIsStillInClear(string column)
+    {
+        // Each column is checked on its own: a row whose BIN is already encrypted can still hold a clear TIN or licence.
+        var owner = await TestUsers.CreateAsync(fixture);
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("One Column Ltd", "TL-OC-1", NextBin(), "123456789012", null))).Id;
+        string clear = column == "tin" ? "123456789012" : "TL-OC-1";
+        await using (var connection = new NpgsqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var cmd = new NpgsqlCommand($"UPDATE companies SET {column} = @v WHERE id = @id", connection);
+            cmd.Parameters.AddWithValue("v", clear);
+            cmd.Parameters.AddWithValue("id", id);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var db = fixture.CreateContext())
+            await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+
+        var raw = await RawAsync(id);
+        (column == "tin" ? raw.Tin : raw.Licence).Should().StartWith(FieldEncryption.Current.CurrentPrefix).And.NotContain(clear);
+        await using var check = fixture.CreateContext();
+        var company = await new CompanyService(check).GetAsync(owner, id);
+        (company.Tin, company.TradeLicenceNo).Should().Be(("123456789012", "TL-OC-1"));
     }
 }

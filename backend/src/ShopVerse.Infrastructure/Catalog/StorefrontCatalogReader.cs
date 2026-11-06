@@ -27,6 +27,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             db.Products.AsNoTracking().AsSplitQuery()
                 .Include(p => p.Variants)
                 .Include(p => p.Media)
+                .Include(p => p.Alternatives)
                 .FirstOrDefault(p => p.Slug == slug && p.DeletedAtUtc == null && p.Status == ProductStatus.Active));
 
     private readonly ShopVerseDbContext _db;
@@ -94,9 +95,21 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         // otherwise the page would point the buyer at a dead end.
         var successor = product.SuccessorProductId is null ? null
             : await _db.Products.AsNoTracking()
-                .Where(p => p.Id == product.SuccessorProductId && p.Status == ProductStatus.Active && p.DeletedAtUtc == null
-                            && p.SupplyStatus != SupplyStatus.Obsolete)
-                .Select(p => new SuccessorDto(p.Slug, p.TitleEn, p.TitleBn)).FirstOrDefaultAsync(ct);
+                .Where(p => p.Id == product.SuccessorProductId).Where(Product.IsLinkable)
+                .Select(p => new SuccessorDto(p.Slug, p.TitleEn, p.TitleBn, product.SuccessorIsDropIn, product.SuccessorNote))
+                .FirstOrDefaultAsync(ct);
+
+        // Alternatives: the same rule as the successor, only parts on sale and not obsolete, in the order staff set.
+        var alternativeIds = product.Alternatives.Select(a => a.AlternativeProductId).ToList();
+        var listed = alternativeIds.Count == 0 ? []
+            : await (from p in _db.Products.AsNoTracking().Where(Product.IsLinkable)
+                     where alternativeIds.Contains(p.Id)
+                     join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
+                     from b in bs.DefaultIfEmpty()
+                     select new { p.Id, Dto = new AlternativeDto(p.Slug, p.TitleEn, p.TitleBn, b == null ? null : b.Name) })
+                .ToDictionaryAsync(r => r.Id, r => r.Dto, ct);
+        var alternatives = product.Alternatives.OrderBy(a => a.Position)
+            .Where(a => listed.ContainsKey(a.AlternativeProductId)).Select(a => listed[a.AlternativeProductId]).ToList();
 
         var category = await _db.Categories.AsNoTracking().FirstAsync(c => c.Id == product.CategoryId, ct);
         var slugs = category.MaterializedPath.Split('.').Skip(1).ToArray();
@@ -128,6 +141,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             VatRate = category.VatRate,
             SupplyStatus = SnakeCaseName(product.SupplyStatus),
             Successor = successor,
+            Alternatives = alternatives,
             Media = product.Media.OrderBy(m => m.Position)
                 .Select(m => new MediaDto(m.Url, m.AltText, m.Type == MediaType.Video ? "video" : "image", m.Width, m.Height, m.BlurDataUrl, m.VariantId))
                 .ToList(),
@@ -192,7 +206,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         d.Variants.Select(v => new VariantDto(
             v.Id, v.Sku, v.Options, v.IsDefault, PriceFor(v, d.VatRate, nowUtc),
             ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize)).ToList(),
-        d.SupplyStatus, d.Successor);
+        d.SupplyStatus, d.Successor, d.Alternatives);
 
     internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
     {
@@ -376,6 +390,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public List<CachedVariant> Variants { get; set; } = [];
         public string SupplyStatus { get; set; } = "active";
         public SuccessorDto? Successor { get; set; }
+        public List<AlternativeDto> Alternatives { get; set; } = [];
     }
 
     internal sealed class CachedVariant

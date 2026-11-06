@@ -100,6 +100,130 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
     }
 
     [PostgresAndRedisFact]
+    public async Task WhenALinkedProductGoesObsolete_ThePagesThatPointToIt_AreEvictedToo()
+    {
+        Guid[] ids;
+        string[] slugs;
+        await using (var db = _seed.Db.CreateContext())
+        {
+            // A successor must belong to the same seller, so take three products of one seller.
+            var three = await db.Products.AsNoTracking()
+                .Where(p => p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .GroupBy(p => p.SellerId).Where(g => g.Count() >= 8)
+                .Select(g => g.OrderBy(p => p.Slug).Select(p => new { p.Id, p.Slug }).Skip(5).Take(3).ToList())
+                .FirstAsync();
+            (ids, slugs) = ([.. three.Select(x => x.Id)], [.. three.Select(x => x.Slug)]);
+        }
+
+        var client = _factory!.CreateClient();
+        try
+        {
+            // [0] lists [1] as an alternative and names [2] as its successor.
+            await using (var db = _seed.Db.CreateContext())
+            {
+                var page = await db.Products.Include(p => p.Alternatives).SingleAsync(p => p.Id == ids[0]);
+                page.AddAlternative(await db.Products.SingleAsync(p => p.Id == ids[1]));
+                page.SetSupply(SupplyStatus.Nrnd, await db.Products.SingleAsync(p => p.Id == ids[2]));
+                await db.SaveChangesAsync();
+            }
+            await DrainOutboxAsync();   // the relay evicts what these changes touched
+            using (var before = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{slugs[0]}")))
+            {
+                var d = before.RootElement.GetProperty("data");
+                d.GetProperty("alternatives").GetArrayLength().Should().Be(1);
+                d.GetProperty("successor").GetProperty("slug").GetString().Should().Be(slugs[2]);
+            }
+
+            // The alternative goes obsolete first. Nothing touches page [0]; only the product it points to changes, and the
+            // page must still be evicted. The successor stays, so this step needs the "alternative" half of the eviction.
+            await ObsoleteAsync(ids[1]);
+            using (var step1 = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{slugs[0]}")))
+            {
+                var d = step1.RootElement.GetProperty("data");
+                d.GetProperty("alternatives").GetArrayLength().Should().Be(0, "its alternative went obsolete");
+                d.GetProperty("successor").GetProperty("slug").GetString().Should().Be(slugs[2]);
+            }
+
+            // Then the successor: this step needs the "successor" half.
+            await ObsoleteAsync(ids[2]);
+            using var step2 = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{slugs[0]}"));
+            step2.RootElement.GetProperty("data").GetProperty("successor").ValueKind.Should().Be(JsonValueKind.Null, "its successor went obsolete");
+        }
+        finally
+        {
+            await using var db = _seed.Db.CreateContext();
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM product_alternatives WHERE product_id = {ids[0]}");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL, successor_note = NULL WHERE id = ANY({ids})");
+            foreach (var slug in slugs) await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(slug));
+        }
+    }
+
+    private async Task ObsoleteAsync(Guid productId)
+    {
+        await using (var db = _seed.Db.CreateContext())
+        {
+            (await db.Products.SingleAsync(p => p.Id == productId)).SetSupply(SupplyStatus.Obsolete, null);
+            await db.SaveChangesAsync();
+        }
+        await DrainOutboxAsync();
+    }
+
+    private async Task DrainOutboxAsync()
+    {
+        await using var db = _seed.Db.CreateContext();
+        IOutboxPublisher[] publishers = [new StorefrontCacheInvalidationPublisher(new RedisStorefrontCacheInvalidator(_redis!), db)];
+        var relay = new OutboxRelay(db, publishers, NullLogger<OutboxRelay>.Instance);
+        while (await relay.ProcessBatchAsync(500) > 0) { }
+    }
+
+    [PostgresAndRedisFact]
+    public async Task ProductPage_ListsAlternatives_InOrder_OnlyThoseOnSale()
+    {
+        Guid[] ids, chosen = [];
+        string[] slugs;
+        await using (var db = _seed.Db.CreateContext())
+        {
+            var four = await db.Products.AsNoTracking()
+                .Where(p => p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .OrderByDescending(p => p.Slug).Select(p => new { p.Id, p.Slug }).Take(4).ToListAsync();
+            (ids, slugs) = ([.. four.Select(x => x.Id)], [.. four.Select(x => x.Slug)]);
+        }
+
+        try
+        {
+            await using (var db = _seed.Db.CreateContext())
+            {
+                var main = await db.Products.Include(p => p.Alternatives).SingleAsync(p => p.Id == ids[0]);
+                // The order staff chose: descending by id, so neither id order nor the table's key order gives the same list.
+                chosen = [.. new[] { ids[1], ids[2] }.OrderByDescending(id => id)];
+                foreach (var id in chosen.Append(ids[3]))
+                    main.AddAlternative(await db.Products.SingleAsync(p => p.Id == id));
+                await db.SaveChangesAsync();
+                // One alternative has since gone obsolete: listing it would send the buyer to a dead end.
+                await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'obsolete' WHERE id = {ids[3]}");
+            }
+            await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(slugs[0]));
+
+            var client = _factory!.CreateClient();
+            foreach (var source in new[] { "database", "redis" })
+            {
+                using var doc = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{slugs[0]}"));
+                doc.RootElement.GetProperty("data").GetProperty("alternatives").EnumerateArray()
+                    .Select(a => a.GetProperty("slug").GetString())
+                    .Should().Equal(chosen.Select(id => slugs[Array.IndexOf(ids, id)]), source);
+            }
+        }
+        finally
+        {
+            await using var db = _seed.Db.CreateContext();
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM product_alternatives WHERE product_id = {ids[0]}");
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'active' WHERE id = {ids[3]}");
+            await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(slugs[0]));
+        }
+    }
+
+    [PostgresAndRedisFact]
     public async Task ProductPage_ShowsSupplyStatus_ItsPublicSuccessor_AndOrderUnits()
     {
         // Two products of one seller: the older one is phased out in favour of the newer one.
@@ -128,7 +252,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         {
             var old = await db.Products.Include(p => p.Variants).SingleAsync(p => p.Id == oldId);
             var successor = await db.Products.SingleAsync(p => p.Id == newId);
-            old.SetSupply(SupplyStatus.Nrnd, successor);
+            old.SetSupply(SupplyStatus.Nrnd, successor, successorIsDropIn: false, successorNote: "Firmware V4: migrate the project.");
             old.SetOrderUnits(old.Variants.OrderByDescending(v => v.IsDefault).First().Id, 20, 10);
             await db.SaveChangesAsync();
         }
@@ -142,6 +266,8 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
             d.GetProperty("supplyStatus").GetString().Should().Be("nrnd");
             d.GetProperty("successor").GetProperty("slug").GetString().Should().Be(newSlug);
             d.GetProperty("successor").GetProperty("titleEn").GetString().Should().NotBeNullOrEmpty();
+            d.GetProperty("successor").GetProperty("isDropIn").GetBoolean().Should().BeFalse();
+            d.GetProperty("successor").GetProperty("note").GetString().Should().Be("Firmware V4: migrate the project.");
             var variant = d.GetProperty("variants")[0];
             variant.GetProperty("minOrderQty").GetInt32().Should().Be(20);
             variant.GetProperty("packSize").GetInt32().Should().Be(10);
@@ -171,7 +297,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         {
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET status = 'active' WHERE id = {newId}");
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL WHERE id = {oldId}");
+                $"UPDATE products SET supply_status = 'active', successor_product_id = NULL, successor_note = NULL WHERE id = {oldId}");
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"UPDATE product_variants SET min_order_qty = 1, pack_size = 1 WHERE product_id = {oldId}");
         }
@@ -210,7 +336,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         await using (var db = _seed.Db.CreateContext())
         {
             var invalidator = new RedisStorefrontCacheInvalidator(_redis!);
-            IOutboxPublisher[] publishers = [new StorefrontCacheInvalidationPublisher(invalidator), new SearchSyncQueuePublisher(_redis!)];
+            IOutboxPublisher[] publishers = [new StorefrontCacheInvalidationPublisher(invalidator, db), new SearchSyncQueuePublisher(_redis!)];
             var relay = new OutboxRelay(db, publishers, NullLogger<OutboxRelay>.Instance);
             while (await relay.ProcessBatchAsync(500) > 0) { }
         }

@@ -142,6 +142,8 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.Property(p => p.SupplyStatus).HasColumnName("supply_status").HasMaxLength(30)
             .HasConversion(new SnakeCaseEnumConverter<SupplyStatus>()).HasDefaultValue(SupplyStatus.Active).HasSentinel(0);
         b.Property(p => p.SuccessorProductId).HasColumnName("successor_product_id");
+        b.Property(p => p.SuccessorIsDropIn).HasColumnName("successor_is_drop_in");
+        b.Property(p => p.SuccessorNote).HasColumnName("successor_note").HasMaxLength(Product.MaxSuccessorNoteLength);
 
         b.HasIndex(p => p.Slug).IsUnique().HasDatabaseName("ux_products_slug").HasFilter("deleted_at IS NULL");
         b.HasIndex(p => new { p.SellerId, p.Status }).HasDatabaseName("ix_products_seller_status");
@@ -158,6 +160,8 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         b.HasMany(p => p.Variants).WithOne().HasForeignKey(v => v.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.Media).WithOne().HasForeignKey(m => m.ProductId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(p => p.AttributeValues).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(p => p.Alternatives).WithOne().HasForeignKey(a => a.ProductId).OnDelete(DeleteBehavior.Cascade);
+        b.Navigation(p => p.Alternatives).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Variants).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.Media).UsePropertyAccessMode(PropertyAccessMode.Field);
         b.Navigation(p => p.AttributeValues).UsePropertyAccessMode(PropertyAccessMode.Field);
@@ -274,6 +278,21 @@ internal sealed class AttributeValueConfiguration : IEntityTypeConfiguration<Att
         b.Property(v => v.NumericMax).HasColumnName("numeric_max").HasPrecision(18, 6);
         // Range filters ("0.5–2 kW") read values of one attribute by number.
         b.HasIndex(v => new { v.AttributeId, v.NumericValue }).HasDatabaseName("ix_attribute_values_numeric");
+    }
+}
+
+internal sealed class ProductAlternativeConfiguration : IEntityTypeConfiguration<ProductAlternative>
+{
+    public void Configure(EntityTypeBuilder<ProductAlternative> b)
+    {
+        b.ToTable("product_alternatives", t =>
+            t.HasCheckConstraint("ck_product_alternatives_not_self", "product_id <> alternative_product_id"));
+        b.HasKey(a => new { a.ProductId, a.AlternativeProductId });
+        b.Property(a => a.ProductId).HasColumnName("product_id");
+        b.Property(a => a.AlternativeProductId).HasColumnName("alternative_product_id");
+        b.Property(a => a.Position).HasColumnName("position");
+        b.HasOne<Product>().WithMany().HasForeignKey(a => a.AlternativeProductId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(a => a.AlternativeProductId).HasDatabaseName("ix_product_alternatives_alternative");
     }
 }
 

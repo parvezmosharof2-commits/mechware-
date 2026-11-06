@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ShopVerse.Application.Catalog;
 using ShopVerse.Application.Common;
+using Microsoft.EntityFrameworkCore;
 using ShopVerse.Domain.Catalog;
 using StackExchange.Redis;
 
@@ -31,12 +32,21 @@ public sealed class SearchSyncQueuePublisher : IOutboxPublisher
     }
 }
 
-/// <summary>Evicts storefront cache entries when a product changes (tag-style invalidation).</summary>
+/// <summary>
+/// Evicts storefront cache entries when a product changes (tag-style invalidation). A product page also shows other products
+/// (its successor and its alternatives, only while they are on sale), so when a product changes, the pages that point to it
+/// are evicted too; otherwise a page keeps linking to a part that has since gone obsolete or been archived.
+/// </summary>
 public sealed class StorefrontCacheInvalidationPublisher : IOutboxPublisher
 {
     private readonly IStorefrontCacheInvalidator _cache;
+    private readonly ShopVerseDbContext _db;
 
-    public StorefrontCacheInvalidationPublisher(IStorefrontCacheInvalidator cache) => _cache = cache;
+    public StorefrontCacheInvalidationPublisher(IStorefrontCacheInvalidator cache, ShopVerseDbContext db)
+    {
+        _cache = cache;
+        _db = db;
+    }
 
     public async Task PublishAsync(OutboxEnvelope message, CancellationToken ct = default)
     {
@@ -47,6 +57,9 @@ public sealed class StorefrontCacheInvalidationPublisher : IOutboxPublisher
                 {
                     var slug = doc.RootElement.GetProperty("slug").GetString();
                     if (slug is not null) await _cache.InvalidateProductAsync(slug, ct);
+                    if (doc.RootElement.TryGetProperty("productId", out var id) && id.TryGetGuid(out var productId))
+                        foreach (var dependent in await PagesPointingToAsync(productId, ct))
+                            await _cache.InvalidateProductAsync(dependent, ct);
                 }
 
                 break;
@@ -63,4 +76,11 @@ public sealed class StorefrontCacheInvalidationPublisher : IOutboxPublisher
                 break;
         }
     }
+
+    /// <summary>Slugs of the products whose page shows <paramref name="productId"/> as successor or as an alternative.</summary>
+    private Task<List<string>> PagesPointingToAsync(Guid productId, CancellationToken ct) =>
+        _db.Products.AsNoTracking()
+            .Where(p => p.SuccessorProductId == productId
+                        || _db.Set<ProductAlternative>().Any(a => a.ProductId == p.Id && a.AlternativeProductId == productId))
+            .Select(p => p.Slug).ToListAsync(ct);
 }

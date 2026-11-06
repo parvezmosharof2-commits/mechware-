@@ -177,4 +177,169 @@ public class ProductSupplyTests
         notAPack.Should().Throw<ValidationException>().WithMessage("*packs of 10*");
         CartEngine.Set(cart, facts, 30).Items.Single().Quantity.Should().Be(30);
     }
+
+    [Theory]
+    [InlineData(50, 50, 50, true)]
+    [InlineData(50, 50, 100, true)]
+    [InlineData(50, 50, 49, false)]   // below the minimum
+    [InlineData(50, 50, 75, false)]   // not whole packs
+    [InlineData(100, 50, 50, false)]  // one pack, but the minimum is two
+    [InlineData(100, 50, 150, true)]
+    [InlineData(3, 1, 2, false)]
+    [InlineData(3, 1, 4, true)]
+    public void AnOrderLine_FollowsTheMinimumAndThePack(int min, int pack, int quantity, bool allowed)
+    {
+        var v = Published("units-" + Guid.NewGuid().ToString("N")[..6]).Variants.Single();
+        v.SetOrderUnits(min, pack);
+        (v.QuantityProblem(quantity) is null).Should().Be(allowed);
+    }
+
+    [Fact]
+    public void AnOrderLineProblem_NamesTheSkuAndTheRule()
+    {
+        var v = Published("tb").Variants.Single();
+        v.SetOrderUnits(100, 50);
+        v.QuantityProblem(50).Should().Contain("SKU-TB").And.Contain("minimum order is 100");
+        v.QuantityProblem(120).Should().Contain("packs of 50");
+    }
+
+    [Fact]
+    public void ASuccessor_CarriesWhetherItFitsAsItIs_AndWhatChanges()
+    {
+        var old = Published("old-cpu");
+        var successor = Published("new-cpu");
+        old.SetSupply(SupplyStatus.Obsolete, successor, successorIsDropIn: false, successorNote: "  Firmware V4: migrate the project.  ");
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((false, "Firmware V4: migrate the project."));
+
+        old.SetSupply(SupplyStatus.Active, null);
+        (old.SuccessorProductId, old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((null, false, null));
+    }
+
+    [Fact]
+    public void CompatibilityNotes_NeedASuccessor_AndAreBounded()
+    {
+        var p = Published("lonely");
+        ((Action)(() => p.SetSupply(SupplyStatus.Obsolete, null, successorIsDropIn: true))).Should().Throw<ValidationException>();
+        ((Action)(() => p.SetSupply(SupplyStatus.Obsolete, null, successorNote: "x"))).Should().Throw<ValidationException>();
+        var tooLong = () => p.SetSupply(SupplyStatus.Nrnd, Published("next"), false, new string('x', Product.MaxSuccessorNoteLength + 1));
+        tooLong.Should().Throw<ValidationException>().Which.Errors.Single().Field.Should().Be("successorNote");
+    }
+
+    [Fact]
+    public void Alternatives_AreKeptInOrder_WithoutDuplicates_AndCanBeRemoved()
+    {
+        var p = Published("plc");
+        Product a = Published("alt-a", Guid.NewGuid()), b = Published("alt-b");   // another seller is fine for an alternative
+        p.AddAlternative(a);
+        p.AddAlternative(b);
+        p.AddAlternative(a);
+
+        p.Alternatives.Select(x => (x.AlternativeProductId, x.Position)).Should().Equal((a.Id, 0), (b.Id, 1));
+        p.RemoveAlternative(a.Id);
+        p.Alternatives.Select(x => x.AlternativeProductId).Should().Equal(b.Id);
+    }
+
+    [Fact]
+    public void AnAlternative_IsAnotherPublishedProduct_AndTheListIsCapped()
+    {
+        var p = Published("hmi");
+        ((Action)(() => p.AddAlternative(p))).Should().Throw<ValidationException>();
+        var draft = new Product(Guid.NewGuid(), Seller, Guid.NewGuid(), null, "Draft", "খসড়া", "draft-x", "s", "s", "<p>d</p>");
+        ((Action)(() => p.AddAlternative(draft))).Should().Throw<ValidationException>();
+
+        for (int i = 0; i < Product.MaxAlternatives; i++) p.AddAlternative(Published($"alt-{i}"));
+        ((Action)(() => p.AddAlternative(Published("one-more")))).Should().Throw<ValidationException>();
+        p.Alternatives.Should().HaveCount(Product.MaxAlternatives);
+    }
+
+    [Fact]
+    public void RemovingAnAlternative_ClosesTheGap_SoTheNextOneNeverTiesInPosition()
+    {
+        var p = Published("switch");
+        Product a = Published("pos-a"), b = Published("pos-b"), c = Published("pos-c");
+        p.AddAlternative(a);
+        p.AddAlternative(b);
+        p.RemoveAlternative(a.Id);
+        p.AddAlternative(c);
+
+        p.Alternatives.Select(x => (x.AlternativeProductId, x.Position)).Should().Equal((b.Id, 0), (c.Id, 1));
+    }
+
+    [Fact]
+    public void ChangingOnlyTheStatus_KeepsTheSuccessorsNoteAndDropInFlag()
+    {
+        var old = Published("keep-old");
+        var successor = Published("keep-new");
+        old.SetSupply(SupplyStatus.Nrnd, successor, successorIsDropIn: true, successorNote: "Same footprint.");
+
+        old.SetSupply(SupplyStatus.Obsolete, successor);   // a status change that says nothing about the note
+
+        (old.SupplyStatus, old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((SupplyStatus.Obsolete, true, "Same footprint."));
+    }
+
+    [Fact]
+    public void ADifferentSuccessor_StartsWithoutTheOldNote_AndABlankNoteClearsIt()
+    {
+        var old = Published("swap-old");
+        old.SetSupply(SupplyStatus.Nrnd, Published("swap-a"), true, "About A.");
+
+        old.SetSupply(SupplyStatus.Nrnd, Published("swap-b"));
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((false, null));
+
+        var same = Published("swap-c");
+        old.SetSupply(SupplyStatus.Nrnd, same, true, "About C.");
+        old.SetSupply(SupplyStatus.Nrnd, same, successorNote: "   ");
+        (old.SuccessorIsDropIn, old.SuccessorNote).Should().Be((true, null), "only the note was cleared");
+    }
+
+    [Fact]
+    public void AnObsoleteProduct_CannotBeAddedAsAnAlternative()
+    {
+        var p = Published("cpu");
+        var gone = Published("gone");
+        gone.SetSupply(SupplyStatus.Obsolete, null);
+
+        var act = () => p.AddAlternative(gone);
+        act.Should().Throw<ValidationException>().Which.Errors.Single().Message.Should().Contain("not obsolete");
+        p.Alternatives.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AlternativesCannotBeChanged_WhileTheProductIsUnderReview()
+    {
+        var p = new Product(Guid.NewGuid(), Seller, Guid.NewGuid(), null, "Under review", "পর্যালোচনায়", "under-review", "s", "s", "<p>d</p>");
+        p.AddVariant(Guid.NewGuid(), "SKU-UR", null, new Dictionary<string, string>(), new Money(1000, Currency.BDT), null, null, 0.4m, true);
+        p.AddMedia(Guid.NewGuid(), null, "/img/a.jpg", "front view", 1200, 1200);
+        var other = Published("ur-other");
+        p.AddAlternative(other);
+        p.SubmitForReview();
+
+        ((Action)(() => p.AddAlternative(Published("ur-two")))).Should().Throw<ValidationException>();
+        ((Action)(() => p.RemoveAlternative(other.Id))).Should().Throw<ValidationException>();
+        p.Alternatives.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public void IsLinkable_IsTrueOnlyForAPublishedNonObsoleteProduct()
+    {
+        var test = Product.IsLinkable.Compile();
+        var live = Published("live");
+        test(live).Should().BeTrue();
+
+        var nrnd = Published("nrnd");
+        nrnd.SetSupply(SupplyStatus.Nrnd, null);
+        test(nrnd).Should().BeTrue("still sold");
+
+        var obsolete = Published("obs");
+        obsolete.SetSupply(SupplyStatus.Obsolete, null);
+        test(obsolete).Should().BeFalse();
+
+        var archived = Published("arch");
+        archived.Archive();
+        test(archived).Should().BeFalse();
+
+        var deleted = Published("del");
+        deleted.SoftDelete(DateTime.UtcNow);
+        test(deleted).Should().BeFalse();
+    }
 }
