@@ -82,6 +82,8 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         ConnectionString = new NpgsqlConnectionStringBuilder(TestInfra.AdminConnection) { Database = _dbName }.ConnectionString;
         await using var db = CreateContext();
         await db.Database.EnsureCreatedAsync();
+        // Database objects migrations add with raw SQL (the audit hash chain); EnsureCreated knows only the model.
+        await db.Database.ExecuteSqlRawAsync(AuditChainSql.Install);
     }
 
     public ShopVerseDbContext CreateContext()
