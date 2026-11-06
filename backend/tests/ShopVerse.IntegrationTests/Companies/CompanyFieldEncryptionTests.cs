@@ -176,6 +176,99 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
                 .Should().Be(current.BlindIndex(bin));
     }
 
+    private async Task ExecAsync(string sql, Guid id, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+        await connection.OpenAsync();
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        cmd.Parameters.AddWithValue("id", id);
+        foreach (var (name, value) in parameters) cmd.Parameters.AddWithValue(name, value);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task<string?> BinIndexAsync(Guid id)
+    {
+        await using var db = fixture.CreateContext();
+        return await db.Companies.AsNoTracking().Where(c => c.Id == id).Select(c => EF.Property<string?>(c, CompanyBinIndex.Property)).SingleAsync();
+    }
+
+    private async Task<(Guid Owner, Guid Id, string Bin)> RegisterAsync(string name, string? tin = null)
+    {
+        var owner = await TestUsers.CreateAsync(fixture);
+        string bin = NextBin();
+        await using var db = fixture.CreateContext();
+        var id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest(name, "TL-" + bin[^6..], bin, tin, null))).Id;
+        return (owner, id, bin);
+    }
+
+    [PostgresFact]
+    public async Task AMissingFingerprint_IsRestoredByAnySave_EvenOneThatDoesNotTouchTheBin()
+    {
+        // Between deploying encryption and the backfill finishing, ordinary saves (an account manager assigned, a status
+        // change) must not leave the BIN without a fingerprint, or it would be open to a second registration.
+        var (owner, id, bin) = await RegisterAsync("Unindexed Ltd");
+        await ExecAsync("UPDATE companies SET bin_index = NULL WHERE id = @id", id);
+
+        await using (var db = fixture.CreateContext())
+        {
+            var company = await db.Companies.SingleAsync(c => c.Id == id);
+            company.AssignAccountManager(owner);
+            await db.SaveChangesAsync();
+        }
+
+        (await BinIndexAsync(id)).Should().Be(FieldEncryption.Current.BlindIndex(bin));
+    }
+
+    [PostgresFact]
+    public async Task TheBackfill_RestoresAMissingFingerprint_OnARowWhoseValuesAreAlreadyCurrent()
+    {
+        var (_, id, bin) = await RegisterAsync("Fingerprintless Ltd");
+        await ExecAsync("UPDATE companies SET bin_index = NULL WHERE id = @id", id);
+
+        await using (var db = fixture.CreateContext())
+            await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+
+        (await BinIndexAsync(id)).Should().Be(FieldEncryption.Current.BlindIndex(bin));
+    }
+
+    [PostgresFact]
+    public async Task TheBackfill_EncryptsAPlainTin_EvenWhenTheBinAndLicenceAreAlreadyCurrent()
+    {
+        var (owner, id, _) = await RegisterAsync("Plain Tin Ltd", "444455556666");
+        await ExecAsync("UPDATE companies SET tin = '444455556666' WHERE id = @id", id);
+
+        await using (var db = fixture.CreateContext())
+            await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+
+        (await RawAsync(id)).Tin.Should().StartWith(FieldEncryption.Current.CurrentPrefix).And.NotContain("444455556666");
+        await using (var db = fixture.CreateContext())
+            (await new CompanyService(db).GetAsync(owner, id)).Tin.Should().Be("444455556666");
+    }
+
+    [PostgresFact]
+    public async Task TheBackfill_Stops_WhenARowDoesNotReachTheCurrentKey_InsteadOfLoopingForEver()
+    {
+        // A trigger that undoes the encryption of this one row stands in for any defect that keeps a save from sticking.
+        var (_, id, _) = await RegisterAsync("Stubborn Ltd", "777788889999");
+        string fn = $"keep_tin_plain_{id:N}";
+        await ExecAsync($"""
+            CREATE FUNCTION {fn}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN NEW.tin := '777788889999'; RETURN NEW; END $$;
+            CREATE TRIGGER {fn} BEFORE UPDATE ON companies FOR EACH ROW WHEN (NEW.id = '{id}') EXECUTE FUNCTION {fn}();
+            UPDATE companies SET tin = '777788889999' WHERE id = @id;
+            """, id);
+        try
+        {
+            await using var db = fixture.CreateContext();
+            Func<Task> run = () => FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None);
+            (await run.Should().ThrowAsync<InvalidOperationException>().WaitAsync(TimeSpan.FromSeconds(30)))
+                .WithMessage($"*{id}*");
+        }
+        finally
+        {
+            await ExecAsync($"DROP TRIGGER {fn} ON companies; DROP FUNCTION {fn}(); UPDATE companies SET tin = NULL WHERE id = @id;", id);
+        }
+    }
+
     private sealed class FixedUser(Guid id) : ShopVerse.Application.Identity.ICurrentUserService
     {
         public Guid? UserId => id;

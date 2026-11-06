@@ -35,6 +35,7 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
     {
         string like = FieldEncryption.Current.CurrentPrefix + "%";
         int total = 0;
+        var done = new HashSet<Guid>();
         while (true)
         {
             var ids = await db.Database.SqlQuery<Guid>($"""
@@ -44,6 +45,12 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
                  LIMIT {Batch}
                 """).ToListAsync(ct);
             if (ids.Count == 0) return total;
+            // A row saved once and still selected did not reach the current key; selecting it again would loop for ever.
+            var stuck = ids.Where(done.Contains).ToList();
+            if (stuck.Count > 0)
+                throw new InvalidOperationException(
+                    $"{stuck.Count} companies were re-encrypted but still are not under the current key (first: {stuck[0]}); stopping instead of retrying them for ever.");
+            done.UnionWith(ids);
 
             var companies = await db.Companies.Where(c => ids.Contains(c.Id)).ToListAsync(ct);
             foreach (var company in companies)

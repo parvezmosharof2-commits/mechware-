@@ -112,6 +112,30 @@ public class FieldProtectorTests
     }
 
     [Fact]
+    public void TheKeyIdAndBlindIndex_FollowThePublishedDerivation()
+    {
+        // Stored fingerprints are only matched if the derivation never changes: an index computed another way (even under
+        // another key from the same master) would no longer find existing BINs, and a duplicate registration would pass.
+        byte[] master = RandomNumberGenerator.GetBytes(32);
+        byte[] Hkdf(string info, int length) => HKDF.DeriveKey(HashAlgorithmName.SHA256, master, length, info: Encoding.UTF8.GetBytes(info));
+        var p = new FieldProtector(master);
+
+        p.CurrentPrefix.Should().Be($"enc:v2:{Convert.ToHexStringLower(Hkdf("mechware/key-id/v1", 4))}:");
+        p.BlindIndex(" tl-77 ").Should().Be(
+            Convert.ToHexStringLower(HMACSHA256.HashData(Hkdf("mechware/blind-index/v1", 32), Encoding.UTF8.GetBytes("TL-77"))));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(27)]
+    public void ATruncatedValue_FailsAsACryptographicError(int length)
+    {
+        // Shorter than nonce + tag: refused as a damaged value, not as an arithmetic or argument error.
+        var act = () => P.Unprotect(P.CurrentPrefix + Convert.ToBase64String(new byte[length]));
+        act.Should().Throw<CryptographicException>().WithMessage("*truncated*");
+    }
+
+    [Fact]
     public void AnUnknownFormat_IsRefused_NotGuessed()
     {
         string stored = P.Protect("x");

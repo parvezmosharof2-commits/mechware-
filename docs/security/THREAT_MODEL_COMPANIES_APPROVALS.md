@@ -308,9 +308,25 @@ them in audit values, restrict who can read `audit_logs`.
 - TEST: the start-up guard (2 cases).
 - TEST: `AfterAKeyRotation_RowsUnderTheOldKey_StayReadable_KeepTheirBin_AndTheBackfillMovesThemToTheNewKey`,
   `ALicenceNumberThatLooksEncrypted_IsStillEncrypted_AndReadsBack`.
-- Unit: `FieldProtectorTests` (15): rotation, the first format, unknown key, unknown format, and configuration.
+- Unit: `FieldProtectorTests` (18): rotation, the first format, unknown key, unknown format, configuration, truncated
+  values, and a known-answer test that pins the key-id and blind-index derivation.
 - **Mutation check (rotation):** 12 mutants. 11 were caught, one only after a test was added. The 12th behaves the same as
   the original code (it rebuilds an identical protector), so no test can catch it.
+- **Mutation check (whole of H4, 2026-11-06):** 26 mutants over `FieldProtector`, key configuration, the `Program.cs`
+  wiring, `CompanyBinIndex.Refresh`, the "BIN taken" lookup and the backfill. **All 26 are caught.** The first run caught
+  20 of 25; a test was added for each survivor:
+  - Truncated value: shorter than nonce + tag now has a test that it fails as a `CryptographicException`, not an
+    arithmetic error.
+  - Blind index under the encryption key instead of the index key: the derivation is now pinned by a known-answer test. A
+    silent change would stop every stored fingerprint from matching, so a BIN could be registered twice.
+  - A missing fingerprint restored by any save, even one that does not touch the BIN.
+  - The backfill picking up a row whose only problem is a missing fingerprint, or only a plain TIN.
+- **Defect found by the mutation run:** four mutants were caught only because the tests hung. When a save did not bring a
+  row to the current key, `FieldEncryptionBackfillWorker.RunAsync` selected the same rows again for ever, which at
+  start-up would mean a silent loop against the database. It now stops with an error naming the row once a row it has
+  already saved comes back (`TheBackfill_Stops_WhenARowDoesNotReachTheCurrentKey_InsteadOfLoopingForEver`, which uses a
+  trigger to keep one row's TIN plain). Removing that guard fails the test, and the four former hangs now fail in about
+  35 seconds.
 
 ### M1. Staff roles other than admin / finance sign in without a second factor (Medium vs brief) [TEST] — **FIXED 2026-11-05** (passkeys still open)
 `RequiresMandatoryTwoFactor` covered admin and finance only. `support` holds `companies.view` and could read every
