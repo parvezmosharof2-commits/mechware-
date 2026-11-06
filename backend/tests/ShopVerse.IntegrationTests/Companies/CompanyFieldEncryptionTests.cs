@@ -52,6 +52,21 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
     }
 
     [PostgresFact]
+    public async Task ALicenceNumberThatLooksEncrypted_IsStillEncrypted_AndReadsBack()
+    {
+        // Typed by a user: it must not be taken for ciphertext, stored in clear and then break every read of the company.
+        var owner = await TestUsers.CreateAsync(fixture);
+        const string sneaky = "enc:v2:00000000:AAAA";
+        CompanyDto created;
+        await using (var db = fixture.CreateContext())
+            created = await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Sneaky Ltd", sneaky, NextBin(), null, null));
+
+        (await RawAsync(created.Id)).Licence.Should().StartWith(FieldEncryption.Current.CurrentPrefix).And.NotBe(sneaky);
+        await using (var db = fixture.CreateContext())
+            (await new CompanyService(db).GetAsync(owner, created.Id)).TradeLicenceNo.Should().Be(sneaky);
+    }
+
+    [PostgresFact]
     public async Task TheAuditLog_DoesNotCopyTheIdentifiersInClear()
     {
         var owner = await TestUsers.CreateAsync(fixture);
@@ -107,6 +122,58 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
             Func<Task> dup = () => new CompanyService(db).RegisterAsync(other, new RegisterCompanyRequest("Copycat Ltd", "TL-X", bin, null, null));
             (await dup.Should().ThrowAsync<ShopVerse.Domain.Common.Exceptions.ConflictException>()).Which.Code.Should().Be("COMPANY_BIN_EXISTS");
         }
+    }
+
+    [PostgresFact]
+    public async Task AfterAKeyRotation_RowsUnderTheOldKey_StayReadable_KeepTheirBin_AndTheBackfillMovesThemToTheNewKey()
+    {
+        var owner = await TestUsers.CreateAsync(fixture);
+        string bin = NextBin();
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Rotated Ltd", "TL-ROT-1", bin, "111122223333", null))).Id;
+
+        // As written before the rotation: everything under what is now the previous key.
+        var old = new FieldProtector(TestEncryption.PreviousKey);
+        await using (var connection = new NpgsqlConnection(fixture.ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var cmd = new NpgsqlCommand(
+                "UPDATE companies SET bin = @bin, tin = @tin, trade_licence_no = @lic, bin_index = @idx WHERE id = @id", connection);
+            cmd.Parameters.AddWithValue("bin", old.Protect(bin));
+            cmd.Parameters.AddWithValue("tin", old.Protect("111122223333"));
+            cmd.Parameters.AddWithValue("lic", old.Protect("TL-ROT-1"));
+            cmd.Parameters.AddWithValue("idx", old.BlindIndex(bin));
+            cmd.Parameters.AddWithValue("id", id);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        await using (var db = fixture.CreateContext())
+        {
+            var read = await new CompanyService(db).GetAsync(owner, id);
+            (read.Bin, read.Tin, read.TradeLicenceNo).Should().Be((bin, "111122223333", "TL-ROT-1"));
+        }
+
+        // Its BIN is still taken, although its fingerprint is under the old key.
+        var other = await TestUsers.CreateAsync(fixture);
+        await using (var db = fixture.CreateContext())
+        {
+            Func<Task> dup = () => new CompanyService(db).RegisterAsync(other, new RegisterCompanyRequest("Copycat Ltd", "TL-Y", bin, null, null));
+            (await dup.Should().ThrowAsync<ShopVerse.Domain.Common.Exceptions.ConflictException>()).Which.Code.Should().Be("COMPANY_BIN_EXISTS");
+        }
+
+        await using (var db = fixture.CreateContext())
+            (await FieldEncryptionBackfillWorker.RunAsync(db, CancellationToken.None)).Should().BeGreaterThan(0);
+
+        var raw = await RawAsync(id);
+        var current = FieldEncryption.Current;
+        raw.Bin.Should().StartWith(current.CurrentPrefix);
+        raw.Tin.Should().StartWith(current.CurrentPrefix);
+        raw.Licence.Should().StartWith(current.CurrentPrefix);
+        new FieldProtector(TestEncryption.Key).Unprotect(raw.Bin).Should().Be(bin, "the old key is no longer needed for this row");
+        await using (var db = fixture.CreateContext())
+            (await db.Companies.AsNoTracking().Where(c => c.Id == id).Select(c => EF.Property<string>(c, CompanyBinIndex.Property)).SingleAsync())
+                .Should().Be(current.BlindIndex(bin));
     }
 
     private sealed class FixedUser(Guid id) : ShopVerse.Application.Identity.ICurrentUserService

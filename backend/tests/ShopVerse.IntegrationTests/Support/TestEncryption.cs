@@ -15,6 +15,10 @@ public static class TestEncryption
     public static readonly byte[] Key = SHA256.HashData(Encoding.UTF8.GetBytes("mechware-integration-tests-field-key"));
     public static readonly string KeyBase64 = Convert.ToBase64String(Key);
 
+    /// <summary>A retired key still configured for reading, as during a key rotation.</summary>
+    public static readonly byte[] PreviousKey = SHA256.HashData(Encoding.UTF8.GetBytes("mechware-integration-tests-previous-field-key"));
+    public static readonly string PreviousKeyBase64 = Convert.ToBase64String(PreviousKey);
+
     [ModuleInitializer]
-    public static void UseTestKey() => FieldEncryption.Configure(Key);
+    public static void UseTestKey() => FieldEncryption.Configure(Key, [PreviousKey]);
 }
