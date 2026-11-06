@@ -516,6 +516,12 @@ public sealed class SellerIsolationResourcesController : ControllerBase
 [Route("api/v1/admin/users")]
 public sealed class AdminUserSecurityController(IIdentityService identity, ICurrentUserService currentUser) : ControllerBase
 {
+    /// <summary>Staff who must use an authenticator and have none yet, so the console can offer them a setup code.</summary>
+    [HttpGet("awaiting-two-factor")]
+    [RequirePermission(Permissions.UsersManage)]
+    public async Task<IActionResult> ListAwaitingTwoFactor(CancellationToken ct) =>
+        Ok(new { data = await identity.ListStaffAwaitingTwoFactorAsync(ct) });
+
     [HttpPost("{userId:guid}/two-factor-setup-code")]
     [RequirePermission(Permissions.UsersManage)]
     [RequireStepUp("user.two_factor_setup_code")]

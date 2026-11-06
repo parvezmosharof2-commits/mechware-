@@ -146,6 +146,14 @@ async function signIn(page, email, password) {
   await p.getByRole('row').filter({ hasText: 'Console Test Mills Ltd' }).waitFor();
   check('reload restores the staff session', true);
 
+  // 11b staff authenticator setup (M1): the admin's page lists staff without an authenticator; the seed has none.
+  await p.getByRole('link', { name: /Staff authenticator setup/ }).first().click();
+  await p.waitForURL(/\/staff$/);
+  await p.getByText('Everyone is set up').waitFor();
+  check('admin opens the staff authenticator page (no one waiting in the seed)', true);
+  await p.goto(`${WEB}/companies`);
+  await p.getByRole('row').filter({ hasText: 'Console Test Mills Ltd' }).waitFor();
+
   // 12 mobile
   const m = await browser.newContext({ viewport: { width: 360, height: 800 } });
   await m.addCookies(await ctx.cookies());

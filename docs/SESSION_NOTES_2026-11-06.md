@@ -42,7 +42,7 @@
    - ~~**M2:** প্রত্যাখ্যান করা আমন্ত্রণ মনে রাখা হয় না।~~ **ঠিক হয়েছে:** ৩০ দিন একই company আবার আমন্ত্রণ পাঠাতে পারে না।
    - **H3:** step-up কোড action ব্যর্থ হলেও খরচ হয়ে যায়, তাই আবার চেষ্টা করতে ৩০ সেকেন্ড পর্যন্ত অপেক্ষা লাগে।
    - ~~**H4:** key rotation নেই।~~ **হয়েছে:** `Encryption__PreviousFieldKeys` দিয়ে rotation। এর সাথে একটা বাগও ঠিক হয়েছে: কেউ licence নম্বর `enc:...` লিখলে company পড়া যেত না।
-   - **M1:** admin-এর setup code দেওয়ার console পাতা নেই, এখন শুধু API দিয়ে দেওয়া যায়। Passkey (WebAuthn) এখনো হয়নি।
+   - **M1:** ~~setup code দেওয়ার console পাতা নেই~~ **হয়েছে** ("Staff authenticator setup")। Passkey (WebAuthn) এখনো হয়নি।
    - **H6:** চালু authenticator বদলানোর আলাদা নিরাপদ ব্যবস্থা নেই।
    - **M5:** style-এ এখনো `unsafe-inline` আছে, আর CSP violation report-এর endpoint নেই।
 3. **Threat model v2-এর বাকি অংশ:** Q1–Q9 (quotes) আর I1–I10 (invoicing)। এগুলো ওই মডিউলগুলো তৈরি হওয়ার সাথে সাথে করতে হবে (রোডম্যাপের স্প্রিন্ট ৭–৯ আর ১০–১২)।

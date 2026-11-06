@@ -338,14 +338,19 @@ setup needed a session, so there was no way to enrol the first authenticator.
   (`403 STAFF_ENROLL_WITH_SETUP_CODE`), so an old session or a stolen token cannot get around the setup code.
 - **No code for a disabled account.** No setup code is issued for a suspended or banned account.
 - **Console:** sign-in → setup code → key + recovery codes → first code.
+- **Admin console page** (follow-up). "Staff authenticator setup" lists active staff who have no authenticator yet
+  (`GET /admin/users/awaiting-two-factor`, `users.manage`) and whether a code is already out. "Issue code" asks for the
+  admin's own fresh authenticator code (step-up) and shows the setup code once. The admin's own row has no button.
 
 **Residual:**
 - Passkeys (WebAuthn) are not built.
-- There is no console screen yet for administrators to issue codes; it is API only.
 - Staff roles are still assigned in the database, because there is no staff-management feature.
 
 **Evidence:**
-- TEST: `IT/Identity/StaffTwoFactorEnrollmentTests.cs` (22 tests).
+- TEST: `IT/Identity/StaffTwoFactorEnrollmentTests.cs` (23 tests, including the list for the console).
+- E2E: the admin opens the staff authenticator page.
+- **Mutation check (console list):** 7 mutants. All were caught, one only after the test was strengthened (an enrolment token
+  must not count as a setup code).
 - **Mutation check:** 22 mutants on the design, plus 11 on the code-review fixes, all caught.
 - **Code review:** two passes. The first found the trust-on-first-use flaw (a leaked password could enrol an attacker's
   phone), which led to the setup-code design.

@@ -727,6 +727,28 @@ public sealed class IdentityService : IIdentityService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<StaffAwaitingTwoFactorDto>> ListStaffAwaitingTwoFactorAsync(CancellationToken cancellationToken = default)
+    {
+        string[] staffRoles = [Permissions.Roles.Admin, Permissions.Roles.Finance, Permissions.Roles.Support, Permissions.Roles.Moderator];
+        var users = await _db.Users.AsNoTracking().Include(u => u.UserRoles)
+            .Where(u => !u.TwoFactorEnabled && u.DeletedAtUtc == null
+                        && u.Status != UserStatus.Suspended && u.Status != UserStatus.Banned && u.Status != UserStatus.Deleted
+                        && u.UserRoles.Any(r => staffRoles.Contains(r.RoleName.ToLower())))
+            .OrderBy(u => u.Email)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var recipients = users.Select(u => u.Id.ToString("N")).ToList();
+        var withCode = (await _db.OtpCodes.AsNoTracking()
+            .Where(o => recipients.Contains(o.Recipient) && o.Type == OtpType.TwoFactorSetupCode && !o.IsConsumed && o.ExpiresAtUtc > now
+                        && o.Attempts < OtpCode.MaxVerificationAttempts)
+            .Select(o => o.Recipient).ToListAsync(cancellationToken)).ToHashSet();
+
+        return [.. users.Select(u => new StaffAwaitingTwoFactorDto(
+            u.Id, u.Email, u.FullName, GetUserRoles(u), withCode.Contains(u.Id.ToString("N"))))];
+    }
+
     public async Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
         Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default)
     {
