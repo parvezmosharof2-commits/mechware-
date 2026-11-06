@@ -87,6 +87,34 @@ public class CompanyFieldEncryptionTests(PostgresDatabaseFixture fixture) : ICla
     }
 
     [PostgresFact]
+    public async Task ARowMissingItsFingerprint_GetsItOnTheNextSave_EvenWhenTheBinIsUnchanged()
+    {
+        // Without a fingerprint the BIN is invisible to the duplicate check; any save of the row must restore it, not only
+        // the start-up backfill.
+        var owner = await TestUsers.CreateAsync(fixture);
+        string bin = NextBin();
+        Guid id;
+        await using (var db = fixture.CreateContext())
+            id = (await new CompanyService(db).RegisterAsync(owner, new RegisterCompanyRequest("Gap Ltd", "TL-GAP-1", bin, null, null))).Id;
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE companies SET bin_index = NULL WHERE id = {id}");
+
+        await using (var db = fixture.CreateContext())
+        {
+            var company = await db.Companies.SingleAsync(c => c.Id == id);
+            db.Entry(company).Property(c => c.LegalName).IsModified = true;   // some other change; the BIN is untouched
+            await db.SaveChangesAsync();
+        }
+
+        var other = await TestUsers.CreateAsync(fixture);
+        await using (var db = fixture.CreateContext())
+        {
+            Func<Task> dup = () => new CompanyService(db).RegisterAsync(other, new RegisterCompanyRequest("Copycat Ltd", "TL-Y", bin, null, null));
+            (await dup.Should().ThrowAsync<ShopVerse.Domain.Common.Exceptions.ConflictException>()).Which.Code.Should().Be("COMPANY_BIN_EXISTS");
+        }
+    }
+
+    [PostgresFact]
     public async Task RowsWrittenBeforeEncryption_StayReadable_AndTheBackfillEncryptsAndIndexesThem()
     {
         var owner = await TestUsers.CreateAsync(fixture);
