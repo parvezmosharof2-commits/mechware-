@@ -147,6 +147,15 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
             variant.GetProperty("packSize").GetInt32().Should().Be(10);
         }
 
+        // A successor that has itself gone obsolete is not shown either: it would be another dead end.
+        await using (var db = _seed.Db.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'obsolete' WHERE id = {newId}");
+        await _redis!.GetDatabase().KeyDeleteAsync(StorefrontCacheKeys.Product(oldSlug));
+        using (var gone = JsonDocument.Parse(await client.GetStringAsync($"/api/v1/storefront/products/{oldSlug}")))
+            gone.RootElement.GetProperty("data").GetProperty("successor").ValueKind.Should().Be(JsonValueKind.Null);
+        await using (var db = _seed.Db.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET supply_status = 'active' WHERE id = {newId}");
+
         // A successor that is no longer on sale is not shown: the buyer is never sent to a dead page.
         await using (var db = _seed.Db.CreateContext())
         {

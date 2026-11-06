@@ -118,6 +118,16 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 
 **Exit gate:** ৪০০+ পণ্য যাচাই করা স্পেকসহ; ফাইল আপলোডের abuse test (ভুল টাইপ, বড় ফাইল, EICAR ভাইরাস নমুনা) পাস।
 
+**অবস্থা (২০২৬-১১-০৬):**
+- ✅ **ধাপ ১:** supply status (active / NRND / obsolete), উত্তরসূরি পণ্য, MOQ ও pack size।
+  - Domain-এর নিয়ম মেনে চলে, আর database-এ check constraint আছে।
+  - Public PDP API-তে field-গুলো আসে।
+  - টেস্ট আর mutation check হয়েছে।
+- ⏳ **PDP-তে banner আর quantity ধাপ:** স্প্রিন্ট ৫–৬-এর PDP পাতার সাথে হবে (web-এ PDP পাতা এখনো নেই)।
+- ⏳ **Seller বা admin-এর সম্পাদনার API:** product লেখার API এলে সেখানে `SetSupply`/`SetOrderUnits` ব্যবহার হবে।
+  - উত্তরসূরি "একই seller-এর পণ্য" কিনা, সেই যাচাই domain-এ আছে, তাই ওই API-কে আলাদা করে এটা যাচাই করতে হবে না।
+- ⏳ **পরের ধাপ:** unit-সহ attribute, datasheet/CAD আপলোড (AV scan), বিকল্প পণ্য।
+
 ### স্প্রিন্ট ৫–৬ — সার্চ + পণ্যের তালিকা ও পেজ
 - Meilisearch adapter (outbox থেকে sync), parametric facet, পার্ট-নম্বর normalisation (`6ES7 214-1AG40-0XB0` = `6ES72141AG400XB0`), Banglish প্রতিশব্দ।
 - PLP: ডেস্কটপে product table, মোবাইলে list; PDP: স্পেক টেবিল, quantity-break টেবিল, গুদামভিত্তিক স্টক, "Add to quote"।

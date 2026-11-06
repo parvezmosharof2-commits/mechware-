@@ -90,10 +90,12 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         var seller = await _db.Sellers.AsNoTracking().Where(s => s.Id == product.SellerId)
             .Select(s => new SellerSummaryDto(s.StoreName, s.Slug, s.LogoUrl, s.RatingAvg, s.RatingCount)).FirstAsync(ct);
 
-        // Only a successor that is itself on sale; otherwise the page would point the buyer at a dead end.
+        // Only a successor that is itself on sale and not obsolete (it may have gone end of life since it was chosen);
+        // otherwise the page would point the buyer at a dead end.
         var successor = product.SuccessorProductId is null ? null
             : await _db.Products.AsNoTracking()
-                .Where(p => p.Id == product.SuccessorProductId && p.Status == ProductStatus.Active && p.DeletedAtUtc == null)
+                .Where(p => p.Id == product.SuccessorProductId && p.Status == ProductStatus.Active && p.DeletedAtUtc == null
+                            && p.SupplyStatus != SupplyStatus.Obsolete)
                 .Select(p => new SuccessorDto(p.Slug, p.TitleEn, p.TitleBn)).FirstOrDefaultAsync(ct);
 
         var category = await _db.Categories.AsNoTracking().FirstAsync(c => c.Id == product.CategoryId, ct);
