@@ -24,6 +24,18 @@ public sealed class ShopVerseDbContext : DbContext
     {
     }
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        CompanyBinIndex.Refresh(this);
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        CompanyBinIndex.Refresh(this);
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<User> Users => Set<User>();
     public DbSet<Address> Addresses => Set<Address>();
     public DbSet<Role> Roles => Set<Role>();

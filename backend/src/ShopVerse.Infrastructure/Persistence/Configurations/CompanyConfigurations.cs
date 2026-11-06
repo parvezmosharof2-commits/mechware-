@@ -24,9 +24,15 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         b.Ignore(c => c.IsActive);
         b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         b.Property(c => c.LegalName).HasColumnName("legal_name").HasMaxLength(200).IsRequired();
-        b.Property(c => c.TradeLicenceNo).HasColumnName("trade_licence_no").HasMaxLength(50).IsRequired();
-        b.Property(c => c.Bin).HasColumnName("bin").HasMaxLength(13).IsRequired();
-        b.Property(c => c.Tin).HasColumnName("tin").HasMaxLength(12);
+        // Encrypted at application level (threat model v1, H4): the columns hold ciphertext, the entity plain values.
+        var protect = new Microsoft.EntityFrameworkCore.Storage.ValueConversion.ValueConverter<string, string>(
+            v => ShopVerse.Infrastructure.Security.FieldEncryption.Current.Protect(v),
+            v => ShopVerse.Infrastructure.Security.FieldEncryption.Current.Unprotect(v));
+        b.Property(c => c.TradeLicenceNo).HasColumnName("trade_licence_no").HasMaxLength(256).IsRequired().HasConversion(protect);
+        b.Property(c => c.Bin).HasColumnName("bin").HasMaxLength(256).IsRequired().HasConversion(protect);
+        b.Property(c => c.Tin).HasColumnName("tin").HasMaxLength(256).HasConversion(protect!);
+        // Keyed fingerprint of the BIN for uniqueness and lookups; kept up to date by ShopVerseDbContext on save.
+        b.Property<string>(CompanyBinIndex.Property).HasColumnName("bin_index").HasMaxLength(64);
         b.Property(c => c.Industry).HasColumnName("industry").HasMaxLength(100);
         b.Property(c => c.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
         b.Property(c => c.CreditTerms).HasColumnName("credit_terms").HasConversion<int>();
@@ -38,7 +44,7 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
 
         b.Property(c => c.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(500);
         // A rejected registration releases its BIN, so a squatter cannot lock the real firm out (threat model v1, H2).
-        b.HasIndex(c => c.Bin).IsUnique().HasFilter("status <> 'Rejected'").HasDatabaseName("ux_companies_bin");
+        b.HasIndex(CompanyBinIndex.Property).IsUnique().HasFilter("status <> 'Rejected'").HasDatabaseName("ux_companies_bin");
         b.HasIndex(c => c.Status).HasDatabaseName("ix_companies_status");
     }
 }

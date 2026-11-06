@@ -263,12 +263,37 @@ just before the action, after the permission check.
 - **Mutation check:** 10 mutants, all caught.
 - The migration runs in `CatalogHardeningTests` (`MigrateAsync`).
 
-### H4. Business identifiers stored in clear and copied into the audit log (High vs brief) [CODE]
+### H4. Business identifiers stored in clear and copied into the audit log (High vs brief) [TEST] — **FIXED 2026-11-06**
 BIN, TIN, trade-licence number and legal name are plain columns. Nothing in the code base encrypts at
 application level (brief §11.1 "PII and KYC numbers encrypted at application level"), and the audit interceptor
 writes the full old / new values of every changed row, including these fields, as JSON. A database dump or a
 read-only audit viewer exposes them. Fix direction: encrypt these columns with a managed key, exclude or mask
 them in audit values, restrict who can read `audit_logs`.
+
+**Fix:** the identifying numbers BIN, TIN and trade licence are now encrypted at application level, in line with brief §11.1.
+- **Encryption.** AES-256-GCM with a random nonce, through EF value converters (`FieldProtector`). The columns hold
+  `enc:v1:` ciphertext and the entity holds plain values. A changed byte fails to decrypt.
+- **Keys.** Encryption and index keys are derived with HKDF from one 32-byte master key, `Encryption__FieldKey`. Outside
+  Development the API refuses to start without it, or with the published development key.
+- **BIN lookups use a keyed fingerprint.** Equal BINs no longer look equal in the database, so uniqueness (the partial
+  index, now on `bin_index`) and the "BIN taken" check use HMAC-SHA256 under a second key. `ShopVerseDbContext` refreshes it
+  on every save.
+- **Never query `c.Bin == x`.** With randomized encryption that comparison silently matches nothing. One test did exactly
+  that and was fixed; the rule is written in `CompanyBinIndex`.
+- **The audit log no longer copies them.** BIN, TIN, trade licence and the fingerprint are `[REDACTED]` in old/new values.
+- **Rows written before encryption** are read as they are, and a start-up backfill encrypts and indexes them.
+- **Legal name stays in clear.** It is public business information and is searched.
+
+**Residual:**
+- Key rotation is not built: the format is versioned (`v1`) but holds one key.
+- `audit.view` holders still read other audit values.
+
+**Evidence:**
+- TEST: `IT/Companies/CompanyFieldEncryptionTests.cs` covers ciphertext in the database and plain values in the app, no
+  identifiers in the audit log, and the backfill.
+- TEST: the start-up guard (2 cases).
+- Unit: `FieldProtectorTests` (8).
+- **Mutation check:** started on 9 mutants but not finished (stopped mid-run); the guards are covered by the tests above.
 
 ### M1. Staff roles other than admin / finance sign in without a second factor (Medium vs brief) [TEST] — **FIXED 2026-11-05** (passkeys still open)
 `RequiresMandatoryTwoFactor` covered admin and finance only. `support` holds `companies.view` and could read every

@@ -54,6 +54,19 @@ builder.Services.AddOptions<StorageOptions>()
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// 2.0a Application-level encryption of business identifiers (threat model v1, H4). Outside Development the key must come
+// from the secret store: the development key is published in this repository.
+{
+    byte[]? fieldKey = ShopVerse.Infrastructure.Security.FieldEncryption.ParseKey(builder.Configuration["Encryption:FieldKey"]);
+    bool relaxed = builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing";
+    if (fieldKey is null && !relaxed)
+        throw new InvalidOperationException("Encryption:FieldKey is not set; set Encryption__FieldKey (32 bytes, base64) from the secret store.");
+    if (fieldKey is not null && !relaxed && fieldKey.AsSpan().SequenceEqual(ShopVerse.Infrastructure.Security.FieldEncryption.DevelopmentKey))
+        throw new InvalidOperationException("Encryption:FieldKey is the published development key; set a real one from the secret store.");
+    if (fieldKey is not null) ShopVerse.Infrastructure.Security.FieldEncryption.Configure(fieldKey);
+}
+builder.Services.AddHostedService<ShopVerse.Infrastructure.Workers.FieldEncryptionBackfillWorker>();
+
 // 2.1 Singleton ConnectionMultiplexer (CRIT-01: prevents socket exhaustion DoS)
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {

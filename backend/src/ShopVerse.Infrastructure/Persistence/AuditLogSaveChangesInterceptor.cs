@@ -21,7 +21,12 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
         nameof(User.TwoFactorSecret),
         nameof(User.TwoFactorRecoveryCodesJson),
         nameof(RefreshToken.TokenHash),
-        nameof(OtpCode.CodeHash)
+        nameof(OtpCode.CodeHash),
+        // Business identifiers are encrypted in their own table (H4); the audit log must not copy them out in clear.
+        nameof(ShopVerse.Domain.Companies.Company.Bin),
+        nameof(ShopVerse.Domain.Companies.Company.Tin),
+        nameof(ShopVerse.Domain.Companies.Company.TradeLicenceNo),
+        CompanyBinIndex.Property
     };
 
     private readonly ICurrentUserService _currentUserService;

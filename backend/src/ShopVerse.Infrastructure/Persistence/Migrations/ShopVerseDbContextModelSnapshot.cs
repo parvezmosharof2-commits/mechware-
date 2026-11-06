@@ -858,9 +858,14 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Bin")
                         .IsRequired()
-                        .HasMaxLength(13)
-                        .HasColumnType("character varying(13)")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("bin");
+
+                    b.Property<string>("BinIndex")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("bin_index");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -911,14 +916,14 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnName("status");
 
                     b.Property<string>("Tin")
-                        .HasMaxLength(12)
-                        .HasColumnType("character varying(12)")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("tin");
 
                     b.Property<string>("TradeLicenceNo")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("trade_licence_no");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
@@ -933,7 +938,7 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Bin")
+                    b.HasIndex("BinIndex")
                         .IsUnique()
                         .HasDatabaseName("ux_companies_bin")
                         .HasFilter("status <> 'Rejected'");

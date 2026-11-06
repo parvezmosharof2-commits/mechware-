@@ -34,7 +34,8 @@ public sealed class CompanyService(ShopVerseDbContext db) : ICompanyService
             throw new ConflictException("TOO_MANY_PENDING_COMPANIES",
                 $"You already have {pending} companies waiting for verification. Wait for MECHWARE to verify them first.");
 
-        if (await db.Companies.AnyAsync(c => c.Bin == company.Bin && c.Status != CompanyStatus.Rejected, ct))
+        string binIndex = CompanyBinIndex.Of(company.Bin);
+        if (await db.Companies.AnyAsync(c => EF.Property<string>(c, CompanyBinIndex.Property) == binIndex && c.Status != CompanyStatus.Rejected, ct))
             throw new ConflictException("COMPANY_BIN_EXISTS", "A company with this BIN is already registered.");
 
         db.Companies.Add(company);

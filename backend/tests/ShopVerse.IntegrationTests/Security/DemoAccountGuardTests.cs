@@ -18,6 +18,7 @@ public sealed class DemoAccountGuardTests
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
+            ["Encryption:FieldKey"] = TestEncryption.KeyBase64,
             ["Storage:SecretKey"] = "test-secret-key"
         });
 

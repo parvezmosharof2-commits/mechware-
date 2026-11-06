@@ -232,6 +232,21 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             .Where(e => e.ToString().Contains("JWT Secret is required"));
     }
 
+    [PostgresTheory]
+    [InlineData(null, "Encryption:FieldKey is not set")]
+    [InlineData("development", "published development key")]
+    public async Task Production_RefusesToStart_WithoutARealFieldEncryptionKey(string? key, string message)
+    {
+        await using var factory = new DbBackedFactory("Production", new Dictionary<string, string>
+        {
+            ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Storage:AccessKey"] = "test-access-key",
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Encryption:FieldKey"] = key is null ? "" : Convert.ToBase64String(ShopVerse.Infrastructure.Security.FieldEncryption.DevelopmentKey)
+        });
+        FluentActions.Invoking(() => factory.CreateClient()).Should().Throw<Exception>().Where(e => e.ToString().Contains(message));
+    }
+
     [PostgresFact]
     public async Task Production_HidesSwagger_AndThrottlesLoginBruteForce()
     {
@@ -291,6 +306,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         {
             ["Jwt:Secret"] = "staging-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
+            ["Encryption:FieldKey"] = TestFieldKey,
             ["Storage:SecretKey"] = "test-secret-key"
         });
         var client = factory.CreateClient();
@@ -325,6 +341,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
             ["Storage:AccessKey"] = "test-access-key",
+            ["Encryption:FieldKey"] = TestFieldKey,
             ["Storage:SecretKey"] = "test-secret-key",
             ["Identity:BootstrapAdmin:Email"] = email,
             ["Identity:BootstrapAdmin:Password"] = password,
@@ -346,11 +363,15 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         (await LoginAsync(client, new LoginRequestDto("admin@mechware.com.bd", "MechAdmin#2026!"))).Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    /// <summary>Production refuses to start without a field key (threat model v1, H4); the test key is shared by all tests.</summary>
+    private static readonly string TestFieldKey = TestEncryption.KeyBase64;
+
     private static DbBackedFactory ProductionFactory(string jwtSecret) =>
         new("Production", new Dictionary<string, string>
         {
             ["Jwt:Secret"] = jwtSecret,
             ["Storage:AccessKey"] = "test-access-key",
+            ["Encryption:FieldKey"] = TestFieldKey,
             ["Storage:SecretKey"] = "test-secret-key"
         });
 }
