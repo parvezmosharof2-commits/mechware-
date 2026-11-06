@@ -4,6 +4,7 @@ using ShopVerse.Domain.Catalog;
 using ShopVerse.Domain.Common.Enums;
 using ShopVerse.Domain.Common.Exceptions;
 using ShopVerse.Domain.Common.ValueObjects;
+using ShopVerse.Domain.Identity;
 
 namespace ShopVerse.UnitTests.Catalog;
 
@@ -341,5 +342,60 @@ public class ProductSupplyTests
         var deleted = Published("del");
         deleted.SoftDelete(DateTime.UtcNow);
         test(deleted).Should().BeFalse();
+    }
+
+    [Fact]
+    public void ReplaceAlternatives_SetsTheWholeList_InOrder_KeepingRowsThatStay()
+    {
+        var p = Published("main-part");
+        Product a = Published("ra-a"), b = Published("ra-b"), c = Published("ra-c");
+        p.ReplaceAlternatives([a, b]);
+        var rowOfB = p.Alternatives.Single(x => x.AlternativeProductId == b.Id);
+
+        p.ReplaceAlternatives([c, b]);
+
+        p.Alternatives.Select(x => (x.AlternativeProductId, x.Position)).Should().Equal((c.Id, 0), (b.Id, 1));
+        p.Alternatives.Single(x => x.AlternativeProductId == b.Id).Should().BeSameAs(rowOfB, "a row that stays is moved, not recreated");
+
+        p.ReplaceAlternatives([]);
+        p.Alternatives.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void ReplaceAlternatives_RefusesBadLists_AndChangesNothing()
+    {
+        var p = Published("main-two");
+        Product a = Published("rb-a"), gone = Published("rb-gone");
+        gone.SetSupply(SupplyStatus.Obsolete, null);
+        p.ReplaceAlternatives([a]);
+
+        ((Action)(() => p.ReplaceAlternatives([a, a]))).Should().Throw<ValidationException>();
+        ((Action)(() => p.ReplaceAlternatives([p]))).Should().Throw<ValidationException>();
+        ((Action)(() => p.ReplaceAlternatives([gone]))).Should().Throw<ValidationException>();
+        ((Action)(() => p.ReplaceAlternatives([.. Enumerable.Range(0, Product.MaxAlternatives + 1).Select(i => Published($"rb-{i}"))])))
+            .Should().Throw<ValidationException>();
+
+        p.Alternatives.Select(x => x.AlternativeProductId).Should().Equal(a.Id);
+    }
+
+    [Fact]
+    public void ReplaceAlternatives_WithTheSameList_RaisesNoEvent()
+    {
+        var p = Published("main-same");
+        var a = Published("rs-a");
+        p.ReplaceAlternatives([a]);
+        p.ClearDomainEvents();
+
+        p.ReplaceAlternatives([a]);
+
+        p.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void OnlyAdministrators_CanManageTheCatalogData()
+    {
+        foreach (var role in new[] { Permissions.Roles.Buyer, Permissions.Roles.Seller, Permissions.Roles.Support, Permissions.Roles.Moderator, Permissions.Roles.Finance })
+            Permissions.GetDefaultPermissionsForRole(role).Should().NotContain(Permissions.CatalogManage, role);
+        Permissions.GetDefaultPermissionsForRole(Permissions.Roles.Admin).Should().Contain(Permissions.CatalogManage);
     }
 }

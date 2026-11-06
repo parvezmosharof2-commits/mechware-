@@ -321,6 +321,39 @@ public sealed class Product : AggregateRoot<Guid>
         MarkUpdated();
     }
 
+    /// <summary>
+    /// Sets the whole list of alternatives, in the given order (staff edit it as one list). Every entry must be linkable and
+    /// the list has no duplicates and at most <see cref="MaxAlternatives"/> entries. An entry already present keeps its row.
+    /// </summary>
+    public void ReplaceAlternatives(IReadOnlyList<Product> ordered)
+    {
+        EnsureEditable();
+        if (ordered.Count > MaxAlternatives)
+            throw new ValidationException("alternativeProductIds", $"A product can list at most {MaxAlternatives} alternatives.");
+        if (ordered.Select(p => p.Id).Distinct().Count() != ordered.Count)
+            throw new ValidationException("alternativeProductIds", "An alternative is listed twice.");
+        foreach (var alternative in ordered)
+        {
+            if (alternative.Id == Id) throw new ValidationException("alternativeProductIds", "A product cannot be its own alternative.");
+            if (!LinkableNow(alternative))
+                throw new ValidationException("alternativeProductIds", "An alternative must be a published product that is not obsolete.");
+        }
+
+        var wanted = ordered.Select(p => p.Id).ToList();
+        if (_alternatives.OrderBy(a => a.Position).Select(a => a.AlternativeProductId).SequenceEqual(wanted)) return;
+
+        var existing = _alternatives.ToDictionary(a => a.AlternativeProductId);
+        _alternatives.RemoveAll(a => !wanted.Contains(a.AlternativeProductId));
+        for (int i = 0; i < wanted.Count; i++)
+        {
+            if (existing.TryGetValue(wanted[i], out var row)) row.MoveTo(i);
+            else _alternatives.Add(new ProductAlternative(Id, wanted[i], i));
+        }
+
+        _alternatives.Sort((x, y) => x.Position.CompareTo(y.Position));
+        MarkUpdated();
+    }
+
     public void RemoveAlternative(Guid alternativeProductId)
     {
         EnsureEditable();

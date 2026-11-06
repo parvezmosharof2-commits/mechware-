@@ -454,6 +454,20 @@ The rules:
 - **Request**: `{ "paymentId": "uuid", "amount": "12500.00", "reason": "Defective sensor returned" }`
 - **Behavior**: Calls payment gateway refund API, writes balanced double-entry ledger entries.
 
+#### Product information (staff): `/admin/products/{productId}/...`
+- **Auth**: Bearer, permission `catalog.manage` (administrators only). Anonymous callers get 401, other roles 403. Changes are audited (who, old and new values).
+- **Errors**: 400 `VALIDATION_ERROR` (with the field) for bad input, never 500; 404 for an unknown or deleted product. A refused call saves nothing. A product under review cannot be edited (400).
+- `GET /pim`: the product's state, drafts and archived products included. `{ id, slug, titleEn, status, supplyStatus, successor, alternatives, variants }`.
+  - `successor`: `{ productId, slug, titleEn, status, isDropIn, note }` or `null`.
+  - `alternatives[]`: `{ productId, slug, titleEn, status, supplyStatus, listed }`. `listed` is `false` when buyers do not see it (no longer published, or obsolete). Staff should replace it.
+  - `variants[]`: `{ variantId, sku, minOrderQty, packSize }`.
+- `PUT /supply`: `{ supplyStatus: "active"|"nrnd"|"obsolete", successorProductId?, successorIsDropIn?, successorNote? }`.
+  - The successor is replaced as a whole: leave it out for none. Only a product that is not `active` may have one, it must be another product of the same seller, published and in supply.
+  - Leave `successorIsDropIn` and `successorNote` out to keep what is stored while the successor stays the same. A different successor starts without a note. A blank note clears it. A note needs a successor, at most 500 characters.
+- `PUT /alternatives`: `{ alternativeProductIds: [uuid] }`, the complete list in display order. It may be empty, never missing.
+  - At most 10, no duplicates, not the product itself. Each must exist, be published and not be obsolete. An alternative that has since gone obsolete must be dropped before the list can be saved again.
+- `PUT /variants/{variantId}/order-units`: `{ minOrderQty, packSize }`. The minimum must be a whole number of packs. Both are between 1 and 10,000.
+
 #### `POST /admin/finance/payouts/execute-weekly`
 - **Auth**: Bearer (`[RequirePermission(Permissions.FinancePayout)]`)
 - **Behavior**: Calculates matured seller balances (`completed` sub-orders > 7 days), creates balanced ledger payout entries, generates bank/bKash transfer files.
