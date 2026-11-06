@@ -25,8 +25,7 @@ public sealed class ProductDocumentService(
     public async Task<DocumentDto> UploadAsync(
         Guid productId, string? kind, string? fileName, Stream content, Guid? uploadedBy, CancellationToken ct = default)
     {
-        if (!Enum.TryParse<DocumentKind>(kind, ignoreCase: true, out var documentKind) || !Enum.IsDefined(documentKind) || int.TryParse(kind, out _))
-            throw new ValidationException("kind", "The kind must be datasheet, cad or certificate.");
+        var documentKind = ParseKind(kind);
 
         var product = await db.Products.Include(p => p.Documents).FirstOrDefaultAsync(p => p.Id == productId && p.DeletedAtUtc == null, ct)
                       ?? throw new KeyNotFoundException("The product does not exist.");
@@ -116,6 +115,18 @@ public sealed class ProductDocumentService(
 
         return new DocumentDownload(stream, document.FileName, document.ContentType, document.SizeBytes);
     }
+
+    /// <summary>
+    /// Exactly one of the three words. Enum.TryParse is not used: it accepts numbers, undefined values and comma lists
+    /// ("datasheet,cad" is read as the two values or-ed together, which is "certificate").
+    /// </summary>
+    private static DocumentKind ParseKind(string? kind) => kind?.Trim().ToLowerInvariant() switch
+    {
+        "datasheet" => DocumentKind.Datasheet,
+        "cad" => DocumentKind.Cad,
+        "certificate" => DocumentKind.Certificate,
+        _ => throw new ValidationException("kind", "The kind must be datasheet, cad or certificate.")
+    };
 
     private long LimitFor(DocumentKind kind) => kind switch
     {

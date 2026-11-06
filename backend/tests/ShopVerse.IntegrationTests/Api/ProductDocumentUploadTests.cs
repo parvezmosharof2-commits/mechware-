@@ -171,6 +171,21 @@ public sealed class ProductDocumentUploadTests : IDisposable
     }
 
     [PostgresFact]
+    public async Task TheKind_IsOneOfTheThreeWords_InAnyCase_WithOrWithoutSpacesAround()
+    {
+        var factory = Factory();
+        var (product, _) = await PublishedProductAsync(factory);
+        using var admin = await AdminAsync(factory);
+
+        (await admin.PostAsync(Url(product), Form("DATASHEET", "a.pdf", Pdf("one")))).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await admin.PostAsync(Url(product), Form("  Certificate ", "b.pdf", Pdf("two")))).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        await using var db = Db(factory);
+        (await db.ProductDocuments.AsNoTracking().Where(d => d.ProductId == product).OrderBy(d => d.FileName).Select(d => d.Kind).ToListAsync())
+            .Should().Equal(DocumentKind.Datasheet, DocumentKind.Certificate);
+    }
+
+    [PostgresFact]
     public async Task ACadModelAndACertificate_AreAccepted_WithTheirOwnTypes()
     {
         var factory = Factory();
@@ -257,6 +272,11 @@ public sealed class ProductDocumentUploadTests : IDisposable
             Form("1", "a.pdf", Pdf()),              // a number is not a kind
             Form("0", "a.pdf", Pdf()),
             Form("99", "a.pdf", Pdf()),
+            Form("datasheet,cad", "a.pdf", Pdf()),  // Enum.TryParse would or these into "certificate"
+            Form("datasheet, certificate", "a.pdf", Pdf()),
+            Form("Datasheet\0", "a.pdf", Pdf()),
+            Form("data sheet", "a.pdf", Pdf()),
+            Form("-1", "a.pdf", Pdf()),
             Form("", "a.pdf", Pdf()),
             Form(null, "a.pdf", Pdf()),             // no kind at all
             Form("datasheet", null, null)           // no file
