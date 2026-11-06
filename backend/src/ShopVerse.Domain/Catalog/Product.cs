@@ -28,6 +28,10 @@ public sealed class Product : AggregateRoot<Guid>
     private readonly List<ProductMedia> _media = [];
     private readonly List<ProductAttributeValue> _attributeValues = [];
     private readonly List<ProductAlternative> _alternatives = [];
+    private readonly List<ProductDocument> _documents = [];
+
+    /// <summary>At most this many documents per product.</summary>
+    public const int MaxDocuments = 20;
 
     /// <summary>At most this many alternatives per product: a product page lists them, it is not a cross-reference database.</summary>
     public const int MaxAlternatives = 10;
@@ -89,6 +93,7 @@ public sealed class Product : AggregateRoot<Guid>
     public IReadOnlyCollection<ProductMedia> Media => _media.AsReadOnly();
     public IReadOnlyCollection<ProductAttributeValue> AttributeValues => _attributeValues.AsReadOnly();
     public IReadOnlyCollection<ProductAlternative> Alternatives => _alternatives.AsReadOnly();
+    public IReadOnlyCollection<ProductDocument> Documents => _documents.AsReadOnly();
 
     /// <summary>Whether a buyer can be sent to this product (see <see cref="IsLinkable"/>).</summary>
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
@@ -301,6 +306,39 @@ public sealed class Product : AggregateRoot<Guid>
         }
 
         return created;
+    }
+
+    #endregion
+
+    #region Documents
+
+    /// <summary>
+    /// Records a scanned, stored file. The same content (SHA-256) is not added twice, and a product holds at most
+    /// <see cref="MaxDocuments"/>. Saving raises the product's update event, so its cached page lists the file.
+    /// </summary>
+    public ProductDocument AddDocument(Guid documentId, DocumentKind kind, string fileName, DetectedFileType type, long sizeBytes,
+        string sha256, string storageKey, Guid? uploadedBy)
+    {
+        EnsureEditable();
+        if (_documents.Any(d => d.Sha256 == sha256))
+            throw new ConflictException("DOCUMENT_EXISTS", "This exact file is already attached to the product.");
+        if (_documents.Count >= MaxDocuments)
+            throw new ValidationException("file", $"A product can hold at most {MaxDocuments} documents.");
+        var document = new ProductDocument(documentId, Id, kind, fileName, type, sizeBytes, sha256, storageKey, uploadedBy);
+        _documents.Add(document);
+        MarkUpdated();
+        return document;
+    }
+
+    /// <summary>Removes a document and returns it, so the caller can delete the stored file.</summary>
+    public ProductDocument RemoveDocument(Guid documentId)
+    {
+        EnsureEditable();
+        var document = _documents.FirstOrDefault(d => d.Id == documentId)
+                       ?? throw new KeyNotFoundException("The document does not exist.");
+        _documents.Remove(document);
+        MarkUpdated();
+        return document;
     }
 
     #endregion

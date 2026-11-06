@@ -65,6 +65,12 @@ builder.Services.AddOptions<StorageOptions>()
 }
 builder.Services.AddHostedService<ShopVerse.Infrastructure.Workers.FieldEncryptionBackfillWorker>();
 
+// 2.0b Product documents (datasheets, CAD, certificates): a persistent directory and a real malware scanner outside Development.
+builder.Services.AddProductDocuments(
+    builder.Configuration.GetSection(ShopVerse.Infrastructure.Documents.DocumentOptions.SectionName).Get<ShopVerse.Infrastructure.Documents.DocumentOptions>() ?? new(),
+    builder.Configuration.GetSection(ShopVerse.Infrastructure.Documents.AntivirusOptions.SectionName).Get<ShopVerse.Infrastructure.Documents.AntivirusOptions>() ?? new(),
+    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+
 // 2.1 Singleton ConnectionMultiplexer (CRIT-01: prevents socket exhaustion DoS)
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {

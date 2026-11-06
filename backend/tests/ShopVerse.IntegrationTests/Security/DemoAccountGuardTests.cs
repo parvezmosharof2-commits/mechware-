@@ -20,7 +20,9 @@ public sealed class DemoAccountGuardTests
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestEncryption.KeyBase64,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
-            ["Storage:SecretKey"] = "test-secret-key"
+            ["Storage:SecretKey"] = "test-secret-key",
+            ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
+            ["Antivirus:Host"] = "127.0.0.1"
         });
 
     private static ShopVerseDbContext Db(DbBackedFactory factory) =>

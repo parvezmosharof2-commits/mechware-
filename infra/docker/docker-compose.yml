@@ -70,6 +70,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # Malware scanning for uploaded documents (datasheets, CAD, certificates). The API talks to clamd on 3310 (Antivirus__Host,
+  # Antivirus__Port). StreamMaxLength must stay above the largest upload limit (Documents__MaxCadBytes, 50 MB by default).
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: mechware_clamav
+    restart: unless-stopped
+    environment:
+      CLAMD_CONF_StreamMaxLength: 64M
+      CLAMD_CONF_MaxFileSize: 64M
+    ports:
+      - "127.0.0.1:3310:3310"   # clamd has no authentication: reachable from this host only, never published
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   minio-init:
     image: minio/mc:latest
     container_name: mechware_minio_init
@@ -113,3 +133,4 @@ volumes:
   redis_data:
   meili_data:
   minio_data:
+  clamav_data:
