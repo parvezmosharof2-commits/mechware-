@@ -76,7 +76,33 @@
   - **স্প্রিন্ট ১–২ বন্ধ:** ৫টা কাল্পনিক (AI) সাক্ষাৎকার আছে `docs/discovery/`-এ। মালিক রিভিউ মওকুফ করেছেন।
 - **শিক্ষা:** `StorefrontCatalogReader`-এর product query একটা static compiled query। তাই টেস্টে reader-কে fixture-এর context দিয়ে বানানো যাবে না, HTTP দিয়ে টেস্ট করতে হবে। নইলে পরে API-তে 500 আসে।
 
+## ১ঘ. চতুর্থ দফা (২০২৬-১১-০৬/০৭): PIM ধাপ ৩–৫, সবকিছু `main`-এ
+
+`main`-এ merge হয়েছে (শেষ commit `ecb28c4`): [#58](https://github.com/parvezmosharof2-commits/mechware-/pull/58), [#59](https://github.com/parvezmosharof2-commits/mechware-/pull/59), [#60](https://github.com/parvezmosharof2-commits/mechware-/pull/60)। শেষ রান: unit ৫৯৮, integration ৪৪২ টেস্ট সবুজ, CI-র ১২টা চেক সবুজ।
+
+| PR | কাজ |
+|---|---|
+| #58 | অর্ডারে MOQ ও pack size যাচাই (`POST /orders` সরাসরি ডাকলেও); উত্তরসূরির `isDropIn` ও `note`; বিকল্প পার্ট (সর্বোচ্চ ১০); উত্তরসূরি বা বিকল্প obsolete হলে যে পাতাগুলো সেটা দেখায় তাদের ক্যাশ মোছা; H4-এর mutation check-এর ফাঁকের টেস্ট; ৫টা কাল্পনিক সাক্ষাৎকার (`docs/discovery/`, অনুমান, প্রমাণ নয়) |
+| #59 | staff-এর জন্য পণ্যের তথ্য সম্পাদনার API: `/api/v1/admin/products/{id}/{pim,supply,alternatives,variants/{id}/order-units}`, নতুন অনুমতি `catalog.manage` (শুধু Admin)। উত্তরসূরি-সহ পণ্যের status বদলাতে উত্তরসূরি আবার পাঠাতে হয় (চুপচাপ হারানো ঠেকাতে), সরাতে `clearSuccessor: true`। একসাথে লিখলে 409, 500 নয় |
+| #60 | datasheet, CAD, certificate আপলোড: `/api/v1/admin/products/{id}/documents` + public download `/api/v1/storefront/products/{slug}/documents/{id}`। ধরন প্রথম byte দেখে, আকার পড়ার সময় গোনা, ClamAV স্ক্যান (না পেলে 503, কিছু সংরক্ষণ হয় না), ২০টার সীমা ও একই ফাইল দুবার না (পণ্যের row-lock-এর নিচে)। Production-এ `Documents__LocalPath` আর `Antivirus__Host` ছাড়া API চালুই হয় না |
+
+- **Sprint ১–২ বন্ধ:** মালিকের সাক্ষাৎকার নেওয়ার লোক নেই, ৫টা AI-র কাল্পনিক সাক্ষাৎকার দিয়ে চলছে। সাইন-অফ আর threat model v2-এর মানুষের রিভিউ মওকুফ।
+- **Mutation check এখন repo-তে:** `scripts/mutation/run.py` (ব্যবহার ফাইলের মাথায় লেখা)। **আলাদা git worktree-তে চালান**, নইলে stop-hook আর commit ভাঙা কোড ধরে ফেলে। প্রতিটা mutant-এ ~২ মিনিট।
+- **শিক্ষা, যা বারবার কাজে লেগেছে:**
+  - `StorefrontCatalogReader`-এর product query static compiled query: টেস্টে reader-কে fixture-এর context দিয়ে সরাসরি বানাবেন না, HTTP দিয়ে টেস্ট করুন।
+  - `Enum.TryParse` কমা-দেওয়া মান জুড়ে দেয় (`"datasheet,cad"` = `certificate`): ইনপুটে সরাসরি switch ব্যবহার করুন।
+  - নতুন বেনামী endpoint `ApiSecurityRegressionTests`-এর পর্যালোচিত তালিকায় কারণসহ লিখতে হয়। এটা ইচ্ছাকৃত দরজা।
+  - CI-র মেশিনে `/tmp`-এর কিছু ডিরেক্টরি পড়া যায় না: টেস্টে `/tmp` ঘাঁটবেন না, নির্দিষ্ট পথ দেখুন।
+  - Branch-এ force-push করা যায় না (অনুমতি নেই): squash-merge-এর পর `git commit-tree HEAD^{tree} -p HEAD -p origin/<branch>` দিয়ে tree-একই একটা merge commit বানিয়ে সাধারণ push করা হয়েছে। নতুন কাজ সবসময় `origin/main` থেকে।
+
 ## ২. বাকি কাজ (পরের বার এখান থেকে শুরু)
+
+**সবচেয়ে আগে (চতুর্থ দফার পরে):**
+- **স্প্রিন্ট ৫–৬ — সার্চ + পণ্যের তালিকা/পাতা:** Meilisearch adapter (outbox থেকে sync; `SearchSyncQueuePublisher` ইতিমধ্যে queue-তে ঘটনা ফেলে), পার্ট-নম্বর normalisation (`6ES7 214-1AG40-0XB0` = `6ES72141AG400XB0`; সাক্ষাৎকারে সবাই space, dash আর 0/O গোলমালের কথা বলেছেন), Banglish প্রতিশব্দ, PLP (টেবিল), PDP (স্পেক টেবিল, quantity-break, গুদামভিত্তিক স্টক)। Exit gate: search p95 < ১৫০ ms (k6), Lighthouse ≥ ৯০।
+- **PIM-এর বাকি:** আসল পণ্যের ছবি আর যাচাই করা স্পেক (মালিক জোগাড় করবেন), staff-এর জন্য frontend পাতা (এখন শুধু API), ফাইল সংরক্ষণ MinIO/S3-তে (এখন স্থানীয় ডিরেক্টরি; `IObjectStorage` interface-এ adapter বসবে), পুরনো ফাইল নতুন signature দিয়ে আবার স্ক্যান।
+
+**আগের তালিকা (বাকিগুলো এখনো প্রযোজ্য):**
+
 
 1. ~~**H4-এর mutation check শেষ করা।**~~ **শেষ হয়েছে।** (নিচের তিনটা লাইন এখন আর প্রযোজ্য নয়)
    - দুবার শুরু করে থামাতে হয়েছে, কারণ প্রতিটা mutant-এ build সহ দেড় মিনিটের মতো লাগে।
@@ -90,7 +116,7 @@
    - **H6:** চালু authenticator বদলানোর আলাদা নিরাপদ ব্যবস্থা নেই।
    - **M5:** CSP violation report **হয়েছে** (`/api/csp-report`)। Style-এ এখনো `unsafe-inline` আছে। CSS দিয়ে code চালানো যায় না, তাই এটা মেনে নেওয়া ঝুঁকি।
 3. **Threat model v2-এর বাকি অংশ:** Q1–Q9 (quotes) আর I1–I10 (invoicing)। এগুলো ওই মডিউলগুলো তৈরি হওয়ার সাথে সাথে করতে হবে (রোডম্যাপের স্প্রিন্ট ৭–৯ আর ১০–১২)।
-4. **রোডম্যাপের পরের কাজ:** PIM-এর বাকি অংশ: datasheet/CAD আপলোড (magic-byte, ClamAV, signed URL), staff-এর product edit API, আসল ছবি। স্প্রিন্ট ১–২ বন্ধ।
+4. **রোডম্যাপ:** `PROGRESS.md` আর `docs/MASTER_PLAN.md`। স্প্রিন্ট ১–২ বন্ধ, স্প্রিন্ট ৩–৪ প্রায় শেষ (উপরে বাকি অংশ)।
 
 ## ৩. মালিকের সিদ্ধান্ত বা কাজ দরকার
 
@@ -110,10 +136,15 @@
   - নতুন staff-কে authenticator সেট করাতে admin কল করবেন `POST /api/v1/admin/users/{id}/two-factor-setup-code`, step-up কোড দিয়ে।
   - তারপর কোডটা ব্যক্তিগতভাবে হাতে দিতে হবে।
 
+- **নতুন (ফাইল আপলোড):**
+  - **`Documents__LocalPath`:** production-এ একটা persistent volume-এর ডিরেক্টরি লাগবে। MinIO/S3 বা volume, কোনটা চান জানাবেন।
+  - **ClamAV:** production-এ `Antivirus__Host` (আর `Antivirus__Port`, ডিফল্ট ৩৩১০) ছাড়া API চালু হবে না। `infra/docker/docker-compose.yml`-এ ClamAV আছে (শুধু `127.0.0.1`-এ খোলা)। clamd-এর `StreamMaxLength` সবচেয়ে বড় আপলোডের (৫০ MB) উপরে রাখতে হবে।
+  - **সাক্ষাৎকারের আসল যাচাই:** `docs/discovery/SYNTHESIS.md`-এর "যাচাই করতে হবে" অংশ। যেমন VDS-এর হার (VAT পরামর্শক), WhatsApp-এ approval, নবাবপুরের বদলে integrator কেন আসবেন।
+
 ## ৪. আবার শুরু করার আগে
 
 - **Branch:** `claude/inspiring-galileo-lqeixj`, প্রতিটা merge-এর পর `main`-এর সাথে sync করা। **একসাথে একটাই session চালান।**
-- **নতুন container-এ:** `apt-get install -y dotnet-sdk-10.0`, `dotnet tool install -g dotnet-ef`, তারপর `pg_ctlcluster 16 main start` আর `redis-server --daemonize yes`। Migration বানাতে startup project হবে `ShopVerse.Infrastructure`।
+- **নতুন container-এ:** `apt-get install -y dotnet-sdk-10.0`, `dotnet tool install -g dotnet-ef`, তারপর `pg_ctlcluster 16 main start` আর `redis-server --daemonize yes` (container বন্ধ হলে এ দুটো আবার চালাতে হয়; না চালালে integration টেস্ট ব্যর্থ নয়, **skip** হয়: ফলে সবুজ দেখায়, সাবধান!)। Postgres-এ `CREATE ROLE shopverse LOGIN SUPERUSER PASSWORD 'shopverse_secret'` একবার। Migration বানাতে `dotnet ef migrations add <নাম> -p ShopVerse.Infrastructure -s ShopVerse.Infrastructure --no-build` (`export PATH=$PATH:/root/.dotnet/tools`)।
 - **লোকাল টেস্টের জন্য:**
   - PostgreSQL 16-এ একটা user লাগবে (`shopverse` / `shopverse_secret`), আর Redis চালু থাকতে হবে।
   - চালানোর কমান্ড: `MECHWARE_TEST_PG=... dotnet test backend/ShopVerse.slnx`।
