@@ -111,6 +111,23 @@ public sealed class PartNumberLookupTests : IDisposable
     }
 
     [PostgresFact]
+    public async Task AProduct_WhoseSkusShareTheNumber_IsListedOnce()
+    {
+        var (id, slug) = await ProductWithAsync("ATV320-SHARED");
+        await using (var db = Db())
+        {
+            var p = await db.Products.Include(x => x.Variants).SingleAsync(x => x.Id == id);
+            var second = p.AddVariant(Guid.NewGuid(), "SKU-" + Guid.NewGuid().ToString("N")[..8], null,
+                new Dictionary<string, string> { ["Model"] = "B" }, ShopVerse.Domain.Common.ValueObjects.Money.FromMinorUnits(160_000, ShopVerse.Domain.Common.Enums.Currency.BDT),
+                null, null, 0.5m, false);
+            second.SetManufacturerPartNumber("ATV320-SHARED");
+            await db.SaveChangesAsync();
+        }
+
+        (await FoundAsync("ATV320SHARED")).Slugs.Should().Equal([slug], "two SKUs of one product are one entry");
+    }
+
+    [PostgresFact]
     public async Task AtMostTenProducts_AreListed()
     {
         for (int i = 0; i < 12; i++) await ProductWithAsync("MANY-0001");
@@ -139,7 +156,9 @@ public sealed class PartNumberLookupTests : IDisposable
         HttpClient client = _factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/v1/auth/login", new
         {
-            identifier = AdminEmail, password = "MechAdmin#2026!", totpCode = Totp.ComputeTotpCode("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", DateTimeOffset.UtcNow)
+            identifier = AdminEmail,
+            password = "MechAdmin#2026!",
+            totpCode = Totp.ComputeTotpCode("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", DateTimeOffset.UtcNow)
         });
         login.StatusCode.Should().Be(HttpStatusCode.OK);
         using var doc = JsonDocument.Parse(await login.Content.ReadAsStringAsync());

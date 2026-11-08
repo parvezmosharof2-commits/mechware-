@@ -52,6 +52,8 @@ public class PartNumberTests
     [InlineData("vfd", false)]
     [InlineData("12", false)]                    // too short
     [InlineData("a b c d e f", false)]           // many words
+    [InlineData("siemens s7 1200 plc cpu", false)]   // a sentence that happens to hold a model: five words
+    [InlineData("6ES7 214 1AG40 0XB0", true)]        // four groups is still a part number
     [InlineData("", false)]
     [InlineData(null, false)]
     public void APartNumberLookingQuery_HasADigit_AFewCharacters_AndFewWords(string? text, bool looksLike) =>
