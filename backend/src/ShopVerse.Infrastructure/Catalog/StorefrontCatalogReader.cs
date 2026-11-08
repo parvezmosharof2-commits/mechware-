@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ShopVerse.Application.Catalog;
@@ -41,6 +42,44 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         _redis = redis;
         _clock = clock;
     }
+
+    #region Part numbers
+
+    public const int MaxPartNumberMatches = 10;
+
+    public async Task<PartNumberLookupDto?> FindByPartNumberAsync(string? partNumber, CancellationToken ct = default)
+    {
+        string key = PartNumbers.Normalise(partNumber);
+        if (key.Length < 2)
+            throw new ShopVerse.Domain.Common.Exceptions.ValidationException("q", "Type at least two letters or digits of the part number.");
+
+        var exact = await MatchPartNumberAsync(v => v.PartNumberKey == key, ct);
+        if (exact.Count > 0) return new PartNumberLookupDto(key, true, exact);
+
+        // Nothing as typed: read O as 0 and I or L as 1 on both sides, and offer what that finds as "did you mean".
+        string fuzzy = PartNumbers.Fuzzy(key);
+        var near = await MatchPartNumberAsync(v => v.PartNumberFuzzyKey == fuzzy, ct);
+        return near.Count > 0 ? new PartNumberLookupDto(key, false, near) : null;
+    }
+
+    private async Task<List<PartNumberMatchDto>> MatchPartNumberAsync(Expression<Func<ShopVerse.Domain.Catalog.ProductVariant, bool>> matches, CancellationToken ct)
+    {
+        var rows = await (from v in _db.ProductVariants.AsNoTracking().Where(matches)
+                          where v.Status == VariantStatus.Active
+                          join p in _db.Products.AsNoTracking() on v.ProductId equals p.Id
+                          where p.Status == ProductStatus.Active && p.DeletedAtUtc == null
+                          join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
+                          from b in bs.DefaultIfEmpty()
+                          orderby p.TitleEn, p.Id
+                          select new { p.Id, p.Slug, p.TitleEn, p.TitleBn, Brand = b == null ? null : b.Name, v.ManufacturerPartNumber, v.Sku, p.SupplyStatus })
+            .Take(MaxPartNumberMatches * 4).ToListAsync(ct);
+
+        // One entry per product, even when several of its SKUs carry the number.
+        return [.. rows.DistinctBy(r => r.Id).Take(MaxPartNumberMatches)
+            .Select(r => new PartNumberMatchDto(r.Slug, r.TitleEn, r.TitleBn, r.Brand, r.ManufacturerPartNumber!, r.Sku, SnakeCaseName(r.SupplyStatus)))];
+    }
+
+    #endregion
 
     #region Product by slug
 

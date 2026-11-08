@@ -20,6 +20,8 @@ internal sealed class ProductPlan
     public required Family Family { get; init; }
     public required Dictionary<string, string> Row { get; init; }
     public required string Brand { get; init; }
+    /// <summary>The manufacturer part number of the row (its MPN column, or the model when there is none).</summary>
+    public required string Mpn { get; init; }
     public required string LeafSlug { get; init; }
     public required string RootSlug { get; init; }
     public required string Domain { get; init; }
@@ -134,6 +136,7 @@ internal static class CatalogPlanner
                     Family = family,
                     Row = row,
                     Brand = family.Brand,
+                    Mpn = mpn,
                     LeafSlug = family.Leaf,
                     RootSlug = rootSlug,
                     Domain = ReviewCorpus.RootDomain[rootSlug],

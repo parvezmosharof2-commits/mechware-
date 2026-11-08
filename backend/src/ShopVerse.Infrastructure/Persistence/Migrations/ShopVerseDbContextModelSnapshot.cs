@@ -874,6 +874,11 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_default");
 
+                    b.Property<string>("ManufacturerPartNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("manufacturer_part_number");
+
                     b.Property<int>("MinOrderQty")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -890,6 +895,16 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
                         .HasColumnName("pack_size");
+
+                    b.Property<string>("PartNumberFuzzyKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("part_number_fuzzy_key");
+
+                    b.Property<string>("PartNumberKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("part_number_key");
 
                     b.Property<long>("PriceMinor")
                         .HasColumnType("bigint")
@@ -939,6 +954,12 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PartNumberFuzzyKey")
+                        .HasDatabaseName("ix_variants_part_number_fuzzy_key");
+
+                    b.HasIndex("PartNumberKey")
+                        .HasDatabaseName("ix_variants_part_number_key");
 
                     b.HasIndex("ProductId")
                         .HasDatabaseName("ix_product_variants_product_id");

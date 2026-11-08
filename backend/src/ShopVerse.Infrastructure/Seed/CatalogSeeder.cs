@@ -281,6 +281,10 @@ public static class CatalogSeeder
             }, plan.Family.WeightKg);
         }
 
+        // The row's part number belongs to the base model, so it goes on the default SKU; option variants (another voltage,
+        // another length) have their own manufacturer numbers, which the seed does not know.
+        product.Variants.First(v => v.IsDefault).SetManufacturerPartNumber(plan.Mpn);
+
         var ratio = plan.CompareAt is { } cmp ? cmp / plan.BasePrice : 0m;
         foreach (var variant in product.Variants)
         {

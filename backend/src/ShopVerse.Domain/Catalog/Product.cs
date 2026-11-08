@@ -211,6 +211,16 @@ public sealed class Product : AggregateRoot<Guid>
         MarkUpdated();
     }
 
+    /// <summary>Sets one SKU's manufacturer part number (see <see cref="ProductVariant.SetManufacturerPartNumber"/>).</summary>
+    public void SetManufacturerPartNumber(Guid variantId, string? partNumber)
+    {
+        EnsureEditable();
+        var variant = _variants.FirstOrDefault(v => v.Id == variantId)
+                      ?? throw new ValidationException("variantId", "No such SKU on this product.");
+        variant.SetManufacturerPartNumber(partNumber);
+        MarkUpdated();   // the cached page and the search index follow
+    }
+
     public void Recategorize(Guid categoryId, Guid? brandId)
     {
         EnsureEditable();

@@ -75,8 +75,24 @@ public sealed record SlugLookupResult<T>(T? Value, string? RedirectToSlug)
     public static SlugLookupResult<T> NotFound() => new(default, null);
 }
 
+/// <summary>A published product whose SKU carries the part number looked up.</summary>
+public sealed record PartNumberMatchDto(
+    string Slug, string TitleEn, string TitleBn, string? BrandName, string PartNumber, string Sku, string SupplyStatus);
+
+/// <summary>
+/// <c>Exact</c> is false when nothing matched the part number as typed and these were found by reading O as 0 and I or L as 1;
+/// the buyer should be asked "did you mean". At most 10 matches.
+/// </summary>
+public sealed record PartNumberLookupDto(string Key, bool Exact, IReadOnlyList<PartNumberMatchDto> Matches);
+
 public interface IStorefrontCatalogReader
 {
+    /// <summary>
+    /// Finds published products (obsolete ones too: people replacing a part search its old number) by manufacturer part
+    /// number, written any way (<see cref="ShopVerse.Domain.Catalog.PartNumbers"/>). Null when nothing matches.
+    /// </summary>
+    Task<PartNumberLookupDto?> FindByPartNumberAsync(string? partNumber, CancellationToken ct = default);
+
     Task<SlugLookupResult<ProductDetailDto>> GetProductBySlugAsync(string slug, CancellationToken ct = default);
     Task<IReadOnlyList<CategoryNodeDto>> GetCategoryTreeAsync(CancellationToken ct = default);
     Task<SlugLookupResult<PagedResult<ProductCardDto>>> ListProductsByCategoryAsync(

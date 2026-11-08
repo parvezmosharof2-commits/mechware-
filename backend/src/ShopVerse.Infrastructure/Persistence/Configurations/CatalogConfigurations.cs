@@ -215,6 +215,11 @@ internal sealed class ProductVariantConfiguration : IEntityTypeConfiguration<Pro
         b.Property(v => v.Status).HasColumnName("status").HasMaxLength(30).HasConversion(new SnakeCaseEnumConverter<VariantStatus>());
         b.Property(v => v.MinOrderQty).HasColumnName("min_order_qty").HasDefaultValue(1).HasSentinel(0);
         b.Property(v => v.PackSize).HasColumnName("pack_size").HasDefaultValue(1).HasSentinel(0);
+        b.Property(v => v.ManufacturerPartNumber).HasColumnName("manufacturer_part_number").HasMaxLength(PartNumbers.MaxLength);
+        b.Property(v => v.PartNumberKey).HasColumnName("part_number_key").HasMaxLength(PartNumbers.MaxLength);
+        b.Property(v => v.PartNumberFuzzyKey).HasColumnName("part_number_fuzzy_key").HasMaxLength(PartNumbers.MaxLength);
+        b.HasIndex(v => v.PartNumberKey).HasDatabaseName("ix_variants_part_number_key");
+        b.HasIndex(v => v.PartNumberFuzzyKey).HasDatabaseName("ix_variants_part_number_fuzzy_key");
         b.Ignore(v => v.Price);
         b.Ignore(v => v.SalePrice);
         b.Ignore(v => v.CompareAtPrice);
