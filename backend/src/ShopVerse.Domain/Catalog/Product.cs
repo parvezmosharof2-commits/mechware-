@@ -218,7 +218,7 @@ public sealed class Product : AggregateRoot<Guid>
         var variant = _variants.FirstOrDefault(v => v.Id == variantId)
                       ?? throw new ValidationException("variantId", "No such SKU on this product.");
         variant.SetManufacturerPartNumber(partNumber);
-        MarkUpdated();   // the cached page and the search index follow
+        MarkUpdated();
     }
 
     public void Recategorize(Guid categoryId, Guid? brandId)

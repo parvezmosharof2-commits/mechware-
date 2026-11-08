@@ -64,19 +64,30 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
 
     private async Task<List<PartNumberMatchDto>> MatchPartNumberAsync(Expression<Func<ShopVerse.Domain.Catalog.ProductVariant, bool>> matches, CancellationToken ct)
     {
-        var rows = await (from v in _db.ProductVariants.AsNoTracking().Where(matches)
-                          where v.Status == VariantStatus.Active
-                          join p in _db.Products.AsNoTracking() on v.ProductId equals p.Id
+        var variants = _db.ProductVariants.AsNoTracking().Where(matches).Where(v => v.Status == VariantStatus.Active);
+
+        // One entry per product, chosen in the database (so many SKUs of one product cannot crowd others out of the ten), and
+        // for each product the same SKU every time: the default one if it matches, else the first by SKU.
+        var rows = await (from p in _db.Products.AsNoTracking()
                           where p.Status == ProductStatus.Active && p.DeletedAtUtc == null
+                                && variants.Any(v => v.ProductId == p.Id)
                           join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
                           from b in bs.DefaultIfEmpty()
                           orderby p.TitleEn, p.Id
-                          select new { p.Id, p.Slug, p.TitleEn, p.TitleBn, Brand = b == null ? null : b.Name, v.ManufacturerPartNumber, v.Sku, p.SupplyStatus })
-            .Take(MaxPartNumberMatches * 4).ToListAsync(ct);
+                          select new
+                          {
+                              p.Slug,
+                              p.TitleEn,
+                              p.TitleBn,
+                              Brand = b == null ? null : b.Name,
+                              p.SupplyStatus,
+                              Variant = variants.Where(v => v.ProductId == p.Id).OrderByDescending(v => v.IsDefault).ThenBy(v => v.Sku)
+                                  .Select(v => new { v.ManufacturerPartNumber, v.Sku }).First()
+                          })
+            .Take(MaxPartNumberMatches).ToListAsync(ct);
 
-        // One entry per product, even when several of its SKUs carry the number.
-        return [.. rows.DistinctBy(r => r.Id).Take(MaxPartNumberMatches)
-            .Select(r => new PartNumberMatchDto(r.Slug, r.TitleEn, r.TitleBn, r.Brand, r.ManufacturerPartNumber!, r.Sku, SnakeCaseName(r.SupplyStatus)))];
+        return [.. rows.Select(r => new PartNumberMatchDto(r.Slug, r.TitleEn, r.TitleBn, r.Brand, r.Variant.ManufacturerPartNumber!, r.Variant.Sku,
+            SnakeCaseName(r.SupplyStatus)))];
     }
 
     #endregion

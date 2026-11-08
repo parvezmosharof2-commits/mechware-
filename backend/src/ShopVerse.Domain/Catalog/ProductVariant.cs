@@ -150,8 +150,8 @@ public sealed class ProductVariant : Entity<Guid>
         string value = partNumber.Trim();
         if (value.Length > PartNumbers.MaxLength)
             throw new ValidationException("manufacturerPartNumber", $"A part number can be at most {PartNumbers.MaxLength} characters.");
-        if (value.Any(char.IsControl))
-            throw new ValidationException("manufacturerPartNumber", "A part number cannot contain control characters.");
+        if (value.Any(IsInvisible))
+            throw new ValidationException("manufacturerPartNumber", "A part number cannot contain control or invisible characters.");
         string key = PartNumbers.Normalise(value);
         if (key.Length < 2)
             throw new ValidationException("manufacturerPartNumber", "A part number needs at least two letters or digits.");
@@ -161,6 +161,14 @@ public sealed class ProductVariant : Entity<Guid>
         PartNumberFuzzyKey = PartNumbers.Fuzzy(key);
         UpdatedAtUtc = DateTime.UtcNow;
     }
+
+    /// <summary>
+    /// Control characters, and the invisible ones a paste from a PDF brings along: zero-width spaces, direction overrides (which
+    /// would show the number reversed), the byte-order mark, and line and paragraph separators.
+    /// </summary>
+    private static bool IsInvisible(char c) => char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.Control
+        or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
+        or System.Globalization.UnicodeCategory.ParagraphSeparator;
 
     /// <summary>What the cart needs to know about this SKU, with its order units.</summary>
     public Cart.VariantFacts ToCartFacts(bool sellable, long unitNetMinor, int available) =>

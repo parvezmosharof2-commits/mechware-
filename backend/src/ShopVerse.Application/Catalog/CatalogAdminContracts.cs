@@ -16,7 +16,7 @@ public sealed record AdminSuccessorDto(Guid ProductId, string Slug, string Title
 /// <summary><c>Listed</c> is false when buyers do not see it (it is no longer published, or has gone obsolete); staff should replace it.</summary>
 public sealed record AdminAlternativeDto(Guid ProductId, string Slug, string TitleEn, string Status, string SupplyStatus, bool Listed);
 
-public sealed record AdminVariantUnitsDto(Guid VariantId, string Sku, int MinOrderQty, int PackSize, string? ManufacturerPartNumber = null);
+public sealed record AdminVariantUnitsDto(Guid VariantId, string Sku, int MinOrderQty, int PackSize, string? ManufacturerPartNumber);
 
 /// <summary>
 /// <c>SupplyStatus</c>: <c>active</c>, <c>nrnd</c> or <c>obsolete</c>. <c>active</c> has no successor. For the other two, name the

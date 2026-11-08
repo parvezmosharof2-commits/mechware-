@@ -81,6 +81,10 @@ public class PartNumberTests
     [InlineData("A")]                 // one letter: could never be told apart
     [InlineData("-/-.")]              // nothing usable
     [InlineData("AB\u0007CD")]         // a control character
+    [InlineData("AB\u200BCD")]         // a zero-width space
+    [InlineData("6ES7\u202E0BX0")]     // a direction override: would show reversed
+    [InlineData("AB\u2028CD")]         // a line separator
+    [InlineData("\uFEFFAB12")]         // a byte-order mark
     public void AVariant_RefusesAPartNumberThatCouldNotBeFound_OrIsNotPrintable(string partNumber)
     {
         var v = Variant();

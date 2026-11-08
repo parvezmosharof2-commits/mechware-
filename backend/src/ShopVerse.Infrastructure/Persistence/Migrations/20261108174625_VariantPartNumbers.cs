@@ -42,15 +42,16 @@ namespace ShopVerse.Infrastructure.Persistence.Migrations
                 column: "part_number_key");
 
             // Existing rows: the default SKU takes the part number from the product's specs ("General" → "Manufacturer part
-            // no."), and the keys are made with the same rule as PartNumbers.Normalise / Fuzzy (A–Z and 0–9 only, upper case,
+            // no.", else "Model", as the seed does), skipping any with control or invisible characters, and the keys are made with the same rule as PartNumbers.Normalise / Fuzzy (A–Z and 0–9 only, upper case,
             // Bangla digits as digits; O→0, I and L→1). Rows whose key would be shorter than two characters stay empty.
             migrationBuilder.Sql("""
                 UPDATE product_variants v
-                   SET manufacturer_part_number = left(btrim(p.specs->'General'->>'Manufacturer part no.'), 64)
-                  FROM products p
-                 WHERE p.id = v.product_id AND v.is_default AND v.manufacturer_part_number IS NULL
-                   AND jsonb_typeof(p.specs->'General') = 'object'
-                   AND btrim(coalesce(p.specs->'General'->>'Manufacturer part no.', '')) <> '';
+                   SET manufacturer_part_number = left(src.mpn, 64)
+                  FROM (SELECT id, btrim(coalesce(nullif(btrim(specs->'General'->>'Manufacturer part no.'), ''), specs->'General'->>'Model')) AS mpn
+                          FROM products WHERE jsonb_typeof(specs->'General') = 'object') src
+                 WHERE src.id = v.product_id AND v.is_default AND v.manufacturer_part_number IS NULL
+                   AND coalesce(src.mpn, '') <> ''
+                   AND src.mpn !~ '[[:cntrl:]\u200B-\u200F\u2028-\u202E\u2060-\u2064\uFEFF]';
                 UPDATE product_variants
                    SET part_number_key = left(upper(regexp_replace(translate(manufacturer_part_number, '০১২৩৪৫৬৭৮৯', '0123456789'), '[^A-Za-z0-9]', '', 'g')), 64)
                  WHERE manufacturer_part_number IS NOT NULL;

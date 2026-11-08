@@ -128,6 +128,38 @@ public sealed class PartNumberLookupTests : IDisposable
     }
 
     [PostgresFact]
+    public async Task ManySkusOfOneProduct_DoNotCrowdOutOthers_AndTheDefaultSkuIsShown()
+    {
+        var (crowded, crowdedSlug) = await ProductWithAsync("CROWD-0001");
+        string defaultSku;
+        await using (var db = Db())
+        {
+            var p = await db.Products.Include(x => x.Variants).SingleAsync(x => x.Id == crowded);
+            defaultSku = p.Variants.Single().Sku;
+            for (int i = 0; i < 45; i++)
+            {
+                // "A-…" sorts before the default "SKU-…": the default must still be the one shown.
+                p.AddVariant(Guid.NewGuid(), $"A-{i:D2}-{Guid.NewGuid():N}"[..20], null, new Dictionary<string, string> { ["Model"] = $"V{i}" },
+                    ShopVerse.Domain.Common.ValueObjects.Money.FromMinorUnits(160_000, ShopVerse.Domain.Common.Enums.Currency.BDT), null, null, 0.5m, false)
+                    .SetManufacturerPartNumber("CROWD-0001");
+            }
+
+            await db.SaveChangesAsync();
+            // Listed first by title, so its SKUs come first too.
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE products SET title_en = 'AAA crowded' WHERE id = {crowded}");
+        }
+
+        var (_, other1) = await ProductWithAsync("CROWD-0001");
+        var (_, other2) = await ProductWithAsync("CROWD-0001");
+
+        var response = await LookUpAsync("CROWD0001");
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var matches = doc.RootElement.GetProperty("data").GetProperty("matches").EnumerateArray().ToList();
+        matches.Select(m => m.GetProperty("slug").GetString()).Should().BeEquivalentTo([crowdedSlug, other1, other2]);
+        matches.Single(m => m.GetProperty("slug").GetString() == crowdedSlug).GetProperty("sku").GetString().Should().Be(defaultSku);
+    }
+
+    [PostgresFact]
     public async Task AtMostTenProducts_AreListed()
     {
         for (int i = 0; i < 12; i++) await ProductWithAsync("MANY-0001");

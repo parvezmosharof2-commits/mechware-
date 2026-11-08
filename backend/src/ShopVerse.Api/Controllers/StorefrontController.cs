@@ -31,13 +31,13 @@ public sealed class StorefrontController : ControllerBase
     public async Task<IActionResult> FindByPartNumber([FromQuery] string? q, CancellationToken ct)
     {
         var result = await _catalog.FindByPartNumberAsync(q, ct);
+        Response.Headers.CacheControl = "public, max-age=60";   // a miss too: repeated guesses are answered by the cache
         if (result is null)
         {
             return Problem(statusCode: StatusCodes.Status404NotFound, title: "No product with this part number",
                 type: "https://mechware.com.bd/errors/part-number-not-found");
         }
 
-        Response.Headers.CacheControl = "public, max-age=60";
         return Ok(new { data = result });
     }
 

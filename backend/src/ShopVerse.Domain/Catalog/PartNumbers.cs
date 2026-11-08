@@ -34,7 +34,8 @@ public static class PartNumbers
     /// <summary>
     /// Whether a search text is worth an exact part-number look-up first: at most four words, a key of at least four
     /// characters, and a word that mixes letters and digits ("6ES7", "LC1-D09") or is four or more digits ("2900011").
-    /// "inverter 2 hp" or "siemens" are searched as words. A false yes only costs one indexed look-up before the search.
+    /// "inverter 2 hp" or "siemens" are searched as words. For the free-text search (next step of sprint 5–6), which tries the
+    /// part-number look-up first when this says yes: a false yes then costs only one indexed look-up.
     /// </summary>
     public static bool LooksLikePartNumber(string? text)
     {
