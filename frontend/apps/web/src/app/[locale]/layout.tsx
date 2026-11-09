@@ -1,26 +1,34 @@
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans, Hind_Siliguri } from 'next/font/google';
+import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { ToastProvider } from '@mechware/ui';
 import { AuthProvider } from '../../lib/auth';
 import '../globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+// The fonts are kept in the repository (../fonts, SIL Open Font License; from Fontsource 5.3.0), not fetched from Google
+// Fonts at build time: a build must not fail because a font server is slow to answer.
+const inter = localFont({
+  src: '../fonts/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   variable: '--font-inter',
   display: 'swap'
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
+const plusJakarta = localFont({
+  src: '../fonts/plus-jakarta-sans-latin-wght-normal.woff2',
+  weight: '200 800',
   variable: '--font-jakarta',
   display: 'swap'
 });
 
-const hindSiliguri = Hind_Siliguri({
-  weight: ['400', '500', '600', '700'],
-  subsets: ['bengali'],
+const hindSiliguri = localFont({
+  src: [
+    { path: '../fonts/hind-siliguri-bengali-400-normal.woff2', weight: '400', style: 'normal' },
+    { path: '../fonts/hind-siliguri-bengali-500-normal.woff2', weight: '500', style: 'normal' },
+    { path: '../fonts/hind-siliguri-bengali-600-normal.woff2', weight: '600', style: 'normal' },
+    { path: '../fonts/hind-siliguri-bengali-700-normal.woff2', weight: '700', style: 'normal' }
+  ],
   variable: '--font-hind',
   display: 'swap'
 });
