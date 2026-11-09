@@ -6,7 +6,7 @@
 >
 > **v2 (2026-10-30)** replaces the v1 brief, which was adapted from a generic B2C marketplace
 > template (consumer personas, consumer KPIs, "B2B pricing — do not build"). The rationale is in
-> `docs/100K_GRADE_REVIEW_AND_PLAN.md`. Code namespaces keep the internal code name `ShopVerse`;
+> `docs/100K_GRADE_REVIEW_AND_PLAN.md`. Code namespaces keep the internal code name `Mechware`;
 > every user-facing surface says **MECHWARE**.
 
 ---
@@ -177,7 +177,7 @@ marketplace-wide wallet.
 ```
 mechware-/
 ├── backend/
-│   ├── ShopVerse.sln
+│   ├── Mechware.sln
 │   ├── src/  (Domain, Application, Infrastructure, Payment, Worker, Api)
 │   ├── seed/ (catalogue dump)
 │   └── tests/ (UnitTests, IntegrationTests)

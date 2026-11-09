@@ -12,12 +12,12 @@ They rely on the Development seed accounts of the in-memory identity store and o
 
 ## Run locally
 ```bash
-# 1. PostgreSQL with the shopverse user, then the schema
-SHOPVERSE_DESIGN_DB="Host=localhost;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
-  dotnet ef database update --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
+# 1. PostgreSQL with the mechware user, then the schema
+MECHWARE_DESIGN_DB="Host=localhost;Database=mechware;Username=mechware;Password=mechware_secret" \
+  dotnet ef database update --project backend/src/Mechware.Infrastructure --startup-project backend/src/Mechware.Infrastructure
 # 2. API (Development) on :5000, web on :3000, console on :3001
 RateLimiting__GlobalPermitPerMinute=2000 ASPNETCORE_ENVIRONMENT=Development \
-  dotnet run --project backend/src/ShopVerse.Api --urls http://localhost:5000
+  dotnet run --project backend/src/Mechware.Api --urls http://localhost:5000
 cd frontend && pnpm --filter @mechware/web build && pnpm --filter @mechware/web start
 cd frontend && pnpm --filter @mechware/console build && pnpm --filter @mechware/console start
 # 3. browsers once, then the tests

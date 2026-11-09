@@ -54,7 +54,7 @@ flowchart TD
 
 **Folder structure (setup-er por):**
 ```
-shopverse/
+mechware/
 └── docs/
     ├── 01_PROJECT_BRIEF.md
     └── 02_DESIGN_SYSTEM.md

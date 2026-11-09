@@ -1,0 +1,377 @@
+using System.Security.Claims;
+using Mechware.Domain.Identity;
+
+namespace Mechware.Application.Identity;
+
+/// <summary>
+/// Marker interface for any domain or application resource owned by a specific Seller.
+/// Used by SellerResourceIsolationHandler to enforce strict tenant isolation.
+/// </summary>
+public interface ISellerOwnedResource
+{
+    Guid SellerId { get; }
+}
+
+public sealed record SellerOwnedResource(Guid ResourceId, Guid SellerId, string ResourceType) : ISellerOwnedResource;
+
+public sealed record UpdateSellerResourceRequestDto(
+    string Sku,
+    decimal UnitPriceBdt,
+    int StockQuantity);
+
+public sealed record RegisterRequestDto(
+    string Email,
+    string? Phone,
+    string Password,
+    string FullName,
+    string Locale = "en");
+
+public sealed record RegisterResponseDto(
+    Guid UserId,
+    string Status,
+    string VerificationChannel,
+    string ReferenceId,
+    int ExpiresInSeconds);
+
+public sealed record SendOtpRequestDto(
+    string Recipient,
+    string Type = "PhoneVerify");
+
+public sealed record SendOtpResponseDto(
+    string Recipient,
+    string Type,
+    string ReferenceId,
+    int ExpiresInSeconds,
+    int MaxAttempts = 3);
+
+public sealed record VerifyOtpRequestDto(
+    string Recipient,
+    string Code,
+    string Type,
+    string ReferenceId);
+
+public sealed record LoginRequestDto(
+    string Identifier,
+    string Password,
+    string? TotpCode = null,
+    string? SetupCode = null);
+
+public sealed record AuthenticatedUserDto(
+    Guid Id,
+    string Email,
+    string? Phone,
+    string FullName,
+    IReadOnlyList<string> Roles,
+    IReadOnlyList<string> Permissions,
+    string Locale,
+    bool TwoFactorEnabled,
+    Guid? SellerId = null);
+
+public sealed record AuthTokenResponseDto(
+    string AccessToken,
+    int ExpiresIn,
+    string TokenType,
+    AuthenticatedUserDto User,
+    string? RefreshTokenCookieValue = null,
+    bool RequiresTwoFactor = false,
+    string? TwoFactorChallengeToken = null,
+    bool RequiresTwoFactorEnrollment = false,
+    string? EnrollmentToken = null,
+    TotpSetupResponseDto? TwoFactorSetup = null);
+
+public sealed record TwoFactorEnrollmentCompleteDto(string EnrollmentToken, string Code);
+
+/// <summary>Shown once to the administrator, who hands it to the staff member in person or by another trusted channel.</summary>
+public sealed record TwoFactorSetupCodeDto(Guid UserId, string SetupCode, DateTime ExpiresAtUtc);
+
+/// <summary>A staff member who must use an authenticator and has none yet; the console lists them so an admin can issue a code.</summary>
+public sealed record StaffAwaitingTwoFactorDto(Guid UserId, string Email, string FullName, IReadOnlyList<string> Roles, bool HasActiveSetupCode);
+
+/// <summary>Only the ID token Google issued; who the user is comes from its verified claims, never from the request body.</summary>
+public sealed record GoogleLoginRequestDto(string IdToken);
+
+/// <summary>What a verified Google ID token says about its holder.</summary>
+public sealed record GoogleIdentity(string Subject, string Email, string FullName);
+
+/// <summary>Checks a Google ID token's signature against Google's published keys, and its issuer, audience and lifetime.</summary>
+public interface IGoogleIdTokenVerifier
+{
+    Task<GoogleIdentity> VerifyAsync(string idToken, DateTime utcNow, CancellationToken cancellationToken = default);
+}
+
+public sealed record ForgotPasswordRequestDto(string Identifier);
+
+public sealed record ResetPasswordRequestDto(
+    string Recipient,
+    string ReferenceId,
+    string OtpCode,
+    string NewPassword);
+
+public sealed record TotpSetupResponseDto(
+    string Secret,
+    string OtpAuthUri,
+    IReadOnlyList<string> RecoveryCodes);
+
+public sealed record TotpVerifyRequestDto(string Code);
+
+public sealed record ActiveSessionDto(
+    Guid SessionId,
+    Guid FamilyId,
+    string? IpAddress,
+    string? UserAgent,
+    DateTime CreatedAtUtc,
+    DateTime ExpiresAtUtc,
+    bool IsCurrent);
+
+public sealed record RevokeSessionsRequestDto(
+    Guid? SessionId = null,
+    bool RevokeAll = true,
+    bool RevokeAllExceptCurrent = false);
+
+public sealed record UpsertAddressRequestDto(
+    string Label,
+    string RecipientName,
+    string Phone,
+    string Line1,
+    string? Line2,
+    string? Area,
+    string Division,
+    string District,
+    string Upazila,
+    string? PostalCode,
+    bool IsDefaultShipping = false,
+    bool IsDefaultBilling = false,
+    decimal? Latitude = null,
+    decimal? Longitude = null);
+
+public sealed record AddressDto(
+    Guid Id,
+    string Label,
+    string RecipientName,
+    string Phone,
+    string Line1,
+    string? Line2,
+    string? Area,
+    string Division,
+    string District,
+    string Upazila,
+    string? PostalCode,
+    string Country,
+    bool IsDefaultShipping,
+    bool IsDefaultBilling,
+    decimal? Latitude,
+    decimal? Longitude);
+
+public sealed record BdLocationDto(
+    Guid Id,
+    Guid? ParentId,
+    string Level,
+    string NameEn,
+    string NameBn,
+    string ShippingZone,
+    string? PostalCodePrefix);
+
+public sealed record GdprExportBundleDto(
+    DateTime ExportedAtUtc,
+    AuthenticatedUserDto Profile,
+    IReadOnlyList<AddressDto> Addresses,
+    IReadOnlyList<ActiveSessionDto> ActiveSessions,
+    IReadOnlyList<AuditLogSummaryDto> RecentAuditEvents);
+
+public sealed record AuditLogSummaryDto(
+    Guid Id,
+    string Action,
+    string EntityName,
+    string EntityId,
+    string? ActorIp,
+    DateTime CreatedAtUtc);
+
+public interface ISmsProvider
+{
+    Task SendSmsAsync(string phoneNumber, string message, CancellationToken cancellationToken = default);
+}
+
+public interface IPasswordHasherService
+{
+    void ValidatePasswordPolicy(string password);
+    string HashPassword(string password);
+    bool VerifyPassword(string password, string passwordHash);
+}
+
+public interface ITotpService
+{
+    string GenerateBase32Secret(int byteLength = 20);
+    string BuildOtpAuthUri(string email, string base32Secret, string issuer = "MECHWARE");
+    string ComputeTotpCode(string base32Secret, DateTimeOffset timestamp);
+    bool VerifyTotpCode(string base32Secret, string code, DateTimeOffset timestamp, int windowSteps = 1);
+    bool TryVerifyTotpCode(
+        string base32Secret,
+        string code,
+        DateTimeOffset timestamp,
+        long? lastUsedTimeStep,
+        out long matchedTimeStep,
+        int windowSteps = 1);
+    IReadOnlyList<string> GenerateRecoveryCodes(int count = 10);
+    string HashRecoveryCode(string rawCode);
+}
+
+/// <summary>What the database says, right now, about the holder of an access token.</summary>
+public sealed record LiveSession(IReadOnlyList<string> Roles, IReadOnlyList<string> Permissions, Guid? SellerId);
+
+/// <summary>
+/// Checked on every authenticated request (M4): the account still exists and is active, its session was not ended, and its
+/// roles are the current ones, not those frozen into a token minted up to 15 minutes ago.
+/// </summary>
+public interface ISessionValidator
+{
+    Task<LiveSession?> ValidateAsync(Guid userId, Guid sessionId, DateTime utcNow, CancellationToken cancellationToken = default);
+}
+
+public interface ITokenService
+{
+    /// <param name="sessionId">The refresh-token family the access token belongs to; ending that session ends the token too.</param>
+    string GenerateAccessToken(
+        User user,
+        IReadOnlyList<string> roles,
+        IReadOnlyList<string> permissions,
+        DateTime utcNow,
+        Guid sessionId);
+
+    ClaimsPrincipal? ValidateAccessToken(string token, DateTime utcNow);
+    string GenerateRawRefreshToken();
+    string HashToken(string rawToken);
+}
+
+public interface ICurrentUserService
+{
+    Guid? UserId { get; }
+    string? Email { get; }
+    Guid? SellerId { get; }
+    string? IpAddress { get; }
+    string? UserAgent { get; }
+    string? CorrelationId { get; }
+    bool HasPermission(string permission);
+}
+
+/// <summary>
+/// Application-layer Identity & Access boundary interface (AUD-P3-03 Clean Architecture DIP).
+/// </summary>
+public interface IIdentityService
+{
+    Task<(RegisterResponseDto Response, string RawOtpForDev)> RegisterAsync(
+        RegisterRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
+
+    Task<(SendOtpResponseDto Response, string RawOtpForDev)> SendOtpAsync(
+        SendOtpRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthTokenResponseDto> VerifyOtpAsync(
+        VerifyOtpRequestDto request,
+        string? clientIp = null,
+        string? userAgent = null,
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthTokenResponseDto> LoginAsync(
+        LoginRequestDto request,
+        string? clientIp = null,
+        string? userAgent = null,
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthTokenResponseDto> GoogleLoginAsync(
+        GoogleLoginRequestDto request,
+        string? clientIp = null,
+        string? userAgent = null,
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<AuthTokenResponseDto> RotateRefreshTokenAsync(
+        string rawRefreshToken,
+        string? clientIp = null,
+        string? userAgent = null,
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> RevokeRefreshTokenByCookieAsync(
+        string? rawRefreshToken,
+        string? clientIp = null,
+        DateTime? utcNowOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<(string ReferenceId, string RawOtpForDev)> InitiatePasswordResetAsync(
+        string identifier,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
+
+    Task CompletePasswordResetAsync(
+        ResetPasswordRequestDto request,
+        string? clientIp = null,
+        CancellationToken cancellationToken = default);
+
+    Task<TotpSetupResponseDto> SetupTwoFactorAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Step-up (brief §11.1): a fresh authenticator code for one sensitive action, on top of the session. Throws
+    /// ForbiddenException STEP_UP_REQUIRED / STEP_UP_FAILED. Five wrong codes in a row end every session of the account
+    /// (not the login lockout, which would let a session thief lock the owner out).
+    /// </summary>
+    /// <param name="target">What the action is about (e.g. the company id), recorded in the audit log.</param>
+    Task VerifyStepUpAsync(Guid userId, string? code, string action, string? target = null, string? clientIp = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Active staff accounts that must use an authenticator and have none yet (M1 onboarding, console).</summary>
+    Task<IReadOnlyList<StaffAwaitingTwoFactorDto>> ListStaffAwaitingTwoFactorAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>An administrator lets a staff member who must use 2FA enrol their first authenticator.</summary>
+    Task<TwoFactorSetupCodeDto> IssueTwoFactorSetupCodeAsync(
+        Guid adminId, Guid userId, string? clientIp = null, DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
+    /// <summary>Turns 2FA on with the first authenticator code, spends the token and starts the session.</summary>
+    Task<AuthTokenResponseDto> CompleteTwoFactorEnrollmentAsync(
+        string enrollmentToken, string code, string? clientIp = null, string? userAgent = null,
+        DateTime? utcNowOverride = null, CancellationToken cancellationToken = default);
+
+    Task VerifyAndEnableTwoFactorAsync(
+        Guid userId,
+        string code,
+        string? clientIp = null,
+        DateTimeOffset? timestampOverride = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ActiveSessionDto>> GetActiveSessionsAsync(
+        Guid userId,
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default);
+
+    Task<int> RevokeSessionsAsync(
+        Guid userId,
+        RevokeSessionsRequestDto request,
+        string? clientIp = null,
+        string? currentRawRefreshToken = null,
+        CancellationToken cancellationToken = default,
+        Guid? currentSessionId = null);
+
+    Task<IReadOnlyList<AddressDto>> GetAddressesAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<AddressDto> CreateAddressAsync(Guid userId, UpsertAddressRequestDto request, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    Task<AddressDto> UpdateAddressAsync(Guid userId, Guid addressId, UpsertAddressRequestDto request, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    Task DeleteAddressAsync(Guid userId, Guid addressId, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    IReadOnlyList<BdLocationDto> GetBdLocations(string? level = null, Guid? parentId = null);
+
+    Task<GdprExportBundleDto> ExportUserDataAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    Task AnonymizeAndEraseUserAsync(Guid userId, string? clientIp = null, CancellationToken cancellationToken = default);
+
+    Task<AuthenticatedUserDto> GetUserProfileAsync(Guid userId, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<User>> GetUsersForAuditAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AuditLog>> GetAuditLogsAsync(CancellationToken cancellationToken = default);
+}

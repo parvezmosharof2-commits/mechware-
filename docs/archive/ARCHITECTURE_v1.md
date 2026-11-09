@@ -60,12 +60,12 @@ flowchart TD
     end
 
     subgraph CoreBackend ["Core Engine (C# 13 / .NET 10 Solution)"]
-        WebApi["ShopVerse.Api\nASP.NET Core Web API\nControllers, Global ProblemDetails Middleware, JWT/Cookie Auth"]
-        AppLayer["ShopVerse.Application\nCQRS MediatR Handlers, FluentValidation, Pipeline Behaviors"]
-        DomainLayer["ShopVerse.Domain\nPure Entities, Money Value Object, Domain Events, Enums"]
-        InfraLayer["ShopVerse.Infrastructure\nEF Core 10 DbContext, Npgsql, Dapper, Redis StackExchange"]
-        PayModule["ShopVerse.Payment\nGateway Adapters (bKash, Stripe, SSLCommerz, COD)"]
-        WorkerService["ShopVerse.Worker\nBackgroundService / Hangfire\nOutbox Relay, Reservation Expiry, Reconciliation"]
+        WebApi["Mechware.Api\nASP.NET Core Web API\nControllers, Global ProblemDetails Middleware, JWT/Cookie Auth"]
+        AppLayer["Mechware.Application\nCQRS MediatR Handlers, FluentValidation, Pipeline Behaviors"]
+        DomainLayer["Mechware.Domain\nPure Entities, Money Value Object, Domain Events, Enums"]
+        InfraLayer["Mechware.Infrastructure\nEF Core 10 DbContext, Npgsql, Dapper, Redis StackExchange"]
+        PayModule["Mechware.Payment\nGateway Adapters (bKash, Stripe, SSLCommerz, COD)"]
+        WorkerService["Mechware.Worker\nBackgroundService / Hangfire\nOutbox Relay, Reservation Expiry, Reconciliation"]
     end
 
     subgraph DataTier ["Data & Stateful Storage"]
@@ -214,7 +214,7 @@ sequenceDiagram
     participant Gateway as Payment Gateway (bKash AWS SNS / Stripe)
     participant Api as Webhook Controller (/api/v1/webhooks)
     participant PG as PostgreSQL 16
-    participant Worker as ShopVerse.Worker (Outbox Relay)
+    participant Worker as Mechware.Worker (Outbox Relay)
     participant Client as Buyer / Seller
 
     alt bKash AWS SNS Instant Payment Notification (POST /api/v1/webhooks/bkash/ipn)
@@ -302,7 +302,7 @@ sequenceDiagram
     participant Courier as Courier System (Steadfast / Pathao)
     participant Api as Webhook Controller (/api/v1/webhooks/courier)
     participant PG as PostgreSQL 16
-    participant Worker as ShopVerse.Worker
+    participant Worker as Mechware.Worker
     participant Buyer as Customer
 
     Courier->>Api: POST /api/v1/webhooks/courier/steadfast (Tracking: ST-92819, Status: 'delivered')
@@ -365,7 +365,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     participant Hangfire as Hangfire Scheduler (Every Sunday 02:00 AM)
-    participant Worker as ShopVerse.Worker (Payout Engine)
+    participant Worker as Mechware.Worker (Payout Engine)
     participant PG as PostgreSQL 16
     participant Bank as Corporate Banking / bKash Bulk Disburse API
     participant Seller as Equipment Merchant
@@ -446,8 +446,8 @@ flowchart TD
     subgraph AppCluster ["Application Cluster (Docker / Kubernetes Pods)"]
         WebPods["Next.js 15 Storefront Cluster\n(apps/web - 3 Replicas)"]
         ConsolePods["Next.js 15 Console Cluster\n(apps/console - 2 Replicas)"]
-        ApiPods["C# .NET 10 Web API Cluster\n(ShopVerse.Api - 4 Replicas)"]
-        WorkerPods["ShopVerse.Worker Cluster\n(BackgroundService - 2 Replicas)"]
+        ApiPods["C# .NET 10 Web API Cluster\n(Mechware.Api - 4 Replicas)"]
+        WorkerPods["Mechware.Worker Cluster\n(BackgroundService - 2 Replicas)"]
     end
 
     subgraph DataServices ["Persistent & Managed Data Services"]
@@ -510,7 +510,7 @@ This matrix verifies that every requirement from Sections 3, 7, 8, 9, 10, and 15
 | **7. Feature Flags & Settings**| `System` | `feature_flags`, `system_settings` | `GET /admin/feature-flags`, `/health/ready` | Phase 1, Phase 11 |
 | **8.1 Pricing & VAT Rules** | `Catalog`, `Application` | `product_variants`, `categories.commission_rate` | Domain Service `PricingEngine` | Phase 4 |
 | **8.2 Promotions Engine** | `Promotion` | `promotions`, `coupons`, `coupon_usages` | Domain Service `PromotionEngine` | Phase 8 |
-| **8.3 Concurrency & 15m Hold** | `Inventory` | `inventory_items`, `stock_reservations` | `POST /checkout/reserve`, `ShopVerse.Worker` | Phase 4, Phase 8 |
+| **8.3 Concurrency & 15m Hold** | `Inventory` | `inventory_items`, `stock_reservations` | `POST /checkout/reserve`, `Mechware.Worker` | Phase 4, Phase 8 |
 | **8.4 Guest Cart & Login Merge**| `Cart` | `carts`, `cart_items` | `POST /cart/merge`, Redis Cart Store | Phase 8 |
 | **8.5 Order State Machine** | `Order` | `orders`, `sub_orders`, `order_events` | `ISubOrderService.TransitionStatusAsync` | Phase 9 |
 | **8.6 Payment Webhooks & COD** | `Payment` | `payments`, `otp_codes`, `idempotency_records` | `/payments/bkash/callback`, `/payments/cod/verify-otp` | Phase 8 |

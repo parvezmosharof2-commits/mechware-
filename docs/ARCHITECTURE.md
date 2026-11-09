@@ -54,14 +54,14 @@ Modular monolith with Clean Architecture (ADR-0001). One deployable API, one wor
 
 | Project | Holds | May depend on |
 |---|---|---|
-| `ShopVerse.Domain` | Entities, value objects (`Money`), pure engines (`PricingEngine`, `PromotionEngine`, `CartEngine`, `OrderPricing`, `OrderStateMachine`, `WebhookVerifier`), domain events | nothing (no framework, no I/O) |
-| `ShopVerse.Application` | Service interfaces and request/response contracts per module | Domain |
-| `ShopVerse.Infrastructure` | EF Core `ShopVerseDbContext`, migrations, service implementations, outbox, Redis, workers, seed | Application, Domain |
-| `ShopVerse.Api` | Controllers, authentication, authorisation, middleware, configuration | Application (controllers inject only application ports) |
-| `ShopVerse.Worker` | Host for the background services and the `seed-catalog` command | Infrastructure |
-| `ShopVerse.Payment` | Reserved for real gateway adapters ⬜ | — |
+| `Mechware.Domain` | Entities, value objects (`Money`), pure engines (`PricingEngine`, `PromotionEngine`, `CartEngine`, `OrderPricing`, `OrderStateMachine`, `WebhookVerifier`), domain events | nothing (no framework, no I/O) |
+| `Mechware.Application` | Service interfaces and request/response contracts per module | Domain |
+| `Mechware.Infrastructure` | EF Core `MechwareDbContext`, migrations, service implementations, outbox, Redis, workers, seed | Application, Domain |
+| `Mechware.Api` | Controllers, authentication, authorisation, middleware, configuration | Application (controllers inject only application ports) |
+| `Mechware.Worker` | Host for the background services and the `seed-catalog` command | Infrastructure |
+| `Mechware.Payment` | Reserved for real gateway adapters ⬜ | — |
 
-These are **checked by tests**, not by convention: `backend/tests/ShopVerse.UnitTests/Architecture/LayeringTests.cs`
+These are **checked by tests**, not by convention: `backend/tests/Mechware.UnitTests/Architecture/LayeringTests.cs`
 fails CI if the Domain references any other layer or I/O, if Application references Infrastructure, if Infrastructure
 references the API, or if a controller injects anything but an application port.
 
@@ -128,7 +128,7 @@ The request has no field for a price, tax, discount, total or address text. A fa
 
 A browser redirect confirms nothing.
 
-### 4.3 Background work (`ShopVerse.Worker`)
+### 4.3 Background work (`Mechware.Worker`)
 
 | Worker | Every | Does |
 |---|---|---|
@@ -199,8 +199,8 @@ Local development: `infra/docker/docker-compose.yml` (PostgreSQL, Redis, MinIO, 
 
 | Level | Where | Notes |
 |---|---|---|
-| Unit, property, fuzz | `backend/tests/ShopVerse.UnitTests` | domain rules, money and pricing properties, JWT attacker model, architecture rules |
-| Integration | `backend/tests/ShopVerse.IntegrationTests` | real PostgreSQL (and Redis); races, IDOR, API security, Production-mode hosts |
+| Unit, property, fuzz | `backend/tests/Mechware.UnitTests` | domain rules, money and pricing properties, JWT attacker model, architecture rules |
+| Integration | `backend/tests/Mechware.IntegrationTests` | real PostgreSQL (and Redis); races, IDOR, API security, Production-mode hosts |
 | Mutation checks | recorded per PR | each money or security guard is removed once to show a test fails |
 | Browser E2E | `frontend/packages/e2e` | API + PostgreSQL + production builds of web and console, EN + BN, 360 px |
 | Frontend | `pnpm lint` (0 warnings), typecheck, axe, contrast, bundle budget 170 kB | `frontend/` |

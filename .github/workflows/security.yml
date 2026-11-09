@@ -144,8 +144,8 @@ jobs:
 
       - name: NuGet packages (direct + transitive) have no known vulnerabilities
         run: |
-          dotnet restore backend/ShopVerse.sln
-          dotnet list backend/ShopVerse.sln package --vulnerable --include-transitive 2>&1 | tee nuget-audit.txt
+          dotnet restore backend/Mechware.sln
+          dotnet list backend/Mechware.sln package --vulnerable --include-transitive 2>&1 | tee nuget-audit.txt
           if grep -q "has the following vulnerable packages" nuget-audit.txt; then
             echo "::error::Vulnerable NuGet packages found (see log above)"
             exit 1

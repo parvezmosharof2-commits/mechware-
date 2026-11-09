@@ -29,7 +29,7 @@ unusual conditions. **Low / Info**: hardening or a rule for future work.
 
 ### C1. Known admin account exists in every environment (Critical) [RUN] — **FIXED**, see "Fix" below
 `IdentityService` calls `SeedEnterpriseAccounts()` unconditionally in its constructor
-(`backend/src/ShopVerse.Infrastructure/Identity/IdentityService.cs`). It creates, with passwords and secrets that
+(`backend/src/Mechware.Infrastructure/Identity/IdentityService.cs`). It creates, with passwords and secrets that
 are **in this public repository**: `admin@mechware.com.bd` / `MechAdmin#2026!` with TOTP secret
 `JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP` and recovery code `ABCDE-12345`, plus seller and buyer accounts.
 **Reproduced:** the API started with `ASPNETCORE_ENVIRONMENT=Production` and a fresh random JWT secret
@@ -282,7 +282,7 @@ them in audit values, restrict who can read `audit_logs`.
 - **Keys.** Encryption and index keys are derived with HKDF from one 32-byte master key, `Encryption__FieldKey`. Outside
   Development the API refuses to start without it, or with the published development key.
 - **BIN lookups use a keyed fingerprint.** Equal BINs no longer look equal in the database, so uniqueness (the partial
-  index, now on `bin_index`) and the "BIN taken" check use HMAC-SHA256 under a second key. `ShopVerseDbContext` refreshes it
+  index, now on `bin_index`) and the "BIN taken" check use HMAC-SHA256 under a second key. `MechwareDbContext` refreshes it
   on every save.
 - **Never query `c.Bin == x`.** With randomized encryption that comparison silently matches nothing. One test did exactly
   that and was fixed; the rule is written in `CompanyBinIndex`.

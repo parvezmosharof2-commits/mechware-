@@ -144,12 +144,12 @@
 ## ৪. আবার শুরু করার আগে
 
 - **Branch:** `claude/inspiring-galileo-lqeixj`, প্রতিটা merge-এর পর `main`-এর সাথে sync করা। **একসাথে একটাই session চালান।**
-- **নতুন container-এ:** `apt-get install -y dotnet-sdk-10.0`, `dotnet tool install -g dotnet-ef`, তারপর `pg_ctlcluster 16 main start` আর `redis-server --daemonize yes` (container বন্ধ হলে এ দুটো আবার চালাতে হয়; না চালালে integration টেস্ট ব্যর্থ নয়, **skip** হয়: ফলে সবুজ দেখায়, সাবধান!)। Postgres-এ `CREATE ROLE shopverse LOGIN SUPERUSER PASSWORD 'shopverse_secret'` একবার। Migration বানাতে `dotnet ef migrations add <নাম> -p ShopVerse.Infrastructure -s ShopVerse.Infrastructure --no-build` (`export PATH=$PATH:/root/.dotnet/tools`)।
+- **নতুন container-এ:** `apt-get install -y dotnet-sdk-10.0`, `dotnet tool install -g dotnet-ef`, তারপর `pg_ctlcluster 16 main start` আর `redis-server --daemonize yes` (container বন্ধ হলে এ দুটো আবার চালাতে হয়; না চালালে integration টেস্ট ব্যর্থ নয়, **skip** হয়: ফলে সবুজ দেখায়, সাবধান!)। Postgres-এ `CREATE ROLE mechware LOGIN SUPERUSER PASSWORD 'mechware_secret'` একবার। Migration বানাতে `dotnet ef migrations add <নাম> -p Mechware.Infrastructure -s Mechware.Infrastructure --no-build` (`export PATH=$PATH:/root/.dotnet/tools`)।
 - **লোকাল টেস্টের জন্য:**
-  - PostgreSQL 16-এ একটা user লাগবে (`shopverse` / `shopverse_secret`), আর Redis চালু থাকতে হবে।
-  - চালানোর কমান্ড: `MECHWARE_TEST_PG=... dotnet test backend/ShopVerse.slnx`।
+  - PostgreSQL 16-এ একটা user লাগবে (`mechware` / `mechware_secret`), আর Redis চালু থাকতে হবে।
+  - চালানোর কমান্ড: `MECHWARE_TEST_PG=... dotnet test backend/Mechware.slnx`।
 - **Push-এর আগে চালাতে হবে:**
-  - `dotnet format backend/ShopVerse.sln --verify-no-changes`, কারণ CI এটা যাচাই করে।
+  - `dotnet format backend/Mechware.sln --verify-no-changes`, কারণ CI এটা যাচাই করে।
   - `pnpm --dir frontend typecheck` আর `pnpm --dir frontend lint`।
 - **লোকালে E2E চালাতে:**
   - নতুন database, তারপর `dotnet ef database update`।

@@ -67,7 +67,7 @@ We implement a **Two-Phase Inventory Reservation Pattern** with tiered concurren
    If all items are sufficient, `reserved` is incremented, and corresponding `stock_reservations` records are created with `status = 'active'`.
 
 ### 3. Expiry and Reconciliation
-- A background worker (`ShopVerse.Worker`) runs every 60 seconds executing an atomic set-based CTE query with `FOR UPDATE SKIP LOCKED` to release expired active holds without lock contention:
+- A background worker (`Mechware.Worker`) runs every 60 seconds executing an atomic set-based CTE query with `FOR UPDATE SKIP LOCKED` to release expired active holds without lock contention:
   ```sql
   WITH expired_holds AS (
       SELECT id, variant_id, warehouse_id, quantity

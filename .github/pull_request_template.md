@@ -8,7 +8,7 @@
 
 <!-- কমান্ড আর তার আউটপুটের সারাংশ। "পাস করে" লিখলে হবে না, সংখ্যা দিন। -->
 
-- [ ] `dotnet test backend/ShopVerse.sln` — unit: ___ / integration: ___ পাস
+- [ ] `dotnet test backend/Mechware.sln` — unit: ___ / integration: ___ পাস
 - [ ] নতুন বা বদলানো টেস্টের নাম:
 - [ ] Mutation check: কোন গার্ড সরালে কোন টেস্ট ফেল করে (প্রতিটা টাকা/নিরাপত্তার গার্ডের জন্য)
 - [ ] UI হলে: `pnpm typecheck`, `pnpm lint`, `pnpm check:bundle`, E2E; light/dark × EN/BN স্ক্রিনশট নিচে

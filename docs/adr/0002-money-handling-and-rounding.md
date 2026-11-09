@@ -14,7 +14,7 @@ Using IEEE 754 floating-point numbers (`float` or `double`) leads to catastrophi
 We enforce strict financial precision across the entire stack using three core mechanisms:
 
 ### 1. In-Memory Domain Representation: Value Object `Money`
-In C# domain code (`ShopVerse.Domain`), all monetary figures are encapsulated by an immutable `Money` value object:
+In C# domain code (`Mechware.Domain`), all monetary figures are encapsulated by an immutable `Money` value object:
 ```csharp
 public readonly record struct Money(decimal Amount, Currency Currency)
 {
@@ -25,7 +25,7 @@ public readonly record struct Money(decimal Amount, Currency Currency)
 - Currency is strictly validated against ISO 4217 (`BDT`, `USD`, `EUR`). Operations between mismatched currencies throw `CurrencyMismatchException`.
 
 ### 2. Database Storage: Minor Units as 64-Bit Integers
-In PostgreSQL (`ShopVerse.Infrastructure`), money is stored as an integer representing the smallest currency minor unit:
+In PostgreSQL (`Mechware.Infrastructure`), money is stored as an integer representing the smallest currency minor unit:
 - **BDT / USD / EUR**: Stored as `bigint` (Poisha / Cents). For example, 1,250.50 BDT is stored as `125050`.
 - Each monetary column is accompanied by a currency column:
   - `amount_minor bigint NOT NULL`

@@ -3,6 +3,8 @@
 > **Target Standard:** USD 100,000+ Enterprise Industrial Commerce & Automation Platform
 > **Architecture:** C# 13 / .NET 10 Clean Architecture + Next.js 15 Monorepo + PostgreSQL 16 + Redis 7 + Meilisearch
 >
+> **নাম বদল (২০২৬-১১-০৯):** কোডের পুরোনো ভেতরের নাম `ShopVerse` এখন সব জায়গায় `Mechware` (প্রজেক্ট, namespace, solution, ডেটাবেস ইউজার `mechware` / `mechware_secret`)। নিজের পুরোনো dev ডেটাবেস থাকলে নতুন ইউজার বানান বা `.env`-এ পুরোনো মান রাখুন।
+>
 > **📌 সর্বশেষ অবস্থা (২০২৬-১১-০৬):** নিরাপত্তা অডিটের কাজ কোথায় থেমেছে, কী বাকি আর কোন সিদ্ধান্ত মালিকের, সব আছে [`docs/SESSION_NOTES_2026-11-06.md`](docs/SESSION_NOTES_2026-11-06.md)-এ। পরের বার ওখান থেকে শুরু করুন।
 
 ---
@@ -66,14 +68,14 @@
 
 ### Phase 1: Enterprise Foundation (.NET 10 Solution, Next.js Monorepo, Docker, CI)
 - [x] **Repository Structure Setup**:
-  - [x] Initialize `backend/` C# 13 / .NET 10 solution (`ShopVerse.sln`).
-  - [x] Create `ShopVerse.Domain` project (Entities, Value Objects, Domain Events).
-  - [x] Create `ShopVerse.Application` project (CQRS MediatR, FluentValidation).
-  - [x] Create `ShopVerse.Infrastructure` project (EF Core 10, Npgsql, Redis).
-  - [x] Create `ShopVerse.Payment` project (Gateway abstractions).
-  - [x] Create `ShopVerse.Worker` project (BackgroundService outbox relay).
-  - [x] Create `ShopVerse.Api` project (ASP.NET Core Web API).
-  - [x] Create unit & integration test projects (`ShopVerse.UnitTests`, `ShopVerse.IntegrationTests`).
+  - [x] Initialize `backend/` C# 13 / .NET 10 solution (`Mechware.sln`).
+  - [x] Create `Mechware.Domain` project (Entities, Value Objects, Domain Events).
+  - [x] Create `Mechware.Application` project (CQRS MediatR, FluentValidation).
+  - [x] Create `Mechware.Infrastructure` project (EF Core 10, Npgsql, Redis).
+  - [x] Create `Mechware.Payment` project (Gateway abstractions).
+  - [x] Create `Mechware.Worker` project (BackgroundService outbox relay).
+  - [x] Create `Mechware.Api` project (ASP.NET Core Web API).
+  - [x] Create unit & integration test projects (`Mechware.UnitTests`, `Mechware.IntegrationTests`).
 - [x] **Backend Foundation & Quality Plumbing**:
   - [x] Strongly typed `IOptions<T>` configuration validation at startup.
   - [x] Serilog structured JSON logging with `CorrelationId` and `TraceId`.
@@ -146,7 +148,7 @@
 ---
 
 ### Phase 3: Identity, Authentication, Granular RBAC & Audit Interceptors
-- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`ShopVerseDbContext`; the tables are created by `20261029190715_Phase4CatalogInventoryOutbox`).
+- [x] EF Core mapping and migrations for `User`, `Address`, `Role`, `Permission`, `RefreshToken`, `OtpCode`, `AuditLog`, and `BdLocation` (`MechwareDbContext`; the tables are created by `20261029190715_Phase4CatalogInventoryOutbox`).
 - [x] Authentication flows:
   - [x] Email + Password registration and login with 210,000-iteration PBKDF2-SHA512 / Argon2id-equivalent hashing and NIST password policy enforcement.
   - [x] Phone SMS OTP registration and login with bound `reference_id` and `ISmsProvider` adapter (`LoggingSmsProvider`).
@@ -168,7 +170,7 @@
 - [x] **Phase 3 R1 Sign-Off Audit & Remediation (Principal Engineer + Senior Product Designer + QA Lead)**:
   - [x] `AUD-P3-01` (Critical): Implemented RFC 6238 §5.2 TOTP replay guard via `User.LastUsedTotpTimeStep` and `TotpService.TryVerifyTotpCode` to reject replayed 6-digit TOTP codes within the 90-second (`±1` step) window.
   - [x] `AUD-P3-02` (High): Hardened `IdentityService.GoogleLogin` with structured Google OIDC JWT claim validation (`iss`, `exp`, `email_verified`, `sub`, `email`).
-  - [x] `AUD-P3-03` (High): Extracted `IIdentityService` in `ShopVerse.Application.Identity` and removed direct `ShopVerse.Infrastructure.Identity` dependency from `ShopVerse.Api` controllers.
+  - [x] `AUD-P3-03` (High): Extracted `IIdentityService` in `Mechware.Application.Identity` and removed direct `Mechware.Infrastructure.Identity` dependency from `Mechware.Api` controllers.
   - [x] `AUD-P3-04` (High): Configured `"AuthStrictPolicy"` rate limiter (`10 req/min` per IP) in `Program.cs` and applied `[EnableRateLimiting(AuthStrictRateLimitPolicy)]` to `/api/v1/auth/*` endpoints.
   - [x] `AUD-P3-05` (High): Fixed single-session logout via `RevokeRefreshTokenByCookie` (revokes only the cookie's `FamilyId`) and added `RevokeAllExceptCurrent` support to `/api/v1/auth/sessions/revoke`.
   - [x] `AUD-P3-06` (Medium): Aligned `OtpCode.MaxVerificationAttempts = 3` (`DATA_MODEL.md` §2.1) and added `POST /api/v1/auth/otp/send`.
@@ -188,7 +190,7 @@
 - [x] Deterministic pricing domain service (`PricingEngine`: sale windows `[start,end)`, compare-at, floor-% discount, VAT inclusive/exclusive, banker's rounding).
 - [x] Transactional outbox: `DomainEventOutboxInterceptor` writes events in the same `SaveChanges`; `OutboxRelay` (`SKIP LOCKED`) feeds the `search:sync:queue` Redis list and storefront cache invalidation.
 - [x] Storefront read models: `GET /api/v1/storefront/products/{slug}` (Redis cache, 301 on retired slugs), `/categories`, `/categories/{slug}/products`.
-- [x] Deterministic seed (`dotnet run --project backend/src/ShopVerse.Worker -- seed-catalog`, ~5 s): 12 roots / 120 categories / 72 leaves, 40 brands, 25 sellers, 572 industrial products (≈840 variants), 3 240 reviews (446 with photos), 242 questions, report in `docs/PHASE4_SEED_REPORT.md`.
+- [x] Deterministic seed (`dotnet run --project backend/src/Mechware.Worker -- seed-catalog`, ~5 s): 12 roots / 120 categories / 72 leaves, 40 brands, 25 sellers, 572 industrial products (≈840 variants), 3 240 reviews (446 with photos), 242 questions, report in `docs/PHASE4_SEED_REPORT.md`.
 - [x] Concurrency test: 50 parallel reservations for 10 units → exactly 10 succeed (PostgreSQL-only and with RedLock).
 - [x] Unit tests: pricing, lifecycle, variant generation, slug-history redirects, inventory invariants, seed-plan integrity.
 - [x] Phase 4 audit (`docs/PHASE4_AUDIT.md`): 10 findings fixed with regression tests, 6 documented as accepted/open.
@@ -249,7 +251,7 @@
 - [ ] Advanced promotion engine supporting stacking rules, spend tiers, and coupon validation.
 - [ ] Atomic checkout with 15-minute stock reservation token.
 - [ ] Two-tier order creation: 1 Master Order (`SV-YYMMDD-XXXXXX`) split into child `SubOrders`.
-- [ ] Payment Gateway Integrations (`ShopVerse.Payment`):
+- [ ] Payment Gateway Integrations (`Mechware.Payment`):
   - [ ] bKash Tokenized Checkout adapter.
   - [ ] Stripe PaymentIntent adapter.
   - [ ] SSLCommerz Hosted Payment adapter.
@@ -407,7 +409,7 @@ now provisioned from deployment secrets at startup:
 database, so a restart or a second API instance loses nothing (the tables come from `20261029190715_Phase4CatalogInventoryOutbox`;
 the old hand-written `202610290001_Phase3IdentityAndAccess.cs` had no `[Migration]` attribute, never ran, and is removed).
 
-- `IIdentityService` is async and the service is registered per request (it holds the request's `ShopVerseDbContext`).
+- `IIdentityService` is async and the service is registered per request (it holds the request's `MechwareDbContext`).
 - Demo accounts (Development only) and the bootstrap administrator are created by `IdentitySeeder` at startup,
   idempotently: an existing account is never reset. Nothing touches the database at boot when there is nothing to seed.
 - Refresh-token rotation and OTP checks take a row lock (`SELECT ... FOR UPDATE`) inside a transaction, so two
@@ -432,7 +434,7 @@ addresses outright.
 
 ## Phase 8 slice b: promotion engine (pure domain)
 
-`ShopVerse.Domain.Pricing.PromotionEngine` prices a basket's promotions with no I/O: percent off, fixed off, volume tiers
+`Mechware.Domain.Pricing.PromotionEngine` prices a basket's promotions with no I/O: percent off, fixed off, volume tiers
 per line, spend tiers, scoped by everything / category / seller / variant, with priority order, exclusivity, caps,
 validity windows and global / per-user limits (the counters are supplied by the caller). A discount is rounded once
 (banker's, ADR-0002) and allocated to lines by largest remainder, so the line discounts add up to exactly the promotion's
@@ -442,7 +444,7 @@ Not built yet: cart (Redis), order and atomic checkout, payment providers and we
 
 ## Phase 8 slice a: cart rules (pure domain)
 
-`ShopVerse.Domain.Cart.CartEngine`: add / set / remove with stock, minimum order quantity, pack size and line limits;
+`Mechware.Domain.Cart.CartEngine`: add / set / remove with stock, minimum order quantity, pack size and line limits;
 merge of a guest cart into the signed-in buyer's cart on login (quantities add up, capped, the buyer's order kept);
 re-validation against the catalog that returns a notice for every drift (price changed, stock reduced, sold out,
 withdrawn, below the minimum order, adjusted to the pack size) and is idempotent. 12 unit tests; five mutations
@@ -452,7 +454,7 @@ Not built yet: the Redis cart store with its signed guest token, the HTTP endpoi
 
 ## Phase 8 slice c (part 1): order state machine and order number (pure domain)
 
-`ShopVerse.Domain.Orders.OrderStateMachine` is the single place that says which state may follow which (brief §8.6):
+`Mechware.Domain.Orders.OrderStateMachine` is the single place that says which state may follow which (brief §8.6):
 `pending_approval -> pending_payment -> confirmed -> processing -> packed -> shipped -> out_for_delivery -> delivered
 -> completed`, plus cancelled, delivery_failed, returned, return_requested, return_approved and refunded. Every change
 is an `OrderEvent` (who, when, why); a reason is mandatory for cancelling, a failed delivery and a return approval.
@@ -467,7 +469,7 @@ the ADR should be updated when the order tables are built. Not built yet: the or
 
 ## Phase 8 slice d (part 1): webhook verification (pure domain)
 
-`ShopVerse.Domain.Payments.WebhookVerifier` checks a provider webhook the way brief §8.7 requires: HMAC-SHA256 over
+`Mechware.Domain.Payments.WebhookVerifier` checks a provider webhook the way brief §8.7 requires: HMAC-SHA256 over
 `{timestamp}.{rawBody}` compared in constant time, and a time window (default 5 minutes, small clock skew tolerated,
 requests from the future refused). The timestamp is part of the signed message, so a captured request cannot be
 replayed with a fresh timestamp. Deduplication by provider event id needs storage and stays with the inbox (not built
@@ -478,7 +480,7 @@ wiring.
 
 ## Phase 8 slice c (part 2): order pricing (pure domain)
 
-`ShopVerse.Domain.Orders.OrderPricing.Price` turns server-resolved lines into the order's money: per-line VAT
+`Mechware.Domain.Orders.OrderPricing.Price` turns server-resolved lines into the order's money: per-line VAT
 (inclusive prices are split, exclusive prices get VAT added), one sub-order per seller with its own shipping, the
 marketplace commission on the seller's discounted net goods, and the seller's earning. Rounding happens once per line
 in whole poisha (banker's); every higher total is a sum, so `GrandTotal = sum of line totals + shipping` holds exactly.
@@ -494,7 +496,7 @@ the HTTP endpoint, payment adapters, the inbox, the frontend.
 
 ## Phase 8 slice c (part 3): atomic PlaceOrder, order tables, idempotency
 
-`IOrderService.PlaceAsync` (`ShopVerse.Infrastructure.Orders.OrderService`) turns a request that carries **only variant ids
+`IOrderService.PlaceAsync` (`Mechware.Infrastructure.Orders.OrderService`) turns a request that carries **only variant ids
 and quantities** (no price, tax, discount or total field exists) into an order:
 re-prices every line from the database (`PricingEngine` + `OrderPricing`), checks the products are live, reserves stock
 through `IInventoryService` under the order id, and writes the order, one sub-order per seller, frozen line snapshots,

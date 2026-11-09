@@ -37,7 +37,7 @@ We verified the git commit history (`bee490b` + `b7c0d72`) and ran the automated
 
 | # | Phase 0 Requirement (`03_PHASE_PROMPTS.md`) | Status | Evidence & Audit Notes |
 |---|---|---|---|
-| 1 | `docs/ARCHITECTURE.md` (C4 L1–L3, bounded contexts, outbox, cache, observability, deployment) | **Done** | C4 L1–L3 Mermaid diagrams, 10 bounded contexts, transactional outbox, Redis cache-aside + RedLock, and bKash server-to-server `ExecutePayment` flow documented (`ADR-0001` documents `ShopVerse.*` assembly mapping). |
+| 1 | `docs/ARCHITECTURE.md` (C4 L1–L3, bounded contexts, outbox, cache, observability, deployment) | **Done** | C4 L1–L3 Mermaid diagrams, 10 bounded contexts, transactional outbox, Redis cache-aside + RedLock, and bKash server-to-server `ExecutePayment` flow documented (`ADR-0001` documents `Mechware.*` assembly mapping). |
 | 2 | `docs/DATA_MODEL.md` (Full ER diagram + every table, column, type, FK, index, soft-delete, audit) | **Partial (Minor DDL Bug)** | All 41 tables + `trg_enforce_balanced_ledger_batch` deferrable trigger are documented, **but** `otp_codes` (Lines 184–188) has a duplicate `ix_otp_codes_lookup` index block with conflicting column lists (`MW-P0-NEW-08`). |
 | 3 | `docs/API_CONTRACT.md` (Every v1 endpoint, RFC 7807 errors, rate limits, auth scopes) | **Done** | Covers Auth, Catalog, Cart, Atomic Checkout (`/reserve` + `/orders`), bKash/SSLCommerz/COD OTP, Seller Console, RFQ (`/rfq`), Messaging, Notifications, and Admin Disputes. |
 | 4 | `docs/adr/0001` through `0007` | **Done** | All 7 ADRs complete and aligned with `01_PROJECT_BRIEF.md`. |
@@ -47,11 +47,11 @@ We verified the git commit history (`bee490b` + `b7c0d72`) and ran the automated
 | # | Phase 1 Requirement (`03_PHASE_PROMPTS.md`) | Status | Evidence & Audit Notes |
 |---|---|---|---|
 | 1 | `infra/docker/docker-compose.yml` (Postgres 16, Redis 7, Meilisearch, MinIO, Mailpit, Seq, OTel, Prometheus, Grafana) | **Done** | All 9 services configured with healthchecks, resource limits, and named volumes. |
-| 2 | `.NET 10 Solution` + OpenAPI / Swagger documentation with XML comments and JWT bearer auth at `/swagger` | **Partial (Broken in Browser)** | `SecurityHeadersMiddleware.cs:21` applies `Content-Security-Policy: default-src 'none'` to `/swagger`, blocking all Swagger UI scripts/styles! Also `ShopVerse.Api.csproj` is missing `<GenerateDocumentationFile>true</GenerateDocumentationFile>` (`MW-P1-NEW-02`). |
+| 2 | `.NET 10 Solution` + OpenAPI / Swagger documentation with XML comments and JWT bearer auth at `/swagger` | **Partial (Broken in Browser)** | `SecurityHeadersMiddleware.cs:21` applies `Content-Security-Policy: default-src 'none'` to `/swagger`, blocking all Swagger UI scripts/styles! Also `Mechware.Api.csproj` is missing `<GenerateDocumentationFile>true</GenerateDocumentationFile>` (`MW-P1-NEW-02`). |
 | 3 | Middlewares (`Serilog`, `OpenTelemetry`, `ProblemDetails`, `SecurityHeaders`, `RateLimiter`, `/health/live`, `/health/ready`) | **Partial (Security Flaw)** | `Program.cs:56–61` clears `KnownIPNetworks` and `KnownProxies` without `ForwardLimit = 1` or environment restriction, allowing trivial rate-limit bypass via `X-Forwarded-For` header spoofing (`MW-P1-NEW-03`). |
 | 4 | Domain Primitives (`Money`, `Currency`, `Entity<TId>`, `AggregateRoot<TId>`, `DomainException`) | **Done** | Banker's rounding (`MidpointRounding.ToEven`), 4-decimal intermediate math, and read-only `bn-BD` `CultureInfo` verified by 18 unit tests in `MoneyTests.cs`. |
 | 5 | Typed API client (`packages/api-client`) | **Partial (Runtime Crash Bug)** | `MechWareApiClient.fetch()` (`packages/api-client/src/index.ts:57–68`) calls `await response.json()` in `try` and `await response.text()` in `catch` on the same `Response`, throwing `TypeError: Body has already been read` whenever a non-JSON error occurs (`MW-P1-NEW-04`). |
-| 6 | Integration tests (`ShopVerse.IntegrationTests`) & CI (`ci.yml`) | **Partial** | `ApiStartupIntegrationTests.cs` only tests `/health/live` and `/unknown-route`, never asserting `/health/ready`, `SecurityHeadersMiddleware`, or `CorrelationIdMiddleware` sanitization (`MW-P1-NEW-05`). |
+| 6 | Integration tests (`Mechware.IntegrationTests`) & CI (`ci.yml`) | **Partial** | `ApiStartupIntegrationTests.cs` only tests `/health/live` and `/unknown-route`, never asserting `/health/ready`, `SecurityHeadersMiddleware`, or `CorrelationIdMiddleware` sanitization (`MW-P1-NEW-05`). |
 
 ### Phase 2 Sign-Off Table (Cybernetic Design System & Component Library)
 
@@ -120,24 +120,24 @@ We verified the git commit history (`bee490b` + `b7c0d72`) and ran the automated
 ---
 
 ### 🟠 [MW-P1-NEW-02] (HIGH) `SecurityHeadersMiddleware` `default-src 'none'` CSP Breaks Swagger UI (`/swagger`) & XML Comments Are Disabled
-- **File / Location:** `backend/src/ShopVerse.Api/Middleware/SecurityHeadersMiddleware.cs` (Line 21), `backend/src/ShopVerse.Api/ShopVerse.Api.csproj`, `backend/src/ShopVerse.Api/Program.cs` (Line 74)
+- **File / Location:** `backend/src/Mechware.Api/Middleware/SecurityHeadersMiddleware.cs` (Line 21), `backend/src/Mechware.Api/Mechware.Api.csproj`, `backend/src/Mechware.Api/Program.cs` (Line 74)
 - **Flaw Explanation:**
   1. `SecurityHeadersMiddleware` runs before `app.UseSwaggerUI()` (`Program.cs:151` vs `164`) and sets `Content-Security-Policy: default-src 'none'` on every response. Opening `/swagger/index.html` in any browser fails completely because Swagger UI scripts, styles, and images are blocked by CSP.
   2. Phase 1 Deliverable #2 requires *"OpenAPI / Swagger documentation with XML comments and JWT bearer auth at /swagger"*, but `<GenerateDocumentationFile>true</GenerateDocumentationFile>` and `c.IncludeXmlComments(...)` are missing.
 - **Exact Code Fix:**
 ```csharp
-// 1. In backend/src/ShopVerse.Api/Middleware/SecurityHeadersMiddleware.cs:
+// 1. In backend/src/Mechware.Api/Middleware/SecurityHeadersMiddleware.cs:
 var isSwagger = context.Request.Path.StartsWithSegments("/swagger") ||
                 context.Request.Path.StartsWithSegments("/openapi");
 headers.TryAdd("Content-Security-Policy", isSwagger
     ? "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"
     : "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
 
-// 2. In backend/src/ShopVerse.Api/ShopVerse.Api.csproj (<PropertyGroup>):
+// 2. In backend/src/Mechware.Api/Mechware.Api.csproj (<PropertyGroup>):
 <GenerateDocumentationFile>true</GenerateDocumentationFile>
 <NoWarn>$(NoWarn);1591</NoWarn>
 
-// 3. In backend/src/ShopVerse.Api/Program.cs (inside AddSwaggerGen):
+// 3. In backend/src/Mechware.Api/Program.cs (inside AddSwaggerGen):
 var xmlFilename = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
 var xmlPath = System.IO.Path.Combine(AppContext.BaseDirectory, xmlFilename);
 if (System.IO.File.Exists(xmlPath))
@@ -149,10 +149,10 @@ if (System.IO.File.Exists(xmlPath))
 ---
 
 ### 🟠 [MW-P1-NEW-03] (HIGH) Unrestricted `ForwardedHeadersOptions` Allows Trivial Rate-Limit Bypass via `X-Forwarded-For` Spoofing
-- **File / Location:** `backend/src/ShopVerse.Api/Program.cs` (Lines 56–62)
+- **File / Location:** `backend/src/Mechware.Api/Program.cs` (Lines 56–62)
 - **Flaw Explanation:**
   Clearing `KnownIPNetworks` and `KnownProxies` unconditionally without setting `options.ForwardLimit = 1` or checking the environment allows any external client to send `X-Forwarded-For: <random-ip>` on every request, bypassing the `100 req/min` `GlobalLimiter` IP partition.
-- **Exact Code Fix (`backend/src/ShopVerse.Api/Program.cs`):**
+- **Exact Code Fix (`backend/src/Mechware.Api/Program.cs`):**
 ```csharp
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -195,10 +195,10 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 ---
 
 ### 🟠 [MW-P1-NEW-05] (HIGH) Integration Tests Omit Security Header, Correlation-ID Sanitization, and `/health/ready` Verification
-- **File / Location:** `backend/tests/ShopVerse.IntegrationTests/Api/ApiStartupIntegrationTests.cs`
+- **File / Location:** `backend/tests/Mechware.IntegrationTests/Api/ApiStartupIntegrationTests.cs`
 - **Flaw Explanation:**
   `ApiStartupIntegrationTests.cs` only checks `/health/live` and `/unknown-route`. It never tests that `SecurityHeadersMiddleware` emits `Content-Security-Policy` / `X-Content-Type-Options: nosniff`, nor that `CorrelationIdMiddleware` rejects CRLF/malformed `X-Correlation-Id` inputs.
-- **Exact Code Fix (`backend/tests/ShopVerse.IntegrationTests/Api/ApiStartupIntegrationTests.cs`):**
+- **Exact Code Fix (`backend/tests/Mechware.IntegrationTests/Api/ApiStartupIntegrationTests.cs`):**
 ```csharp
     [Fact]
     public async Task SecurityHeaders_And_CorrelationId_Sanitization_AreEnforced()
@@ -267,17 +267,17 @@ We completed the deep Principal Architect & Staff Cybersecurity re-audit across 
      ```
 
 2. **[MW-P1-NEW-02] (HIGH) Allow Swagger UI in `SecurityHeadersMiddleware.cs` & Enable OpenAPI XML Comments:**
-   - In `backend/src/ShopVerse.Api/Middleware/SecurityHeadersMiddleware.cs`, check if `context.Request.Path.StartsWithSegments("/swagger") || context.Request.Path.StartsWithSegments("/openapi")`. If true, set `Content-Security-Policy` to `"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"`, otherwise keep `"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"`.
-   - In `backend/src/ShopVerse.Api/ShopVerse.Api.csproj`, add `<GenerateDocumentationFile>true</GenerateDocumentationFile>` and `<NoWarn>$(NoWarn);1591</NoWarn>`.
-   - In `backend/src/ShopVerse.Api/Program.cs` inside `AddSwaggerGen`, include the XML comments file via `c.IncludeXmlComments(xmlPath)`.
+   - In `backend/src/Mechware.Api/Middleware/SecurityHeadersMiddleware.cs`, check if `context.Request.Path.StartsWithSegments("/swagger") || context.Request.Path.StartsWithSegments("/openapi")`. If true, set `Content-Security-Policy` to `"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'"`, otherwise keep `"default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"`.
+   - In `backend/src/Mechware.Api/Mechware.Api.csproj`, add `<GenerateDocumentationFile>true</GenerateDocumentationFile>` and `<NoWarn>$(NoWarn);1591</NoWarn>`.
+   - In `backend/src/Mechware.Api/Program.cs` inside `AddSwaggerGen`, include the XML comments file via `c.IncludeXmlComments(xmlPath)`.
 
-3. **[MW-P1-NEW-03] (HIGH) Harden `ForwardedHeadersOptions` in `backend/src/ShopVerse.Api/Program.cs`:**
+3. **[MW-P1-NEW-03] (HIGH) Harden `ForwardedHeadersOptions` in `backend/src/Mechware.Api/Program.cs`:**
    - Set `options.ForwardLimit = 1;` and only call `options.KnownIPNetworks.Clear(); options.KnownProxies.Clear();` when `builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"` so production clients cannot spoof `X-Forwarded-For` to bypass rate limiting.
 
 4. **[MW-P1-NEW-04] (HIGH) Fix Double Stream Read in `frontend/packages/api-client/src/index.ts`:**
    - In `MechWareApiClient.fetch()`, when `!response.ok`, read `const rawBody = await response.text();` once, then `JSON.parse(rawBody)` inside `try/catch` instead of calling `await response.json()` followed by `await response.text()` on an already-consumed stream.
 
-5. **[MW-P1-NEW-05] (HIGH) Expand `backend/tests/ShopVerse.IntegrationTests/Api/ApiStartupIntegrationTests.cs`:**
+5. **[MW-P1-NEW-05] (HIGH) Expand `backend/tests/Mechware.IntegrationTests/Api/ApiStartupIntegrationTests.cs`:**
    - Add an integration test verifying `SecurityHeadersMiddleware` (`X-Content-Type-Options: nosniff`, `Content-Security-Policy`) and `CorrelationIdMiddleware` (confirming an invalid `X-Correlation-Id` with spaces/special chars is sanitized and replaced with a 32-char hex GUID).
 
 6. **[MW-P2-NEW-06] (MEDIUM) Replace Raw Tailwind Colors in `Badge.tsx` & Harden `lint-tokens.mjs`:**

@@ -19,7 +19,7 @@ Requirements:
 We implement a **Port and Adapter pattern** for search discovery:
 
 ```
-[ ShopVerse.Application ]
+[ Mechware.Application ]
            │
            ▼
 [ Port: ISearchProvider ]
@@ -30,7 +30,7 @@ We implement a **Port and Adapter pattern** for search discovery:
 (Production / Dev)        (Unit Tests / CI)
 ```
 
-### 1. Port Interface (`ShopVerse.Application/Common/Interfaces/ISearchProvider.cs`)
+### 1. Port Interface (`Mechware.Application/Common/Interfaces/ISearchProvider.cs`)
 ```csharp
 public interface ISearchProvider
 {
@@ -68,7 +68,7 @@ public interface ISearchProvider
 ### 3. Asynchronous Data Synchronization via Transactional Outbox
 1. Product mutations (create, update, price change, stock status change, delete) emit a `ProductUpdatedDomainEvent` or `ProductStockStatusChangedDomainEvent`.
 2. The domain event is saved to the PostgreSQL `outbox_messages` table within the same ACID transaction as the product record.
-3. The background outbox processor (`ShopVerse.Worker`) reads pending messages, maps them to `ProductSearchDocument`, and publishes them in batches to Meilisearch with retry policies (Polly).
+3. The background outbox processor (`Mechware.Worker`) reads pending messages, maps them to `ProductSearchDocument`, and publishes them in batches to Meilisearch with retry policies (Polly).
 4. Direct synchronous indexing from API controllers is prohibited to guarantee zero latency penalty on write operations.
 
 ## Consequences

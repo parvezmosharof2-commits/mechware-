@@ -22,9 +22,9 @@ docker compose -f infra/docker/docker-compose.yml up -d
 ### 3. Start C# .NET 10 Web API
 ```bash
 cd backend
-dotnet restore ShopVerse.sln
-dotnet test ShopVerse.sln
-dotnet run --project src/ShopVerse.Api
+dotnet restore Mechware.sln
+dotnet test Mechware.sln
+dotnet run --project src/Mechware.Api
 ```
 - API Swagger UI: [http://localhost:5000/swagger](http://localhost:5000/swagger)
 - Liveness Probe: [http://localhost:5000/health/live](http://localhost:5000/health/live)
@@ -33,15 +33,15 @@ dotnet run --project src/ShopVerse.Api
 ### 3b. Load the demo catalogue (Phase 4)
 ```bash
 cd backend
-dotnet run --project src/ShopVerse.Worker -- seed-catalog \
+dotnet run --project src/Mechware.Worker -- seed-catalog \
   --media-root ../frontend/apps/web/public/seed-media --report ../docs/PHASE4_SEED_REPORT.md
-dotnet run --project src/ShopVerse.Worker        # reservation-expiry + outbox workers
+dotnet run --project src/Mechware.Worker        # reservation-expiry + outbox workers
 ```
 Then try `GET http://localhost:5000/api/v1/storefront/categories`.
 
 No .NET at hand? The generated artwork is committed under `frontend/apps/web/public/seed-media/`, and a ready-made database (schema + the demo catalogue) is in `backend/seed/`:
 ```bash
-createdb shopverse && gunzip -c backend/seed/shopverse-catalog-seed.sql.gz | psql shopverse
+createdb mechware && gunzip -c backend/seed/mechware-catalog-seed.sql.gz | psql mechware
 ```
 
 ### 4. Start Next.js 15 Frontends
@@ -66,17 +66,17 @@ merges is [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) (Bangla). Every PR fills 
 ```
 MECHWARE/
 ├── backend/                             # C# 13 / .NET 10 Clean Architecture Solution
-│   ├── ShopVerse.sln                    # Visual Studio 2026 / .NET 10 Solution
+│   ├── Mechware.sln                    # Visual Studio 2026 / .NET 10 Solution
 │   ├── src/
-│   │   ├── ShopVerse.Domain/            # Pure Entities, Money Value Object, Enums, Domain Events
-│   │   ├── ShopVerse.Application/       # Service interfaces & contracts (no MediatR / FluentValidation)
-│   │   ├── ShopVerse.Infrastructure/    # EF Core 10, Npgsql, StackExchange.Redis, RedLock
-│   │   ├── ShopVerse.Payment/           # Reserved for gateway adapters (SSLCommerz, bKash, COD) — empty today
-│   │   ├── ShopVerse.Worker/            # BackgroundService, Outbox Relay, Reservation Expiry
-│   │   └── ShopVerse.Api/               # ASP.NET Core Web API, RFC 7807 ProblemDetails, Swagger
+│   │   ├── Mechware.Domain/            # Pure Entities, Money Value Object, Enums, Domain Events
+│   │   ├── Mechware.Application/       # Service interfaces & contracts (no MediatR / FluentValidation)
+│   │   ├── Mechware.Infrastructure/    # EF Core 10, Npgsql, StackExchange.Redis, RedLock
+│   │   ├── Mechware.Payment/           # Reserved for gateway adapters (SSLCommerz, bKash, COD) — empty today
+│   │   ├── Mechware.Worker/            # BackgroundService, Outbox Relay, Reservation Expiry
+│   │   └── Mechware.Api/               # ASP.NET Core Web API, RFC 7807 ProblemDetails, Swagger
 │   └── tests/
-│       ├── ShopVerse.UnitTests/         # Domain rules, property/fuzz, architecture, JWT attacker tests
-│       └── ShopVerse.IntegrationTests/  # Real PostgreSQL: services, races, IDOR, API security
+│       ├── Mechware.UnitTests/         # Domain rules, property/fuzz, architecture, JWT attacker tests
+│       └── Mechware.IntegrationTests/  # Real PostgreSQL: services, races, IDOR, API security
 ├── frontend/                            # Next.js 15 Monorepo
 │   ├── apps/
 │   │   ├── web/                         # Customer Storefront (App Router, ISR, next-intl)
@@ -99,7 +99,7 @@ MECHWARE/
 
 ### Backend Unit & Integration Tests:
 ```bash
-dotnet test backend/ShopVerse.sln
+dotnet test backend/Mechware.sln
 ```
 
 ### Frontend Typechecking & Builds:
