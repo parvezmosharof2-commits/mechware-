@@ -2,7 +2,7 @@
 
 ## Status
 Accepted (2026-10-29). Amended 2026-11-05: order numbers are `MW-YYMMDD-XXXXXX` (brief v2; implemented in
-`OrderNumber.Generate`, `backend/src/ShopVerse.Domain/Orders/OrderStateMachine.cs`) and sub-orders append `-01`, `-02`.
+`OrderNumber.Generate`, `backend/src/Mechware.Domain/Orders/OrderStateMachine.cs`) and sub-orders append `-01`, `-02`.
 Brief v2 launches MECHWARE as the direct seller; the parent order / sub-order split stays in the model so authorised
 distributors can be added later without a migration, but seller payouts and commission ledgers are after launch.
 

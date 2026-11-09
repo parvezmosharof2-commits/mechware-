@@ -1,17 +1,21 @@
 import type { Metadata } from 'next';
-import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
+import localFont from 'next/font/local';
 import { ToastProvider } from '@mechware/ui';
 import { AuthProvider } from '../lib/auth';
 import './globals.css';
 
-const inter = Inter({
-  subsets: ['latin'],
+// The fonts are kept in the repository (./fonts, SIL Open Font License; from Fontsource 5.3.0), not fetched from Google
+// Fonts at build time: a build must not fail because a font server is slow to answer.
+const inter = localFont({
+  src: './fonts/inter-latin-wght-normal.woff2',
+  weight: '100 900',
   variable: '--font-inter',
   display: 'swap'
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ['latin'],
+const plusJakarta = localFont({
+  src: './fonts/plus-jakarta-sans-latin-wght-normal.woff2',
+  weight: '200 800',
   variable: '--font-jakarta',
   display: 'swap'
 });

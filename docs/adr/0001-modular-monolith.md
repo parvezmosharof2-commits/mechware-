@@ -21,12 +21,12 @@ We adopt a **Modular Monolith architecture** for the backend built on **C# 13 / 
 2. **Explicit Interfaces**: Modules communicate strictly through public Application service interfaces (`IOrderService`, `IInventoryService`) or via asynchronous Domain Events. Direct cross-module repository access or EF Core `Include` across module boundaries is prohibited.
 3. **Single Database with Logical Schemas**: A single PostgreSQL 16 database is used, with tables logically grouped by domain prefix or PostgreSQL schemas (`identity.*`, `catalog.*`, `order.*`, `finance.*`).
 4. **Clean Architecture in C#**:
-   - `ShopVerse.Domain`: Pure domain entities, value objects (e.g. `Money`), domain events, enums. Zero external dependencies.
-   - `ShopVerse.Application`: CQRS Commands and Queries (MediatR), validation pipelines (FluentValidation), event handlers, application ports/interfaces.
-   - `ShopVerse.Infrastructure`: EF Core DbContext, Npgsql, Redis caching, MinIO/S3, Mailpit/SMTP, Meilisearch client.
-   - `ShopVerse.Payment`: Gateway adapters (Stripe, bKash, SSLCommerz, COD).
-   - `ShopVerse.Worker`: Background services (Hangfire / .NET BackgroundService) for outbox processing, reservation expiry, and reconciliations.
-   - `ShopVerse.Api`: ASP.NET Core Web API, controllers, middleware, RFC 7807 problem details, OpenAPI spec.
+   - `Mechware.Domain`: Pure domain entities, value objects (e.g. `Money`), domain events, enums. Zero external dependencies.
+   - `Mechware.Application`: CQRS Commands and Queries (MediatR), validation pipelines (FluentValidation), event handlers, application ports/interfaces.
+   - `Mechware.Infrastructure`: EF Core DbContext, Npgsql, Redis caching, MinIO/S3, Mailpit/SMTP, Meilisearch client.
+   - `Mechware.Payment`: Gateway adapters (Stripe, bKash, SSLCommerz, COD).
+   - `Mechware.Worker`: Background services (Hangfire / .NET BackgroundService) for outbox processing, reservation expiry, and reconciliations.
+   - `Mechware.Api`: ASP.NET Core Web API, controllers, middleware, RFC 7807 problem details, OpenAPI spec.
 5. **Next.js 15 Frontend Monorepo**:
    - `apps/web`: Public storefront with App Router (RSC, ISR, SSR).
    - `apps/console`: Protected Admin and Seller portals (client-side data tables, TanStack Table).

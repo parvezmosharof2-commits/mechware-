@@ -21,12 +21,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: shopverse
-          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_USER: mechware
+          POSTGRES_PASSWORD: mechware_secret
           POSTGRES_DB: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U mechware" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -34,7 +34,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      PGPASSWORD: shopverse_secret
+      PGPASSWORD: mechware_secret
 
     steps:
       - name: Checkout Code
@@ -47,23 +47,23 @@ jobs:
 
       - name: Create database and apply migrations
         run: |
-          dotnet restore backend/ShopVerse.sln
-          psql -h localhost -U shopverse -d postgres -c "CREATE DATABASE shopverse"
+          dotnet restore backend/Mechware.sln
+          psql -h localhost -U mechware -d postgres -c "CREATE DATABASE mechware"
           dotnet tool install --global dotnet-ef --version 10.*
           export PATH="$PATH:$HOME/.dotnet/tools"
-          SHOPVERSE_DESIGN_DB="Host=localhost;Port=5432;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
+          MECHWARE_DESIGN_DB="Host=localhost;Port=5432;Database=mechware;Username=mechware;Password=mechware_secret" \
             dotnet ef database update \
-              --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
+              --project backend/src/Mechware.Infrastructure --startup-project backend/src/Mechware.Infrastructure
 
       - name: Start the API
         run: |
-          dotnet publish backend/src/ShopVerse.Api -c Release -o "$RUNNER_TEMP/api"
+          dotnet publish backend/src/Mechware.Api -c Release -o "$RUNNER_TEMP/api"
           cd "$RUNNER_TEMP/api"
           # Development publishes the OpenAPI document ZAP reads. The scan is anonymous, so the demo accounts are
           # not used; the rate limit is raised so the scan measures the endpoints, not the limiter.
           RateLimiting__GlobalPermitPerMinute=100000 \
           ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://0.0.0.0:5000 \
-            nohup dotnet ShopVerse.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+            nohup dotnet Mechware.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 60); do
             curl -fs http://localhost:5000/health/live > /dev/null && exit 0
             sleep 2

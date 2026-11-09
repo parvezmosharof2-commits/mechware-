@@ -9,7 +9,7 @@
 > (`github.com/OWASP/ASVS`, tag `v5.0.0`, `5.0/docs_en/…_5.0.0_en.flat.json`, ৩৪৫টা requirement)।
 > প্রতিটা ID ওই তালিকায় আছে কিনা script দিয়ে মেলানো। ID শুধু সেখানেই বসানো হয়েছে যেখানে নিয়ন্ত্রণ আর requirement স্পষ্ট মেলে;
 > যেখানে ASVS-এ সরাসরি কিছু নেই, সেখানে "—" আর কারণ। `(L1)`/`(L2)`/`(L3)` = requirement-এর লেভেল।
-> টেস্টের পথ সংক্ষেপে: `UT` = `backend/tests/ShopVerse.UnitTests`, `IT` = `backend/tests/ShopVerse.IntegrationTests`.
+> টেস্টের পথ সংক্ষেপে: `UT` = `backend/tests/Mechware.UnitTests`, `IT` = `backend/tests/Mechware.IntegrationTests`.
 
 ## V1 — Encoding and Sanitization
 | নিয়ন্ত্রণ | ASVS ID | অবস্থা | টেস্ট / প্রমাণ | বাকি |

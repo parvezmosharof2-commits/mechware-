@@ -1,4 +1,4 @@
-# PROJECT BRIEF — [ShopVerse] Premium Multi-Vendor Commerce Platform
+# PROJECT BRIEF — [Mechware] Premium Multi-Vendor Commerce Platform
 
 > This file is the single source of truth. Every agent session MUST read this file and
 > `02_DESIGN_SYSTEM.md` before writing any code. If code and this brief disagree, the brief
@@ -24,7 +24,7 @@ in both themes, is fast, accessible, secure, covered by tests, and documented.
 
 ## 2. Business Context
 
-- **Brand**: [ShopVerse] — tagline: [Everything you love, delivered fast]
+- **Brand**: [Mechware] — tagline: [Everything you love, delivered fast]
 - **Business model**: marketplace.
   - Commission per category (default 8%, configurable 3–20%).
   - Seller plans: Free (commission only) and Pro (monthly fee, lower commission, more listings).
@@ -110,19 +110,19 @@ live chat, B2B pricing, multi-warehouse routing, flash-sale queueing, marketplac
 ## 5. Repository Structure
 
 ```
-shopverse/
+mechware/
 ├── backend/                             # C# .NET 8/9 Solution (Clean / Modular Architecture)
-│   ├── ShopVerse.sln
+│   ├── Mechware.sln
 │   ├── src/
-│   │   ├── ShopVerse.Domain/           # Entities, Enums, Value Objects (Money), Domain Events
-│   │   ├── ShopVerse.Application/      # CQRS Commands/Queries, MediatR Handlers, Validators
-│   │   ├── ShopVerse.Infrastructure/   # EF Core DbContext, Repositories, Redis, S3, Email/SMS
-│   │   ├── ShopVerse.Payment/          # Stripe, bKash, SSLCommerz implementations
-│   │   ├── ShopVerse.Worker/           # Background jobs, Outbox relay, reconciliation
-│   │   └── ShopVerse.Api/              # ASP.NET Core Web API, Controllers, Middleware, Swagger
+│   │   ├── Mechware.Domain/           # Entities, Enums, Value Objects (Money), Domain Events
+│   │   ├── Mechware.Application/      # CQRS Commands/Queries, MediatR Handlers, Validators
+│   │   ├── Mechware.Infrastructure/   # EF Core DbContext, Repositories, Redis, S3, Email/SMS
+│   │   ├── Mechware.Payment/          # Stripe, bKash, SSLCommerz implementations
+│   │   ├── Mechware.Worker/           # Background jobs, Outbox relay, reconciliation
+│   │   └── Mechware.Api/              # ASP.NET Core Web API, Controllers, Middleware, Swagger
 │   └── tests/
-│       ├── ShopVerse.UnitTests/        # Business logic, pricing, promotion, ledger tests
-│       └── ShopVerse.IntegrationTests/ # Testcontainers with real Postgres & Redis
+│       ├── Mechware.UnitTests/        # Business logic, pricing, promotion, ledger tests
+│       └── Mechware.IntegrationTests/ # Testcontainers with real Postgres & Redis
 ├── frontend/                            # Next.js Frontend Monorepo
 │   ├── apps/
 │   │   ├── web/                        # Customer storefront (Next.js 15)

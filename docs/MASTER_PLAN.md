@@ -191,7 +191,7 @@ Seller marketplace + payout ledger, AI assistant, PunchOut (cXML/OCI), installed
 
 | স্তর | কখন বাধ্যতামূলক | টুল / প্যাটার্ন |
 |---|---|---|
-| Unit | প্রতিটা ব্যবসার নিয়ম | xUnit, `backend/tests/ShopVerse.UnitTests` |
+| Unit | প্রতিটা ব্যবসার নিয়ম | xUnit, `backend/tests/Mechware.UnitTests` |
 | Property / fuzz | টাকা, দাম, ডিসকাউন্ট, পরিমাণ, পার্সিং | `Properties/PropertyRunner.cs` |
 | Integration | DB ছোঁয় এমন সব কিছু; race condition | আসল PostgreSQL, `Support/DbBackedFactory.cs` |
 | Concurrency | স্টক, ক্রেডিট, কুপন, approval, পেমেন্ট | সমান্তরাল অনুরোধ, invariant check |

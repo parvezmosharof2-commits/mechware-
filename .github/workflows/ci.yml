@@ -15,12 +15,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: shopverse
-          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_USER: mechware
+          POSTGRES_PASSWORD: mechware_secret
           POSTGRES_DB: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U mechware" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -28,7 +28,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      MECHWARE_TEST_PG: Host=localhost;Port=5432;Database=postgres;Username=shopverse;Password=shopverse_secret;Maximum Pool Size=150
+      MECHWARE_TEST_PG: Host=localhost;Port=5432;Database=postgres;Username=mechware;Password=mechware_secret;Maximum Pool Size=150
       MECHWARE_TEST_REDIS: localhost:6379,abortConnect=false,connectTimeout=2000
 
     steps:
@@ -41,17 +41,17 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore Backend Dependencies
-        run: dotnet restore backend/ShopVerse.sln
+        run: dotnet restore backend/Mechware.sln
 
       - name: Verify Code Formatting
-        run: dotnet format backend/ShopVerse.sln --verify-no-changes
+        run: dotnet format backend/Mechware.sln --verify-no-changes
 
       - name: Build Backend Solution
-        run: dotnet build backend/ShopVerse.sln --no-restore --configuration Release
+        run: dotnet build backend/Mechware.sln --no-restore --configuration Release
 
       - name: Run Unit & Integration Tests
         run: >
-          dotnet test backend/ShopVerse.sln --no-build --configuration Release --verbosity normal
+          dotnet test backend/Mechware.sln --no-build --configuration Release --verbosity normal
           --logger "trx;LogFilePrefix=results" --results-directory "$RUNNER_TEMP/test-results"
 
       # The console log buries failed test names under thousands of lines; print them plainly.
@@ -135,12 +135,12 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: shopverse
-          POSTGRES_PASSWORD: shopverse_secret
+          POSTGRES_USER: mechware
+          POSTGRES_PASSWORD: mechware_secret
           POSTGRES_DB: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U shopverse" --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U mechware" --health-interval 5s --health-timeout 5s --health-retries 10
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
@@ -148,7 +148,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      PGPASSWORD: shopverse_secret
+      PGPASSWORD: mechware_secret
       NEXT_PUBLIC_API_BASE_URL: http://localhost:5000
 
     steps:
@@ -171,27 +171,27 @@ jobs:
           version: 10
 
       - name: Restore backend dependencies
-        run: dotnet restore backend/ShopVerse.sln
+        run: dotnet restore backend/Mechware.sln
 
       - name: Create database and apply migrations
         run: |
-          psql -h localhost -U shopverse -d postgres -c "CREATE DATABASE shopverse"
+          psql -h localhost -U mechware -d postgres -c "CREATE DATABASE mechware"
           dotnet tool install --global dotnet-ef --version 10.*
           export PATH="$PATH:$HOME/.dotnet/tools"
-          SHOPVERSE_DESIGN_DB="Host=localhost;Port=5432;Database=shopverse;Username=shopverse;Password=shopverse_secret" \
+          MECHWARE_DESIGN_DB="Host=localhost;Port=5432;Database=mechware;Username=mechware;Password=mechware_secret" \
             dotnet ef database update \
-              --project backend/src/ShopVerse.Infrastructure --startup-project backend/src/ShopVerse.Infrastructure
+              --project backend/src/Mechware.Infrastructure --startup-project backend/src/Mechware.Infrastructure
 
       - name: Start the API
         run: |
-          dotnet publish backend/src/ShopVerse.Api -c Release -o "$RUNNER_TEMP/api"
+          dotnet publish backend/src/Mechware.Api -c Release -o "$RUNNER_TEMP/api"
           cd "$RUNNER_TEMP/api"
           # Development turns on the seeded staff / buyer accounts and the published dev TOTP secret.
           # One E2E run sends ~150 requests a minute from a single IP; the default global limit (100 a minute)
           # would queue them. Production keeps its own configuration.
           RateLimiting__GlobalPermitPerMinute=2000 \
           ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://localhost:5000 \
-            nohup dotnet ShopVerse.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
+            nohup dotnet Mechware.Api.dll > "$RUNNER_TEMP/api.log" 2>&1 &
           for i in $(seq 1 60); do
             curl -fs http://localhost:5000/health/live > /dev/null && exit 0
             sleep 2

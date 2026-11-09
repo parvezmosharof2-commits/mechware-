@@ -1,6 +1,6 @@
 /**
  * B2B company account types and pure helpers. No runtime imports, so it can be unit-tested directly with
- * Node's type stripping. Field names mirror the API DTOs in ShopVerse.Application.Companies.
+ * Node's type stripping. Field names mirror the API DTOs in Mechware.Application.Companies.
  */
 
 export interface MoneyDto {

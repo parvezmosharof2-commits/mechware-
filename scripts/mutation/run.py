@@ -59,15 +59,15 @@ for name, path, old, new in M:
         continue
     open(target, "w").write(source.replace(old, new))
     try:
-        build = sh("dotnet build backend/ShopVerse.slnx -v q -nologo 2>&1 | tail -3")
+        build = sh("dotnet build backend/Mechware.slnx -v q -nologo 2>&1 | tail -3")
         if " 0 Error(s)" not in build.stdout:
             res[name] = "KILLED(compile)"
         else:
-            test = sh(f'dotnet test backend/ShopVerse.slnx --no-build --filter "{filt}" -nologo 2>&1', timeout=TEST_TIMEOUT_SECONDS)
+            test = sh(f'dotnet test backend/Mechware.slnx --no-build --filter "{filt}" -nologo 2>&1', timeout=TEST_TIMEOUT_SECONDS)
             if test is None:
                 res[name] = "KILLED(timeout: tests hang)"
             else:
-                failed = [l.strip().split(" [")[0] for l in test.stdout.splitlines() if l.strip().startswith("Failed ShopVerse")]
+                failed = [l.strip().split(" [")[0] for l in test.stdout.splitlines() if l.strip().startswith("Failed Mechware")]
                 res[name] = ("KILLED: " + "; ".join(failed[:3])) if test.returncode != 0 else "SURVIVED"
     finally:
         open(target, "w").write(source)   # always put the original back

@@ -24,10 +24,10 @@ We enforce a secure, server-side-only integration pattern:
 [ Client Request (Chat / Search / Listing) ]
                  │
                  ▼
-[ ShopVerse.Api (ASP.NET Core Web API) ]
+[ Mechware.Api (ASP.NET Core Web API) ]
                  │
                  ▼
-[ ShopVerse.Application: IAiProvider ]
+[ Mechware.Application: IAiProvider ]
                  │
    ┌─────────────┴────────────────┐
    ▼                              ▼
@@ -40,7 +40,7 @@ We enforce a secure, server-side-only integration pattern:
 - It is **never** bundled in frontend code, git commits, Docker images, HTTP response payloads, or error logs.
 - Direct client-to-Gemini communication is strictly forbidden; all traffic flows through the backend API.
 
-### 2. Provider Abstraction (`ShopVerse.Application/Common/Interfaces/IAiProvider.cs`)
+### 2. Provider Abstraction (`Mechware.Application/Common/Interfaces/IAiProvider.cs`)
 ```csharp
 public interface IAiProvider
 {

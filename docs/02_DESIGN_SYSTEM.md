@@ -145,7 +145,7 @@ the `/design-system` showcase page.
 
 ### 4.1 Global header (sticky; condenses on scroll)
 - Top utility bar (desktop): delivery location selector ("Deliver to Dhaka 1207"),
-  language switch (EN/বাং), currency, help, "Sell on ShopVerse".
+  language switch (EN/বাং), currency, help, "Sell on Mechware".
 - Main bar: logo · category button (opens mega menu) · **large search bar (center, flex-grow)**
   with category scope select · account menu (Hello, Nadia / Sign in) · Orders · Wishlist (count) · Cart (count + total on desktop).
 - Search autocomplete (opens within 100ms of typing, debounced 150ms): recent searches,

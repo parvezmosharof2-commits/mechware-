@@ -350,26 +350,26 @@ test('Phase 3 R1 Audit Fix (AUD-P3-01): RFC 6238 §5.2 TOTP replay guard blocks 
 test('Phase 3 R1 Audit Fix (AUD-P3-03 & AUD-P3-06): Backend C# Clean Architecture DIP & OTP MaxAttempts=3 invariants', () => {
   const controllerPath = path.resolve(
     __dirname,
-    '../../../../backend/src/ShopVerse.Api/Controllers/AuthAndIdentityControllers.cs'
+    '../../../../backend/src/Mechware.Api/Controllers/AuthAndIdentityControllers.cs'
   );
   const otpPath = path.resolve(
     __dirname,
-    '../../../../backend/src/ShopVerse.Domain/Identity/OtpCode.cs'
+    '../../../../backend/src/Mechware.Domain/Identity/OtpCode.cs'
   );
   const userPath = path.resolve(
     __dirname,
-    '../../../../backend/src/ShopVerse.Domain/Identity/User.cs'
+    '../../../../backend/src/Mechware.Domain/Identity/User.cs'
   );
 
   const controllerSource = fs.readFileSync(controllerPath, 'utf8');
   const otpSource = fs.readFileSync(otpPath, 'utf8');
   const userSource = fs.readFileSync(userPath, 'utf8');
 
-  // Verify ShopVerse.Api controllers depend on IIdentityService, not ShopVerse.Infrastructure.Identity
+  // Verify Mechware.Api controllers depend on IIdentityService, not Mechware.Infrastructure.Identity
   assert.equal(
-    controllerSource.includes('using ShopVerse.Infrastructure.Identity;'),
+    controllerSource.includes('using Mechware.Infrastructure.Identity;'),
     false,
-    'API controller must not import ShopVerse.Infrastructure.Identity directly'
+    'API controller must not import Mechware.Infrastructure.Identity directly'
   );
   assert.equal(
     controllerSource.includes('IIdentityService'),
@@ -400,7 +400,7 @@ test('Phase 3 R1 Audit Fix (AUD-P3-03 & AUD-P3-06): Backend C# Clean Architectur
 test('Phase 3 R1 Audit Fix (AUD-P3-07): 3-Level Bangladesh Division -> District -> Upazila parent-child hierarchy validation', () => {
   const identityServicePath = path.resolve(
     __dirname,
-    '../../../../backend/src/ShopVerse.Infrastructure/Identity/IdentityService.cs'
+    '../../../../backend/src/Mechware.Infrastructure/Identity/IdentityService.cs'
   );
   const addressesPagePath = path.resolve(
     __dirname,
@@ -457,15 +457,15 @@ test('Phase 3 R1 Audit Fix (AUD-P3-07): 3-Level Bangladesh Division -> District 
   assert.equal(validateHierarchy('Dhaka', 'Gazipur', 'Savar EPZ'), false);
 });
 
-// 24. Pass 2 DB Index Parity (DATA_MODEL.md §2.1 -> ShopVerseDbContext.cs + Migration)
+// 24. Pass 2 DB Index Parity (DATA_MODEL.md §2.1 -> MechwareDbContext.cs + Migration)
 test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1 indexes', () => {
   const repoRoot = path.resolve(__dirname, '../../../../');
   const dbContextSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/ShopVerseDbContext.cs'),
+    path.join(repoRoot, 'backend/src/Mechware.Infrastructure/Persistence/MechwareDbContext.cs'),
     'utf8'
   );
   const migrationSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/src/ShopVerse.Infrastructure/Persistence/Migrations/20261029190715_Phase4CatalogInventoryOutbox.cs'),
+    path.join(repoRoot, 'backend/src/Mechware.Infrastructure/Persistence/Migrations/20261029190715_Phase4CatalogInventoryOutbox.cs'),
     'utf8'
   );
 
@@ -477,7 +477,7 @@ test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1
     'ix_otp_codes_recipient_type',
     'ix_otp_codes_expires_at'
   ]) {
-    assert.ok(dbContextSrc.includes(idxName), `ShopVerseDbContext missing index ${idxName}`);
+    assert.ok(dbContextSrc.includes(idxName), `MechwareDbContext missing index ${idxName}`);
     assert.ok(migrationSrc.includes(idxName), `identity migration missing index ${idxName}`);
   }
   // EF's default names for the indexes the model declares without an explicit name.
@@ -490,11 +490,11 @@ test('24. Phase 3 EF Core DbContext and Migration define all DATA_MODEL.md §2.1
 test('25. User entity computes progressive login delay and unit tests cover email OTP + password reset session revocation', () => {
   const repoRoot = path.resolve(__dirname, '../../../../');
   const userSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/src/ShopVerse.Domain/Identity/User.cs'),
+    path.join(repoRoot, 'backend/src/Mechware.Domain/Identity/User.cs'),
     'utf8'
   );
   const unitTestsSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/tests/ShopVerse.UnitTests/Identity/IdentityPhase3UnitTests.cs'),
+    path.join(repoRoot, 'backend/tests/Mechware.UnitTests/Identity/IdentityPhase3UnitTests.cs'),
     'utf8'
   );
 
@@ -502,7 +502,7 @@ test('25. User entity computes progressive login delay and unit tests cover emai
   assert.ok(unitTestsSrc.includes('GetProgressiveLoginDelayMilliseconds()'));
   // The service flow runs against PostgreSQL, so it lives with the integration tests.
   const identityDbTestsSrc = fs.readFileSync(
-    path.join(repoRoot, 'backend/tests/ShopVerse.IntegrationTests/Identity/IdentityServiceTests.cs'),
+    path.join(repoRoot, 'backend/tests/Mechware.IntegrationTests/Identity/IdentityServiceTests.cs'),
     'utf8'
   );
   assert.ok(identityDbTestsSrc.includes('EmailVerificationAndPasswordResetFlow_ShouldVerifyEmailAndRevokeExistingSessionsOnPasswordReset'));

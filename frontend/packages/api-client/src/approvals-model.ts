@@ -1,6 +1,6 @@
 /**
  * Approval rules and requests (brief v2 section 8.3): types and pure helpers. No runtime imports, so it can be
- * unit-tested directly. Field names mirror the API DTOs in ShopVerse.Application.Approvals.
+ * unit-tested directly. Field names mirror the API DTOs in Mechware.Application.Approvals.
  */
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';

@@ -65,13 +65,13 @@ Read docs/01_PROJECT_BRIEF.md (sections 4, 5, 6, 16), docs/ARCHITECTURE.md and P
 
 Build:
 1. Repository structure exactly as in brief section 5:
-   - backend/: C# 12 / .NET 8 (or 9) Solution (ShopVerse.sln):
-     - ShopVerse.Domain (Entities, Value Objects, Domain Events, Enums)
-     - ShopVerse.Application (CQRS Commands/Queries, MediatR, FluentValidation)
-     - ShopVerse.Infrastructure (EF Core DbContext, PostgreSQL, Redis, MinIO, Mailpit)
-     - ShopVerse.Payment (Payment gateway interfaces & providers)
-     - ShopVerse.Worker (BackgroundService / Hangfire outbox processor)
-     - ShopVerse.Api (ASP.NET Core Web API, Controllers, Middleware, Swagger/OpenAPI)
+   - backend/: C# 12 / .NET 8 (or 9) Solution (Mechware.sln):
+     - Mechware.Domain (Entities, Value Objects, Domain Events, Enums)
+     - Mechware.Application (CQRS Commands/Queries, MediatR, FluentValidation)
+     - Mechware.Infrastructure (EF Core DbContext, PostgreSQL, Redis, MinIO, Mailpit)
+     - Mechware.Payment (Payment gateway interfaces & providers)
+     - Mechware.Worker (BackgroundService / Hangfire outbox processor)
+     - Mechware.Api (ASP.NET Core Web API, Controllers, Middleware, Swagger/OpenAPI)
    - frontend/: Next.js 15 Monorepo (apps/web, apps/console, packages/ui, packages/config, packages/api-client)
 2. C# Backend Foundation:
    - Strongly typed appsettings.json with IOptions<T> validation at startup.
@@ -147,7 +147,7 @@ PHASE 3 — IDENTITY AND ACCESS
 
 Read brief sections 7 (User, Address), 9, 11.1 and docs/API_CONTRACT.md (auth, users).
 
-Backend (C# ShopVerse.Infrastructure/Identity, ShopVerse.Api):
+Backend (C# Mechware.Infrastructure/Identity, Mechware.Api):
 1. EF Core entities + Fluent API configurations + Migrations for User, Address, Role, Permission, UserRole, RefreshToken (token family tracking), OtpCode, AuditLog.
 2. Authentication pipeline:
    - Email + Password login with Argon2id / ASP.NET Core PasswordHasher.
@@ -195,7 +195,7 @@ PHASE 4 — CATALOG
 
 Read brief sections 7 (Category → InventoryItem), 8.1, 8.3 and design-system section 2.6.
 
-Backend (C# ShopVerse.Domain, Application, Infrastructure):
+Backend (C# Mechware.Domain, Application, Infrastructure):
 1. EF Core Models & Mapping: Category (hierarchical tree with materialized path, JSONB attribute schemas), Brand, Product, ProductVariant, ProductMedia, Attribute definitions, Warehouse, InventoryItem, StockReservation, SlugHistory.
 2. Product lifecycle state management: Draft -> PendingReview -> Active/Rejected -> Archived.
 3. High-concurrency Inventory Service:
@@ -343,7 +343,7 @@ PHASE 8 — CART, PROMOTIONS, CHECKOUT AND PAYMENTS (highest-risk phase — prio
 
 Read brief section 6 (principles 6 and 7), sections 8.2–8.7, 11.1 and design-system sections 4.5, 4.6.
 
-Backend (C# ShopVerse.Application & ShopVerse.Payment):
+Backend (C# Mechware.Application & Mechware.Payment):
 1. Cart Service: Redis-backed cart with signed guest token, atomic merge on user login, stock and price drift revalidation returning structured notifications.
 2. Promotions Engine: Pure, deterministic C# domain engine using MediatR. Computes coupon discounts, tiered volume pricing, category/seller promotions, and line-item allocations with zero rounding loss using banker's rounding on C# `decimal`.
 3. Checkout Orchestrator:

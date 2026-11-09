@@ -1,0 +1,113 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Mechware.Application.Catalog;
+
+namespace Mechware.Api.Controllers;
+
+/// <summary>Public, cache-backed storefront read endpoints (Phase 4 read models).</summary>
+[ApiController]
+[Route("api/v1/storefront")]
+[EnableRateLimiting(StorefrontController.ReadRateLimitPolicy)]
+public sealed class StorefrontController : ControllerBase
+{
+    public const string ReadRateLimitPolicy = "StorefrontRead";
+    private const string PublicCache = "public, max-age=30, stale-while-revalidate=60";
+
+    private readonly IStorefrontCatalogReader _catalog;
+    private readonly IProductDocumentService _documents;
+
+    public StorefrontController(IStorefrontCatalogReader catalog, IProductDocumentService documents)
+    {
+        _catalog = catalog;
+        _documents = documents;
+    }
+
+    /// <summary>
+    /// Looks a manufacturer part number up, written any way ("6ES7 214-1AG40-0XB0" = "6es72141ag400xb0"). A query string, not a
+    /// path segment: part numbers contain '/' and '.'. 200 with the matches (<c>exact</c> false means "did you mean"), 404 when
+    /// none, 400 when fewer than two letters or digits are left.
+    /// </summary>
+    [HttpGet("pn")]
+    public async Task<IActionResult> FindByPartNumber([FromQuery] string? q, CancellationToken ct)
+    {
+        var result = await _catalog.FindByPartNumberAsync(q, ct);
+        Response.Headers.CacheControl = "public, max-age=60";   // a miss too: repeated guesses are answered by the cache
+        if (result is null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "No product with this part number",
+                type: "https://mechware.com.bd/errors/part-number-not-found");
+        }
+
+        return Ok(new { data = result });
+    }
+
+    /// <summary>
+    /// A datasheet, CAD model or certificate of a published product. Always a download (never shown in the page), with the type we
+    /// detected when it was uploaded, not one the client chose. Anything else, including a product that is not published, is a 404.
+    /// </summary>
+    [HttpGet("products/{slug}/documents/{documentId:guid}")]
+    public async Task<IActionResult> DownloadDocument(string slug, Guid documentId, CancellationToken ct)
+    {
+        if (!Mechware.Domain.Catalog.Slug.IsValid(slug)) return NotFound();
+        var file = await _documents.OpenPublicAsync(slug, documentId, ct);
+        // Short: a deleted or unpublished document must stop being served soon, and downloads are rare enough not to need more.
+        Response.Headers.CacheControl = "public, max-age=60";
+        return File(file.Content, file.ContentType, file.FileName, enableRangeProcessing: false);
+    }
+
+    /// <summary>Product detail page payload. Retired slugs answer 301 to the current slug.</summary>
+    [HttpGet("products/{slug}")]
+    [ProducesResponseType(typeof(ProductDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status301MovedPermanently)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProductBySlug(string slug, CancellationToken ct)
+    {
+        var result = await _catalog.GetProductBySlugAsync(slug, ct);
+        if (result.IsRedirect)
+        {
+            Response.Headers.CacheControl = "public, max-age=3600";
+            return RedirectPermanent($"/api/v1/storefront/products/{result.RedirectToSlug}");
+        }
+
+        if (!result.IsFound)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Product not found",
+                detail: $"No active product with slug '{slug}'.", type: "https://mechware.com.bd/errors/product-not-found");
+        }
+
+        Response.Headers.CacheControl = PublicCache;
+        return Ok(new { data = result.Value });
+    }
+
+    [HttpGet("categories")]
+    public async Task<IActionResult> GetCategoryTree(CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "public, max-age=300";
+        return Ok(new { data = await _catalog.GetCategoryTreeAsync(ct) });
+    }
+
+    /// <summary>Products in a category and all of its descendants, best sellers first.</summary>
+    [HttpGet("categories/{slug}/products")]
+    public async Task<IActionResult> ListCategoryProducts(
+        string slug, [FromQuery] int page = 1, [FromQuery] int pageSize = 24, CancellationToken ct = default)
+    {
+        var result = await _catalog.ListProductsByCategoryAsync(slug, page, pageSize, ct);
+        if (result.IsRedirect)
+        {
+            return RedirectPermanent($"/api/v1/storefront/categories/{result.RedirectToSlug}/products?page={page}&pageSize={pageSize}");
+        }
+
+        if (!result.IsFound)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "Category not found",
+                detail: $"No category with slug '{slug}'.", type: "https://mechware.com.bd/errors/category-not-found");
+        }
+
+        Response.Headers.CacheControl = "public, max-age=30";
+        return Ok(new
+        {
+            data = result.Value!.Items,
+            meta = new { page = result.Value.Page, pageSize = result.Value.PageSize, totalCount = result.Value.TotalCount }
+        });
+    }
+}

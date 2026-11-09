@@ -13,7 +13,7 @@
 inventory, outbox, audit log, ADR)। কিন্তু **এটা এখনো ১০০K USD মানের প্ল্যান না**, কারণ:
 
 1. **ভুল প্রোডাক্ট টার্গেট** — brief টা একটা সাধারণ B2C ফ্যাশন-মার্কেটপ্লেস টেমপ্লেট থেকে নেওয়া
-   (ShopVerse, "black running shoes", Rahim/Nadia persona)। MECHWARE-এর আসল ক্রেতা কারখানা ও
+   (Mechware, "black running shoes", Rahim/Nadia persona)। MECHWARE-এর আসল ক্রেতা কারখানা ও
    কর্পোরেট (Square, Singer, RFL…)। অথচ brief-এ **"B2B pricing — do NOT build"** লেখা। এটাই সবচেয়ে বড় ভুল।
 2. **২১ দিনে AI দিয়ে পুরো সিস্টেম + AI দিয়েই অডিট** — বাস্তবসম্মত না। মানুষের pen-test, ডিজাইনার, QA নেই।
 3. **নিরাপত্তা "ফিচার" আছে, নিরাপত্তা "প্রসেস" নেই** — threat model, SAST/DAST, SBOM, patch SLA,
@@ -50,7 +50,7 @@ plan; the plan is what needs fixing.
 
 ### P0-1 — The brief's business context is industrial, but its scope and rules are B2C
 - `01_PROJECT_BRIEF.md` (v1) gets the business context and the 12 industrial categories right, but
-  the parts that drive the build come from a B2C template: repo name "shopverse", the AI example
+  the parts that drive the build come from a B2C template: repo name "mechware", the AI example
   "black running shoes", consumer personas (value buyer, premium buyer), consumer KPIs, consumer
   promotions, per-seller order splitting as the core flow. (Fixed in brief v2.)
 - `COMPANY_PROFILE.md` says MECHWARE sells automation (Siemens, Mitsubishi, Delta, Omron, Yaskawa),
@@ -282,7 +282,7 @@ and admin**. Keep a requirement → test → evidence matrix in `docs/security/A
 
 | Document | Change |
 |---|---|
-| `01_PROJECT_BRIEF.md` ✅ v2 | Replace ShopVerse/B2C personas and KPIs with B2B personas (purchase officer, maintenance engineer, plant manager approver, MECHWARE sales engineer); move B2B pricing, quotes, approvals, quick order into Phase 1 scope; defer seller payouts, flash sale, AI chat; add Guideline-2021, Mushak-6.3, PDPO 2025 to §14; Tailwind version aligned with code |
+| `01_PROJECT_BRIEF.md` ✅ v2 | Replace Mechware/B2C personas and KPIs with B2B personas (purchase officer, maintenance engineer, plant manager approver, MECHWARE sales engineer); move B2B pricing, quotes, approvals, quick order into Phase 1 scope; defer seller payouts, flash sale, AI chat; add Guideline-2021, Mushak-6.3, PDPO 2025 to §14; Tailwind version aligned with code |
 | `02_DESIGN_SYSTEM.md` | Light default storefront; add product-table, spec-table, price-break, quote and approval components (Bangla font stack and tabular numerals are already specified — keep them) |
 | `ARCHITECTURE.md` | Add the new modules (§3.2), inbox, event versioning, architecture tests, right-sized deployment, SLOs, RPO/RTO |
 | `DATA_MODEL.md` | Company, CompanyUser, Role, PriceList, PriceListEntry, Quote, QuoteLine, QuoteVersion, ApprovalRule, ApprovalRequest, Invoice (Mushak-6.3), CreditTerm, InstalledMachine, Consent |

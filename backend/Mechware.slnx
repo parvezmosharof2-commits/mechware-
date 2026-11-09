@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mechware.Api/Mechware.Api.csproj" />
+    <Project Path="src/Mechware.Application/Mechware.Application.csproj" />
+    <Project Path="src/Mechware.Domain/Mechware.Domain.csproj" />
+    <Project Path="src/Mechware.Infrastructure/Mechware.Infrastructure.csproj" />
+    <Project Path="src/Mechware.Payment/Mechware.Payment.csproj" />
+    <Project Path="src/Mechware.Worker/Mechware.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mechware.IntegrationTests/Mechware.IntegrationTests.csproj" />
+    <Project Path="tests/Mechware.UnitTests/Mechware.UnitTests.csproj" />
+  </Folder>
+</Solution>

@@ -369,8 +369,8 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
 ## ৭. যাচাইয়ের রেকর্ড (২০২৬-১১-০৫)
 
 **১. বিদ্যমান টেস্ট চালানো হয়েছে** (local PostgreSQL 16, Redis 7):
-- `dotnet test tests/ShopVerse.IntegrationTests --filter "PaymentServiceTests|OrdersApiTests|ApiSecurityRegressionTests"` → **৫৪/৫৪ পাস**।
-- `dotnet test tests/ShopVerse.UnitTests --filter "Payments|Pricing|Orders"` → **৯৯/৯৯ পাস**।
+- `dotnet test tests/Mechware.IntegrationTests --filter "PaymentServiceTests|OrdersApiTests|ApiSecurityRegressionTests"` → **৫৪/৫৪ পাস**।
+- `dotnet test tests/Mechware.UnitTests --filter "Payments|Pricing|Orders"` → **৯৯/৯৯ পাস**।
 
 **২. P1 ও P2-এর পুনরুৎপাদন:** একটা অস্থায়ী integration টেস্ট-ফাইল লেখা হয়েছিল, যেটা `PaymentServiceTests`-এর মতো একই fixture, একই seed আর একই `MockPaymentProvider` ব্যবহার করে। চালানোর পর মুছে ফেলা হয়েছে, commit হয়নি। দুটো probe চালানো হয়েছিল:
 
