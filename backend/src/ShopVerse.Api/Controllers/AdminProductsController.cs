@@ -32,4 +32,9 @@ public sealed class AdminProductsController(ICatalogAdminService catalog) : Cont
     [RequirePermission(Permissions.CatalogManage)]
     public async Task<IActionResult> SetOrderUnits(Guid productId, Guid variantId, [FromBody] SetOrderUnitsRequest request, CancellationToken ct) =>
         Ok(new { data = await catalog.SetOrderUnitsAsync(productId, variantId, request, ct) });
+
+    [HttpPut("{productId:guid}/variants/{variantId:guid}/part-number")]
+    [RequirePermission(Permissions.CatalogManage)]
+    public async Task<IActionResult> SetPartNumber(Guid productId, Guid variantId, [FromBody] SetPartNumberRequest request, CancellationToken ct) =>
+        Ok(new { data = await catalog.SetPartNumberAsync(productId, variantId, request, ct) });
 }

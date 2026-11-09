@@ -39,6 +39,15 @@ public sealed class ProductVariant : Entity<Guid>
     /// <summary>Units per pack; a line's quantity must be a multiple of it.</summary>
     public int PackSize { get; private set; } = 1;
 
+    /// <summary>The manufacturer's part number as printed (e.g. "6ES7214-1AG40-0XB0"); what buyers search for.</summary>
+    public string? ManufacturerPartNumber { get; private set; }
+
+    /// <summary><see cref="PartNumbers.Normalise"/> of the part number: what look-ups compare.</summary>
+    public string? PartNumberKey { get; private set; }
+
+    /// <summary><see cref="PartNumbers.Fuzzy"/> of the key, for the second look.</summary>
+    public string? PartNumberFuzzyKey { get; private set; }
+
     internal string OptionKey => OptionKeyOf(OptionValues);
 
     private ProductVariant() { }
@@ -124,6 +133,42 @@ public sealed class ProductVariant : Entity<Guid>
         quantity < MinOrderQty ? $"{Sku}: the minimum order is {MinOrderQty}."
         : quantity % PackSize != 0 ? $"{Sku}: sold in packs of {PackSize}; order a multiple of {PackSize}."
         : null;
+
+    /// <summary>
+    /// Sets or clears (null or blank) the manufacturer part number. At most 64 printable characters, and it must keep at least
+    /// two letters or digits once spaces and punctuation are dropped, or it could never be found.
+    /// </summary>
+    public void SetManufacturerPartNumber(string? partNumber)
+    {
+        if (string.IsNullOrWhiteSpace(partNumber))
+        {
+            ManufacturerPartNumber = PartNumberKey = PartNumberFuzzyKey = null;
+            UpdatedAtUtc = DateTime.UtcNow;
+            return;
+        }
+
+        string value = partNumber.Trim();
+        if (value.Length > PartNumbers.MaxLength)
+            throw new ValidationException("manufacturerPartNumber", $"A part number can be at most {PartNumbers.MaxLength} characters.");
+        if (value.Any(IsInvisible))
+            throw new ValidationException("manufacturerPartNumber", "A part number cannot contain control or invisible characters.");
+        string key = PartNumbers.Normalise(value);
+        if (key.Length < 2)
+            throw new ValidationException("manufacturerPartNumber", "A part number needs at least two letters or digits.");
+
+        ManufacturerPartNumber = value;
+        PartNumberKey = key;
+        PartNumberFuzzyKey = PartNumbers.Fuzzy(key);
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Control characters, and the invisible ones a paste from a PDF brings along: zero-width spaces, direction overrides (which
+    /// would show the number reversed), the byte-order mark, and line and paragraph separators.
+    /// </summary>
+    private static bool IsInvisible(char c) => char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.Control
+        or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
+        or System.Globalization.UnicodeCategory.ParagraphSeparator;
 
     /// <summary>What the cart needs to know about this SKU, with its order units.</summary>
     public Cart.VariantFacts ToCartFacts(bool sellable, long unitNetMinor, int available) =>

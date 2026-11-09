@@ -23,6 +23,25 @@ public sealed class StorefrontController : ControllerBase
     }
 
     /// <summary>
+    /// Looks a manufacturer part number up, written any way ("6ES7 214-1AG40-0XB0" = "6es72141ag400xb0"). A query string, not a
+    /// path segment: part numbers contain '/' and '.'. 200 with the matches (<c>exact</c> false means "did you mean"), 404 when
+    /// none, 400 when fewer than two letters or digits are left.
+    /// </summary>
+    [HttpGet("pn")]
+    public async Task<IActionResult> FindByPartNumber([FromQuery] string? q, CancellationToken ct)
+    {
+        var result = await _catalog.FindByPartNumberAsync(q, ct);
+        Response.Headers.CacheControl = "public, max-age=60";   // a miss too: repeated guesses are answered by the cache
+        if (result is null)
+        {
+            return Problem(statusCode: StatusCodes.Status404NotFound, title: "No product with this part number",
+                type: "https://mechware.com.bd/errors/part-number-not-found");
+        }
+
+        return Ok(new { data = result });
+    }
+
+    /// <summary>
     /// A datasheet, CAD model or certificate of a published product. Always a download (never shown in the page), with the type we
     /// detected when it was uploaded, not one the client chose. Anything else, including a product that is not published, is a 404.
     /// </summary>

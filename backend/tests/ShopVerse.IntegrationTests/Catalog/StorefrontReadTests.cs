@@ -67,6 +67,61 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
     }
 
     [PostgresAndRedisFact]
+    public async Task EverySeededPartNumber_IsFound_InEveryUsualFormat_AtLeast98Percent()
+    {
+        // Brief: exact part-number hits >= 98% "any formatting: spaces, dashes, case". Every published product's part number,
+        // written six ways, through the API.
+        List<(string Slug, string Mpn)> seeded;
+        await using (var db = _seed.Db.CreateContext())
+        {
+            seeded = await (from v in db.ProductVariants.AsNoTracking()
+                            join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
+                            where p.Status == ProductStatus.Active && p.DeletedAtUtc == null && v.ManufacturerPartNumber != null
+                            select new { p.Slug, v.ManufacturerPartNumber })
+                .ToListAsync().ContinueWith(t => t.Result.Select(r => (r.Slug, r.ManufacturerPartNumber!)).ToList());
+        }
+
+        seeded.Count.Should().BeGreaterThan(400, "the seed gives every published product's default SKU its part number");
+        var client = _factory!.CreateClient();
+        int tried = 0, exactHits = 0, nearTried = 0, nearHits = 0;
+        foreach (var (slug, mpn) in seeded)
+        {
+            string[] exactForms =
+            [
+                mpn, mpn.ToLowerInvariant(), mpn.Replace('-', ' '), mpn.Replace('-', '.'),
+                ShopVerse.Domain.Catalog.PartNumbers.Normalise(mpn)
+            ];
+            foreach (var typed in exactForms)
+            {
+                tried++;
+                if (await FoundAsync(typed, slug, mustBeExact: true)) exactHits++;
+            }
+
+            // Digits typed as look-alike letters: found as "did you mean".
+            string lookAlike = mpn.Replace('0', 'O').Replace('1', 'I');
+            if (lookAlike != mpn)
+            {
+                nearTried++;
+                if (await FoundAsync(lookAlike, slug, mustBeExact: false)) nearHits++;
+            }
+        }
+
+        _output.WriteLine($"exact: {exactHits}/{tried}, look-alike: {nearHits}/{nearTried}");
+        ((double)exactHits / tried).Should().BeGreaterThanOrEqualTo(0.98);
+        ((double)nearHits / nearTried).Should().BeGreaterThanOrEqualTo(0.98);
+
+        async Task<bool> FoundAsync(string typed, string slug, bool mustBeExact)
+        {
+            var response = await client.GetAsync("/api/v1/storefront/pn?q=" + Uri.EscapeDataString(typed));
+            if (response.StatusCode != HttpStatusCode.OK) return false;
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var data = doc.RootElement.GetProperty("data");
+            if (mustBeExact && !data.GetProperty("exact").GetBoolean()) return false;
+            return data.GetProperty("matches").EnumerateArray().Any(m => m.GetProperty("slug").GetString() == slug);
+        }
+    }
+
+    [PostgresAndRedisFact]
     public async Task GetProductBySlug_ReturnsRichProduct_FromDatabase_ThenRedis()
     {
         var slug = await AnySlugAsync("vfd007el21a");

@@ -291,6 +291,14 @@ The rules:
     - `POST /api/v1/orders` refuses a line that breaks either rule. The response is 400 `VALIDATION_ERROR` naming the SKU and the rule. The quantity is never rounded.
   - `alternatives`: `[{ slug, titleEn, titleBn, brandName }]`, parts that can be used instead, in the order staff set. Only products on sale and not obsolete are listed.
 
+#### `GET /storefront/pn?q={part number}` (sprint 5–6)
+- **Auth**: Public, storefront rate limit. **Caching**: `public, max-age=60`.
+- Finds published products, obsolete ones included, by manufacturer part number written any way. The key keeps only A–Z and 0–9 in upper case, and Bangla digits count as digits, so `6ES7 214-1AG40-0XB0`, `6es72141ag400xb0` and `৬ES7২১৪-1AG40-0XB0` are the same.
+- `q` is a query string, not a path segment, because part numbers contain `/` and `.`.
+- **Response**: 200 `{ data: { key, exact, matches: [{ slug, titleEn, titleBn, brandName, partNumber, sku, supplyStatus }] } }`, at most 10 products.
+  - `exact: false` means nothing matched as typed, and these were found by reading `O` as `0` and `I`/`L` as `1`. Show it as "did you mean".
+- 404 when nothing matches. 400 when fewer than two letters or digits are left. A query longer than 64 key characters is cut.
+
 #### `GET /search/autocomplete`
 - **Auth**: Public | **Rate Limit**: 30 req/10s | **SLA**: < 50ms p95
 - **Query Params**: `q=siem`
@@ -469,6 +477,7 @@ The rules:
 - `PUT /alternatives`: `{ alternativeProductIds: [uuid] }`, the complete list in display order. It may be empty, never missing.
   - At most 10, no duplicates, not the product itself. Each must exist, be published and not be obsolete. An alternative that has since gone obsolete must be dropped before the list can be saved again.
 - `PUT /variants/{variantId}/order-units`: `{ minOrderQty, packSize }`. The minimum must be a whole number of packs. Both are between 1 and 10,000.
+- `PUT /variants/{variantId}/part-number`: `{ manufacturerPartNumber }`, the part number as printed. At most 64 printable characters, with at least two letters or digits; null or blank clears it. The variant list in `GET /pim` shows it.
 
 #### Product documents (staff): `/admin/products/{productId}/documents`
 - **Auth**: Bearer, permission `catalog.manage`. Anonymous 401, other roles 403.

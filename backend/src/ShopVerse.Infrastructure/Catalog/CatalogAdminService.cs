@@ -69,6 +69,14 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
         return await ToDtoAsync(product, ct);
     }
 
+    public async Task<ProductPimDto> SetPartNumberAsync(Guid productId, Guid variantId, SetPartNumberRequest request, CancellationToken ct = default)
+    {
+        var product = await LoadAsync(productId, ct);
+        product.SetManufacturerPartNumber(variantId, request.ManufacturerPartNumber);
+        await SaveAsync(ct);
+        return await ToDtoAsync(product, ct);
+    }
+
     /// <summary>Two staff saving the same new row at once: the second gets a 409 to retry, not a 500.</summary>
     private async Task SaveAsync(CancellationToken ct)
     {
@@ -120,7 +128,7 @@ public sealed class CatalogAdminService(ShopVerseDbContext db) : ICatalogAdminSe
             }).ToList();
 
         var variants = product.Variants.OrderByDescending(v => v.IsDefault).ThenBy(v => v.Sku, StringComparer.Ordinal)
-            .Select(v => new AdminVariantUnitsDto(v.Id, v.Sku, v.MinOrderQty, v.PackSize)).ToList();
+            .Select(v => new AdminVariantUnitsDto(v.Id, v.Sku, v.MinOrderQty, v.PackSize, v.ManufacturerPartNumber)).ToList();
 
         return new ProductPimDto(product.Id, product.Slug, product.TitleEn, Name(product.Status), Name(product.SupplyStatus),
             successor, alternatives, variants);

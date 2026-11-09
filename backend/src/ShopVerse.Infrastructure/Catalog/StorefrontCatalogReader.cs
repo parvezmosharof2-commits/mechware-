@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ShopVerse.Application.Catalog;
@@ -41,6 +42,55 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         _redis = redis;
         _clock = clock;
     }
+
+    #region Part numbers
+
+    public const int MaxPartNumberMatches = 10;
+
+    public async Task<PartNumberLookupDto?> FindByPartNumberAsync(string? partNumber, CancellationToken ct = default)
+    {
+        string key = PartNumbers.Normalise(partNumber);
+        if (key.Length < 2)
+            throw new ShopVerse.Domain.Common.Exceptions.ValidationException("q", "Type at least two letters or digits of the part number.");
+
+        var exact = await MatchPartNumberAsync(v => v.PartNumberKey == key, ct);
+        if (exact.Count > 0) return new PartNumberLookupDto(key, true, exact);
+
+        // Nothing as typed: read O as 0 and I or L as 1 on both sides, and offer what that finds as "did you mean".
+        string fuzzy = PartNumbers.Fuzzy(key);
+        var near = await MatchPartNumberAsync(v => v.PartNumberFuzzyKey == fuzzy, ct);
+        return near.Count > 0 ? new PartNumberLookupDto(key, false, near) : null;
+    }
+
+    private async Task<List<PartNumberMatchDto>> MatchPartNumberAsync(Expression<Func<ShopVerse.Domain.Catalog.ProductVariant, bool>> matches, CancellationToken ct)
+    {
+        var variants = _db.ProductVariants.AsNoTracking().Where(matches).Where(v => v.Status == VariantStatus.Active);
+
+        // One entry per product, chosen in the database (so many SKUs of one product cannot crowd others out of the ten), and
+        // for each product the same SKU every time: the default one if it matches, else the first by SKU.
+        var rows = await (from p in _db.Products.AsNoTracking()
+                          where p.Status == ProductStatus.Active && p.DeletedAtUtc == null
+                                && variants.Any(v => v.ProductId == p.Id)
+                          join b in _db.Brands.AsNoTracking() on p.BrandId equals b.Id into bs
+                          from b in bs.DefaultIfEmpty()
+                          orderby p.TitleEn, p.Id
+                          select new
+                          {
+                              p.Slug,
+                              p.TitleEn,
+                              p.TitleBn,
+                              Brand = b == null ? null : b.Name,
+                              p.SupplyStatus,
+                              Variant = variants.Where(v => v.ProductId == p.Id).OrderByDescending(v => v.IsDefault).ThenBy(v => v.Sku)
+                                  .Select(v => new { v.ManufacturerPartNumber, v.Sku }).First()
+                          })
+            .Take(MaxPartNumberMatches).ToListAsync(ct);
+
+        return [.. rows.Select(r => new PartNumberMatchDto(r.Slug, r.TitleEn, r.TitleBn, r.Brand, r.Variant.ManufacturerPartNumber!, r.Variant.Sku,
+            SnakeCaseName(r.SupplyStatus)))];
+    }
+
+    #endregion
 
     #region Product by slug
 
