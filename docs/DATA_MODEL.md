@@ -327,10 +327,14 @@ Purchasable SKUs with physical pricing and stock attributes.
 | `currency` | `varchar(3)` | NOT NULL, default `'BDT'` | ISO 4217 code |
 | `is_default` | `boolean` | NOT NULL, default `false` | Highlighted variant on initial PDP view |
 | `status` | `varchar(30)` | NOT NULL, default `'active'` | `'active'`, `'inactive'` |
+| `manufacturer_part_number` | `varchar(64)` | nullable | The maker's part number as printed (e.g. `6ES7214-1AG40-0XB0`); no control or invisible characters |
+| `part_number_key` | `varchar(64)` | nullable | The part number reduced to A–Z and 0–9, upper case, Bangla digits as digits (`PartNumbers.Normalise`) |
+| `part_number_fuzzy_key` | `varchar(64)` | nullable | The key with O read as 0 and I or L as 1, for "did you mean" (`PartNumbers.Fuzzy`) |
 
 **Indexes:**
 - `ux_product_variants_sku` UNIQUE (`sku`) — SKU uniqueness.
 - `ix_product_variants_product_id` (`product_id`) — PDP variant retrieval.
+- `ix_variants_part_number_key` (`part_number_key`), `ix_variants_part_number_fuzzy_key` (`part_number_fuzzy_key`) — part-number look-up (`GET /storefront/pn`). Not unique: two sellers can sell the same part.
 
 #### `product_media`
 - `id (uuid PK)`, `product_id (uuid FK)`, `variant_id (uuid FK nullable)`, `url (text NOT NULL)`, `alt_text (varchar(255))`, `media_type (varchar(20) NOT NULL default 'image')` (`'image'`, `'video'`), `position (int NOT NULL default 0)`, `width (int)`, `height (int)`, `blur_data_url (text)`, `created_at`.
