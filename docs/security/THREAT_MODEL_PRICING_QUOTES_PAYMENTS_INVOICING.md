@@ -256,6 +256,7 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
   5. খরচ ও margin শুধু `pricing.view_cost` permission দেখবে; ক্রেতা কখনো দেখবে না।
   6. প্রতিটা অনুমোদনের audit থাকবে।
   - **লাগবে এমন টেস্ট:** `TheAuthorCannotApproveTheirOwnPriceList`, `BelowFloorLinesNeedAReason`, `AnOrderKeepsThePriceListVersionItWasPlacedWith`।
+  - **২০২৬-১১-১৩:** বিস্তারিত অপব্যবহারের ঘটনা, প্রতিকার আর টেস্টের চূড়ান্ত নাম এখন §৮-এ (D2.1)।
 
 ---
 
@@ -385,7 +386,61 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
 
 ---
 
+## ৮. D2 — Price list ও contract price: অপব্যবহারের ঘটনা ও টেস্ট (২০২৬-১১-১৩) [RULE]
+
+> **অবস্থা:** ডিজাইন ইউনিট D2.1-এর অংশ, AI সহকারীর লেখা। কোনো মানুষ রিভিউ করেননি, আর এখনো কোনো কোড নেই।
+> নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md)। এই অংশ R3-এর ছয়টা নিয়মকে বিস্তারিত করে।
+> নিচের টেস্টগুলো এখনো লেখা হয়নি। যে ইউনিট কোড বানাবে, এই নামগুলোই তার exit test (`docs/modules/D2.md`)।
+
+**R3-এর তিনটা টেস্টের নাম এখন:**
+- `TheAuthorCannotApproveTheirOwnPriceList` → `Approve_BySameUserWhoSubmitted_IsRefused` + `Approve_ByAUserWhoEditedTheDraft_IsRefused`
+- `BelowFloorLinesNeedAReason` → `Submit_WithBelowFloorEntryWithoutReason_IsRefused`
+- `AnOrderKeepsThePriceListVersionItWasPlacedWith` → নাম একই থাকছে
+
+**নতুন asset:** অনুমোদিত price list (কোম্পানির গোপন দাম); খরচ (cost) ও margin floor; order line-এ দামের snapshot।
+
+**নতুন trust boundary:**
+1. **কোম্পানির সদস্য → দামের API:** `companyId` প্রতিবার `company_members` থেকে যাচাই হয় (B1-এর নিয়ম)। ক্রেতা কখনো দাম বা price-list id পাঠান না।
+2. **স্টাফ → price-list API:** permission, তার ওপরে 4-eyes আর step-up।
+3. **Public cache, CDN, search index:** এখানে শুধু public দাম থাকে (list, sale, সবার জন্য quantity break)। কোম্পানির দাম কখনো নয়।
+
+| ID | অপব্যবহার | প্রতিকার | যে টেস্ট প্রমাণ করবে | ইউনিট |
+|---|---|---|---|---|
+| PL1 | **নিজের list নিজে অনুমোদন।** যিনি বানিয়েছেন, বদলেছেন বা জমা দিয়েছেন, তিনিই approve করেন | সার্ভারে চেক: approver ≠ creator, ≠ submitter, ≠ এই version-এর কোনো contributor। DB-তেও `CHECK (approved_by <> created_by AND approved_by <> submitted_by)` | `Approve_BySameUserWhoSubmitted_IsRefused`, `Approve_ByAUserWhoEditedTheDraft_IsRefused`, `ApprovedByEqualsSubmittedBy_FailsAtDbLevel` | D2.3, D2.4, D2.8 |
+| PL2 | চুরি হওয়া session দিয়ে, বা permission ছাড়া approve / withdraw | `pricelists.approve` + `[RequireStepUp]` (নতুন authenticator code)। Withdraw-এ কারণ লেখা বাধ্যতামূলক | `Approve_WithoutStepUpCode_IsRefused`, `Approve_WithoutPermission_Is403`, `Withdraw_NeedsPermissionStepUpAndReason` | D2.8 |
+| PL3 | অনুমোদনকারী যা দেখেছেন তার বদলে অন্য কিছু approve হয় (জমার পরে edit; একসাথে দুটো approve) | জমার পর list frozen। Approve-এ দেখানো `contentHash` ফেরত পাঠাতে হয়; না মিললে 409। Row `FOR UPDATE` | `EditingAPendingList_IsRefused`, `Approve_WithAStaleContentHash_IsRefused`, `TwoParallelApprovals_ApproveExactlyOnce` | D2.3, D2.8 |
+| PL4 | **চালু list বদলানো।** সাথে: request-এ status বা approver বসানো (mass assignment); list-এর কোম্পানি পাল্টে দেওয়া | Approved list immutable; বদল মানে নতুন version। DB trigger `UPDATE` / `DELETE` ফেরায়। Create / edit request-এ status, approver, author নেই। Scope ও `companyId` তৈরির পরে বদলায় না | `EditingAnApprovedList_IsRefused`, `UpdatingAnEntryOfAnApprovedList_FailsAtDbLevel`, `CreateOrEdit_CannotSetStatusOrApprover`, `ScopeAndCompany_CannotChangeAfterCreation` | D2.3, D2.4, D2.7 |
+| PL5 | **পেছনের তারিখের validity** দিয়ে আগের সময়ে কম দাম চালানো; অসীম মেয়াদ | `effectiveFromUtc = max(validFrom, approvedAt + delay)`। মেয়াদ সার্ভারের ঘড়িতে, `[from, to)`। `validTo` বাধ্যতামূলক, সর্বোচ্চ `MaxValidityDays`। দেওয়া অর্ডারের দাম আর কখনো নতুন করে হিসাব হয় না | `BackdatedValidFrom_NeverAppliesBeforeApproval`, `ValidityWindow_StartIsInclusive_EndIsExclusive`, `ValidityLongerThanTheMaximum_IsRefused`, `ApprovingAListWhoseWindowHasPassed_IsRefused` | D2.2, D2.3 |
+| PL6 | **এক কোম্পানি অন্য কোম্পানির দাম দেখে বা পায় (IDOR)** | `companyId` প্রতিবার `company_members` থেকে যাচাই; অন্য কোম্পানি → 404। ক্রেতার কোনো endpoint price-list id নেয় না। Resolver শুধু যাচাই করা company id পায়। Guest ও ব্যক্তিগত অর্ডারে negotiated দাম নেই | `Idor_PricesOfAnotherCompany_Are404`, `MemberOfTwoCompanies_GetsOnlyTheOrderingCompanysPrices`, `GuestOrPersonalOrder_NeverGetsACompanyPrice`, `Resolver_WithoutACompany_NeverReturnsANegotiatedSource` | D2.2, D2.5, D2.10 |
+| PL7 | **ক্রেতা দাম, price-list id বা মোট পাঠিয়ে কম দামে কেনে** | `PlaceOrderLine`-এ শুধু variant ও পরিমাণ; বাকি field উপেক্ষিত। `ExpectedGrandTotalMinor` শুধু অর্ডার থামাতে পারে, দাম বদলাতে পারে না | `ClientSentPriceOrPriceListId_IsIgnored`, `ClientExpectedTotal_CanOnlyRefuseAnOrder_NeverLowerItsPrice` | D2.5, D2.6 |
+| PL8 | **শূন্য বা ঋণাত্মক দাম**, শূন্য বা ঋণাত্মক `minQty`, বেশি কিনলে বেশি দাম | Domain validation, সাথে DB `CHECK (unit_price_minor > 0)` ও `CHECK (min_qty >= 1)`। একই variant-এ `minQty` বাড়লে দাম বাড়তে পারে না | `Entry_WithZeroOrNegativePrice_IsRefused`, `Entry_WithZeroOrNegativeMinQty_IsRefused`, `NonPositivePrice_FailsAtDbLevel`, `Breaks_MustNotGetDearerAsQuantityGrows`, `OrderingMore_NeverRaisesTheUnitPrice` | D2.2, D2.3, D2.4 |
+| PL9 | **Overflow**, বা বিশাল list / বিশাল প্রশ্ন দিয়ে সার্ভার আটকানো | `MaxUnitPriceMinor`, `MaxEntriesPerList`; দামের প্রশ্নে সর্বোচ্চ ১০০ variant; গুণ `checked` | `Entry_AboveTheMaximumUnitPrice_IsRefused`, `Resolver_NeverReturnsZeroNegativeOrOverflows` (property), `ListWithMoreThanTheMaximumEntries_IsRefused`, `PriceQuery_WithMoreThanTheMaximumVariants_IsRefused` | D2.2, D2.3, D2.10 |
+| PL10 | **স্টাফ margin floor-এর নিচে দাম নামায়** | Floor = cost-এর ওপর ন্যূনতম markup, ওপরের দিকে round। নিচের entry-তে লাগে: কারণ, `pricelists.approve_below_floor`, আর approver-এর স্পষ্ট স্বীকৃতি (entry id-র তালিকা সার্ভারের তালিকার সাথে মিলতে হবে)। Approve-এর মুহূর্তে আবার হিসাব। Cost না থাকলে floor-এর নিচে ধরা হয়। Cost-এর নিচে হলে প্রত্যাখ্যাত | `Submit_WithBelowFloorEntryWithoutReason_IsRefused`, `Approve_BelowFloorWithoutExtraPermission_IsRefused`, `Approve_BelowFloorWithoutAcknowledgement_IsRefused`, `FloorIsRecheckedAtApproval_WithTheCostOfThatMoment`, `EntryForAVariantWithoutCost_IsTreatedAsBelowFloor`, `EntryBelowCost_IsRefused_UnlessConfigAllows`, `Floor_IsRoundedUp_NeverDown` | D2.3, D2.8 |
+| PL11 | আগে floor কমিয়ে, তারপর list approve | Floor বদলাতে আলাদা permission (`pricing.manage_floors`) + step-up + audit (আগের ও পরের মান)। Global floor না থাকলে সব entry floor-এর নিচে (fail closed) | `ChangingAFloor_NeedsItsOwnPermissionAndStepUp_AndIsAudited`, `NoGlobalFloor_MeansEveryEntryIsBelowFloor` | D2.3, D2.9 |
+| PL12 | ক্রেতা বা অনুমতিহীন স্টাফ cost / margin দেখে | Cost ও floor শুধু `pricing.view_cost`। ক্রেতার response-এ এমন field-ই নেই | `BuyerPriceResponse_NeverContainsCostOrFloor`, `StaffWithoutViewCost_SeesNoCostFields` | D2.7, D2.10 |
+| PL13 | **Approval আর অর্ডারের race:** প্রায় একই মুহূর্তের দুই অর্ডার দুই দাম পায়, পরে ব্যাখ্যা করা যায় না | Activation delay: `effectiveFromUtc`-এর আগে পুরোনো দাম, তখন থেকে নতুন দাম; ততক্ষণে approval commit হয়ে গেছে। দাম নির্ভর করে শুধু `asOf` আর commit হওয়া ডেটার ওপর | `OrderPricedBeforeEffectiveFrom_PaysTheOldPrice_AtOrAfterIt_TheNewPrice`, `ResolvingAgainAtTheOrdersInstant_GivesTheSamePriceAndSource` | D2.2, D2.5 |
+| PL14 | Withdrawal আর অর্ডারের race; withdraw করে পুরোনো সস্তা version ফিরিয়ে আনা (একজনের হাতে দাম কমানো) | অর্ডার সংরক্ষণের transaction-এ ব্যবহৃত list row আবার `FOR SHARE` পড়া হয়; withdraw নেয় `FOR UPDATE`। চালু হওয়ার পরে withdraw করা version পুরোনো version-গুলোকে ঢেকেই রাখে | `WithdrawRacingAnOrder_NoOrderCommittedAfterTheWithdrawalCarriesItsPrice`, `WithdrawingAVersion_NeverBringsBackAnOlderCheaperOne` | D2.2, D2.6 |
+| PL15 | Cart আর checkout-এর মাঝে list-এর মেয়াদ শেষ: ক্রেতা না জেনে বেশি দাম দেন, বা মেয়াদ শেষ দামে কেনেন | অর্ডারের দাম এক মুহূর্তে, সার্ভারে। মেয়াদের বাইরের list কখনো ব্যবহার হয় না। মোট দেখানো অঙ্কের চেয়ে বেশি হলে `409 PRICE_CHANGED`, অর্ডার হয় না | `Resolver_NeverUsesAListOutsideItsWindowOrNotApproved`, `ListExpiredBetweenCartAndCheckout_OrderIsRefusedWithPriceChanged` | D2.2, D2.6 |
+| PL16 | অর্ডারের পরে দাম বদলে যায় (list বদল, withdraw, মেয়াদ শেষ), ইনভয়েস (E6) মেলে না | Order line-এ দাম, উৎস, list id ও version-এর snapshot। এরপর ওই অর্ডারের জন্য আর কোনো list পড়া হয় না। Idempotent replay আগের অর্ডারই ফেরত দেয় | `AnOrderKeepsThePriceListVersionItWasPlacedWith`, `WithdrawingAList_DoesNotChangePlacedOrders`, `IdempotentReplay_ReturnsTheOriginalPrices` | D2.5 |
+| PL17 | **Public cache-এ কোম্পানির দাম ঢুকে যায় (cache poisoning):** অন্য কেউ সেই দাম দেখে | কোম্পানির দাম আলাদা authenticated endpoint-এ, `Cache-Control: private, no-store`। Public endpoint, Redis `sf:*` আর search index-এ শুধু public দাম; guest আর সদস্য একই উত্তর পান। Web পাতা public ডেটা দিয়ে render হয়; কোম্পানির দাম আলাদা করে, ব্যবহারকারী ধরে আনা হয় | `CompanyPriceEndpoint_SendsPrivateNoStore`, `PublicProductResponse_IsTheSameForGuestAndCompanyMember`, `StorefrontCache_HoldsNoCompanyPrices`, E2E `ContractPrice_IsNotInTheCachedPageHtml` | D2.10, D2.13 |
+| PL18 | Contract দামের ওপর কুপন চাপিয়ে floor-এর নিচে নামা; পয়সার গরমিল | Negotiated উৎসের (Contract, GroupList, Quote) লাইন `PromotionEngine`-এ যায় না। Rounding আগের মতোই, প্রতি লাইনে একবার | `Coupon_DoesNotApplyToContractPricedLines`, `RandomOrdersWithContractPrices_AlwaysReconcileToThePoisha` | D2.6 |
+| PL19 | কে কোন দাম অনুমোদন করলেন তা অস্বীকার করা | প্রতিটা ধাপ audit-এ (actor, IP, `contentHash`)। Approval-এর মুহূর্তের cost ও floor entry-তে লেখা থাকে | `EveryPriceListTransition_IsAudited_WithActorAndContentHash` | D2.8 |
+| PL20 | Resolver ভুল উৎস বেছে নেয় (বেশি বা কম দাম) | Pure function, property test। নিয়ম A (ADR-0008 §5.1, মালিকের সিদ্ধান্ত ১): সবচেয়ে কম বৈধ দাম; সমান হলে বেশি নির্দিষ্ট উৎস | `Resolver_AlwaysReturnsTheLowestValidCandidate`, `Resolver_TieGoesToTheMoreSpecificSource`, `Resolver_PicksTheBreakWithTheLargestMinQtyNotAboveTheQuantity`, `Resolver_IsDeterministic_InputOrderDoesNotMatter` | D2.2 |
+| PL21 | (পরে, group list) একজন স্টাফ পরিচিত কোম্পানিকে সস্তা group-এ বসান | `Company.DefaultPriceListId` বদলাতে দ্বিতীয় অনুমোদনকারী লাগবে। আজ কোনো কোড এই column লেখে না [CODE] | `AssigningAGroupList_NeedsASecondApprover` | D2.14 ⏭ |
+
+**যে ঝুঁকি থেকে যায়:**
+- দুজন স্টাফের যোগসাজশ, বা একজনের হাতে দুটো স্টাফ অ্যাকাউন্ট: 4-eyes এটা ঠেকায় না। নিয়ন্ত্রণ: স্টাফের বাধ্যতামূলক 2FA, আলাদা `users.manage`, audit, floor-এর নিচের জন্য আলাদা permission।
+- Sale price আর promotion আজ margin floor-এর সাথে মেলানো হয় না। নিয়ম A-তে একটা ভুল sale price contract ক্রেতারাও পাবেন।
+- Audit log এখনো tamper-evident নয় (v1 H3)।
+- Cost ফাঁকা থাকলে fail closed; কিন্তু cost ভুল থাকলে floor-ও ভুল হয়, আর সেটা ধরা পড়ে না।
+- **আজকের কোডে পাওয়া (D2-এর আগে থেকেই আছে) [CODE + TEST]:** একই catalogue দাম guest-এর জন্য VAT-সহ আর কোম্পানির জন্য VAT ছাড়া ধরা হয়, তারপর কোম্পানির ওপর VAT যোগ হয় (`OrderService.cs`-এ `CompanyId` দেখে `TaxMode` ঠিক হয়; `OrderServiceTests`: ১,০০০.০০ দামে ১০৫,০০০ পয়সা)। ফলে একই পণ্যে কোম্পানি guest-এর চেয়ে VAT-এর হার পরিমাণ বেশি দেয়। এটা ঠিক না হলে "সবচেয়ে কম দাম" আর "আপনার contract দাম" অর্থহীন। ADR-0008 §2 ও §12, মালিকের সিদ্ধান্ত ২।
+
+**মালিকের সিদ্ধান্ত লাগবে** (ADR-0008 §12): (১) দাম বাছাইয়ের নিয়ম, (২) catalogue দামে VAT-এর অর্থ, (৩) margin floor-এর মান, (৪) launch-এ group list লাগবে কিনা।
+
+---
+
 ## সম্পর্কিত ডক
+- D2 নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md) (§৮ এর ভিত্তি)
 - v1: [`THREAT_MODEL_COMPANIES_APPROVALS.md`](THREAT_MODEL_COMPANIES_APPROVALS.md) (H1 approval, H3 audit — এখানে উল্লেখ আছে)
 - ASVS ম্যাট্রিক্স: [`ASVS_MATRIX.md`](ASVS_MATRIX.md)
 - আগের রিভিউ: `docs/reviews/R3_ORDERS_AND_PAYMENTS.md`

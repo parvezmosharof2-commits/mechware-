@@ -44,7 +44,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 | C9 | Reviews & Q&A | ⏭ | [C9](modules/C9.md) |
 | C10 | Bulk catalogue import | ⬜ **new** | [C10](modules/C10.md) |
 | D1 | Pricing engine | ✅ | [D1](modules/D1.md) |
-| D2 | Price lists & contract prices | ⬜ | [D2](modules/D2.md) |
+| D2 | Price lists & contract prices | 🟡 (D2.1 design ✅) | [D2](modules/D2.md) |
 | D3 | Promotions admin | ⏭ (engine ✅) | [D3](modules/D3.md) |
 | D4 | RFQ & quotes | ⬜ | [D4](modules/D4.md) |
 | D5 | Quick order & line validator | ⬜ | [D5](modules/D5.md) |
@@ -86,6 +86,12 @@ Console screens are **inside** each feature module (no separate "console phase")
 4. Read-deny rules for the never-open list in `.claude/settings.json` (permission change; owner must approve).
 5. Quote validity (15 vs 30+ days), approval stock hold (24 vs 48–72 h), S3 vs volume, login rate limit behind NAT.
 6. Staff role names: brief §9 vs code (`admin`, `finance`…) — settle in G5.
+7. D2 price lists (details in [ADR-0008](adr/0008-price-lists-and-contract-prices.md) and the D2 card's `## Open (owner)`):
+   (a) resolution rule — lowest valid price wins (recommended, brief §8.1) or contract always applies;
+   (b) company VAT basis — today a company pays catalogue price + VAT (1,000 → 1,050) while a guest pays 1,000 VAT-inclusive;
+   recommended: catalogue price is the VAT-inclusive public price for everyone (needed before D2.5);
+   (c) margin floor values (global, per brand/category) and whether below-cost can ever be approved (before D2.8);
+   (d) group lists at launch (recommended: defer, D2.14 ⏭).
 
 ## 6. Which model per unit type (owner-approved delegation, memory `feedback-subagent-delegation`)
 | Unit type | Model |
