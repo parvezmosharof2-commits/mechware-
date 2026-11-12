@@ -8,12 +8,11 @@ import { CompanyRoles, creditUsagePercent, hasRole, roleNames } from '@mechware/
 import { companiesApi } from '../../lib/api';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
-import { SitesPanel } from './SitesPanel';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath, useMoney } from './shared';
 
-// The sites tab is the default and stays in the page bundle. The other panels are only needed once their tab is
-// opened, so they load on demand instead of weighing down every first visit.
+// Every panel loads on demand (the dashboard header renders first), so the route's first-load JS stays under budget.
 const panelLoading = () => <ListSkeleton rows={2} />;
+const SitesPanel = dynamic(() => import('./SitesPanel').then((m) => m.SitesPanel), { loading: panelLoading });
 const CostCentresPanel = dynamic(() => import('./CostCentresPanel').then((m) => m.CostCentresPanel), { loading: panelLoading });
 const ApprovalsPanel = dynamic(() => import('./ApprovalsPanel').then((m) => m.ApprovalsPanel), { loading: panelLoading });
 const MembersPanel = dynamic(() => import('./MembersPanel').then((m) => m.MembersPanel), { loading: panelLoading });

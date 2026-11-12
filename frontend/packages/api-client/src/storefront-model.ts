@@ -91,8 +91,11 @@ export interface VariantDto {
 }
 export interface SuccessorDto { slug: string; titleEn: string; titleBn: string; isDropIn: boolean; note: string | null }
 export interface AlternativeDto { slug: string; titleEn: string; titleBn: string; brandName: string | null }
-/** Shape of PublicDocumentDto is not mapped here; fields beyond id may exist. */
-export interface PublicDocumentDto { id?: string; [key: string]: unknown }
+/** `kind` is the lower-cased document kind (datasheet, cad, certificate...); `url` is a download link on the API. */
+export interface PublicDocumentDto { id: string; kind: string; fileName: string; contentType: string; sizeBytes: number; url: string }
+
+/** A brand that has at least one published product (labels for brand facet slugs). */
+export interface BrandListItem { slug: string; name: string; logoUrl: string | null }
 
 export interface ProductDetail {
   id: string;

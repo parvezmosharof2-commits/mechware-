@@ -37,6 +37,8 @@ export interface SearchViewProps {
   params: SearchParams;
   result: SearchResponse | null;
   errorStatus: number | null;
+  /** brand slug -> display name from the storefront brand list; hit names and the humanised slug are fallbacks. */
+  brandLabels?: Record<string, string>;
 }
 
 const lastSegment = (path: string) => path.split(/[/>]/).filter(Boolean).pop() ?? path;
@@ -45,7 +47,7 @@ function humanize(slug: string): string {
   return slug.replace(/[-_]+/g, ' ').replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
-export function SearchView({ params, result, errorStatus }: SearchViewProps) {
+export function SearchView({ params, result, errorStatus, brandLabels = {} }: SearchViewProps) {
   const t = useTranslations('Search');
   const locale = useLocale();
   const router = useRouter();
@@ -70,7 +72,7 @@ export function SearchView({ params, result, errorStatus }: SearchViewProps) {
   const page = meta?.page ?? params.page ?? 1;
   const last = maxPage(meta?.total ?? 0, pageSize);
 
-  const brandNames = new Map(hits.map((h) => [h.brandSlug, h.brandName]));
+  const brandNames = new Map([...hits.map((h): [string, string] => [h.brandSlug, h.brandName]), ...Object.entries(brandLabels)]);
   const brandFacet = meta?.facets?.brandSlug ?? {};
   // A selected value stays listed even when its facet count dropped to zero, so it can always be unchecked.
   const brandSlugs = new Set([...Object.keys(brandFacet), ...(params.brand ?? [])]);

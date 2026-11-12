@@ -3,6 +3,7 @@ import { problemStatus } from './problems';
 import { toSearchQueryString } from './storefront-model';
 import type {
   AutocompleteSuggestion,
+  BrandListItem,
   CategoryNode,
   CategoryProductsMeta,
   PartNumberLookup,
@@ -37,6 +38,8 @@ export function createStorefrontApi(client: MechWareApiClient) {
 
     /** A retired slug answers 301; fetch follows it, so `data.slug` may differ from the one asked for (use it for the canonical URL). */
     productBySlug: (slug: string) => client.fetch<Data<ProductDetail>>(`/api/v1/storefront/products/${encodeURIComponent(slug)}`),
+
+    brands: () => client.fetch<Data<BrandListItem[]>>('/api/v1/storefront/brands'),
 
     categoryTree: () => client.fetch<Data<CategoryNode[]>>('/api/v1/storefront/categories'),
 

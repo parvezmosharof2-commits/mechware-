@@ -29,7 +29,8 @@ export function PartNumberText({ hit, query, highlight, t }: { hit: SearchHit; q
   );
 }
 
-export function Availability({ hit, t }: { hit: SearchHit; t: T }) {
+/** Stock and supply-status badges; the product page passes the selected variant's stock in the same shape. */
+export function Availability({ hit, t }: { hit: Pick<SearchHit, 'inStock' | 'supplyStatus'>; t: T }) {
   return (
     <span className="inline-flex flex-wrap gap-1">
       {hit.inStock ? (

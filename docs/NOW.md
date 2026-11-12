@@ -1,18 +1,12 @@
 # NOW (keep ≤ 30 lines; update at the end of every unit)
 
-**Last units:** C6.1 adapter ✅ · C6.2 indexer + rebuild ✅ · C6.3 search API ✅ (2026-11-12). Card: [modules/C6.md](modules/C6.md).
+**Done (2026-11-12):** C6 search module ✅ (C6.1–C6.6; C6.2b moved to E5) · A6 tooling ✅ · C7.1 api-client · C7.2 search page + filters · C7.3 results table/list · C7.4 product page core ✅. Cards: [C6](modules/C6.md), [A6](modules/A6.md), [C7](modules/C7.md).
 Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub).
 
-C6 module review done; its 8 findings fixed (C6.3b).
-C6.4 ✅ · C6.5 accuracy 100 % / k6 p95 17.8 ms ✅ → **module C6 complete** (C6.2b moved to E5). A6.5 PR template ✅.
-**Next:** A6.1 `check-cards` + A6.2 `test-module` scripts, then A6.3 layering ratchet, A6.4 swagger/types drift (Sonnet sub-agents).
+**Next:** C7.5 PDP specs/documents/stock/lifecycle (needs: manufacturer part number + quantity breaks in `ProductDetailDto` — small backend unit first), then C7.7 SEO/JSON-LD, C7.8 Lighthouse/a11y pass, H1 home/legal/sitemap.
 
-**After that:** C7 PLP/PDP + H1 home (frontend).
+**How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent (memory `feedback-subagent-delegation`). Tools: `python scripts/test_module.py <ID>`, `python scripts/check_cards.py`, `python scripts/api_snapshot.py` after API changes.
 
-**How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent (memory `feedback-subagent-delegation`).
-
-**Before starting:** Docker Desktop running → `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch`.
+**Before starting:** Docker Desktop running → `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch`. Seeded catalogue lives in DB `mechware` (Worker default); the Api's default is `mechware_db` → set `ConnectionStrings__DefaultConnection` for manual runs.
 
 **Owner actions (start now):** VAT consultant · lawyer · SSLCommerz/bKash merchant · SMS sender ID + email domain · pen-test booking · 5 real buyers + real product data. Open decisions: [MODULES.md](MODULES.md) §5.
-
-A6 tooling ✅ (check_cards, test_module, module-boundary ratchet, OpenAPI drift). C7.1 storefront api-client ✅. **Next:** C7.2 PLP shell + filters, C7.3 PLP table/list (Sonnet).

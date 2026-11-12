@@ -37,6 +37,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   let result: SearchResponse | null = null;
   let errorStatus: number | null = null;
+  // Brand names label the facet slugs; the list is cached by the API, and a failure only costs the nicer labels.
+  const brandsPromise = storefront.brands().then((r) => r.data, () => []);
   try {
     result = await storefront.search(params);
   } catch (error) {
@@ -44,5 +46,6 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     errorStatus = problemStatus(error) ?? 503;
   }
 
-  return <SearchView params={params} result={result} errorStatus={errorStatus} />;
+  const brandLabels = Object.fromEntries((await brandsPromise).map((b) => [b.slug, b.name]));
+  return <SearchView params={params} result={result} errorStatus={errorStatus} brandLabels={brandLabels} />;
 }
