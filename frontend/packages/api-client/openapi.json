@@ -2495,6 +2495,19 @@
         }
       }
     },
+    "/api/v1/storefront/brands": {
+      "get": {
+        "tags": [
+          "Storefront"
+        ],
+        "summary": "Brands that have at least one published product, by name; labels for the brand facet slugs.",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/storefront/categories/{slug}/products": {
       "get": {
         "tags": [

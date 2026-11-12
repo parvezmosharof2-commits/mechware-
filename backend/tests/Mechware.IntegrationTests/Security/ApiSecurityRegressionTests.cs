@@ -49,6 +49,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "GET api/v1/storefront/pn",   // part-number look-up: published products only, at most 10, storefront rate limit (PartNumberLookupTests)
         "GET api/v1/storefront/products/{slug}/documents/{documentId:guid}",   // a published product's datasheet, public like its page; unpublished or obsolete products, other products' ids and missing files are 404 (ProductDocumentUploadTests)
         "GET api/v1/storefront/categories",
+        "GET api/v1/storefront/brands",   // name, slug and logo of brands with a published product, public like the category tree (StorefrontReadTests)
         "GET api/v1/search",   // published products only (the index holds nothing else), validated input, storefront rate limit (SearchApiTests)
         "GET api/v1/search/autocomplete",   // titles of published products only, limit 10, storefront rate limit (SearchApiTests)
         "POST api/v1/payments/webhooks/{provider}",   // provider-to-server; its authority is the HMAC signature over the raw body, checked in PaymentService

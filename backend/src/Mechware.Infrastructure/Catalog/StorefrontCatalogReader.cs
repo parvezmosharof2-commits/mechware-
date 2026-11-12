@@ -328,6 +328,23 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         return tree;
     }
 
+    public async Task<IReadOnlyList<BrandListItemDto>> GetBrandsAsync(CancellationToken ct = default)
+    {
+        var redis = _redis.GetDatabase();
+        var cached = await redis.StringGetAsync(StorefrontCacheKeys.Brands);
+        if (cached.HasValue)
+            return JsonSerializer.Deserialize<List<BrandListItemDto>>((string)cached!, CacheJson.Options) ?? [];
+
+        var brands = await _db.Brands.AsNoTracking()
+            .Where(b => _db.Products.Any(p => p.BrandId == b.Id && p.Status == ProductStatus.Active && p.DeletedAtUtc == null))
+            .OrderBy(b => b.Name).ThenBy(b => b.Slug)
+            .Select(b => new BrandListItemDto(b.Slug, b.Name, b.LogoUrl))
+            .ToListAsync(ct);
+
+        await redis.StringSetAsync(StorefrontCacheKeys.Brands, JsonSerializer.Serialize(brands, CacheJson.Options), Jitter(StorefrontCacheKeys.BrandsTtl));
+        return brands;
+    }
+
     public async Task<SlugLookupResult<PagedResult<ProductCardDto>>> ListProductsByCategoryAsync(
         string categorySlug, int page, int pageSize, CancellationToken ct = default)
     {

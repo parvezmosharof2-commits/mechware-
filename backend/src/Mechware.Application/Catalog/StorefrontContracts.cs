@@ -63,6 +63,9 @@ public sealed record CategoryNodeDto(
     Guid Id, string NameEn, string NameBn, string Slug, string Path, int Depth, string? ImageUrl,
     IReadOnlyList<CategoryNodeDto> Children);
 
+/// <summary>A brand that has at least one published product, for labelling brand facets.</summary>
+public sealed record BrandListItemDto(string Slug, string Name, string? LogoUrl);
+
 public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount);
 
 /// <summary>Result of a slug lookup: found, permanently moved (301) or unknown.</summary>
@@ -95,6 +98,9 @@ public interface IStorefrontCatalogReader
 
     Task<SlugLookupResult<ProductDetailDto>> GetProductBySlugAsync(string slug, CancellationToken ct = default);
     Task<IReadOnlyList<CategoryNodeDto>> GetCategoryTreeAsync(CancellationToken ct = default);
+
+    /// <summary>Brands with at least one active, non-deleted product, sorted by name.</summary>
+    Task<IReadOnlyList<BrandListItemDto>> GetBrandsAsync(CancellationToken ct = default);
     Task<SlugLookupResult<PagedResult<ProductCardDto>>> ListProductsByCategoryAsync(
         string categorySlug, int page, int pageSize, CancellationToken ct = default);
 }

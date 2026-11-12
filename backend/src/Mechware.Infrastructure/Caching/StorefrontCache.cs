@@ -17,6 +17,8 @@ public static class StorefrontCacheKeys
     public static string Miss(string slug) => $"sf:miss:{slug}";
     public static string Stock(Guid productId) => $"sf:stock:{productId:N}";
     public static string Categories => "sf:categories";
+    public static string Brands => "sf:brands";
+    public static readonly TimeSpan BrandsTtl = TimeSpan.FromMinutes(5);
     public static string Listing(string categorySlug, int page, int size) => $"sf:plp:{categorySlug}:{page}:{size}";
 
     /// <summary>Set of every cached listing key, so invalidation is O(listings) instead of a keyspace SCAN.</summary>

@@ -86,6 +86,14 @@ public sealed class StorefrontController : ControllerBase
         return Ok(new { data = await _catalog.GetCategoryTreeAsync(ct) });
     }
 
+    /// <summary>Brands that have at least one published product, by name; labels for the brand facet slugs.</summary>
+    [HttpGet("brands")]
+    public async Task<IActionResult> ListBrands(CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "public, max-age=300";
+        return Ok(new { data = await _catalog.GetBrandsAsync(ct) });
+    }
+
     /// <summary>Products in a category and all of its descendants, best sellers first.</summary>
     [HttpGet("categories/{slug}/products")]
     public async Task<IActionResult> ListCategoryProducts(

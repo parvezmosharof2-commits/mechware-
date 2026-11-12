@@ -431,6 +431,39 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
     }
 
     [PostgresAndRedisFact]
+    public async Task Brands_ListsOnlyBrandsWithAnActiveProduct_SortedByName_AndIsCacheable()
+    {
+        const string unusedSlug = "zz-brand-without-products";
+        await using (var db = _seed.Db.CreateContext())
+        {
+            if (!await db.Brands.AnyAsync(b => b.Slug == unusedSlug))
+            {
+                db.Brands.Add(new Brand(Guid.NewGuid(), "ZZ Brand Without Products", unusedSlug, null, false));
+                await db.SaveChangesAsync();
+            }
+        }
+
+        var client = _factory!.CreateClient();
+        using var response = await client.GetAsync("/api/v1/storefront/brands");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.CacheControl!.ToString().Should().Be("public, max-age=300");
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var items = json.RootElement.GetProperty("data").EnumerateArray()
+            .Select(e => (Slug: e.GetProperty("slug").GetString()!, Name: e.GetProperty("name").GetString()!)).ToList();
+
+        items.Should().NotBeEmpty();
+        items.Select(i => i.Slug).Should().NotContain(unusedSlug);
+        items.Select(i => i.Name).Should().BeInAscendingOrder();
+
+        await using var verify = _seed.Db.CreateContext();
+        var expected = await verify.Brands.AsNoTracking()
+            .Where(b => verify.Products.Any(p => p.BrandId == b.Id && p.Status == ProductStatus.Active && p.DeletedAtUtc == null))
+            .Select(b => b.Slug).ToListAsync();
+        items.Select(i => i.Slug).Should().BeEquivalentTo(expected);
+    }
+
+    [PostgresAndRedisFact]
     public async Task ProductBySlug_P95_IsUnder50ms_WhenCached()
     {
         var slug = await AnySlugAsync("acs580");
