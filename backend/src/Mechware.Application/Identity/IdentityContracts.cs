@@ -191,6 +191,20 @@ public interface ISmsProvider
     Task SendSmsAsync(string phoneNumber, string message, CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Abuse limits on OTP text messages (F3a.2a: SMS pumping, OTP brute force by re-sending). Called before an OTP is created
+/// for a phone, whether or not the number has an account, so the limits answer the same for both.
+/// </summary>
+public interface IOtpSmsGuard
+{
+    /// <summary>
+    /// Reserves one OTP SMS to <paramref name="bdMobileE164"/> (already normalised, see <c>BdMobileNumber</c>) requested
+    /// from <paramref name="clientIp"/>. Throws <c>TooManyRequestsException</c> over any limit and
+    /// <c>ServiceUnavailableException</c> when the counters cannot be read (fails closed).
+    /// </summary>
+    Task AcquireAsync(string bdMobileE164, string? clientIp, CancellationToken cancellationToken = default);
+}
+
 public interface IPasswordHasherService
 {
     void ValidatePasswordPolicy(string password);

@@ -24,6 +24,7 @@ public sealed class IdentityService : IIdentityService
     private readonly ITokenService _tokenService;
     private readonly ITotpService _totpService;
     private readonly ISmsProvider _smsProvider;
+    private readonly IOtpSmsGuard _otpSmsGuard;
     private readonly MechwareDbContext _db;
     private readonly IReadOnlyList<BdLocation> _bdLocations;
     private readonly IGoogleIdTokenVerifier? _googleVerifier;
@@ -33,6 +34,7 @@ public sealed class IdentityService : IIdentityService
         ITokenService tokenService,
         ITotpService totpService,
         ISmsProvider smsProvider,
+        IOtpSmsGuard otpSmsGuard,
         MechwareDbContext db,
         IGoogleIdTokenVerifier? googleVerifier = null)
     {
@@ -41,6 +43,7 @@ public sealed class IdentityService : IIdentityService
         _tokenService = tokenService;
         _totpService = totpService;
         _smsProvider = smsProvider;
+        _otpSmsGuard = otpSmsGuard;
         _db = db;
         _bdLocations = BangladeshLocationSeeder.GetSeedLocations();
     }
@@ -54,7 +57,15 @@ public sealed class IdentityService : IIdentityService
         _passwordHasher.ValidatePasswordPolicy(request.Password);
 
         string normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        string? normalizedPhone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        string? normalizedPhone = null;
+        if (!string.IsNullOrWhiteSpace(request.Phone))
+        {
+            // The verification code goes by SMS, and only Bangladeshi mobiles receive one (F3a.2a). A format rule, so it
+            // answers the same whether or not the number has an account.
+            normalizedPhone = BdMobileNumber.TryNormalize(request.Phone, out string e164)
+                ? e164
+                : throw new ValidationException("phone", BdMobileOnlyMessage);
+        }
 
         // Hashing first keeps both outcomes equally slow, so timing does not tell them apart either.
         string passwordHash = _passwordHasher.HashPassword(request.Password);
@@ -63,6 +74,13 @@ public sealed class IdentityService : IIdentityService
         // invalid request is refused the same way whether or not the account exists: otherwise "fullName: X" answering
         // 201 for a taken e-mail and 400 for a free one would still tell them apart.
         var user = User.Create(normalizedEmail, normalizedPhone, passwordHash, request.FullName, request.Locale);
+
+        // SMS limits are spent before the existence check, so a number that has an account is throttled exactly like one
+        // that does not (the taken path sends nothing, but must not be cheaper to probe).
+        if (normalizedPhone is not null)
+        {
+            await _otpSmsGuard.AcquireAsync(normalizedPhone, clientIp, cancellationToken);
+        }
 
         // Finding #5 of the 2026-11-04 test: registration said "an account with this email address already exists",
         // which tells anyone whether an e-mail or phone number is a customer here. It now answers exactly as for a new
@@ -150,13 +168,27 @@ public sealed class IdentityService : IIdentityService
             otpType = OtpType.PhoneVerify;
         }
 
+        // Anything that is not an e-mail address goes by SMS, and only to a Bangladeshi mobile: refused before any code or
+        // message exists. The limits run before the account look-up, so they answer the same for unknown numbers.
+        bool bySms = !recipient.Contains('@');
+        if (bySms)
+        {
+            recipient = BdMobileNumber.TryNormalize(recipient, out string e164)
+                ? e164
+                : throw new ValidationException("recipient", BdMobileOnlyMessage);
+            await _otpSmsGuard.AcquireAsync(recipient, clientIp, cancellationToken);
+        }
+
         (OtpCode otp, string rawCode) = CreateOtp(recipient, otpType, now);
 
         User? user = await FindUserByIdentifierAsync(recipient, cancellationToken);
         RecordAudit(user?.Id, clientIp, "user.otp_dispatched", "otp_codes", otp.Id.ToString(), null, new { recipient, otp.Type, otp.ReferenceId });
         await _db.SaveChangesAsync(cancellationToken);
 
-        if (recipient.StartsWith('+') || recipient.All(char.IsDigit))
+        // A number without an account gets the same answer but no message: nobody could use that code (verification needs
+        // an account), and texting arbitrary numbers is exactly what SMS pumping wants. The real gateway adapter must not
+        // make this observable through response time (queue the send rather than await the provider).
+        if (bySms && user is not null)
         {
             await _smsProvider.SendSmsAsync(
                 recipient,
@@ -176,6 +208,10 @@ public sealed class IdentityService : IIdentityService
     {
         var now = utcNowOverride ?? DateTime.UtcNow;
         string recipient = request.Recipient.Trim().ToLowerInvariant();
+        if (BdMobileNumber.TryNormalize(recipient, out string e164))
+        {
+            recipient = e164;   // the same canonical form the code was stored under (SendOtpAsync, RegisterAsync)
+        }
 
         // The attempt counter is the brute-force limit, so the row is locked while it is checked and updated.
         await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
@@ -1399,12 +1435,16 @@ public sealed class IdentityService : IIdentityService
 
         string trimmed = identifier.Trim();
         string lowered = trimmed.ToLowerInvariant();
+        // Phones are stored in canonical form since F3a.2a; older rows may still hold what was typed.
+        string phone = BdMobileNumber.TryNormalize(trimmed, out string e164) ? e164 : trimmed;
         return await _db.Users
             .Include(u => u.UserRoles)
             .FirstOrDefaultAsync(
-                u => u.DeletedAtUtc == null && (u.Email == lowered || (u.Phone != null && u.Phone == trimmed)),
+                u => u.DeletedAtUtc == null && (u.Email == lowered || (u.Phone != null && (u.Phone == phone || u.Phone == trimmed))),
                 cancellationToken);
     }
+
+    private const string BdMobileOnlyMessage = "Codes are sent by SMS only to Bangladeshi mobile numbers (+8801XXXXXXXXX).";
 
     private async Task<User> GetUserByIdOrThrowAsync(Guid userId, CancellationToken cancellationToken) =>
         await _db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAtUtc == null, cancellationToken)

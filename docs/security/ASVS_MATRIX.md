@@ -72,6 +72,8 @@
 | প্রতি request-এ session আর role যাচাই (sign-out, suspend, role সরানো সঙ্গে সঙ্গে কার্যকর) | V7.4.1 (L1), V7.4.2 (L1), V8.2.1 (L1) | ✅ | `SessionValidator` + `JwtBearerAuthenticationHandler`; `IT/Api/LiveSessionTests.cs` | — |
 | Production-এ default/demo অ্যাকাউন্ট নেই | V6.3.2 (L1) | ✅ | `Production_HasNoDemoAccounts_…` (খালি DB) + `IT/Security/DemoAccountGuardTests.cs` (Development-এ চালানো DB-তে Production/Staging চালু হয় না) | — |
 | অ্যাকাউন্ট আছে কিনা ফাঁস না করা (registration, forgot password) | V6.3.8 (L3) | ✅ | `IdentityServiceTests.RegisteringAnEmailOrPhoneThatHasAnAccount_…`, `AnInvalidRegistration_IsRefusedTheSameWay_…` (বাগ #৫) | login-এর response time মেলানো যাচাই |
+| OTP SMS-এর অপব্যবহার ঠেকানো (SMS pumping, পুনরায় পাঠিয়ে brute force): নম্বরপ্রতি 60 সে. ব্যবধান, 3/10 মিনিট, 10/দিন; IP-প্রতি 20/ঘণ্টা; সারা সিস্টেমে 100/মিনিট (breaker); শুধু বাংলাদেশি মোবাইল; Redis না থাকলে পাঠানো বন্ধ (fail closed); কোডপ্রতি 3 ভুল চেষ্টায় কোড বাতিল | V6.3.1 (L1), V2.4.1 (L2), V6.6.3 (L2) | ✅ | `IT/Identity/OtpSmsAbuseTests.cs` (mutation-checked), `UT/Identity/BdMobileNumberTests.cs` (F3a.2a) | আসল SMS gateway adapter (F3a.2b) |
+| OTP পাঠানোয় অ্যাকাউন্ট আছে কিনা ফাঁস না করা | V6.3.8 (L3) | ✅ | একই উত্তর ও একই throttle, অ্যাকাউন্টহীন নম্বরে SMS যায় না; `KnownAndUnknownNumbers_GetTheSameAnswer_AndTheSameThrottle`, `Registration_ThrottlesANumberWithAnAccountExactlyLikeANewOne` | gateway পাঠানো queue-তে (response time), F3a.2b |
 | Bootstrap admin শুধু পাসওয়ার্ড + TOTP | V6.3.3 (L2) | ✅ | `Production_BootstrapAdmin_CanSignInOnlyWithPasswordAndTotp`, `UT/Identity/BootstrapAdminTests.cs` | — |
 
 ## V7 — Session Management

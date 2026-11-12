@@ -628,6 +628,9 @@ use a company id from a token claim.
 | E | Staff without 2FA | **M1 fixed**: every staff role; first authenticator only with an administrator's setup code | TEST (mutation-checked) |
 | S | Skip the authenticator with an OTP, a reset code or Google | **C2 / H5 fixed**: signed Google tokens only; no passwordless session for 2FA accounts | TEST (mutation-checked) |
 | S/E | Known staff account | **C1 fixed**: no demo accounts outside Development | RUN + TEST (mutation-checked) |
+| D | SMS pumping / toll fraud through `otp/send` or `register` | **F3a.2a**: Redis limits per number (60 s resend, 3 / 10 min, 10 / day), per IP (20 / h), global breaker (100 / min, error log); only `+8801[3-9]…` destinations; no SMS to numbers without an account; fails closed (503) without Redis | TEST `OtpSmsAbuseTests` (mutation-checked) |
+| S | Guess an OTP by re-requesting codes | 3 wrong tries burn a code (row lock, constant-time compare) + the send limits above: at most 9 guesses / 10 min, 30 / day per number | TEST `AfterThreeWrongCodes_TheRightCodeIsRefused_TheCodeIsBurned`, `ConcurrentWrongGuesses_CannotOutrunTheAttemptLimit` |
+| I | Learn whether a phone has an account from `otp/send` / `register` | Same answer and same throttle for both; limits spent before the look-up. Residual: a real gateway awaited in-request would add latency only for known numbers (F3a.2b must queue) | TEST `KnownAndUnknownNumbers_GetTheSameAnswer_AndTheSameThrottle` |
 
 ## 4. What the automated tests do not cover
 - No negative test that `support` cannot change credit via a forged request beyond the generic "every route protected" sweep; the per-permission mapping is only read, not tested.

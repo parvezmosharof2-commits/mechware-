@@ -87,6 +87,13 @@ public sealed class GlobalExceptionHandlingMiddleware
                 tooLargeEx.Message,
                 Array.Empty<object>()
             ),
+            // Same status, code and text as the endpoint limiter's 429 (TooManyRequests in Program.cs).
+            TooManyRequestsException throttledEx => (
+                HttpStatusCode.TooManyRequests,
+                throttledEx.Code,
+                throttledEx.Message,
+                Array.Empty<object>()
+            ),
             ServiceUnavailableException unavailableEx => (
                 HttpStatusCode.ServiceUnavailable,
                 unavailableEx.Code,

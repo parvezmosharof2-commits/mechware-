@@ -22,11 +22,13 @@ public static class IdentityTestKit
     private static readonly JwtTokenService Tokens =
         new("mechware-test-high-entropy-secret-key-256bit-2026!!", "https://api.example.test", "https://example.test", 15);
 
-    public static (MechwareDbContext Db, IdentityService Service) Open(PostgresDatabaseFixture fixture, IPasswordHasherService? hasher = null, MechwareDbContext? db = null)
+    public static (MechwareDbContext Db, IdentityService Service) Open(
+        PostgresDatabaseFixture fixture, IPasswordHasherService? hasher = null, MechwareDbContext? db = null,
+        ISmsProvider? sms = null, IOtpSmsGuard? smsGuard = null)
     {
         db ??= fixture.CreateContext();
-        var service = new IdentityService(hasher ?? Hasher, Tokens, Totp, new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance), db,
-            new GoogleIdTokenVerifier(GoogleClientId, GoogleKeys));
+        var service = new IdentityService(hasher ?? Hasher, Tokens, Totp, sms ?? new LoggingSmsProvider(NullLogger<LoggingSmsProvider>.Instance),
+            smsGuard ?? UnlimitedOtpSms.Instance, db, new GoogleIdTokenVerifier(GoogleClientId, GoogleKeys));
         return (db, service);
     }
 
@@ -77,6 +79,13 @@ public static class IdentityTestKit
         await using var db = fixture.CreateContext();
         await new IdentitySeeder(db, Hasher, Totp).SeedAsync(policy, bootstrap);
     }
+}
+
+/// <summary>No SMS limits: identity tests that are not about abuse limits (those are in <c>OtpSmsAbuseTests</c>).</summary>
+public sealed class UnlimitedOtpSms : IOtpSmsGuard
+{
+    public static readonly UnlimitedOtpSms Instance = new();
+    public Task AcquireAsync(string bdMobileE164, string? clientIp, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 /// <summary>Counts how many times a password was checked, to prove unknown and known accounts cost the same.</summary>

@@ -135,6 +135,12 @@ builder.Services.AddNotifications(
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();
 builder.Services.AddSingleton<ISmsProvider, LoggingSmsProvider>();
+// OTP SMS abuse limits (F3a.2a): per number, per IP, global breaker, in Redis; fails closed when Redis is down.
+builder.Services.AddOptions<OtpSmsLimitsOptions>()
+    .BindConfiguration(OtpSmsLimitsOptions.SectionName)
+    .Validate(o => o.IsValid(), "OtpSms limits must be positive and KeyPrefix must be set without braces.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IOtpSmsGuard, RedisOtpSmsGuard>();
 builder.Services.AddSingleton<ITokenService>(sp =>
 {
     JwtOptions jwtOpts = sp.GetRequiredService<IOptions<JwtOptions>>().Value;
@@ -483,7 +489,8 @@ internal static class TooManyRequests
         {
             context.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
         }
-        const string message = "Too many requests. Please wait a moment and try again.";
+        // Same text as a business throttle's 429 (TooManyRequestsException), so callers cannot tell the limits apart.
+        const string message = Mechware.Domain.Common.Exceptions.TooManyRequestsException.GenericMessage;
         string traceId = context.TraceIdentifier;
         await context.Response.WriteAsJsonAsync(new
         {
