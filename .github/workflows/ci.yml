@@ -7,6 +7,21 @@ on:
     branches: [ main, develop ]
 
 jobs:
+  check-cards:
+    name: Module cards (paths and test filters exist)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check card paths and test filters
+        run: python scripts/check_cards.py
+
   backend-checks:
     name: .NET 10 Solution Checks
     runs-on: ubuntu-latest

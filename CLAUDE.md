@@ -22,4 +22,5 @@ by running the tests yourself.
 ## Testing on this PC
 Docker Desktop running, then `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch`.
 Integration tests **skip** (look green) without Postgres/Redis/Meilisearch: always check `Skipped: 0`.
+`python scripts/test_module.py <ID>` runs a card's tests and prints only counts.
 Before push: `dotnet format backend/Mechware.sln --verify-no-changes`, `pnpm --dir frontend typecheck`, `pnpm --dir frontend lint`.

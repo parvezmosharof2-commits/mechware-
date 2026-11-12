@@ -4,6 +4,7 @@
 **Endpoints:** METHOD path — permission.
 **Tests:** `dotnet test backend/tests/Mechware.UnitTests --filter "FullyQualifiedName~<ns>"` (+ IntegrationTests). Check `Skipped: 0`.
 **Depends on:** … **Used by:** …
+Paths in backticks must exist (`python scripts/check_cards.py` checks them in CI); write files a future unit will create in plain text, without backticks.
 ## Units
 | Unit | Goal | Exit test | Model |
 |---|---|---|---|
