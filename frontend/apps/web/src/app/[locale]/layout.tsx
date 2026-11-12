@@ -5,6 +5,8 @@ import { getMessages } from 'next-intl/server';
 import { ToastProvider } from '@mechware/ui/src/components/Toast';
 import { AuthProvider } from '../../lib/auth';
 import { SITE_URL } from '../../lib/site-url';
+import { SiteHeader } from '../../components/layout/SiteHeader';
+import { SiteFooter } from '../../components/layout/SiteFooter';
 import '../globals.css';
 
 // The fonts are kept in the repository (../fonts, SIL Open Font License; from Fontsource 5.3.0), not fetched from Google
@@ -59,7 +61,11 @@ export default async function RootLayout({
       <body className="font-sans antialiased bg-bg text-text selection:bg-accent selection:text-accent-fg">
         <NextIntlClientProvider messages={messages}>
           <AuthProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              <SiteHeader />
+              {children}
+              <SiteFooter />
+            </ToastProvider>
           </AuthProvider>
         </NextIntlClientProvider>
       </body>

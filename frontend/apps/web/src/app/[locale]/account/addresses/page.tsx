@@ -214,7 +214,7 @@ export default function AccountAddressesPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 bg-bg-canvas p-6 text-fg-primary">
+    <main id="main" className="mx-auto max-w-5xl space-y-8 bg-bg-canvas p-6 text-fg-primary">
       <header className="border-b border-border-subtle pb-4">
         <h1 className="font-display text-2xl font-bold">
           Bangladesh Industrial Address Book & GDPR Privacy Controls

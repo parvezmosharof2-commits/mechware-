@@ -13,7 +13,7 @@ export default async function LoginPage({ params, searchParams }: LoginPageProps
   const returnTo = sanitizeReturnToPath(resolvedSearch.returnTo);
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-bg-canvas p-6">
+    <main id="main" className="flex min-h-[70vh] flex-col items-center justify-center bg-bg-canvas p-6">
       <AuthFlowSurface locale={locale} initialMode="signin" returnTo={returnTo} />
     </main>
   );

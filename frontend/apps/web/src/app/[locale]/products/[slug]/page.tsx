@@ -66,7 +66,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
   ]);
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
+    <main id="main" className="mx-auto max-w-7xl px-4 py-6">
       {/* Structured data: serialised with < > & escaped, so product text cannot close the tag. */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(productLd) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(breadcrumbLd) }} />

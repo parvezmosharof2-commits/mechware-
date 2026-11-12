@@ -408,5 +408,70 @@
     "dropIn": "Drop-in replacement",
     "alternatives": "Alternatives",
     "alternativeBrand": "by {brand}"
+  },
+  "Home": {
+    "metaTitle": "MECHWARE | Industrial automation parts for Bangladesh",
+    "metaDescription": "Search drives, PLCs, motors, sensors and switchgear by part number or brand. Prices in BDT, built for engineers and procurement teams in Bangladesh.",
+    "heroTitle": "Industrial parts, found by part number",
+    "heroSubtitle": "Drives, PLCs, motors, sensors and switchgear from trusted brands, priced in BDT for Bangladesh.",
+    "searchLabel": "Search by part number, brand or product",
+    "searchPlaceholder": "Search by part number, brand or product",
+    "searchButton": "Search",
+    "searchHelper": "Type the full or partial manufacturer part number. Dashes and spaces are ignored.",
+    "tryExamples": "Try:",
+    "categoriesTitle": "Shop by category",
+    "brandsTitle": "Brands",
+    "bestSellersTitle": "Best sellers",
+    "viewAll": "View all",
+    "whyTitle": "Built for engineers and procurement",
+    "comingSoon": "Coming soon",
+    "value": {
+      "search": {
+        "title": "Part-number search",
+        "body": "Find an exact manufacturer part number, or a close match, in one search."
+      },
+      "company": {
+        "title": "Company accounts",
+        "body": "Add your team, sites and cost centres, with approval rules for purchases."
+      },
+      "quotes": {
+        "title": "Quotes (RFQ)",
+        "body": "Request a quote for larger or repeat orders and get a priced response."
+      },
+      "credit": {
+        "title": "Credit terms and VAT invoices",
+        "body": "Credit terms for approved companies and VAT invoices for your accounts team."
+      }
+    }
+  },
+  "Layout": {
+    "skipToContent": "Skip to content",
+    "homeLabel": "MECHWARE home",
+    "searchLabel": "Search by part number, brand or product",
+    "searchPlaceholder": "Search by part number, brand or product",
+    "searchButton": "Search",
+    "categories": "Categories",
+    "categoriesUnavailable": "Categories are unavailable right now.",
+    "language": "Language",
+    "footerTagline": "Industrial automation parts for engineers and procurement teams in Bangladesh.",
+    "legalNav": "Legal",
+    "legalHeading": "Legal",
+    "legal": {
+      "terms": "Terms of service",
+      "privacy": "Privacy policy",
+      "cookies": "Cookie policy",
+      "returns": "Returns",
+      "shipping": "Shipping and delivery",
+      "credit": "Credit terms",
+      "quoteTerms": "Quote terms"
+    },
+    "helpNav": "Help",
+    "helpHeading": "Help",
+    "helpCentre": "Help centre",
+    "browseParts": "Browse all parts",
+    "contactHeading": "Contact",
+    "contactPlaceholder": "Contact details coming soon.",
+    "copyright": "© {year} MECHWARE. All rights reserved.",
+    "searchLabelHeader": "Search MECHWARE"
   }
 }

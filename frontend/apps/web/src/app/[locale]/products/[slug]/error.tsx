@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 export default function ProductError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const t = useTranslations('Product');
   return (
-    <main className="mx-auto max-w-2xl px-4 py-16 text-center">
+    <main id="main" className="mx-auto max-w-2xl px-4 py-16 text-center">
       <h1 className="font-display text-2xl font-bold text-text">{t('errorTitle')}</h1>
       <p role="alert" className="mt-3 text-text-muted">
         {t('errorBody')}

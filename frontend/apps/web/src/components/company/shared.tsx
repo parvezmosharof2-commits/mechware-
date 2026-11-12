@@ -85,7 +85,7 @@ export function LoadError({ error, onRetry }: { error: unknown; onRetry: () => v
 
 export function PageShell({ title, subtitle, children, back }: { title: string; subtitle?: string; children: React.ReactNode; back?: { href: string; label: string } }) {
   return (
-    <main className="min-h-screen bg-bg-canvas p-4 text-fg-primary sm:p-6">
+    <main id="main" className="min-h-[70vh] bg-bg-canvas p-4 text-fg-primary sm:p-6">
       <div className="mx-auto w-full max-w-4xl">
         {back && (
           <Link href={back.href} className="text-xs font-semibold text-brand-primary hover:underline">

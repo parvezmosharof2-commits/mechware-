@@ -66,6 +66,24 @@ async function openFilters(page, loc, vp) {
       const errors = [];
       page.on('pageerror', (e) => errors.push(e.message));
 
+      // H1.1 home: hero search (works as a plain GET form), real example chips, categories, header + footer
+      await page.goto(`${WEB}${loc.prefix}/`, { waitUntil: 'networkidle' });
+      check(`[${tag}] home h1, header, footer`, (await page.locator('h1').count()) === 1 && (await page.locator('header').count()) === 1 && (await page.locator('footer a[href*="/legal/terms"]').count()) === 1);
+      check(`[${tag}] home example chips link to searches`, (await page.locator('main a[href*="/search?q="]').count()) > 0);
+      check(`[${tag}] home categories and best sellers`, (await page.locator('#home-categories').count()) === 1 && (await page.locator('section[aria-labelledby="home-best"] a[href*="/products/"]').count()) > 0);
+      check(`[${tag}] home no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await axeCheck(page, `${tag} /`);
+      await page.locator('#hero-search').fill(QUERY);
+      await page.locator('#hero-search').press('Enter');
+      await page.waitForURL(new RegExp(`${loc.prefix}/search\\?q=${QUERY}`));
+      check(`[${tag}] hero search goes to ${loc.prefix}/search`, page.url().includes(`/search?q=${QUERY}`));
+      // language switch keeps the path
+      await page.goto(`${WEB}${loc.prefix}/search?q=${QUERY}`, { waitUntil: 'networkidle' });
+      await page.locator(lname === 'bn' ? 'header a[hreflang="en"]' : 'header a[hreflang="bn"]').click();
+      await page.waitForURL(lname === 'bn' ? new RegExp(`${WEB}/search\\?q=${QUERY}`) : new RegExp(`${WEB}/bn/search\\?q=${QUERY}`));
+      check(`[${tag}] language switch keeps path and query`, true);
+      await ctx.clearCookies(); // next-intl remembers the chosen language in NEXT_LOCALE
+
       await page.goto(`${WEB}${loc.prefix}/search?q=${QUERY}`, { waitUntil: 'networkidle' });
       check(`[${tag}] html lang`, (await page.getAttribute('html', 'lang')) === lname);
       const rows = page.locator('a[href*="/products/"]:visible');

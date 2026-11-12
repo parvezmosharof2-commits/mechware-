@@ -115,7 +115,7 @@ export function SearchView({ params, result, results, errorStatus, brandLabels =
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6">
+    <main id="main" className="mx-auto max-w-7xl px-4 py-6">
       <h1 className="font-display text-2xl font-bold text-text mb-4">{t('title')}</h1>
 
       <form role="search" onSubmit={onSubmit} className="flex gap-2 mb-4">

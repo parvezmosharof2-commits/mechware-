@@ -9,7 +9,7 @@ export default async function ForgotPasswordPage({ params }: ForgotPasswordPageP
   const locale = resolvedParams.locale === 'bn' ? 'bn' : 'en';
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-bg-canvas p-6">
+    <main id="main" className="flex min-h-[70vh] flex-col items-center justify-center bg-bg-canvas p-6">
       <AuthFlowSurface locale={locale} initialMode="forgot" />
     </main>
   );
