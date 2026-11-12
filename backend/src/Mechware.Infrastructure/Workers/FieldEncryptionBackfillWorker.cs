@@ -22,7 +22,16 @@ public sealed class FieldEncryptionBackfillWorker(IServiceScopeFactory scopes, I
         try
         {
             await using var scope = scopes.CreateAsyncScope();
-            int done = await RunAsync(scope.ServiceProvider.GetRequiredService<MechwareDbContext>(), stoppingToken);
+            var db = scope.ServiceProvider.GetRequiredService<MechwareDbContext>();
+
+            // Second-factor secrets first: they gate sign-in, and the company run throws when a row is stuck. The deploy's
+            // `migrate` step already did this; here it catches values written by an older API still running meanwhile.
+            var totp = await Identity.TwoFactorSecrets.EncryptStoredAsync(db, stoppingToken);
+            if (totp.Rewritten > 0) logger.LogInformation("Encrypted the second-factor secrets of {Count} users under the current key", totp.Rewritten);
+            if (totp.Unreadable > 0)
+                logger.LogError("{Count} users' second-factor secrets cannot be decrypted with the configured keys; they cannot sign in with them", totp.Unreadable);
+
+            int done = await RunAsync(db, stoppingToken);
             if (done > 0) logger.LogInformation("Re-encrypted business identifiers of {Count} companies under the current key", done);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

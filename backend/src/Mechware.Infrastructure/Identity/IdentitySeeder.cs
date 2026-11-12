@@ -50,7 +50,8 @@ public sealed class IdentitySeeder(MechwareDbContext db, IPasswordHasherService 
         }
 
         admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
-        admin.ConfigureTwoFactorSecret(settings.TotpSecret, JsonSerializer.Serialize(Array.Empty<string>()), now);
+        admin.ConfigureTwoFactorSecret(TwoFactorSecrets.SealSecret(admin.Id, settings.TotpSecret),
+            TwoFactorSecrets.SealRecoveryCodes(admin.Id, JsonSerializer.Serialize(Array.Empty<string>())), now);
         admin.EnableTwoFactor(now);
         db.Users.Add(admin);
         db.AuditLogs.Add(new AuditLog(
@@ -74,7 +75,8 @@ public sealed class IdentitySeeder(MechwareDbContext db, IPasswordHasherService 
         admin.VerifyPhone(now);
         admin.AssignRole(Guid.Parse("00000000-0000-0000-0000-000000000001"), Permissions.Roles.Admin);
         var recoveryHashes = new[] { totpService.HashRecoveryCode("ABCDE-12345") };
-        admin.ConfigureTwoFactorSecret(PublishedDemoCredentials.AdminTotpSecret, JsonSerializer.Serialize(recoveryHashes), now);
+        admin.ConfigureTwoFactorSecret(TwoFactorSecrets.SealSecret(admin.Id, PublishedDemoCredentials.AdminTotpSecret),
+            TwoFactorSecrets.SealRecoveryCodes(admin.Id, JsonSerializer.Serialize(recoveryHashes)), now);
         admin.EnableTwoFactor(now);
         db.Users.Add(admin);
 

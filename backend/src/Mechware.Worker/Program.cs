@@ -16,11 +16,16 @@ if (args.Length > 0 && args[0] == "seed-catalog")
 
 var builder = Host.CreateApplicationBuilder(args);
 
-// `-- migrate` is the deploy step: applies pending migrations and exits 0, or prints the error and exits 1. Run it once per
-// release before the new API/Worker start (the API never migrates). Concurrent runs are safe (see MechwareDatabase.MigrateAsync).
-if (args.Length > 0 && args[0] == "migrate")
+// `-- migrate` is the deploy step: applies pending migrations, then encrypts second-factor secrets still in clear (the new
+// API refuses those), and exits 0, or prints the error and exits 1. Run it once per release before the new API/Worker start
+// (the API never migrates). Concurrent runs are safe (see MechwareDatabase.MigrateAsync; the encryption skips rows changed
+// meanwhile). It needs Encryption__FieldKey (and PreviousFieldKeys during a rotation), like the API.
+// `-- encrypt-two-factor-secrets` runs only the second step, e.g. after a key rotation.
+if (args.Length > 0 && args[0] is "migrate" or "encrypt-two-factor-secrets")
 {
-    return await MechwareDatabase.MigrateAsync(MechwareDatabase.ConnectionString(builder.Configuration), Console.Out, Console.Error);
+    string connectionString = MechwareDatabase.ConnectionString(builder.Configuration);
+    if (args[0] == "migrate" && await MechwareDatabase.MigrateAsync(connectionString, Console.Out, Console.Error) != 0) return 1;
+    return await EncryptTwoFactorSecretsAsync(builder.Configuration, builder.Environment, connectionString);
 }
 
 // `-- rebuild-search` asks the running indexer for a full rebuild (fresh index + swap) and exits.
@@ -59,6 +64,31 @@ builder.Services.AddNotifications(
 
 await builder.Build().RunAsync();
 return 0;
+
+static async Task<int> EncryptTwoFactorSecretsAsync(IConfiguration configuration, IHostEnvironment environment, string connectionString)
+{
+    try
+    {
+        // Same rule as the API: outside Development a real key from the secret store, never the published one.
+        Mechware.Infrastructure.Security.FieldEncryption.ConfigureFrom(configuration["Encryption:FieldKey"], configuration["Encryption:PreviousFieldKeys"],
+            requireRealKey: !(environment.IsDevelopment() || environment.IsEnvironment("Testing")));
+        await using var db = new MechwareDbContext(new DbContextOptionsBuilder<MechwareDbContext>().UseNpgsql(connectionString).Options);
+        var result = await Mechware.Infrastructure.Identity.TwoFactorSecrets.EncryptStoredAsync(db, CancellationToken.None);
+        Console.WriteLine($"Second-factor secrets: {result.Rewritten} user(s) encrypted under the current key.");
+        if (result.Unreadable > 0)
+        {
+            // Not a deploy blocker: those users cannot sign in with the value anyway (a previous key retired too early, or
+            // the row was changed by hand). They need a new authenticator; the API logs each one at sign-in.
+            await Console.Error.WriteLineAsync($"WARNING: {result.Unreadable} user(s) have second-factor values that do not decrypt with the configured keys.");
+        }
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        await Console.Error.WriteLineAsync($"Encrypting second-factor secrets FAILED: {ex.GetType().Name}: {ex.Message}");
+        return 1;
+    }
+}
 
 static string RedisConnection(IConfiguration configuration) =>
     configuration.GetConnectionString("Redis") ?? configuration["Redis:ConnectionString"] ?? "localhost:6379";

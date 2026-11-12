@@ -34,12 +34,29 @@ public sealed class DemoAccountGuard(MechwareDbContext db)
     public async Task<IReadOnlyList<string>> FindPublishedCredentialAccountsAsync(CancellationToken cancellationToken = default)
     {
         var emails = PublishedDemoCredentials.Emails;
-        return await db.Users
-            .Where(u => u.DeletedAtUtc == null
-                        && (emails.Contains(u.Email) || u.TwoFactorSecret == PublishedDemoCredentials.AdminTotpSecret))
-            .OrderBy(u => u.Email)
-            .Select(u => u.Email)
+        // The secret is encrypted with a fresh nonce, so SQL cannot compare it: every live account with one is decrypted here
+        // (start-up only). A value in clear, from before encryption, is compared as it is.
+        var candidates = await db.Users
+            .Where(u => u.DeletedAtUtc == null && (emails.Contains(u.Email) || u.TwoFactorSecret != null))
+            .Select(u => new { u.Id, u.Email, u.TwoFactorSecret })
             .ToListAsync(cancellationToken);
+        return [.. candidates
+            .Where(u => emails.Contains(u.Email) || UsesPublishedSecret(u.Id, u.TwoFactorSecret))
+            .Select(u => u.Email)
+            .Order(StringComparer.Ordinal)];
+    }
+
+    private static bool UsesPublishedSecret(Guid userId, string? stored)
+    {
+        if (stored == PublishedDemoCredentials.AdminTotpSecret) return true;
+        try
+        {
+            return TwoFactorSecrets.OpenSecret(userId, stored) == PublishedDemoCredentials.AdminTotpSecret;
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            return false;   // unreadable under the configured keys: nobody can sign in with it either
+        }
     }
 
     /// <summary>Throws when the database holds an account with a published credential.</summary>

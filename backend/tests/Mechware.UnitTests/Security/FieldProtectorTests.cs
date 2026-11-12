@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using FluentAssertions;
+using Mechware.Infrastructure.Identity;
 using Mechware.Infrastructure.Security;
 using Xunit;
 
@@ -178,6 +179,68 @@ public class FieldProtectorTests
         pinned.CurrentPrefix.Should().Be("enc:v2:7dd75252:");
         pinned.BlindIndex(" bin-000123 ").Should().Be("74827eefb70818eac6fee0cdda2a62f8a69c3480b9b44968206e6c47e0795e12");
     }
+
+    [Fact]
+    public void AValueBoundToAssociatedData_OpensOnlyWithTheSameData()
+    {
+        byte[] alice = Encoding.UTF8.GetBytes("user-a"), bob = Encoding.UTF8.GetBytes("user-b");
+        string stored = P.Protect("JBSWY3DPEHPK3PXP", alice);
+
+        P.Unprotect(stored, alice).Should().Be("JBSWY3DPEHPK3PXP");
+        var otherData = () => P.Unprotect(stored, bob);
+        otherData.Should().Throw<CryptographicException>("a ciphertext copied into another user's row must not open there");
+        var noData = () => P.Unprotect(stored);
+        noData.Should().Throw<CryptographicException>();
+        var unbound = () => P.Unprotect(P.Protect("JBSWY3DPEHPK3PXP"), alice);
+        unbound.Should().Throw<CryptographicException>();
+    }
+
+    // TwoFactorSecrets uses the process-wide key, which ConfigurationWithPreviousKeys_ReadsWhatTheyWrote changes for a moment:
+    // its tests live in this class so they never run at the same time.
+    [Fact]
+    public void ATwoFactorSecret_RoundTripsForItsUser_AndHidesTheSecret()
+    {
+        Guid user = Guid.NewGuid();
+        string stored = TwoFactorSecrets.SealSecret(user, "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+
+        stored.Should().StartWith(FieldEncryption.Current.CurrentPrefix).And.NotContain("JBSWY3DP");
+        stored.Should().NotBe(TwoFactorSecrets.SealSecret(user, "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"));
+        TwoFactorSecrets.OpenSecret(user, stored).Should().Be("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+        TwoFactorSecrets.OpenSecret(user, null).Should().BeNull();
+        TwoFactorSecrets.OpenRecoveryCodes(user, TwoFactorSecrets.SealRecoveryCodes(user, "[\"a1\"]")).Should().Be("[\"a1\"]");
+    }
+
+    [Fact]
+    public void ATwoFactorSecret_DoesNotOpenForAnotherUser_OrAsTheOtherColumn()
+    {
+        Guid user = Guid.NewGuid();
+        string secret = TwoFactorSecrets.SealSecret(user, "JBSWY3DPEHPK3PXP");
+
+        var otherUser = () => TwoFactorSecrets.OpenSecret(Guid.NewGuid(), secret);
+        otherUser.Should().Throw<CryptographicException>();
+        var otherColumn = () => TwoFactorSecrets.OpenRecoveryCodes(user, secret);
+        otherColumn.Should().Throw<CryptographicException>();
+    }
+
+    [Fact]
+    public void ATwoFactorSecret_InClear_Changed_OrGarbled_IsRefused()
+    {
+        Guid user = Guid.NewGuid();
+        var clear = () => TwoFactorSecrets.OpenSecret(user, "JBSWY3DPEHPK3PXP");
+        clear.Should().Throw<CryptographicException>().WithMessage("*in clear*");
+
+        string stored = TwoFactorSecrets.SealSecret(user, "JBSWY3DPEHPK3PXP");
+        string prefix = FieldEncryption.Current.CurrentPrefix;
+        byte[] raw = Convert.FromBase64String(stored[prefix.Length..]);
+        raw[NonceBytes] ^= 0x01;
+        var changed = () => TwoFactorSecrets.OpenSecret(user, prefix + Convert.ToBase64String(raw));
+        changed.Should().Throw<CryptographicException>();
+
+        var garbled = () => TwoFactorSecrets.OpenSecret(user, prefix + "not*base64");
+        garbled.Should().Throw<CryptographicException>();
+    }
+
+    private const int NonceBytes = 12;
 
     [Theory]
     [InlineData(0)]

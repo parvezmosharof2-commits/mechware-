@@ -215,15 +215,16 @@ public sealed class User : AggregateRoot<Guid>
         UpdatedAtUtc = utcNow;
     }
 
-    public void ConfigureTwoFactorSecret(string base32Secret, string recoveryCodesJson, DateTime utcNow)
+    /// <summary>Both values arrive encrypted (Infrastructure <c>TwoFactorSecrets</c>); the entity never holds them in clear.</summary>
+    public void ConfigureTwoFactorSecret(string protectedSecret, string protectedRecoveryCodes, DateTime utcNow)
     {
-        if (string.IsNullOrWhiteSpace(base32Secret))
+        if (string.IsNullOrWhiteSpace(protectedSecret))
         {
             throw new ValidationException("twoFactorSecret", "TOTP secret is required.");
         }
 
-        TwoFactorSecret = base32Secret;
-        TwoFactorRecoveryCodesJson = recoveryCodesJson;
+        TwoFactorSecret = protectedSecret;
+        TwoFactorRecoveryCodesJson = protectedRecoveryCodes;
         LastUsedTotpTimeStep = null;
         UpdatedAtUtc = utcNow;
     }

@@ -54,19 +54,28 @@ public sealed class FieldProtector
 
     /// <summary>Always encrypts: the value comes from the model and is plain, even when it happens to look like ciphertext
     /// (a user can type "enc:..." as a licence number).</summary>
-    public string Protect(string plain)
+    public string Protect(string plain) => Protect(plain, null);
+
+    /// <summary>
+    /// Encrypts with GCM associated data: the value then decrypts only with the same <paramref name="associatedData"/> (for
+    /// example the owner's id), so a ciphertext copied into another row fails instead of being accepted there.
+    /// </summary>
+    public string Protect(string plain, byte[]? associatedData)
     {
         byte[] data = Encoding.UTF8.GetBytes(plain);
         byte[] output = new byte[NonceSize + data.Length + TagSize];
         Span<byte> nonce = output.AsSpan(0, NonceSize);
         RandomNumberGenerator.Fill(nonce);
         using var aes = new AesGcm(_current.Encryption, TagSize);
-        aes.Encrypt(nonce, data, output.AsSpan(NonceSize, data.Length), output.AsSpan(NonceSize + data.Length, TagSize));
+        aes.Encrypt(nonce, data, output.AsSpan(NonceSize, data.Length), output.AsSpan(NonceSize + data.Length, TagSize), associatedData);
         return CurrentPrefix + Convert.ToBase64String(output);
     }
 
     /// <summary>Decrypts; a value written before encryption was introduced (no prefix) is returned as it is.</summary>
-    public string Unprotect(string stored)
+    public string Unprotect(string stored) => Unprotect(stored, null);
+
+    /// <summary>Decrypts a value written with <see cref="Protect(string, byte[])"/>; other associated data fails.</summary>
+    public string Unprotect(string stored, byte[]? associatedData)
     {
         if (!IsProtected(stored)) return stored;
         if (stored.StartsWith(V1Prefix, StringComparison.Ordinal))
@@ -75,7 +84,7 @@ public sealed class FieldProtector
             byte[] v1 = Convert.FromBase64String(stored[V1Prefix.Length..]);
             foreach (var key in _all)
             {
-                try { return Decrypt(key, v1); }
+                try { return Decrypt(key, v1, associatedData); }
                 catch (AuthenticationTagMismatchException) { }
             }
             throw new CryptographicException("The protected value was written with a key that is not configured.");
@@ -85,16 +94,16 @@ public sealed class FieldProtector
         if (parts is not ["enc", "v2", var id, var body]) throw new CryptographicException("Unknown protected value format.");
         var match = _all.FirstOrDefault(k => k.Id == id)
                     ?? throw new CryptographicException("The protected value was written with a key that is not configured.");
-        return Decrypt(match, Convert.FromBase64String(body));
+        return Decrypt(match, Convert.FromBase64String(body), associatedData);
     }
 
-    private static string Decrypt(Key key, byte[] input)
+    private static string Decrypt(Key key, byte[] input, byte[]? associatedData)
     {
         if (input.Length < NonceSize + TagSize) throw new CryptographicException("The protected value is truncated.");
         int length = input.Length - NonceSize - TagSize;
         byte[] plain = new byte[length];
         using var aes = new AesGcm(key.Encryption, TagSize);
-        aes.Decrypt(input.AsSpan(0, NonceSize), input.AsSpan(NonceSize, length), input.AsSpan(NonceSize + length, TagSize), plain);
+        aes.Decrypt(input.AsSpan(0, NonceSize), input.AsSpan(NonceSize, length), input.AsSpan(NonceSize + length, TagSize), plain, associatedData);
         return Encoding.UTF8.GetString(plain);
     }
 

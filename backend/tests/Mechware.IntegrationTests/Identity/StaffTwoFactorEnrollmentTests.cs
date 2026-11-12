@@ -363,7 +363,8 @@ public class StaffTwoFactorEnrollmentTests(PostgresDatabaseFixture fixture) : IC
         (await act.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("TWO_FACTOR_ALREADY_ENABLED");
 
         await using var db = fixture.CreateContext();
-        (await db.Users.SingleAsync(u => u.Id == staff.UserId)).TwoFactorSecret.Should().Be(redeemed.TwoFactorSetup.Secret);
+        var stored = (await db.Users.SingleAsync(u => u.Id == staff.UserId)).TwoFactorSecret;
+        TwoFactorSecrets.OpenSecret(staff.UserId, stored).Should().Be(redeemed.TwoFactorSetup!.Secret);
     }
 
     [PostgresFact]

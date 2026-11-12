@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Mechware.Application.Identity;
 using Mechware.Domain.Common.Exceptions;
@@ -28,6 +30,7 @@ public sealed class IdentityService : IIdentityService
     private readonly MechwareDbContext _db;
     private readonly IReadOnlyList<BdLocation> _bdLocations;
     private readonly IGoogleIdTokenVerifier? _googleVerifier;
+    private readonly ILogger<IdentityService> _logger;
 
     public IdentityService(
         IPasswordHasherService passwordHasher,
@@ -36,9 +39,11 @@ public sealed class IdentityService : IIdentityService
         ISmsProvider smsProvider,
         IOtpSmsGuard otpSmsGuard,
         MechwareDbContext db,
-        IGoogleIdTokenVerifier? googleVerifier = null)
+        IGoogleIdTokenVerifier? googleVerifier = null,
+        ILogger<IdentityService>? logger = null)
     {
         _googleVerifier = googleVerifier;
+        _logger = logger ?? NullLogger<IdentityService>.Instance;
         _passwordHasher = passwordHasher;
         _tokenService = tokenService;
         _totpService = totpService;
@@ -683,7 +688,8 @@ public sealed class IdentityService : IIdentityService
         IReadOnlyList<string> rawRecoveryCodes = _totpService.GenerateRecoveryCodes(10);
         string hashedCodesJson = JsonSerializer.Serialize(rawRecoveryCodes.Select(_totpService.HashRecoveryCode).ToList());
 
-        user.ConfigureTwoFactorSecret(secret, hashedCodesJson, now);
+        user.ConfigureTwoFactorSecret(
+            TwoFactorSecrets.SealSecret(user.Id, secret), TwoFactorSecrets.SealRecoveryCodes(user.Id, hashedCodesJson), now);
         string otpAuthUri = _totpService.BuildOtpAuthUri(user.Email, secret);
 
         RecordAudit(user.Id, clientIp, "user.2fa_setup_initiated", "users", user.Id.ToString(), null, null);
@@ -709,7 +715,8 @@ public sealed class IdentityService : IIdentityService
             throw new ValidationException("code", "2FA setup has not been initiated for this user.");
         }
 
-        if (!_totpService.TryVerifyTotpCode(user.TwoFactorSecret, code, now, user.LastUsedTotpTimeStep, out long matchedStep))
+        if (TotpSecretOf(user) is not { } secret
+            || !_totpService.TryVerifyTotpCode(secret, code, now, user.LastUsedTotpTimeStep, out long matchedStep))
         {
             throw new ValidationException("code", "Invalid or already-used 6-digit TOTP authenticator code.");
         }
@@ -737,8 +744,8 @@ public sealed class IdentityService : IIdentityService
 
         // Only a current authenticator code: a recovery code is for a lost phone, not for confirming money moves. The
         // replay guard means one code confirms one action.
-        if (user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TwoFactorSecret)
-            && _totpService.TryVerifyTotpCode(user.TwoFactorSecret, code.Trim(), new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
+        if (user.TwoFactorEnabled && TotpSecretOf(user) is { } secret
+            && _totpService.TryVerifyTotpCode(secret, code.Trim(), new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
         {
             user.RecordTotpTimeStepUsed(step, now);
             user.RecordStepUpSuccess(now);
@@ -846,8 +853,8 @@ public sealed class IdentityService : IIdentityService
             throw new ConflictException("TWO_FACTOR_ENROLLMENT_NOT_NEEDED", "This account does not need to enrol an authenticator.");
         }
 
-        if (string.IsNullOrWhiteSpace(user.TwoFactorSecret)
-            || !_totpService.TryVerifyTotpCode(user.TwoFactorSecret, code ?? string.Empty, new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
+        if (TotpSecretOf(user) is not { } secret
+            || !_totpService.TryVerifyTotpCode(secret, code ?? string.Empty, new DateTimeOffset(now, TimeSpan.Zero), user.LastUsedTotpTimeStep, out long step))
         {
             // Counts against the token and the account, like a wrong code at sign-in.
             token.IncrementAttempts(now);
@@ -1357,32 +1364,50 @@ public sealed class IdentityService : IIdentityService
         }
 
         var timestamp = new DateTimeOffset(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc));
-        if (_totpService.TryVerifyTotpCode(
-            user.TwoFactorSecret,
-            code,
-            timestamp,
-            user.LastUsedTotpTimeStep,
-            out long matchedStep))
+        if (TotpSecretOf(user) is { } secret
+            && _totpService.TryVerifyTotpCode(secret, code, timestamp, user.LastUsedTotpTimeStep, out long matchedStep))
         {
             user.RecordTotpTimeStepUsed(matchedStep, utcNow);
             return true;
         }
 
-        if (!string.IsNullOrWhiteSpace(user.TwoFactorRecoveryCodesJson))
+        if (OpenTwoFactorValue(user, TwoFactorSecrets.OpenRecoveryCodes, user.TwoFactorRecoveryCodesJson, "recovery codes") is { } json)
         {
-            List<string>? hashes = JsonSerializer.Deserialize<List<string>>(user.TwoFactorRecoveryCodesJson);
+            List<string>? hashes = JsonSerializer.Deserialize<List<string>>(json);
             if (hashes is not null)
             {
                 string candidateHash = _totpService.HashRecoveryCode(code);
                 if (hashes.Remove(candidateHash))
                 {
-                    user.UpdateRecoveryCodesJson(JsonSerializer.Serialize(hashes), utcNow);
+                    user.UpdateRecoveryCodesJson(TwoFactorSecrets.SealRecoveryCodes(user.Id, JsonSerializer.Serialize(hashes)), utcNow);
                     return true;
                 }
             }
         }
 
         return false;
+    }
+
+    /// <summary>The user's authenticator secret in clear, or null when none is stored or it cannot be used.</summary>
+    private string? TotpSecretOf(User user) =>
+        OpenTwoFactorValue(user, TwoFactorSecrets.OpenSecret, user.TwoFactorSecret, "authenticator secret");
+
+    /// <summary>
+    /// Decrypts a second-factor value. One that cannot be used (stored in clear, changed, another user's, a key no longer
+    /// configured) fails closed, as if the code were wrong, and is logged for the operator; the value itself never is.
+    /// </summary>
+    private string? OpenTwoFactorValue(User user, Func<Guid, string?, string?> open, string? stored, string what)
+    {
+        try
+        {
+            return open(user.Id, stored);
+        }
+        catch (CryptographicException ex)
+        {
+            _logger.LogError("The {What} of user {UserId} cannot be used ({Reason}); sign-in with it fails. Run the Worker `migrate` " +
+                "step and check Encryption:FieldKey / Encryption:PreviousFieldKeys.", what, user.Id, ex.Message);
+            return null;
+        }
     }
 
     private async Task RevokeTokenFamilyAsync(Guid familyId, DateTime utcNow, CancellationToken cancellationToken)
