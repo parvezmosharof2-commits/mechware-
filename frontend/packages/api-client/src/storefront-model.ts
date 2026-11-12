@@ -88,6 +88,7 @@ export interface VariantDto {
   stock: StockDto;
   minOrderQty: number;
   packSize: number;
+  manufacturerPartNumber: string | null;
 }
 export interface SuccessorDto { slug: string; titleEn: string; titleBn: string; isDropIn: boolean; note: string | null }
 export interface AlternativeDto { slug: string; titleEn: string; titleBn: string; brandName: string | null }

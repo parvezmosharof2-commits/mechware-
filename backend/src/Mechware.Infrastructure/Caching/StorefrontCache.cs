@@ -12,7 +12,7 @@ public static class StorefrontCacheKeys
     public static readonly TimeSpan ListingTtl = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan NegativeTtl = TimeSpan.FromSeconds(30);
 
-    public static string Product(string slug) => $"sf:product:{slug}";
+    public static string Product(string slug) => $"sf:product:v2:{slug}";
     public static string Redirect(string slug) => $"sf:redirect:{slug}";
     public static string Miss(string slug) => $"sf:miss:{slug}";
     public static string Stock(Guid productId) => $"sf:stock:{productId:N}";

@@ -3753,6 +3753,10 @@
           "packSize": {
             "type": "integer",
             "format": "int32"
+          },
+          "manufacturerPartNumber": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

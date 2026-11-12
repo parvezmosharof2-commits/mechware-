@@ -147,6 +147,7 @@ public class StorefrontReadTests : IClassFixture<CatalogSeedFixture>, IAsyncLife
         price.GetProperty("amountMinor").GetInt64().Should().BeGreaterThan(0);
         price.GetProperty("formatted").GetString().Should().StartWith("৳");
         variant.GetProperty("pricing").GetProperty("taxIncluded").GetBoolean().Should().BeTrue();
+        variant.GetProperty("manufacturerPartNumber").GetString().Should().NotBeNullOrWhiteSpace();
         variant.GetProperty("stock").GetProperty("status").GetString().Should().BeOneOf("in_stock", "low_stock", "out_of_stock");
 
         (await _redis!.GetDatabase().KeyExistsAsync(StorefrontCacheKeys.Product(slug))).Should().BeTrue("the document is cached after the first read");

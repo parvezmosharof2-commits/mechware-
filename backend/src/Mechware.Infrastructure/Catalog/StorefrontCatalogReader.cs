@@ -214,7 +214,8 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
                     SaleStartsAtUtc = v.SaleStartsAtUtc,
                     SaleEndsAtUtc = v.SaleEndsAtUtc,
                     MinOrderQty = v.MinOrderQty,
-                    PackSize = v.PackSize
+                    PackSize = v.PackSize,
+                    ManufacturerPartNumber = v.ManufacturerPartNumber
                 }).ToList()
         };
     }
@@ -259,7 +260,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         d.RatingCount, d.SoldCount, d.DatasheetUrl, d.CadModelUrl, d.Media,
         d.Variants.Select(v => new VariantDto(
             v.Id, v.Sku, v.Options, v.IsDefault, PriceFor(v, d.VatRate, nowUtc),
-            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize)).ToList(),
+            ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize, v.ManufacturerPartNumber)).ToList(),
         d.SupplyStatus, d.Successor, d.Alternatives, d.Documents);
 
     internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
@@ -479,6 +480,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
         public DateTime? SaleEndsAtUtc { get; set; }
         public int MinOrderQty { get; set; } = 1;
         public int PackSize { get; set; } = 1;
+        public string? ManufacturerPartNumber { get; set; }
     }
 
     #endregion

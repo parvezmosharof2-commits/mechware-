@@ -18,7 +18,7 @@ public sealed record VariantPriceDto(
 /// <param name="PackSize">A line's quantity must be a multiple of this.</param>
 public sealed record VariantDto(
     Guid Id, string Sku, IReadOnlyDictionary<string, string> Options, bool IsDefault, VariantPriceDto Pricing, StockDto Stock,
-    int MinOrderQty, int PackSize);
+    int MinOrderQty, int PackSize, string? ManufacturerPartNumber = null);
 
 /// <summary>The product that replaces a phased-out one; only shown while it is itself on sale. <c>IsDropIn</c>: fits without
 /// wiring, mounting or program changes; <c>Note</c> says what changes otherwise. Never swapped into an order.</summary>

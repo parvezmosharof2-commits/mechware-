@@ -3416,6 +3416,7 @@ export interface components {
             minOrderQty?: number;
             /** Format: int32 */
             packSize?: number;
+            manufacturerPartNumber?: string | null;
         };
         VariantPriceDto: {
             price?: components["schemas"]["MoneyDto"];
