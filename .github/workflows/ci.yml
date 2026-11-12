@@ -64,6 +64,29 @@ jobs:
       - name: Build Backend Solution
         run: dotnet build backend/Mechware.sln --no-restore --configuration Release
 
+      # The OpenAPI snapshot and the TS types made from it are committed; a changed DTO or route must change them too.
+      - name: Setup Node.js (API snapshot)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm (API snapshot)
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install api-client dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile --filter @mechware/api-client...
+
+      - name: API snapshot drift check (OpenAPI + generated types)
+        run: |
+          python3 scripts/api_snapshot.py --no-build
+          if ! git diff --exit-code -- frontend/packages/api-client/openapi.json frontend/packages/api-client/src/schema.d.ts; then
+            echo "::error::API changed: run 'python scripts/api_snapshot.py' and commit frontend/packages/api-client/openapi.json and src/schema.d.ts"
+            exit 1
+          fi
+
       - name: Run Unit & Integration Tests
         run: >
           dotnet test backend/Mechware.sln --no-build --configuration Release --verbosity normal

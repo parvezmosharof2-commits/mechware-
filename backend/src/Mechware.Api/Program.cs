@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -358,6 +359,8 @@ var app = builder.Build();
 
 // Accounts an environment starts with live in the database. Outside Development the database is read at boot to make
 // sure no account with a published demo credential exists, so the API needs the database to start there.
+// The OpenAPI snapshot tool (dotnet swagger tofile) builds the host only to read the document: no database there.
+if (Assembly.GetEntryAssembly()?.GetName().Name != "dotnet-swagger")
 {
     var seedPolicy = app.Services.GetRequiredService<IdentitySeedPolicy>();
     if (seedPolicy.SeedDemoAccounts || bootstrapAdmin is not null)
