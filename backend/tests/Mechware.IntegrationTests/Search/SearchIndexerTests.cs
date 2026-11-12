@@ -129,6 +129,36 @@ public sealed class SearchIndexerTests : IClassFixture<PostgresDatabaseFixture>,
     }
 
     [SearchStackFact]
+    public async Task NumberAttributeInKw_ReachesTheIndexAsWattsInMeasures_AndNumericAttributes()
+    {
+        var seeded = await SeedAsync();
+        var code = "pw_" + Guid.NewGuid().ToString("N")[..8];
+        await using (var db = _pg.CreateContext())
+        {
+            var power = new AttributeDefinition(Guid.NewGuid(), "Power " + code, "Power " + code, code, AttributeDataType.Number, "kW", true);
+            var value = power.AddValue(Guid.NewGuid(), "0.75 kW", "0.75 kW", 0);
+            var unsafeCode = new AttributeDefinition(Guid.NewGuid(), "Odd " + code, "Odd " + code, "odd-" + code, AttributeDataType.Number, "kW", true);
+            var unsafeValue = unsafeCode.AddValue(Guid.NewGuid(), "2 kW", "2 kW", 0);
+            db.Attributes.AddRange(power, unsafeCode);
+            var product = await db.Products.Include(p => p.AttributeValues).SingleAsync(p => p.Id == seeded.ProductId);
+            product.AssignAttributeValue(value.Id);
+            product.AssignAttributeValue(unsafeValue.Id);
+            await db.SaveChangesAsync();
+        }
+        await Enqueue(Envelope(seeded.ProductId));
+        await using (var db = _pg.CreateContext()) await Indexer(db).RunOnceAsync();
+
+        var doc = await Indexed(seeded.ProductId);
+        doc!.Measures["power"].Should().Equal(750d);
+        doc.NumericAttributes.Should().ContainKey(code).WhoseValue.Should().Be(0.75);
+        doc.NumericAttributes.Keys.Should().NotContain("odd-" + code, "codes outside the safe alphabet are not indexed");
+        (await _search.SearchAsync(new SearchQuery { MeasureQuantity = "power", MeasureMin = 746, MeasureMax = 754 })).Hits
+            .Should().ContainSingle(h => h.Id == seeded.ProductId);
+        (await _search.SearchAsync(new SearchQuery { AttributeRanges = [new AttributeRange(code, 0.5, 1)] })).Hits
+            .Should().ContainSingle(h => h.Id == seeded.ProductId);
+    }
+
+    [SearchStackFact]
     public async Task PartTypedWithDigitOneForLetterL_IsFoundThroughTheIndexedFuzzyKey()
     {
         var seeded = await SeedAsync(partNumber: "E3Z-LS61");

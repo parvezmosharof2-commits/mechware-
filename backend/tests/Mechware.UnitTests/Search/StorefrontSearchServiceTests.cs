@@ -16,11 +16,13 @@ public class StorefrontSearchServiceTests
         public long KeyTotal { get; set; }
         /// <summary>Total returned for any other query.</summary>
         public long TextTotal { get; set; } = 1;
+        /// <summary>Total returned for a query that carries a measure filter.</summary>
+        public long MeasureTotal { get; set; }
 
         public Task<SearchResultDto<ProductSearchDocument>> SearchAsync(SearchQuery query, CancellationToken ct = default)
         {
             Queries.Add(query);
-            var total = query.PartNumberKey is null ? TextTotal : KeyTotal;
+            var total = query.PartNumberKey is not null ? KeyTotal : query.MeasureQuantity is not null ? MeasureTotal : TextTotal;
             return Task.FromResult(new SearchResultDto<ProductSearchDocument>(
                 [], total, query.Page, query.PageSize, 1, new Dictionary<string, IReadOnlyDictionary<string, long>>()));
         }
@@ -122,6 +124,73 @@ public class StorefrontSearchServiceTests
             q.MaxPriceMinor.Should().Be(5000);
             q.Sort.Should().Be(SearchSort.PriceAscending);
         }
+    }
+
+    [Fact]
+    public async Task MeasureInText_SearchesByMeasureWithin05Percent_AndReportsMeasure()
+    {
+        _provider.MeasureTotal = 1;
+
+        var result = await Service.SearchAsync(new StorefrontSearchRequest { Text = "inverter 0.75 kW" });
+
+        _provider.Queries.Should().ContainSingle();
+        var q = _provider.Queries[0];
+        q.Text.Should().Be("inverter");
+        q.MeasureQuantity.Should().Be("power");
+        q.MeasureMin.Should().BeApproximately(746.25, 0.001);
+        q.MeasureMax.Should().BeApproximately(753.75, 0.001);
+        result.MatchedBy.Should().Be("measure");
+    }
+
+    [Fact]
+    public async Task MeasureWithNoHit_FallsBackToTheOriginalText()
+    {
+        _provider.MeasureTotal = 0;
+
+        var result = await Service.SearchAsync(new StorefrontSearchRequest { Text = "1 HP" });
+
+        _provider.Queries.Should().HaveCount(2);
+        _provider.Queries[1].Text.Should().Be("1 HP");
+        _provider.Queries[1].MeasureQuantity.Should().BeNull();
+        result.MatchedBy.Should().Be("text");
+    }
+
+    [Fact]
+    public async Task PartNumberComesBeforeMeasure()
+    {
+        _provider.KeyTotal = 1;
+
+        var result = await Service.SearchAsync(new StorefrontSearchRequest { Text = "6es7 214-1ag40-0xb0" });
+
+        result.MatchedBy.Should().Be("partNumber");
+        _provider.Queries.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Attributes_AreParsedIntoRanges_InEveryCall()
+    {
+        _provider.MeasureTotal = 0;
+
+        await Service.SearchAsync(new StorefrontSearchRequest { Text = "750 W", Attributes = ["power_kw:0.5..", "voltage_v:..400", "x:1..2"] });
+
+        foreach (var q in _provider.Queries)
+            q.AttributeRanges.Should().Equal(new AttributeRange("power_kw", 0.5, null), new AttributeRange("voltage_v", null, 400), new AttributeRange("x", 1, 2));
+    }
+
+    [Theory]
+    [InlineData("bad code:1..2")]
+    [InlineData("power_kw:abc..")]
+    [InlineData("power_kw:1")]
+    [InlineData("power_kw")]
+    [InlineData("power_kw:..")]
+    [InlineData("power_kw:5..1")]
+    [InlineData("power_kw:NaN..")]
+    public async Task BadAttribute_IsAValidationError(string attr)
+    {
+        var act = () => Service.SearchAsync(new StorefrontSearchRequest { Text = "x", Attributes = [attr] });
+
+        await act.Should().ThrowAsync<ValidationException>();
+        _provider.Queries.Should().BeEmpty();
     }
 
     public static TheoryData<StorefrontSearchRequest> BadRequests => new()

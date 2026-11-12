@@ -34,6 +34,53 @@ public static partial class UnitCatalog
     /// <summary>True for a unit symbol this catalogue knows, written exactly (e.g. "kW", not "KW").</summary>
     public static bool IsKnown(string? symbol) => symbol is not null && Units.Any(u => u.Symbol == symbol);
 
+    /// <summary>The quantities this catalogue knows (power, voltage, ...); each has one base unit (ToBase = 1).</summary>
+    public static IReadOnlyList<string> Quantities { get; } = Units.Select(u => u.Quantity).Distinct().ToArray();
+
+    /// <summary>Converts <paramref name="value"/> in <paramref name="unit"/> to the base unit of its quantity (W, V, A, mm, Pa, Hz, %).</summary>
+    public static bool TryToBase(decimal value, string unit, out string quantity, out decimal baseValue)
+    {
+        quantity = "";
+        baseValue = 0;
+        var def = Find(unit);
+        if (def is null || Math.Abs(value) > MaxValue) return false;
+        quantity = def.Quantity;
+        baseValue = value * def.ToBase;
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the first single measure ("750 W", "0.75kW") in free text, converted to the base unit. <paramref name="remainder"/> is the
+    /// text with that measure cut out. Ranges, unknown units, text without a measure and regex timeouts give false.
+    /// </summary>
+    public static bool TryReadMeasure(string? text, out string quantity, out decimal baseValue, out string remainder)
+    {
+        quantity = "";
+        baseValue = 0;
+        remainder = text ?? "";
+        if (string.IsNullOrWhiteSpace(text) || text.Length > MaxTextLength * 2) return false;
+        try
+        {
+            foreach (Match m in ValueWithUnit().Matches(text))
+            {
+                var unit = Find(m.Groups["unit"].Value);
+                if (unit is null || m.Groups["high"].Success) continue;
+                if (!decimal.TryParse(m.Groups["low"].Value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var value)) continue;
+                if (!TryToBase(value, unit.Symbol, out quantity, out baseValue)) continue;
+                remainder = WhitespaceRun().Replace(text.Remove(m.Index, m.Length), " ").Trim();
+                return true;
+            }
+        }
+        catch (RegexMatchTimeoutException) { }
+        quantity = "";
+        baseValue = 0;
+        remainder = text;
+        return false;
+    }
+
+    [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 100)]
+    private static partial Regex WhitespaceRun();
+
     /// <summary>
     /// Reads the first number (or "low–high" range) followed by a unit from <paramref name="text"/> and converts it to
     /// <paramref name="targetUnit"/>. A single value gives min = max. Throws <see cref="ValidationException"/> when there is

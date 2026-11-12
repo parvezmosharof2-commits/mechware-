@@ -27,7 +27,10 @@ internal sealed class SearchIndexWorker(IServiceScopeFactory scopes, StackExchan
                 await using var scope = scopes.CreateAsyncScope();
                 if (!_indexReady)
                 {
-                    await scope.ServiceProvider.GetRequiredService<ISearchProvider>().EnsureIndexAsync(stoppingToken);
+                    var provider = scope.ServiceProvider.GetRequiredService<ISearchProvider>();
+                    await provider.EnsureIndexAsync(stoppingToken);
+                    // Owner/admin-editable synonym list comes later; until then the built-in default is applied on every start.
+                    await provider.UpdateSynonymsAsync(SearchSynonyms.Default, stoppingToken);
                     _indexReady = true;
                 }
                 var applied = await scope.ServiceProvider.GetRequiredService<SearchIndexer>().RunOnceAsync(stoppingToken);

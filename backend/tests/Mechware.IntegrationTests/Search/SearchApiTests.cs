@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Mechware.Application.Search;
 using Mechware.Domain.Catalog;
+using Mechware.Infrastructure.Search;
 using Mechware.IntegrationTests.Support;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -30,8 +31,25 @@ public sealed class SearchApiTests : IAsyncLifetime
         });
         var provider = _factory.Services.GetRequiredService<ISearchProvider>();
         await provider.EnsureIndexAsync();
+        await provider.UpdateSynonymsAsync(SearchSynonyms.Default);
         await provider.IndexProductsAsync(
         [
+            new ProductSearchDocument
+            {
+                Id = Guid.NewGuid(), Slug = "gearbox-750", TitleEn = "Gearbox alpha", BrandName = "Zed", BrandSlug = "zed", PriceMinor = 100,
+                Measures = new Dictionary<string, IReadOnlyList<double>> { ["power"] = [750] },
+                NumericAttributes = new Dictionary<string, double> { ["power_kw"] = 0.75 },
+            },
+            new ProductSearchDocument
+            {
+                Id = Guid.NewGuid(), Slug = "gearbox-1500", TitleEn = "Gearbox beta", BrandName = "Zed", BrandSlug = "zed", PriceMinor = 100,
+                Measures = new Dictionary<string, IReadOnlyList<double>> { ["power"] = [1500] },
+                NumericAttributes = new Dictionary<string, double> { ["power_kw"] = 1.5 },
+            },
+            new ProductSearchDocument
+            {
+                Id = Guid.NewGuid(), Slug = "siemens-v20", TitleEn = "Siemens V20 inverter", BrandName = "Siemens", BrandSlug = "siemens", PriceMinor = 100,
+            },
             new ProductSearchDocument
             {
                 Id = Guid.NewGuid(), Slug = "siemens-6es7214", TitleEn = "Siemens S7-1200 CPU 1214C", BrandName = "Siemens", BrandSlug = "siemens",
@@ -131,6 +149,61 @@ public sealed class SearchApiTests : IAsyncLifetime
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         body.Should().Contain("VALIDATION_ERROR");
+    }
+
+    [SearchStackTheory]
+    [InlineData("750 W")]
+    [InlineData("0.75kW")]
+    public async Task MeasureInText_FindsTheProductWithThatPower_InAnyUnit(string q)
+    {
+        var (response, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=" + Uri.EscapeDataString(q)));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        json.RootElement.GetProperty("meta").GetProperty("matchedBy").GetString().Should().Be("measure");
+        Slugs(json).Should().Equal("gearbox-750");
+    }
+
+    [SearchStackFact]
+    public async Task MeasureOutsideHalfAPercent_FallsBackToText()
+    {
+        var (response, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=" + Uri.EscapeDataString("1 HP")));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        json.RootElement.GetProperty("meta").GetProperty("matchedBy").GetString().Should().Be("text");
+        Slugs(json).Should().NotContain("gearbox-750");
+    }
+
+    [SearchStackFact]
+    public async Task AttributeRange_FiltersByNumericAttributes()
+    {
+        var (response, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=gearbox&attr=" + Uri.EscapeDataString("power_kw:0.5..1")));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Slugs(json).Should().Equal("gearbox-750");
+
+        (_, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=gearbox&attr=" + Uri.EscapeDataString("power_kw:1..")));
+        Slugs(json).Should().Equal("gearbox-1500");
+    }
+
+    [SearchStackTheory]
+    [InlineData("bad code:1..2")]
+    [InlineData("power_kw:abc..")]
+    public async Task BadAttribute_Is400(string attr)
+    {
+        var (response, body, _) = await Read(await _client.GetAsync("/api/v1/search?q=x&attr=" + Uri.EscapeDataString(attr)));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        body.Should().Contain("VALIDATION_ERROR");
+    }
+
+    [SearchStackTheory]
+    [InlineData("vfd")]
+    [InlineData("invertar")]
+    public async Task Synonyms_FindTheInverter(string q)
+    {
+        var (response, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=" + q));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        Slugs(json).Should().Contain("siemens-v20");
     }
 
     [SearchStackFact]

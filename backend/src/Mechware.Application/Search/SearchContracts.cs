@@ -1,3 +1,5 @@
+using Mechware.Domain.Catalog;
+
 namespace Mechware.Application.Search;
 
 /// <summary>
@@ -32,6 +34,11 @@ public sealed record ProductSearchDocument
     public int SoldCount { get; init; }
     /// <summary>Numeric attributes by code, each in its own unit (see <c>Units</c>). Filtering on them arrives with the facet step.</summary>
     public IReadOnlyDictionary<string, double> NumericAttributes { get; init; } = new Dictionary<string, double>();
+    /// <summary>
+    /// Measures by quantity (<c>power</c>, <c>voltage</c>, ...), each value converted to the quantity's base unit (W, V, A, mm, Pa, Hz, %),
+    /// so "750 W" in free text finds a product whose power is stored as 0.75 kW. Range attributes are not included.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<double>> Measures { get; init; } = new Dictionary<string, IReadOnlyList<double>>();
 }
 
 public enum SearchSort { Relevance = 0, PriceAscending = 1, PriceDescending = 2, MostSold = 3 }
@@ -43,6 +50,7 @@ public sealed record SearchQuery
     public const int MaxPageSize = 50;
     public const int MaxPage = 200;
     public const int MaxBrands = 20;
+    public const int MaxAttributeRanges = 10;
 
     public string Text { get; init; } = "";
     /// <summary>Exact part-number key (already normalised by the caller: A–Z and 0–9 only). Matches normalised or fuzzy keys.</summary>
@@ -55,6 +63,12 @@ public sealed record SearchQuery
     public long? MinPriceMinor { get; init; }
     public long? MaxPriceMinor { get; init; }
     public SearchSort Sort { get; init; } = SearchSort.Relevance;
+    /// <summary>Quantity of a measure filter (see <c>UnitCatalog.Quantities</c>); the bounds are in that quantity's base unit.</summary>
+    public string? MeasureQuantity { get; init; }
+    public double? MeasureMin { get; init; }
+    public double? MeasureMax { get; init; }
+    /// <summary>Range filters on numeric attributes, each in the attribute's stored unit.</summary>
+    public IReadOnlyList<AttributeRange> AttributeRanges { get; init; } = [];
 
     /// <summary>Returns the problems with this request, or an empty list when it is acceptable.</summary>
     public IReadOnlyList<string> Validate()
@@ -71,11 +85,47 @@ public sealed record SearchQuery
         if (MaxPriceMinor is < 0) problems.Add("maximum price cannot be negative");
         if (MinPriceMinor is not null && MaxPriceMinor is not null && MinPriceMinor > MaxPriceMinor) problems.Add("minimum price is above the maximum");
         if (!Enum.IsDefined(Sort)) problems.Add("unknown sort");
+        if (MeasureQuantity is null)
+        {
+            if (MeasureMin is not null || MeasureMax is not null) problems.Add("measure bounds need a quantity");
+        }
+        else
+        {
+            if (!UnitCatalog.Quantities.Contains(MeasureQuantity)) problems.Add("unknown measure quantity");
+            if (MeasureMin is null && MeasureMax is null) problems.Add("measure needs a minimum or a maximum");
+            if (!IsFiniteOrNull(MeasureMin) || !IsFiniteOrNull(MeasureMax)) problems.Add("measure bounds must be finite numbers");
+            else if (MeasureMin > MeasureMax) problems.Add("measure minimum is above the maximum");
+        }
+        if (AttributeRanges.Count > MaxAttributeRanges) problems.Add($"at most {MaxAttributeRanges} attribute ranges");
+        foreach (var r in AttributeRanges)
+        {
+            if (!SearchAttributeCode.IsValid(r.Code)) problems.Add("attribute code has characters that are not allowed");
+            if (r.Min is null && r.Max is null) problems.Add("attribute range needs a minimum or a maximum");
+            if (!IsFiniteOrNull(r.Min) || !IsFiniteOrNull(r.Max)) problems.Add("attribute bounds must be finite numbers");
+            else if (r.Min > r.Max) problems.Add("attribute minimum is above the maximum");
+        }
         return problems;
     }
 
+    private static bool IsFiniteOrNull(double? v) => v is null || double.IsFinite(v.Value);
+
     private static bool IsPartNumberKey(string key) =>
         key.Length is >= 2 and <= 64 && key.All(c => c is >= 'A' and <= 'Z' or >= '0' and <= '9');
+}
+
+/// <summary>A numeric-attribute range filter; either bound may be missing.</summary>
+public sealed record AttributeRange(string Code, double? Min, double? Max);
+
+/// <summary>The attribute-code alphabet (<c>^[a-z0-9_]{1,64}$</c>). Anything else is refused, never escaped.</summary>
+public static class SearchAttributeCode
+{
+    public static bool IsValid(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > 64) return false;
+        foreach (var c in value)
+            if (!(c is >= 'a' and <= 'z' or >= '0' and <= '9' or '_')) return false;
+        return true;
+    }
 }
 
 /// <summary>The slug alphabet. Slugs are lower-case letters, digits and dashes; anything else is refused, never escaped.</summary>

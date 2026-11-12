@@ -97,6 +97,50 @@ public class SearchFilterBuilderTests
         finally { Thread.CurrentThread.CurrentCulture = previous; }
     }
 
+    [Fact]
+    public void Measure_AndAttributeRanges_AreWrittenWithInvariantNumbers()
+    {
+        var previous = Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("bn-BD");
+            SearchFilterBuilder.Build(new SearchQuery
+            {
+                MeasureQuantity = "power",
+                MeasureMin = 746.25,
+                MeasureMax = 753.75,
+                AttributeRanges = [new AttributeRange("power_kw", 0.5, null), new AttributeRange("voltage_v", null, 400)],
+            }).Should().Be("measures.power >= 746.25 AND measures.power <= 753.75 AND numericAttributes.power_kw >= 0.5 AND numericAttributes.voltage_v <= 400");
+        }
+        finally { Thread.CurrentThread.CurrentCulture = previous; }
+    }
+
+    [Theory]
+    [InlineData("power_kw OR inStock = true")]
+    [InlineData("Power")]
+    [InlineData("a-b")]
+    [InlineData("")]
+    [InlineData("a.b")]
+    public void AttributeCodeOutsideTheAlphabet_IsRefused(string code)
+    {
+        var act = () => SearchFilterBuilder.Build(Q(q => q with { AttributeRanges = [new AttributeRange(code, 1, 2)] }));
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BadMeasureAndRanges_AreRefused()
+    {
+        new SearchQuery { MeasureQuantity = "power OR x", MeasureMin = 1 }.Validate().Should().NotBeEmpty();
+        new SearchQuery { MeasureQuantity = "power" }.Validate().Should().NotBeEmpty();
+        new SearchQuery { MeasureQuantity = "power", MeasureMin = 5, MeasureMax = 1 }.Validate().Should().NotBeEmpty();
+        new SearchQuery { MeasureQuantity = "power", MeasureMin = double.NaN }.Validate().Should().NotBeEmpty();
+        new SearchQuery { MeasureMin = 1 }.Validate().Should().NotBeEmpty();
+        new SearchQuery { AttributeRanges = [new AttributeRange("a", null, null)] }.Validate().Should().NotBeEmpty();
+        new SearchQuery { AttributeRanges = [new AttributeRange("a", 3, 1)] }.Validate().Should().NotBeEmpty();
+        new SearchQuery { AttributeRanges = [new AttributeRange("a", double.PositiveInfinity, null)] }.Validate().Should().NotBeEmpty();
+        new SearchQuery { AttributeRanges = Enumerable.Range(0, 11).Select(i => new AttributeRange("a" + i, 1, 2)).ToList() }.Validate().Should().NotBeEmpty();
+    }
+
     [Theory]
     [InlineData(SearchSort.Relevance, null)]
     [InlineData(SearchSort.PriceAscending, "priceMinor:asc")]
@@ -107,6 +151,16 @@ public class SearchFilterBuilderTests
         var result = SearchFilterBuilder.BuildSort(sort);
         if (expected is null) result.Should().BeNull(); else result.Should().Equal(expected);
     }
+}
+
+public class SearchFilterNumberTests
+{
+    [Theory]
+    [InlineData(0.00001, "0.00001")]
+    [InlineData(1e20, "100000000000000000000")]
+    [InlineData(-2.5, "-2.5")]
+    public void Numbers_AreNeverWrittenInExponentNotation(double value, string expected) =>
+        SearchFilterBuilder.Num(value).Should().Be(expected);
 }
 
 public class SearchQueryValidationTests

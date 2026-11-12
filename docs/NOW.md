@@ -4,7 +4,8 @@
 Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub).
 
 C6 module review done; its 8 findings fixed (C6.3b).
-**Next:** C6.4 measures from text ("750 W"), numeric-attribute filters, synonyms (Sonnet sub-agent).
+C6.4 measures/attr filters/synonyms ✅.
+**Next:** C6.2b one worker registration, then C6.5 accuracy + k6 (Sonnet sub-agents).
 Small side unit any time: C6.2b one worker registration.
 
 **After that:** C6.5 k6 · A6.1–A6.5 tooling.

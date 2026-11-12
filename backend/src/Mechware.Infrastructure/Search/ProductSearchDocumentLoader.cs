@@ -62,7 +62,7 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
         var numeric = await (from v in db.AttributeValues.AsNoTracking()
                              join d in db.Attributes.AsNoTracking() on v.AttributeId equals d.Id
                              where valueIds.Contains(v.Id) && v.NumericValue != null
-                             select new { v.Id, d.Code, d.DataType, v.NumericValue, v.NumericMax })
+                             select new { v.Id, d.Code, d.DataType, d.Unit, v.NumericValue, v.NumericMax })
             .ToDictionaryAsync(r => r.Id, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
@@ -75,15 +75,26 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
             var brand = p.BrandId is { } bid && brands.TryGetValue(bid, out var b) ? b : (Name: "", Slug: "");
 
             var attributes = new Dictionary<string, double>();
+            var measures = new Dictionary<string, List<double>>();
             foreach (var link in p.AttributeValues)
             {
                 if (!numeric.TryGetValue(link.AttributeValueId, out var a)) continue;
+                if (!SearchAttributeCode.IsValid(a.Code)) continue;   // codes go into filters: only the safe alphabet is indexed
                 if (a.DataType == AttributeDataType.Range)
                 {
                     attributes[a.Code + "_min"] = (double)a.NumericValue!.Value;
                     if (a.NumericMax is { } max) attributes[a.Code + "_max"] = (double)max;
                 }
-                else attributes[a.Code] = (double)a.NumericValue!.Value;
+                else
+                {
+                    attributes[a.Code] = (double)a.NumericValue!.Value;
+                    if (a.DataType == AttributeDataType.Number && a.Unit is not null
+                        && UnitCatalog.TryToBase(a.NumericValue.Value, a.Unit, out var quantity, out var baseValue))
+                    {
+                        if (!measures.TryGetValue(quantity, out var values)) measures[quantity] = values = [];
+                        if (!values.Contains((double)baseValue)) values.Add((double)baseValue);
+                    }
+                }
             }
 
             documents.Add(new ProductSearchDocument
@@ -109,6 +120,7 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
                 RatingAvg = (double)p.RatingAvg,
                 SoldCount = p.SoldCount,
                 NumericAttributes = attributes,
+                Measures = measures.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<double>)kv.Value),
             });
         }
         return documents;

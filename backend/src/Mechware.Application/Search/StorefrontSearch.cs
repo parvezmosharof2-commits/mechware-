@@ -13,6 +13,8 @@ public sealed record StorefrontSearchRequest
     public long? MaxPriceMinor { get; init; }
     /// <summary><c>relevance</c> (default), <c>price-asc</c>, <c>price-desc</c> or <c>most-sold</c>.</summary>
     public string? Sort { get; init; }
+    /// <summary>Numeric attribute filters, each <c>code:min..max</c> (either side may be empty), in the attribute's stored unit.</summary>
+    public IReadOnlyList<string> Attributes { get; init; } = [];
 }
 
 /// <summary>One product in a search answer. Only what a listing shows; index-internal fields (keys, sales counts) stay inside.</summary>
@@ -20,7 +22,7 @@ public sealed record StorefrontSearchHit(
     Guid Id, string Slug, string TitleEn, string TitleBn, string BrandName, string BrandSlug,
     IReadOnlyList<string> PartNumbers, long PriceMinor, string Currency, bool InStock, string SupplyStatus, double RatingAvg);
 
-/// <summary>How the hits were found: <c>partNumber</c> (exact key, any formatting) or <c>text</c> (free-text search).</summary>
+/// <summary>How the hits were found: <c>partNumber</c> (exact key, any formatting) or <c>measure</c> (a value with a unit in the text, e.g. "750 W") or <c>text</c> (free-text search).</summary>
 public sealed record StorefrontSearchResult(
     IReadOnlyList<StorefrontSearchHit> Hits, long Total, int Page, int PageSize, string MatchedBy, int ProcessingMs,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, long>> Facets);

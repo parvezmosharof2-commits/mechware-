@@ -27,7 +27,7 @@ public sealed class MeilisearchSearchProvider : ISearchProvider
     internal static readonly JsonObject IndexSettings = new()
     {
         ["searchableAttributes"] = new JsonArray("partNumbers", "titleEn", "titleBn", "brandName"),
-        ["filterableAttributes"] = new JsonArray("partNumberKeys", "brandSlug", "categoryPath", "inStock", "supplyStatus", "priceMinor"),
+        ["filterableAttributes"] = new JsonArray("partNumberKeys", "brandSlug", "categoryPath", "inStock", "supplyStatus", "priceMinor", "measures", "numericAttributes"),
         ["sortableAttributes"] = new JsonArray("priceMinor", "soldCount", "ratingAvg"),
         ["rankingRules"] = new JsonArray("words", "typo", "proximity", "attribute", "sort", "exactness", "soldCount:desc"),
         ["typoTolerance"] = new JsonObject
