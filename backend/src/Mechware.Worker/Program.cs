@@ -8,13 +8,20 @@ using StackExchange.Redis;
 
 // Background worker host: stock-reservation expiry sweep + transactional-outbox relay (Phase 4).
 // `dotnet run --project src/Mechware.Worker -- seed-catalog [--seed N] [--media-root DIR] [--report FILE] [--no-media]`
-// applies migrations and loads the deterministic demo catalogue, then exits.
+// applies migrations and loads the deterministic demo catalogue, then exits. `-- migrate` only applies migrations.
 if (args.Length > 0 && args[0] == "seed-catalog")
 {
     return await RunSeedAsync(args);
 }
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// `-- migrate` is the deploy step: applies pending migrations and exits 0, or prints the error and exits 1. Run it once per
+// release before the new API/Worker start (the API never migrates). Concurrent runs are safe (see MechwareDatabase.MigrateAsync).
+if (args.Length > 0 && args[0] == "migrate")
+{
+    return await MechwareDatabase.MigrateAsync(MechwareDatabase.ConnectionString(builder.Configuration), Console.Out, Console.Error);
+}
 
 // `-- rebuild-search` asks the running indexer for a full rebuild (fresh index + swap) and exits.
 if (args.Length > 0 && args[0] == "rebuild-search")
@@ -35,7 +42,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 builder.Services.AddCatalogServices();
 builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 {
-    options.UseNpgsql(ConnectionString(builder.Configuration)).AddInterceptors(sp.GetRequiredService<DomainEventOutboxInterceptor>());
+    options.UseNpgsql(MechwareDatabase.ConnectionString(builder.Configuration)).AddInterceptors(sp.GetRequiredService<DomainEventOutboxInterceptor>());
 });
 builder.Services.AddCatalogWorkers();
 
@@ -56,11 +63,6 @@ return 0;
 static string RedisConnection(IConfiguration configuration) =>
     configuration.GetConnectionString("Redis") ?? configuration["Redis:ConnectionString"] ?? "localhost:6379";
 
-static string ConnectionString(IConfiguration configuration) =>
-    configuration.GetConnectionString("DefaultConnection")
-    ?? configuration["Database:ConnectionString"]
-    ?? "Host=localhost;Port=5432;Database=mechware;Username=mechware;Password=mechware_secret";
-
 static async Task<int> RunSeedAsync(string[] args)
 {
     var configuration = new ConfigurationBuilder().AddEnvironmentVariables().AddJsonFile("appsettings.json", optional: true).Build();
@@ -79,14 +81,14 @@ static async Task<int> RunSeedAsync(string[] args)
         }
     }
 
+    string connectionString = MechwareDatabase.ConnectionString(configuration);
+    if (await MechwareDatabase.MigrateAsync(connectionString, Console.Out, Console.Error) != 0) return 1;
+
     var dbOptions = new DbContextOptionsBuilder<MechwareDbContext>()
-        .UseNpgsql(ConnectionString(configuration))
+        .UseNpgsql(connectionString)
         .AddInterceptors(new DomainEventOutboxInterceptor())
         .Options;
     await using var db = new MechwareDbContext(dbOptions);
-
-    Console.WriteLine("Applying migrations…");
-    await db.Database.MigrateAsync();
 
     Console.WriteLine($"Seeding catalogue (seed {options.RandomSeed})…");
     var report = await CatalogSeeder.SeedAsync(db, options);

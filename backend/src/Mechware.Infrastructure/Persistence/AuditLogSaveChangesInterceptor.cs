@@ -58,7 +58,8 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
 
         foreach (EntityEntry entry in context.ChangeTracker.Entries().ToList())
         {
-            if (entry.Entity is AuditLog ||
+            // Data Protection keys are key material (plain XML without a certificate): never copied into the audit log.
+            if (entry.Entity is AuditLog or Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey ||
                 Attribute.IsDefined(entry.Entity.GetType(), typeof(NotAuditedAttribute)) ||
                 entry.State is EntityState.Detached or EntityState.Unchanged)
             {

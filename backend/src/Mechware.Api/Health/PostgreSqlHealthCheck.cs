@@ -1,29 +1,27 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
-using Npgsql;
-using Mechware.Api.Configuration;
+using Mechware.Infrastructure.Persistence;
 
 namespace Mechware.Api.Health;
 
+/// <summary>
+/// Readiness of the database the API actually uses: the probe goes through <see cref="MechwareDbContext"/>, so it can never
+/// test a different connection string than the requests do.
+/// </summary>
 public sealed class PostgreSqlHealthCheck : IHealthCheck
 {
-    private readonly DatabaseOptions _options;
+    private readonly MechwareDbContext _db;
 
-    public PostgreSqlHealthCheck(IOptions<DatabaseOptions> options)
+    public PostgreSqlHealthCheck(MechwareDbContext db)
     {
-        _options = options.Value;
+        _db = db;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
-            await using var conn = new NpgsqlConnection(_options.ConnectionString);
-            await conn.OpenAsync(cancellationToken);
-
-            await using var cmd = new NpgsqlCommand("SELECT 1;", conn);
-            await cmd.ExecuteScalarAsync(cancellationToken);
-
+            await _db.Database.ExecuteSqlRawAsync("SELECT 1;", cancellationToken);
             return HealthCheckResult.Healthy("PostgreSQL database connection is healthy.");
         }
         catch (Exception ex)

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Mechware.Domain.Approvals;
@@ -18,7 +19,7 @@ namespace Mechware.Infrastructure.Persistence;
 /// <summary>
 /// EF Core DbContext for MECHWARE platform with Fluent API configurations for Phase 3 Identity & Access.
 /// </summary>
-public sealed class MechwareDbContext : DbContext
+public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
 {
     public MechwareDbContext(DbContextOptions<MechwareDbContext> options) : base(options)
     {
@@ -93,6 +94,9 @@ public sealed class MechwareDbContext : DbContext
     public DbSet<PromotionUserUsage> PromotionUserUsage => Set<PromotionUserUsage>();
     public DbSet<CouponFailureWindow> CouponFailureWindows => Set<CouponFailureWindow>();
     public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
+
+    /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

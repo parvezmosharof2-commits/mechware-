@@ -21,6 +21,7 @@ using Mechware.Infrastructure.Identity;
 using Mechware.Infrastructure.Persistence;
 using Mechware.Infrastructure.Persistence.Outbox;
 using Mechware.Infrastructure.Search;
+using Mechware.Infrastructure.Security;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,8 +35,11 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // 2. Strongly Typed Configuration with Startup Validation
+// One database for everything: ConnectionStrings:DefaultConnection, else the older Database:ConnectionString (MechwareDatabase).
+string databaseConnection = MechwareDatabase.ConnectionString(builder.Configuration);
 builder.Services.AddOptions<DatabaseOptions>()
     .BindConfiguration(DatabaseOptions.SectionName)
+    .PostConfigure(o => o.ConnectionString = databaseConnection)
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
@@ -51,10 +55,12 @@ builder.Services.AddOptions<JwtOptions>()
         "JWT Secret is a published development value; set Jwt__Secret from the secret store.")
     .ValidateOnStart();
 
+// Object storage is optional (no feature uses it yet); when Storage:ServiceUrl is set it must be complete.
 builder.Services.AddOptions<StorageOptions>()
     .BindConfiguration(StorageOptions.SectionName)
-    .ValidateDataAnnotations()
+    .Validate(o => o.IsValid(), StorageOptions.InvalidMessage)
     .ValidateOnStart();
+bool objectStorageConfigured = (builder.Configuration.GetSection(StorageOptions.SectionName).Get<StorageOptions>() ?? new()).IsConfigured;
 
 // 2.0a Application-level encryption of business identifiers (threat model v1, H4). Outside Development the key must come
 // from the secret store: the development key is published in this repository.
@@ -110,15 +116,16 @@ builder.Services.AddScoped<AuditLogSaveChangesInterceptor>();
 
 builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 {
-    var dbConn = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? builder.Configuration.GetSection(DatabaseOptions.SectionName)["ConnectionString"]
-        ?? "Host=localhost;Port=5432;Database=mechware_db;Username=mechware;Password=mechware_dev_password";
-
-    options.UseNpgsql(dbConn)
+    options.UseNpgsql(databaseConnection)
         .AddInterceptors(
             sp.GetRequiredService<AuditLogSaveChangesInterceptor>(),
             sp.GetRequiredService<DomainEventOutboxInterceptor>());
 });
+
+// 2.3a Data Protection keys in the database, shared by every instance and kept across deploys. With
+// DataProtection:CertificatePath (PKCS#12 with private key) they are encrypted at rest; without it they are plain XML.
+bool dataProtectionKeysEncrypted = builder.Services.AddPersistedDataProtection(
+    builder.Configuration["DataProtection:CertificatePath"], builder.Configuration["DataProtection:CertificatePassword"]);
 
 // 2.4 Phase 4 Catalog, Inventory, Outbox and storefront cache (hosted workers live in Mechware.Worker)
 builder.Services.AddCatalogServices();
@@ -201,17 +208,16 @@ builder.Services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHand
 builder.Services.AddSingleton<IAuthorizationHandler, SellerResourceIsolationHandler>();
 builder.Services.AddAuthorization();
 
-// 3. Health Checks
-builder.Services.AddHttpClient("MinioHealth", client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(3);
-});
-
-builder.Services.AddHealthChecks()
+// 3. Health Checks: readiness covers what the API needs to serve; object storage only when it is configured.
+var healthChecks = builder.Services.AddHealthChecks()
     .AddCheck("self", () => HealthCheckResult.Healthy(), tags: ["live"])
     .AddCheck<PostgreSqlHealthCheck>("postgresql", tags: ["ready"])
-    .AddCheck<RedisHealthCheck>("redis", tags: ["ready"])
-    .AddCheck<MinioHealthCheck>("minio", tags: ["ready"]);
+    .AddCheck<RedisHealthCheck>("redis", tags: ["ready"]);
+if (objectStorageConfigured)
+{
+    builder.Services.AddHttpClient("MinioHealth", client => client.Timeout = TimeSpan.FromSeconds(3));
+    healthChecks.AddCheck<MinioHealthCheck>("minio", tags: ["ready"]);
+}
 
 // 4. OpenAPI / Swagger Documentation
 builder.Services.AddEndpointsApiExplorer();
@@ -403,6 +409,10 @@ if (bootstrapAdmin is not null)
 if (!app.Services.GetRequiredService<IdentitySeedPolicy>().SeedDemoAccounts)
 {
     app.Logger.LogInformation("No demo accounts are seeded in the {Environment} environment; the identity store starts empty.", app.Environment.EnvironmentName);
+}
+if (!dataProtectionKeysEncrypted && !app.Environment.IsDevelopment())
+{
+    app.Logger.LogWarning("Data Protection keys are stored unencrypted in the database; set DataProtection__CertificatePath to encrypt them at rest.");
 }
 
 // Configure Middleware Pipeline

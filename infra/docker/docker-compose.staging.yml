@@ -11,9 +11,9 @@ name: mechware-staging
 
 x-api-env: &api-env
   ASPNETCORE_ENVIRONMENT: Production
+  # The one database setting (DbContext, /health/ready, Worker and `migrate`). GSS/Kerberos encryption is off by default in
+  # code (no libgssapi in the images); add "GSS Encryption Mode=..." here only if the database really uses Kerberos.
   ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=mechware;Username=mechware;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
-  # /health/ready reads Database__ConnectionString (not ConnectionStrings__*), so both are set.
-  Database__ConnectionString: "Host=postgres;Port=5432;Database=mechware;Username=mechware;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
   ConnectionStrings__Redis: "redis:6379,abortConnect=false"
   Jwt__Secret: ${JWT_SECRET:?set JWT_SECRET (at least 32 random bytes)}
   Jwt__Issuer: ${JWT_ISSUER:-https://api.staging.invalid}
@@ -25,15 +25,33 @@ x-api-env: &api-env
   Email__Port: ${EMAIL_PORT:-1025}
   Email__FromAddress: ${EMAIL_FROM_ADDRESS:?set EMAIL_FROM_ADDRESS}
   Storefront__BaseUrl: ${STOREFRONT_BASE_URL:?set STOREFRONT_BASE_URL (https public address of the shop)}
-  # Startup validates Storage and /health/ready probes {ServiceUrl}/minio/health/live: an S3-compatible store is required.
-  Storage__ServiceUrl: http://minio:9000
-  Storage__AccessKey: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
-  Storage__SecretKey: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+  # Object storage is off: no feature uses it yet and documents live on the `documents` volume (C3 "S3 vs volume" is an
+  # open owner decision). Setting Storage__ServiceUrl + Storage__AccessKey + Storage__SecretKey switches it on, and then
+  # /health/ready probes {ServiceUrl}/minio/health/live.
   Documents__LocalPath: /data/documents
+  # Data Protection keys live in Postgres (table data_protection_keys). Optional: a PKCS#12 file (with private key) mounted
+  # read-only into the container encrypts them at rest; without it the API logs a warning and stores them as plain XML.
+  DataProtection__CertificatePath: ${DATA_PROTECTION_CERT_PATH:-}
+  DataProtection__CertificatePassword: ${DATA_PROTECTION_CERT_PASSWORD:-}
   Antivirus__Host: clamav
   Antivirus__Port: "3310"
 
 services:
+  # Deploy step: applies pending migrations and exits (non-zero on failure, which keeps api/worker from starting).
+  # The API never migrates. Several runs at once are safe (advisory lock). Same as: docker run mechware-worker:staging migrate
+  migrate:
+    build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
+    image: mechware-worker:staging
+    restart: "no"
+    command: ["migrate"]
+    environment: *api-env
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
   api:
     build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
     image: mechware-api:staging
@@ -49,11 +67,11 @@ services:
     security_opt: ["no-new-privileges:true"]
     volumes: [documents:/data/documents]
     depends_on:
+      migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       meilisearch: { condition: service_healthy }
       clamav: { condition: service_healthy }
-      minio: { condition: service_healthy }
 
   worker:
     build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
@@ -65,6 +83,7 @@ services:
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:
+      migrate: { condition: service_completed_successfully }
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
       meilisearch: { condition: service_healthy }
@@ -150,22 +169,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # NOTE: this tag matches the dev compose file but Docker Hub currently denies the pull (minio/minio is gone upstream);
-  # pick a replacement S3-compatible store/tag before the first staging deploy.
-  minio:
-    image: minio/minio:RELEASE.2024-11-07T00-52-28Z
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
-    volumes: [minio_data:/data]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   clamav:
     image: clamav/clamav:1.4
     restart: unless-stopped
@@ -191,5 +194,4 @@ volumes:
   redis_data:
   meili_data:
   clamav_data:
-  minio_data:
   documents:
