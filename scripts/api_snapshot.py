@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Regenerate the committed OpenAPI snapshot and the TypeScript types made from it (A6.4).
 
-    python scripts/api_snapshot.py [--no-build]
+    python scripts/api_snapshot.py [--no-build] [--out <dir>]   (--out: build into <dir> instead of bin/Release)
 
 Needs only the .NET SDK and `pnpm install` in frontend/. No database, Redis or search server: the Swashbuckle CLI builds the
 host without running it (Program.cs skips the identity-store boot check for the `dotnet-swagger` process).
@@ -28,14 +28,20 @@ def run(cmd, **kw):
 
 
 def main():
+    dll = DLL
+    build = ["dotnet", "build", str(API_DIR), "-c", "Release", "--nologo", "-v", "q"]
+    if "--out" in sys.argv:  # build elsewhere, e.g. while a running API locks bin/Release
+        out = pathlib.Path(sys.argv[sys.argv.index("--out") + 1]).resolve()
+        build.append(f"-p:BaseOutputPath={out}{os.sep}")
+        dll = out / "Release" / "net10.0" / "Mechware.Api.dll"
     if "--no-build" not in sys.argv:
-        run(["dotnet", "build", str(API_DIR), "-c", "Release", "--nologo", "-v", "q"])
+        run(build)
     run(["dotnet", "tool", "restore"], cwd=ROOT)
     with tempfile.TemporaryDirectory() as tmp:
         raw = pathlib.Path(tmp) / "swagger.json"
         env = {**os.environ, "ASPNETCORE_ENVIRONMENT": "Development"}
         # cwd = the Api project so appsettings.Development.json is found (dummy local keys only).
-        run(["dotnet", "swagger", "tofile", "--output", str(raw), str(DLL), "v1"], cwd=API_DIR, env=env)
+        run(["dotnet", "swagger", "tofile", "--output", str(raw), str(dll), "v1"], cwd=API_DIR, env=env)
         doc = json.loads(raw.read_text(encoding="utf-8"))
     SNAPSHOT.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     run(["pnpm", "--dir", str(CLIENT), "run", "generate:types"])
