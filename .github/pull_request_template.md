@@ -40,8 +40,9 @@
 
 ## ডকুমেন্ট
 
-- [ ] `PROGRESS.md` আপডেট
-- [ ] API বদলালে `docs/API_CONTRACT.md`, টেবিল বদলালে `docs/DATA_MODEL.md` আপডেট
+- [ ] মডিউল-কার্ড (`docs/modules/<ID>.md`) আপডেট: unit-এর সারিতে ✅ ও exit test-এর সংখ্যা
+- [ ] কার্ডের **HANDOFF** ব্লক পূরণ (কী হলো, নকশার সিদ্ধান্ত, বিস্ময়, পরের unit) ও `docs/NOW.md` আপডেট
+- [ ] API বদলালে Swagger/`schema.d.ts` আবার তৈরি (`docs/API_CONTRACT.md` ও `docs/DATA_MODEL.md` পুরনো v1 — আর বদলানো হয় না)
 - [ ] যা এখনো বাকি বা জানা ঝুঁকি, তা স্পষ্ট লেখা আছে
 
 ## স্ক্রিনশট (UI হলে)
