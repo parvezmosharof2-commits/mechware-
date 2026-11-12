@@ -446,6 +446,8 @@ export class MechWareApiClient {
 }
 
 export { createInMemoryTokenVault };
+export * from "./storefront-model";
+export * from "./storefront";
 
 export * from "./companies-model";
 export * from "./companies";

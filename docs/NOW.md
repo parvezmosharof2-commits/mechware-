@@ -14,3 +14,5 @@ C6.4 ✅ · C6.5 accuracy 100 % / k6 p95 17.8 ms ✅ → **module C6 complete** 
 **Before starting:** Docker Desktop running → `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch`.
 
 **Owner actions (start now):** VAT consultant · lawyer · SSLCommerz/bKash merchant · SMS sender ID + email domain · pen-test booking · 5 real buyers + real product data. Open decisions: [MODULES.md](MODULES.md) §5.
+
+A6 tooling ✅ (check_cards, test_module, module-boundary ratchet, OpenAPI drift). C7.1 storefront api-client ✅. **Next:** C7.2 PLP shell + filters, C7.3 PLP table/list (Sonnet).
