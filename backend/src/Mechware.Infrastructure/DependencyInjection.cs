@@ -96,6 +96,7 @@ public static class DependencyInjection
         services.AddSingleton(options);
         services.TryAddSingleton<ISearchProvider>(sp => new MeilisearchSearchProvider(
             new HttpClient(), options, sp.GetRequiredService<ILogger<MeilisearchSearchProvider>>()));
+        services.TryAddSingleton<IStorefrontSearch, StorefrontSearchService>();
         return services;
     }
 

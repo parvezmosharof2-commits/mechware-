@@ -22,7 +22,8 @@ public sealed class DemoAccountGuardTests
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
-            ["Antivirus:Host"] = "127.0.0.1"
+            ["Antivirus:Host"] = "127.0.0.1",
+            ["Search:ApiKey"] = "test-search-key"
         });
 
     private static MechwareDbContext Db(DbBackedFactory factory) =>

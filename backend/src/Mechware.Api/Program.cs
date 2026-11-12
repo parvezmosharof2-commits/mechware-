@@ -19,6 +19,7 @@ using Mechware.Infrastructure;
 using Mechware.Infrastructure.Identity;
 using Mechware.Infrastructure.Persistence;
 using Mechware.Infrastructure.Persistence.Outbox;
+using Mechware.Infrastructure.Search;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -120,6 +121,10 @@ builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 
 // 2.4 Phase 4 Catalog, Inventory, Outbox and storefront cache (hosted workers live in Mechware.Worker)
 builder.Services.AddCatalogServices();
+
+// Storefront search (C6.3): the API only queries the engine; indexing runs in the Worker.
+var searchOptions = builder.Configuration.GetSection(SearchOptions.SectionName).Get<SearchOptions>() ?? new SearchOptions();
+builder.Services.AddSearch(searchOptions, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();
