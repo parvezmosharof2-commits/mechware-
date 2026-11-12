@@ -17,7 +17,10 @@ using Mechware.Infrastructure.Documents;
 using Microsoft.Extensions.Options;
 using Mechware.Infrastructure.Inventory;
 using Mechware.Infrastructure.Persistence.Outbox;
+using Mechware.Infrastructure.Search;
 using Mechware.Infrastructure.Workers;
+using Mechware.Application.Search;
+using Microsoft.Extensions.Logging;
 
 namespace Mechware.Infrastructure;
 
@@ -74,6 +77,25 @@ public static class DependencyInjection
             ? new ClamAvScanner(antivirus.Host!, antivirus.Port, TimeSpan.FromSeconds(Math.Clamp(antivirus.TimeoutSeconds, 1, 600)))
             : new DevelopmentSignatureScanner());
         services.TryAddScoped<IProductDocumentService, ProductDocumentService>();
+        return services;
+    }
+
+    /// <summary>
+    /// The search engine (Meilisearch) behind <c>ISearchProvider</c>. Outside Development and Testing the key must be set: a
+    /// production engine with no key would be open to anyone who can reach it.
+    /// </summary>
+    public static IServiceCollection AddSearch(this IServiceCollection services, SearchOptions options, bool requireRealSetup)
+    {
+        if (!Uri.TryCreate(options.Url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
+            throw new InvalidOperationException("Search:Url must be an absolute http(s) address (Search__Url).");
+        if (requireRealSetup && string.IsNullOrWhiteSpace(options.ApiKey))
+            throw new InvalidOperationException("Search:ApiKey is not set; set Search__ApiKey to the Meilisearch key.");
+        if (options.IndexName is not { Length: > 0 and <= 64 } || !options.IndexName.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-'))
+            throw new InvalidOperationException("Search:IndexName may only contain letters, digits, '_' and '-' (at most 64).");
+
+        services.AddSingleton(options);
+        services.TryAddSingleton<ISearchProvider>(sp => new MeilisearchSearchProvider(
+            new HttpClient(), options, sp.GetRequiredService<ILogger<MeilisearchSearchProvider>>()));
         return services;
     }
 

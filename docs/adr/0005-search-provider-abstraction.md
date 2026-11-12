@@ -79,3 +79,18 @@ public interface ISearchProvider
 
 ### Negative:
 - Eventual consistency introduces a negligible delay (~200ms) between product updates in the database and appearance in search results.
+
+## Amendment (2026-11-12): what C6.1 actually built
+
+- **Port location:** `backend/src/Mechware.Application/Search/SearchContracts.cs` (not `Common/Interfaces`). It adds
+  `EnsureIndexAsync`; `SearchQuery` validates itself; filter values outside the slug alphabet are refused, never escaped.
+- **Adapter:** `MeilisearchSearchProvider` talks to the Meilisearch HTTP API with `HttpClient` instead of the
+  Meilisearch-dotnet package: no new dependency to audit, and the index settings stay fully under our control. Engine
+  failures (unreachable, non-2xx, failed task, task timeout) become `503 SEARCH_UNAVAILABLE`; the engine's message is logged only.
+- **Exact part numbers do not rely on the engine's tokenizer.** Meilisearch splits `6ES72141AG400XB0` into pieces, and with
+  typos disabled on that field even an exact query found nothing (re-joining the pieces counts as a typo). Exact lookup
+  therefore filters on `partNumberKeys` (our own `PartNumbers.Normalise` and `Fuzzy` keys); raw part numbers stay in
+  free-text search with normal typo tolerance.
+- **MockSearchProvider:** not built; tests run against the real engine from `infra/docker/docker-compose.yml` and skip
+  when it is not reachable (`MECHWARE_TEST_MEILI`).
+- The event `ProductStockStatusChangedDomainEvent` named above does not exist; stock changes reach the index through C6.2.
