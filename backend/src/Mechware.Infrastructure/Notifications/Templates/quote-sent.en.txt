@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Your quote {{quoteNumber}} is ready. Total: {{total}}. It is valid until {{validUntil}}.
+
+View your quote: {{quoteUrl}}

@@ -1,0 +1,5 @@
+প্রিয় {{approverName}},
+
+{{requesterName}} অর্ডার {{orderNumber}} ({{total}}) দিয়েছেন, যা আপনার অনুমোদনের অপেক্ষায় আছে।
+
+দেখে অনুমোদন করুন: {{approvalUrl}}

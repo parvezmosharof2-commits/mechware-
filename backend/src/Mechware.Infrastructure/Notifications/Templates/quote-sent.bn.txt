@@ -1,0 +1,5 @@
+প্রিয় {{customerName}},
+
+আপনার কোটেশন {{quoteNumber}} প্রস্তুত। মোট: {{total}}। কোটেশনটি {{validUntil}} পর্যন্ত বৈধ।
+
+কোটেশন দেখুন: {{quoteUrl}}

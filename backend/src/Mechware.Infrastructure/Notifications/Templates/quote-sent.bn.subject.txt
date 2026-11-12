@@ -1,0 +1,1 @@
+Mechware থেকে আপনার কোটেশন {{quoteNumber}}

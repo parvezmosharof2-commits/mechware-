@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Thank you. We have received your order {{orderNumber}}. Order total: {{total}}.
+
+View your order: {{orderUrl}}

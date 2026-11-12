@@ -18,6 +18,8 @@ using Microsoft.Extensions.Options;
 using Mechware.Infrastructure.Inventory;
 using Mechware.Infrastructure.Persistence.Outbox;
 using Mechware.Infrastructure.Search;
+using Mechware.Infrastructure.Notifications;
+using Mechware.Application.Notifications;
 using Mechware.Infrastructure.Workers;
 using Mechware.Application.Search;
 using Microsoft.Extensions.Logging;
@@ -99,6 +101,29 @@ public static class DependencyInjection
             // Recycled connections follow DNS changes (engine failover, blue/green deploys).
             new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }), options, sp.GetRequiredService<ILogger<MeilisearchSearchProvider>>()));
         services.TryAddSingleton<IStorefrontSearch, StorefrontSearchService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Email (SMTP) and the bilingual template engine. Outside Development and Testing the SMTP host and the From address must be set.
+    /// With no host in Development/Testing, messages are only logged.
+    /// </summary>
+    public static IServiceCollection AddNotifications(this IServiceCollection services, EmailOptions options, bool requireRealSetup)
+    {
+        bool haveHost = !string.IsNullOrWhiteSpace(options.Host);
+        if (requireRealSetup && !haveHost)
+            throw new InvalidOperationException("Email:Host is not set; set Email__Host to the SMTP server.");
+        if (requireRealSetup && string.IsNullOrWhiteSpace(options.FromAddress))
+            throw new InvalidOperationException("Email:FromAddress is not set; set Email__FromAddress to the sending address.");
+        if (haveHost && !System.Net.Mail.MailAddress.TryCreate(options.FromAddress, out _))
+            throw new InvalidOperationException("Email:FromAddress must be a valid email address.");
+        if (options.Port is < 1 or > 65535)
+            throw new InvalidOperationException("Email:Port must be between 1 and 65535.");
+
+        services.AddSingleton(options);
+        services.TryAddSingleton<INotificationTemplates, EmbeddedTemplates>();
+        if (haveHost) services.TryAddSingleton<INotificationSender, SmtpEmailSender>();
+        else services.TryAddSingleton<INotificationSender, LoggingEmailSender>();
         return services;
     }
 

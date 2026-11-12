@@ -23,6 +23,8 @@ public sealed class DemoAccountGuardTests
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
             ["Antivirus:Host"] = "127.0.0.1",
+            ["Email:Host"] = "localhost",
+            ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Search:ApiKey"] = "test-search-key"
         });
 

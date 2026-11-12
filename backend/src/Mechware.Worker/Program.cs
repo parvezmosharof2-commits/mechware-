@@ -44,6 +44,11 @@ var search = builder.Configuration.GetSection(SearchOptions.SectionName).Get<Sea
 builder.Services.AddSearch(search, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")));
 builder.Services.AddSearchIndexing();
 
+// Email (F3a). Outside Development and Testing Email__Host and Email__FromAddress must be configured.
+builder.Services.AddNotifications(
+    builder.Configuration.GetSection(Mechware.Infrastructure.Notifications.EmailOptions.SectionName).Get<Mechware.Infrastructure.Notifications.EmailOptions>() ?? new(),
+    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")));
+
 await builder.Build().RunAsync();
 return 0;
 

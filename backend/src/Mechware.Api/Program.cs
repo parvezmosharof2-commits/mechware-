@@ -127,6 +127,10 @@ builder.Services.AddCatalogServices();
 var searchOptions = builder.Configuration.GetSection(SearchOptions.SectionName).Get<SearchOptions>() ?? new SearchOptions();
 builder.Services.AddSearch(searchOptions, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 
+builder.Services.AddNotifications(
+    builder.Configuration.GetSection(Mechware.Infrastructure.Notifications.EmailOptions.SectionName).Get<Mechware.Infrastructure.Notifications.EmailOptions>() ?? new(),
+    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();
 builder.Services.AddSingleton<ISmsProvider, LoggingSmsProvider>();

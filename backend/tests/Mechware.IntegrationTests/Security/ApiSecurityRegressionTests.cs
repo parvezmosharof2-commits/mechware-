@@ -249,6 +249,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
             ["Antivirus:Host"] = "127.0.0.1",
+            ["Email:Host"] = "localhost",
+            ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Search:ApiKey"] = "test-search-key",
             ["Encryption:FieldKey"] = key is null ? "" : Convert.ToBase64String(Mechware.Infrastructure.Security.FieldEncryption.DevelopmentKey)
         });
@@ -351,6 +353,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
             ["Antivirus:Host"] = "127.0.0.1",
+            ["Email:Host"] = "localhost",
+            ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Search:ApiKey"] = "test-search-key"
         });
         var client = factory.CreateClient();
@@ -390,6 +394,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
             ["Antivirus:Host"] = "127.0.0.1",
+            ["Email:Host"] = "localhost",
+            ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Search:ApiKey"] = "test-search-key",
             ["Identity:BootstrapAdmin:Email"] = email,
             ["Identity:BootstrapAdmin:Password"] = password,
@@ -424,6 +430,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
             ["Antivirus:Host"] = "127.0.0.1",
+            ["Email:Host"] = "localhost",
+            ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Search:ApiKey"] = "test-search-key"
         });
 }

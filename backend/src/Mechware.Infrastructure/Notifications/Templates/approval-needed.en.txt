@@ -1,0 +1,5 @@
+Hello {{approverName}},
+
+{{requesterName}} has placed order {{orderNumber}} ({{total}}) that needs your approval.
+
+Review and approve: {{approvalUrl}}
