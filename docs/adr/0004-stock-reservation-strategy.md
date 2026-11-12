@@ -49,7 +49,7 @@ We implement a **Two-Phase Inventory Reservation Pattern** with tiered concurren
   - `warehouse_id (UUID)`
   - `cart_id (UUID)` / `order_id (UUID)`
   - `quantity (int)`
-  - `expires_at (timestamptz)` (strictly 15 minutes from reservation initiation)
+  - `expires_at (timestamptz)` (15 minutes by default; orders reserve for 30 minutes, the payment window, and orders waiting for approval up to 24 h 30 min — see the amendments at the end)
 
 ### 2. Concurrency Strategy
 1. **Tier 1 — High-Contention Guard (Redis RedLock)**:
@@ -100,7 +100,7 @@ We implement a **Two-Phase Inventory Reservation Pattern** with tiered concurren
 ## Consequences
 ### Positive:
 - **Zero Overselling**: Mathematically impossible for concurrent checkouts to exceed available inventory.
-- **Fair Access**: True 15-minute purchasing window for buyers without locking stock indefinitely.
+- **Fair Access**: A bounded purchasing window (30 minutes for an order awaiting payment) for buyers without locking stock indefinitely.
 - **Resilient**: If the customer abandons checkout, the background worker recycles the stock seamlessly without human intervention.
 
 ### Negative:

@@ -1,0 +1,3 @@
+# G1 Console shell — ✅ · G5 Audit, users, exports, settings — ⬜
+**G1:** `frontend/apps/console` — sign-in + TOTP, `RoleAwareSidebar` (permission-driven), `/companies`, `/staff`. Feature screens live in their feature module (C4, C10, D2, D4, B3, E5, E6, E8, F1, F2), not here.
+**G5 units (Sonnet, one screen each; exit = permission test per endpoint + E2E):** G5.1 orders list · G5.2 order detail + transitions · G5.3 refund queue (step-up) · G5.4 audit viewer (before/after diff) · G5.5 users & roles (settle role names: brief §9 vs code) · G5.6 exports · G5.7 settings. CMS console and reports ⏭ (static legal/help pages meanwhile).

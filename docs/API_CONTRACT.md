@@ -3,6 +3,8 @@
 > **Base URL:** `https://api.mechware.com.bd/api/v1` (Production) / `http://localhost:5000/api/v1` (Local)
 > **Specification Standard:** OpenAPI 3.1 / ASP.NET Core 10 Web API
 > **Error Standard:** RFC 7807 ProblemDetails `{ "error": { "code": string, "message": string, "details": object[], "traceId": string } }`
+>
+> **অবস্থা (২০২৬-১১-১০):** যেসব endpoint-এ "অবস্থা" নোট নেই সেগুলোর কিছু v1 স্কেচ (seller, payout, flash sale, AI ইত্যাদি লঞ্চের পরে)। বাস্তবে কী আছে তা মডিউল অনুযায়ী [`MODULES.md`](MODULES.md)-এ; সন্দেহ হলে Swagger (`/swagger`) আর controller-ই সত্য।
 
 ---
 
@@ -349,6 +351,8 @@ The rules:
 
 ### 2.4 Checkout & Orders (`/checkout`, `/orders`, `/sub-orders`)
 
+> **অবস্থা (২০২৬-১১-১০): এই অংশ পুরনো স্কেচ।** বাস্তবে `/checkout/*` নেই; অর্ডার হয় `POST /orders` দিয়ে (§2.18 দেখুন, সেটাই সত্য)। অর্ডার নম্বর `MW-YYMMDD-XXXXXX`। `stripe` লঞ্চের gateway নয় (লঞ্চে SSLCommerz, bKash, bank/PO, credit, COD; ব্রিফ §8.7)। মডিউল ও অবস্থার জন্য [`MODULES.md`](MODULES.md)।
+
 #### `POST /checkout/reserve` (15-Minute Inventory Lock)
 - **Auth**: Bearer or Guest Session | **Header**: `Idempotency-Key` (Mandatory) | **Rate Limit**: 10 req/min
 - **Request**:
@@ -389,11 +393,11 @@ The rules:
 - **Response**: `201 Created`
   ```json
   {
-    "orderNumber": "SV-261029-X7K92M",
+    "orderNumber": "MW-261029-X7K92M",
     "paymentStatus": "unpaid",
     "paymentRedirectUrl": "https://tokenized.bkash.com/checkout?paymentID=TR001...",
     "subOrders": [
-      { "subOrderNumber": "SV-261029-X7K92M-01", "sellerId": "uuid", "status": "pending_payment" }
+      { "subOrderNumber": "MW-261029-X7K92M-01", "sellerId": "uuid", "status": "pending_payment" }
     ]
   }
   ```
@@ -407,12 +411,14 @@ The rules:
 
 ### 2.5 Payments & Gateway Webhooks (`/payments`, `/webhooks`)
 
+> **অবস্থা (২০২৬-১১-১০): স্কেচ, আংশিক বাস্তব।** কোডে আছে `POST /orders/{id}/payments` ও `POST /payments/webhooks/{provider}` (mock provider, শুধু Development)। bKash/SSLCommerz/COD adapter এখনো নেই (মডিউল E5)। Stripe, AWS SNS-ভিত্তিক bKash IPN আর ledger লেখা লঞ্চের পরিকল্পনায় নেই; আসল gateway বসানোর সময় তাদের নথি দেখে যাচাই করতে হবে।
+
 #### `POST /payments/bkash/execute` (Server-to-Server bKash Capture)
 - **Auth**: Bearer or Guest Session | **Header**: `Idempotency-Key` (Mandatory) | **Rate Limit**: 10 req/min
 - **Request**:
   ```json
   {
-    "orderNumber": "SV-261029-X7K92M",
+    "orderNumber": "MW-261029-X7K92M",
     "paymentId": "TR00112233AA"
   }
   ```
@@ -430,7 +436,7 @@ The rules:
 
 #### `POST /payments/cod/verify-otp`
 - **Auth**: Bearer or Guest Session | **Rate Limit**: 5 req/min
-- **Request**: `{ "orderNumber": "SV-261029-X7K92M", "otpCode": "849201" }`
+- **Request**: `{ "orderNumber": "MW-261029-X7K92M", "otpCode": "849201" }`
 - **Security Behavior**: Binds verification to `order.Id` (verifying `otp_codes.reference_id == order.Id`). Uses constant-time equality check (`CryptographicOperations.FixedTimeEquals`) against salted HMAC-SHA256 hash to prevent timing attacks. On success, transitions `orders.payment_status` to `'cod_verified'`, sets child sub-orders to `'confirmed'`, and alerts merchant dispatchers.
 
 ---

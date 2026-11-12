@@ -1,0 +1,4 @@
+# Generated files: collapsed in diffs/reviews and excluded from language stats.
+backend/src/Mechware.Infrastructure/Persistence/Migrations/*.Designer.cs linguist-generated=true
+backend/src/Mechware.Infrastructure/Persistence/Migrations/*ModelSnapshot.cs linguist-generated=true
+frontend/pnpm-lock.yaml linguist-generated=true

@@ -2,6 +2,8 @@
 
 > **Single Source of Truth for Database Schema, Types, Constraints, and Indexes**
 > Stack: PostgreSQL 16 + Entity Framework Core 10 (Npgsql) + Dapper
+>
+> **অবস্থা (২০২৬-১১-১০):** এই নথি v1 (মাল্টি-ভেন্ডর) আকারের। brief v2 (B2B, সরাসরি বিক্রয়) অনুযায়ী লঞ্চে seller/payout/ledger/flash-sale/wishlist/conversation টেবিল **লাগবে না** (লঞ্চের পরে, `SellerId` মডেলে থাকবে)। আর company, cost centre, approval, idempotency, promotion, refund, product_document ইত্যাদি বাস্তব টেবিল এখানে নেই; সত্য হলো EF configuration ও migration (`backend/src/Mechware.Infrastructure/Persistence/`)। মডিউলভিত্তিক তালিকা: [`MODULES.md`](MODULES.md)।
 
 ---
 

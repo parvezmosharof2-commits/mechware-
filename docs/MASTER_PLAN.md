@@ -77,6 +77,8 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 
 ## ৩. ধাপে ধাপে রোডম্যাপ (১ স্প্রিন্ট = ১ সপ্তাহ, মোট ~২০ সপ্তাহ)
 
+> **মডিউল ভাগ (২০২৬-১১-১০):** প্রতিটা স্প্রিন্ট [`MODULES.md`](MODULES.md)-এর ছোট মডিউলে ভাঙা আছে (সীমানা, ফাইলের পথ, টেস্ট কমান্ড, শেষ বলার শর্ত)। কাজ মডিউল ধরে, একটা শেষ হলে পরেরটা। স্প্রিন্ট ৫–৬ = C৬ + C৭; ৭–৯ = D২, D৪, D৫; ১০–১২ = E১, E৩, E৫, E৬; ১৩–১৪ = F১, F২, F৩, F৫; ১৫–১৬ = G২–G৫; ১৭–১৮ = H২–H৪।
+
 প্রতিটা ধাপের **Exit gate** পূরণ না হলে পরের ধাপে যাওয়া যাবে না।
 
 ### স্প্রিন্ট ০ — স্থিতিশীল করা (১ সপ্তাহ) — ✅ সম্পূর্ণ (২০২৬-১১-০৫; PR #25, #26, #27)
@@ -89,7 +91,7 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
 | বাগ #৫, #৭ | রেজিস্ট্রেশনে অ্যাকাউন্ট আছে কিনা ফাঁস না করা; web/console-এ security header (CSP, HSTS, X-Frame-Options) |
 | বাগ #৬ | `ForwardedHeaders`-এ `KnownNetworks` কনফিগারযোগ্য করা (Cloudflare/LB) |
 | পরিচ্ছন্নতা | ✅ ৩৩টা ESLint warning ঠিক, `--max-warnings 0` চালু; ✅ রুটের পুরনো Vite/AI Studio অ্যাপ মোছা, পুরনো নোট `docs/archive/`-এ |
-| CI গেট | ✅ Semgrep ও Trivy ব্লকিং (finding log-এ দেখায়); ✅ ZAP চালানো হয়েছে; ⬜ ASVS ম্যাট্রিক্সে অফিসিয়াল requirement ID বসানো |
+| CI গেট | ✅ Semgrep ও Trivy ব্লকিং (finding log-এ দেখায়); ✅ ZAP চালানো হয়েছে; ✅ ASVS ম্যাট্রিক্সে অফিসিয়াল requirement ID বসানো (৮২টা, §৮) |
 | ডকুমেন্ট | ✅ `ARCHITECTURE.md` v2 (কোড + brief v2); ADR-0003 ও DATA_MODEL-এ `MW-` নম্বর |
 | মালিক | GitHub-এ branch protection, secret scanning + push protection চালু |
 
@@ -132,7 +134,8 @@ scanning), বাইরের তিন যাচাইকারী ঠিক �
   - ভুল ধরনের unit আটকায়: যেমন কারেন্ট, ক্ষেত্রফল (mm²) বা শক্তি (kWh)।
   - Seed-এর ৯টা attribute সংখ্যা হিসেবে আছে।
   - স্প্রিন্ট ৫–৬-এর range filter এর উপর দাঁড়াবে।
-- ⏳ **পরের ধাপ:** datasheet/CAD আপলোড (AV scan), বিকল্প পণ্য।
+- ✅ **ধাপ ৩–৫ (২০২৬-১১-০৭, `main`-এ):** অর্ডারে MOQ/pack যাচাই, উত্তরসূরির `isDropIn`/`note`, বিকল্প পণ্য, staff-এর PIM সম্পাদনার API, datasheet/CAD/certificate আপলোড (ClamAV সহ)।
+- ⏳ **বাকি:** আসল ছবি ও যাচাই করা স্পেক (মালিক), staff PIM পাতা (console), MinIO/S3 storage adapter, পুরনো ফাইল আবার স্ক্যান। বিস্তারিত [`MODULES.md`](MODULES.md) (C3, C4)।
 
 ### স্প্রিন্ট ৫–৬ — সার্চ + পণ্যের তালিকা ও পেজ
 - Meilisearch adapter (outbox থেকে sync), parametric facet, পার্ট-নম্বর normalisation (`6ES7 214-1AG40-0XB0` = `6ES72141AG400XB0`), Banglish প্রতিশব্দ।
@@ -234,10 +237,8 @@ Seller marketplace + payout ledger, AI assistant, PunchOut (cXML/OCI), installed
 | ESLint warning = ০ | অব্যবহৃত কোড, hooks-এর ভুল | `ci.yml` | ব্লকিং (`--max-warnings 0`) |
 | Dependabot | সাপ্তাহিক আপডেট PR | `dependabot.yml` | চালু |
 
-> কেন Semgrep ও Trivy এখনই ব্লকিং নয়: যে environment-এ এগুলো লেখা হয়েছে, সেখান থেকে Semgrep-এর rule registry
-> আর Trivy-র ডাউনলোড পাওয়া যায়নি, তাই বর্তমান কোডে এগুলো একবারও চালানো হয়নি। না দেখে ব্লকিং করলে প্রথম দিনেই
-> মিথ্যা-সতর্কতায় CI লাল হতে পারে। ZAP workflow-ও Docker না থাকায় লোকালি চালানো হয়নি; প্রথমবার হাতে চালিয়ে
-> (Actions → DAST → Run workflow) রিপোর্ট দেখতে হবে।
+> ইতিহাস (স্প্রিন্ট ০-এর আগে): Semgrep ও Trivy প্রথমে ব্লকিং ছিল না, কারণ যে environment-এ লেখা হয়েছিল সেখান থেকে
+> চালানো যায়নি। স্প্রিন্ট ০-তে চালিয়ে finding ঠিক করে এখন দুটোই **ব্লকিং** (উপরের সারণি সঠিক)। ZAP নিয়মিত রাতে চলে।
 
 ### ৫.৩ মানুষের চেক (AI + মালিক দিয়ে)
 - প্রতি slice: `/security-review` আর নিজের লেখা attack probe (Production মোডে চালানো API-এর বিরুদ্ধে)।
