@@ -132,6 +132,8 @@ builder.Services.AddNotifications(
     requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"),
     storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"]);
 
+builder.Services.AddPdfRendering();
+
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();
 builder.Services.AddSingleton<ISmsProvider, LoggingSmsProvider>();

@@ -20,6 +20,8 @@ using Mechware.Infrastructure.Persistence.Outbox;
 using Mechware.Infrastructure.Search;
 using Mechware.Infrastructure.Notifications;
 using Mechware.Application.Notifications;
+using Mechware.Application.Pdf;
+using Mechware.Infrastructure.Pdf;
 using Mechware.Infrastructure.Workers;
 using Mechware.Application.Search;
 using Microsoft.Extensions.Logging;
@@ -127,6 +129,13 @@ public static class DependencyInjection
         services.TryAddSingleton<INotificationTemplates, EmbeddedTemplates>();
         if (haveHost) services.TryAddSingleton<INotificationSender, SmtpEmailSender>();
         else services.TryAddSingleton<INotificationSender, LoggingEmailSender>();
+        return services;
+    }
+
+    /// <summary>The PDF renderer (Skia + HarfBuzz, embedded Hind Siliguri). Stateless; no network or browser.</summary>
+    public static IServiceCollection AddPdfRendering(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IPdfRenderer, SkiaPdfRenderer>();
         return services;
     }
 
