@@ -39,3 +39,6 @@ Thumbs.db
 
 # Local Redis snapshot
 dump.rdb
+
+# Staging compose secrets
+infra/docker/staging.env

@@ -1,0 +1,41 @@
+# Shared by all four images (build context = repo root). Keep the context small and free of secrets.
+**/.git
+**/.github
+**/.vs
+**/.idea
+**/bin
+**/obj
+**/node_modules
+**/.next
+**/out
+**/dist
+**/.turbo
+**/*.tsbuildinfo
+**/*.user
+**/TestResults
+**/coverage
+
+# secrets and local config
+**/.env
+**/.env.*
+!**/.env.example
+**/*.key
+**/*.pem
+**/*.pfx
+**/appsettings.*.local.json
+**/appsettings.Local.json
+**/secrets.json
+
+# not needed for any image
+docs
+assets
+scripts
+infra
+PROGRESS.md
+README.md
+*.md
+backend/tests
+backend/seed
+frontend/packages/e2e
+frontend/packages/*/tests
+**/*.http

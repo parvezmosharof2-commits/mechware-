@@ -1,0 +1,195 @@
+# MECHWARE staging stack: API + Worker + web + console + Postgres/Redis/Meilisearch/ClamAV/Mailpit.
+#
+#   cp infra/docker/staging.env.example infra/docker/staging.env   # then fill in real values; never commit staging.env
+#   docker compose -f infra/docker/docker-compose.staging.yml --env-file infra/docker/staging.env up -d --build
+#
+# Every ${VAR:?msg} below makes compose refuse to start when the value is missing. There are no default secrets here.
+# HTTPS and the public URL are NOT part of this file: put a TLS-terminating reverse proxy in front (H3a part 2, needs the
+# owner's hosting choice) and set ForwardedHeaders__KnownProxies to its address.
+
+name: mechware-staging
+
+x-api-env: &api-env
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=mechware;Username=mechware;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+  # /health/ready reads Database__ConnectionString (not ConnectionStrings__*), so both are set.
+  Database__ConnectionString: "Host=postgres;Port=5432;Database=mechware;Username=mechware;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+  ConnectionStrings__Redis: "redis:6379,abortConnect=false"
+  Jwt__Secret: ${JWT_SECRET:?set JWT_SECRET (at least 32 random bytes)}
+  Jwt__Issuer: ${JWT_ISSUER:-https://api.staging.invalid}
+  Jwt__Audience: ${JWT_AUDIENCE:-https://staging.invalid}
+  Encryption__FieldKey: ${ENCRYPTION_FIELD_KEY:?set ENCRYPTION_FIELD_KEY (32 bytes, base64)}
+  Search__Url: http://meilisearch:7700
+  Search__ApiKey: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+  Email__Host: ${EMAIL_HOST:-mailpit}
+  Email__Port: ${EMAIL_PORT:-1025}
+  Email__FromAddress: ${EMAIL_FROM_ADDRESS:?set EMAIL_FROM_ADDRESS}
+  Storefront__BaseUrl: ${STOREFRONT_BASE_URL:?set STOREFRONT_BASE_URL (https public address of the shop)}
+  # Startup validates Storage and /health/ready probes {ServiceUrl}/minio/health/live: an S3-compatible store is required.
+  Storage__ServiceUrl: http://minio:9000
+  Storage__AccessKey: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+  Storage__SecretKey: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+  Documents__LocalPath: /data/documents
+  Antivirus__Host: clamav
+  Antivirus__Port: "3310"
+
+services:
+  api:
+    build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
+    image: mechware-api:staging
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      # Behind the TLS proxy: its address(es), comma-separated. Empty means forwarded headers are not trusted.
+      ForwardedHeaders__KnownProxies: ${FORWARDED_KNOWN_PROXIES:-}
+    ports: ["${API_PORT:-8080}:8080"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    volumes: [documents:/data/documents]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  worker:
+    build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
+    image: mechware-worker:staging
+    restart: unless-stopped
+    environment: *api-env
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/next.Dockerfile
+      args:
+        APP: web
+        PORT: "3000"
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?set PUBLIC_API_BASE_URL (public https address of the API)}
+        NEXT_PUBLIC_SITE_URL: ${STOREFRONT_BASE_URL:?set STOREFRONT_BASE_URL}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    image: mechware-web:staging
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_BASE_URL: http://api:8080   # server-side calls stay on the private network
+    ports: ["${WEB_PORT:-3000}:3000"]
+    read_only: true
+    tmpfs: [/tmp, "/repo/frontend/apps/web/.next/cache:uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  console:
+    build:
+      context: ../..
+      dockerfile: infra/docker/next.Dockerfile
+      args:
+        APP: console
+        PORT: "3001"
+        NEXT_PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?set PUBLIC_API_BASE_URL}
+        NEXT_PUBLIC_SITE_URL: ${CONSOLE_BASE_URL:-http://localhost:3001}
+    image: mechware-console:staging
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_BASE_URL: http://api:8080
+    ports: ["${CONSOLE_PORT:-3001}:3001"]
+    read_only: true
+    tmpfs: [/tmp, "/repo/frontend/apps/console/.next/cache:uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      api: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mechware
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: mechware
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mechware -d mechware"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_ENV: production
+    volumes: [meili_data:/meili_data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # NOTE: this tag matches the dev compose file but Docker Hub currently denies the pull (minio/minio is gone upstream);
+  # pick a replacement S3-compatible store/tag before the first staging deploy.
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-28Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes: [minio_data:/data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    environment:
+      CLAMD_CONF_StreamMaxLength: 64M
+      CLAMD_CONF_MaxFileSize: 64M
+    volumes: [clamav_data:/var/lib/clamav]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # Staging mail sink: catches every outgoing email. Replace EMAIL_HOST with the real SMTP relay for owner demos.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports: ["127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  meili_data:
+  clamav_data:
+  minio_data:
+  documents:
