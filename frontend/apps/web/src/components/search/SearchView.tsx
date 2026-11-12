@@ -5,37 +5,36 @@ import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Filter, Search, X } from 'lucide-react';
-import {
-  Button,
-  EmptyState,
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from '@mechware/ui';
+import { Button } from '@mechware/ui/src/components/Button';
+import { EmptyState } from '@mechware/ui/src/components/EmptyState';
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@mechware/ui/src/components/Pagination';
 import {
   DEFAULT_PAGE_SIZE,
   SEARCH_SORTS,
   formatPriceMinor,
   toSearchQueryString,
   type SearchParams,
+  type SearchHit,
   type SearchResponse,
   type SearchSort
 } from '@mechware/api-client';
 import { clearFilters, hasActiveFilters, maxPage, pageWindow, toggleBrand, withFilter } from '../../lib/search-ui';
 import { FilterPanel } from './FilterPanel';
 import { SearchSkeleton } from './SearchSkeleton';
-import { ResultsTable } from './ResultsTable';
-import { ResultsList } from './ResultsList';
 
 const FilterDrawer = dynamic(() => import('./FilterDrawer'), { ssr: false });
 
+/** What the client island needs of a result: the paging meta and brand names; rows are rendered on the server (`results`). */
+export interface SearchViewResult {
+  meta: SearchResponse['meta'];
+  data: Pick<SearchHit, 'brandSlug' | 'brandName'>[];
+}
+
 export interface SearchViewProps {
   params: SearchParams;
-  result: SearchResponse | null;
+  result: SearchViewResult | null;
+  /** Server-rendered table + list for the hits (Server Components, never hydrated). */
+  results?: React.ReactNode;
   errorStatus: number | null;
   /** brand slug -> display name from the storefront brand list; hit names and the humanised slug are fallbacks. */
   brandLabels?: Record<string, string>;
@@ -47,7 +46,7 @@ function humanize(slug: string): string {
   return slug.replace(/[-_]+/g, ' ').replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 }
 
-export function SearchView({ params, result, errorStatus, brandLabels = {} }: SearchViewProps) {
+export function SearchView({ params, result, results, errorStatus, brandLabels = {} }: SearchViewProps) {
   const t = useTranslations('Search');
   const locale = useLocale();
   const router = useRouter();
@@ -224,8 +223,7 @@ export function SearchView({ params, result, errorStatus, brandLabels = {} }: Se
             />
           ) : (
             <>
-              <ResultsTable hits={hits} locale={locale} query={params.q} highlight={meta?.matchedBy === 'partNumber'} t={t} />
-              <ResultsList hits={hits} locale={locale} query={params.q} highlight={meta?.matchedBy === 'partNumber'} t={t} />
+              {results}
 
               {last > 1 && (
                 <Pagination aria-label={t('pagination')} className="mt-6">

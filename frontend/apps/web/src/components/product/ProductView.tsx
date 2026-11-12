@@ -3,11 +3,11 @@
 import * as React from 'react';
 import Image from 'next/image';
 import { useLocale, useTranslations } from 'next-intl';
-import { Badge, Button } from '@mechware/ui';
+import { Badge } from '@mechware/ui/src/components/Badge';
+import { Button } from '@mechware/ui/src/components/Button';
 import { formatPriceMinor, type MediaDto, type ProductDetail, type VariantDto } from '@mechware/api-client';
 import { Availability } from '../search/hit-parts';
 import { CopyPartNumber } from '../search/CopyPartNumber';
-import { LifecycleBanner, ProductSections } from './ProductSections';
 import {
   absoluteMediaUrl,
   clampQuantity,
@@ -25,6 +25,9 @@ export interface ProductViewProps {
   initialSku?: string;
   /** Public base URL for relative media paths. */
   mediaBase: string;
+  /** Server-rendered lifecycle banner and static sections (description, specs, documents); they are never hydrated. */
+  banner?: React.ReactNode;
+  sections?: React.ReactNode;
 }
 
 type Translate = ReturnType<typeof useTranslations>;
@@ -86,7 +89,7 @@ function Gallery({ images, title, mediaBase, t }: { images: MediaDto[]; title: s
   );
 }
 
-export function ProductView({ product, initialSku, mediaBase }: ProductViewProps) {
+export function ProductView({ product, initialSku, mediaBase, banner, sections }: ProductViewProps) {
   const t = useTranslations('Product');
   const locale = useLocale();
   const [sku, setSku] = React.useState<string | undefined>(initialSku);
@@ -112,7 +115,8 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
   const onRequest = !pricing || pricing.price.amountMinor === 0;
   const currency = pricing?.price.currency ?? 'BDT';
   const showCompare = Boolean(pricing?.compareAt && pricing.compareAt.amountMinor > pricing.price.amountMinor);
-  const stockStatus = variant?.stock.status ?? 'out_of_stock';
+  const stock = variant?.stock;
+  const stockStatus = stock?.status ?? 'out_of_stock';
   const pack = Math.max(1, variant?.packSize ?? 1);
   const min = variant ? minQuantity(variant) : 1;
   const partNumber = variant?.manufacturerPartNumber?.trim() || variant?.sku || '';
@@ -120,7 +124,7 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
 
   return (
     <>
-      <LifecycleBanner product={product} />
+      {banner}
       <div className="grid gap-8 lg:grid-cols-2">
       <Gallery images={images} title={title} mediaBase={mediaBase} t={t} />
 
@@ -255,7 +259,23 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
         </dl>
       </div>
       </div>
-      <ProductSections product={product} variant={variant} mediaBase={mediaBase} />
+      <div className="mt-10">
+        {sections}
+        <section id="pdp-availability" aria-labelledby="pdp-availability-h" className="mt-8 scroll-mt-14">
+          <h2 id="pdp-availability-h" className="font-display text-xl font-bold text-text">
+            {t('availability')}
+          </h2>
+          {stock ? (
+            <div className="mt-3 text-sm" aria-live="polite">
+              <p className="font-medium text-text">{t('availableUnits', { count: Math.max(0, stock.available) })}</p>
+              {stock.status === 'out_of_stock' && <p className="mt-1 text-text-muted">{t('outOfStockNotice')}</p>}
+              {stock.status === 'low_stock' && <p className="mt-1 text-text-muted">{t('lowStockNotice')}</p>}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-text-muted">{t('outOfStockNotice')}</p>
+          )}
+        </section>
+      </div>
     </>
   );
 }

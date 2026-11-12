@@ -1,7 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Button, Checkbox, Input } from '@mechware/ui';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Checkbox } from '@mechware/ui/src/components/Checkbox';
+import { Input } from '@mechware/ui/src/components/Input';
 import { useTranslations } from 'next-intl';
 import type { SearchParams } from '@mechware/api-client';
 import { minorToTaka, takaToMinor, toggleBrand, withFilter } from '../../lib/search-ui';

@@ -1,4 +1,4 @@
-import { Skeleton } from '@mechware/ui';
+import { Skeleton } from '@mechware/ui/src/components/Skeleton';
 
 export function SearchSkeleton({ rows = 8 }: { rows?: number }) {
   return (

@@ -1,5 +1,6 @@
+import type * as React from 'react';
 import type { Metadata } from 'next';
-import { getTranslations } from 'next-intl/server';
+import { getLocale, getTranslations } from 'next-intl/server';
 import {
   MechWareApiClient,
   createStorefrontApi,
@@ -8,6 +9,8 @@ import {
   type SearchResponse
 } from '@mechware/api-client';
 import { SearchView } from '../../../components/search/SearchView';
+import { ResultsTable } from '../../../components/search/ResultsTable';
+import { ResultsList } from '../../../components/search/ResultsList';
 
 // Public, anonymous call made on the server: no session token, no refresh, so it never touches the browser token vault.
 const API_BASE_URL = process.env.API_INTERNAL_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
@@ -47,5 +50,18 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   }
 
   const brandLabels = Object.fromEntries((await brandsPromise).map((b) => [b.slug, b.name]));
-  return <SearchView params={params} result={result} errorStatus={errorStatus} brandLabels={brandLabels} />;
+  const hits = result?.data ?? [];
+  let results: React.ReactNode = null;
+  if (hits.length > 0) {
+    const [t, locale] = await Promise.all([getTranslations('Search'), getLocale()]);
+    const highlight = result?.meta.matchedBy === 'partNumber';
+    results = (
+      <>
+        <ResultsTable hits={hits} locale={locale} query={params.q} highlight={highlight} t={t} />
+        <ResultsList hits={hits} locale={locale} query={params.q} highlight={highlight} t={t} />
+      </>
+    );
+  }
+  const slim = result && { meta: result.meta, data: result.data.map((h) => ({ brandSlug: h.brandSlug, brandName: h.brandName })) };
+  return <SearchView params={params} result={slim} results={results} errorStatus={errorStatus} brandLabels={brandLabels} />;
 }

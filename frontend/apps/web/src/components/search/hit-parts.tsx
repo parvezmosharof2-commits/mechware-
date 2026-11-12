@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Badge } from '@mechware/ui';
+import { Badge } from '@mechware/ui/src/components/Badge';
 import { formatPriceMinor, type SearchHit } from '@mechware/api-client';
 import { matchesPartNumber } from '../../lib/search-ui';
 

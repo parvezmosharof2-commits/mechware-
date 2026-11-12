@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, Sheet, SheetContent, SheetDescription, SheetTitle } from '@mechware/ui';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@mechware/ui/src/components/Sheet';
 import { useTranslations } from 'next-intl';
 
 export interface FilterDrawerProps {

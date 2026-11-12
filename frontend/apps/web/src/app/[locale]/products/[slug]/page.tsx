@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { ProductView } from '../../../../components/product/ProductView';
+import { LifecycleBanner, ProductSections } from '../../../../components/product/ProductSections';
 import { breadcrumbLabel, localePath, pickLocalized, productPath, productTitle } from '../../../../lib/product-ui';
 import { buildBreadcrumbJsonLd, buildProductJsonLd, jsonLdString } from '../../../../lib/json-ld';
 import { nodesToText, sanitizeHtml } from '../../../../lib/safe-html';
@@ -90,7 +91,10 @@ export default async function ProductPage({ params, searchParams }: Props) {
           </li>
         </ol>
       </nav>
-      <ProductView product={product} initialSku={Array.isArray(v) ? v[0] : v} mediaBase={PUBLIC_API_BASE_URL} />
+      <ProductView product={{ ...product, descriptionHtml: '', highlights: [], specs: {}, documents: [] }} initialSku={Array.isArray(v) ? v[0] : v} mediaBase={PUBLIC_API_BASE_URL}
+        banner={<LifecycleBanner product={product} />}
+        sections={<ProductSections product={product} mediaBase={PUBLIC_API_BASE_URL} />}
+      />
     </main>
   );
 }

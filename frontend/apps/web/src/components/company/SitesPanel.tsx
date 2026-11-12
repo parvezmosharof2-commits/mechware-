@@ -2,7 +2,13 @@
 
 import * as React from 'react';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, Checkbox, Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, EmptyState, Input, useToast } from '@mechware/ui';
+import { Badge } from '@mechware/ui/src/components/Badge';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Checkbox } from '@mechware/ui/src/components/Checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { EmptyState } from '@mechware/ui/src/components/EmptyState';
+import { Input } from '@mechware/ui/src/components/Input';
+import { useToast } from '@mechware/ui/src/components/Toast';
 import type { SiteDto, SiteRequest } from '@mechware/api-client';
 import { companiesApi, problemFieldErrors } from '../../lib/api';
 import { useResource } from '../../lib/useResource';

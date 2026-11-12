@@ -3,7 +3,9 @@
 import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { AlertBanner, Progress, Tabs, TabsContent, TabsList, TabsTrigger } from '@mechware/ui';
+import { AlertBanner } from '@mechware/ui/src/components/AlertBanner';
+import { Progress } from '@mechware/ui/src/components/Progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mechware/ui/src/components/Tabs';
 import { CompanyRoles, creditUsagePercent, hasRole, roleNames } from '@mechware/api-client';
 import { companiesApi } from '../../lib/api';
 import { useResource } from '../../lib/useResource';

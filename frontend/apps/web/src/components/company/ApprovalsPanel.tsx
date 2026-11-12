@@ -2,9 +2,13 @@
 
 import * as React from 'react';
 import { useTranslations } from 'next-intl';
-import {
-  Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, EmptyState, Input, Textarea, useToast
-} from '@mechware/ui';
+import { Badge } from '@mechware/ui/src/components/Badge';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { EmptyState } from '@mechware/ui/src/components/EmptyState';
+import { Input } from '@mechware/ui/src/components/Input';
+import { Textarea } from '@mechware/ui/src/components/Textarea';
+import { useToast } from '@mechware/ui/src/components/Toast';
 import {
   CompanyRoles, hasRole, parseAmountToMinor, shortId, validateDecision, validateRuleForm,
   type ApprovalRequestDto, type ApprovalRuleDto, type ApprovalStatus, type RuleFormError

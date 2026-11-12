@@ -3,7 +3,10 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Badge, Button, EmptyState, useToast } from '@mechware/ui';
+import { Badge } from '@mechware/ui/src/components/Badge';
+import { Button } from '@mechware/ui/src/components/Button';
+import { EmptyState } from '@mechware/ui/src/components/EmptyState';
+import { useToast } from '@mechware/ui/src/components/Toast';
 import { roleNames, type CompanyStatus, type MyCompanyDto } from '@mechware/api-client';
 import { companiesApi, problemMessage } from '../../lib/api';
 import { useResource, type Resource } from '../../lib/useResource';

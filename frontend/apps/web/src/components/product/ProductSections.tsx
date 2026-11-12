@@ -2,7 +2,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Box, Download, FileText, ShieldCheck } from 'lucide-react';
-import type { ProductDetail, VariantDto } from '@mechware/api-client';
+import type { ProductDetail } from '@mechware/api-client';
 import { sanitizeHtml, type SafeNode } from '../../lib/safe-html';
 import { absoluteMediaUrl, formatFileSize, pickLocalized, productPath, specBoolean, specGroups } from '../../lib/product-ui';
 
@@ -128,14 +128,14 @@ const DOC_LABEL: Record<string, 'docDatasheet' | 'docCad' | 'docCertificate'> = 
   certificate: 'docCertificate'
 };
 
-export function ProductSections({ product, variant, mediaBase }: { product: ProductDetail; variant: VariantDto | undefined; mediaBase: string }) {
+/** Server Component: the static part of the product page (description, specs, documents) is never hydrated. The variant-dependent availability section is ProductView's. */
+export function ProductSections({ product, mediaBase }: { product: ProductDetail; mediaBase: string }) {
   const t = useTranslations('Product');
   const groups = specGroups(product.specs);
   const documents = product.documents ?? [];
   const html = product.descriptionHtml;
-  const description = React.useMemo(() => sanitizeHtml(html ?? ''), [html]);
+  const description = sanitizeHtml(html ?? '');
   const highlights = product.highlights.filter((h) => h.trim());
-  const stock = variant?.stock;
   const heading = 'font-display text-xl font-bold text-text';
 
   const links: [string, string][] = [
@@ -145,7 +145,7 @@ export function ProductSections({ product, variant, mediaBase }: { product: Prod
   ];
 
   return (
-    <div className="mt-10">
+    <>
       <nav aria-label={t('sectionsNav')} className="sticky top-0 z-10 -mx-4 overflow-x-auto border-b border-surface-border bg-bg px-4">
         <ul className="flex gap-4 whitespace-nowrap text-sm">
           {links.map(([id, label]) => (
@@ -249,21 +249,6 @@ export function ProductSections({ product, variant, mediaBase }: { product: Prod
           </ul>
         )}
       </section>
-
-      <section id="pdp-availability" aria-labelledby="pdp-availability-h" className="mt-8 scroll-mt-14">
-        <h2 id="pdp-availability-h" className={heading}>
-          {t('availability')}
-        </h2>
-        {stock ? (
-          <div className="mt-3 text-sm" aria-live="polite">
-            <p className="font-medium text-text">{t('availableUnits', { count: Math.max(0, stock.available) })}</p>
-            {stock.status === 'out_of_stock' && <p className="mt-1 text-text-muted">{t('outOfStockNotice')}</p>}
-            {stock.status === 'low_stock' && <p className="mt-1 text-text-muted">{t('lowStockNotice')}</p>}
-          </div>
-        ) : (
-          <p className="mt-3 text-sm text-text-muted">{t('outOfStockNotice')}</p>
-        )}
-      </section>
-    </div>
+    </>
   );
 }

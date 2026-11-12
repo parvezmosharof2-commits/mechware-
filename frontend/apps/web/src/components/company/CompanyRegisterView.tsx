@@ -3,7 +3,9 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Button, Input, useToast } from '@mechware/ui';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Input } from '@mechware/ui/src/components/Input';
+import { useToast } from '@mechware/ui/src/components/Toast';
 import { toRegisterRequest, validateCompanyRegistration, type CompanyFieldError } from '@mechware/api-client';
 import { companiesApi, problemFieldErrors } from '../../lib/api';
 import { PageShell, RequireSignIn, useErrorText, useLocalePath } from './shared';
