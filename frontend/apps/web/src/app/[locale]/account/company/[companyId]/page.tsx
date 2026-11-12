@@ -1,6 +1,14 @@
 import { CompanyDashboardView } from '../../../../../components/company/CompanyDashboardView';
+import { parseDashboardTab } from '../../../../../lib/dashboard-tab';
 
-export default async function CompanyDashboardPage({ params }: { params: Promise<{ companyId: string }> }) {
+export default async function CompanyDashboardPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ companyId: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
   const { companyId } = await params;
-  return <CompanyDashboardView companyId={companyId} />;
+  const { tab } = await searchParams;
+  return <CompanyDashboardView companyId={companyId} initialTab={parseDashboardTab(tab)} />;
 }

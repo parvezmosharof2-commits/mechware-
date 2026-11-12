@@ -8,6 +8,7 @@ import { Progress } from '@mechware/ui/src/components/Progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mechware/ui/src/components/Tabs';
 import { CompanyRoles, creditUsagePercent, hasRole, roleNames } from '@mechware/api-client';
 import { companiesApi } from '../../lib/api';
+import type { DashboardTab } from '../../lib/dashboard-tab';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath, useMoney } from './shared';
@@ -19,7 +20,7 @@ const CostCentresPanel = dynamic(() => import('./CostCentresPanel').then((m) => 
 const ApprovalsPanel = dynamic(() => import('./ApprovalsPanel').then((m) => m.ApprovalsPanel), { loading: panelLoading });
 const MembersPanel = dynamic(() => import('./MembersPanel').then((m) => m.MembersPanel), { loading: panelLoading });
 
-function Dashboard({ companyId }: { companyId: string }) {
+function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: DashboardTab }) {
   const t = useTranslations('Company');
   const money = useMoney();
   const company = useResource(async () => (await companiesApi.get(companyId)).data, companyId);
@@ -100,7 +101,7 @@ function Dashboard({ companyId }: { companyId: string }) {
         )}
       </section>
 
-      <Tabs defaultValue="sites">
+      <Tabs defaultValue={initialTab === 'members' && !isAdmin ? 'sites' : initialTab}>
         <TabsList>
           <TabsTrigger value="sites">{t('tabs.sites')}</TabsTrigger>
           <TabsTrigger value="costCentres">{t('tabs.costCentres')}</TabsTrigger>
@@ -126,13 +127,13 @@ function Dashboard({ companyId }: { companyId: string }) {
   );
 }
 
-export function CompanyDashboardView({ companyId }: { companyId: string }) {
+export function CompanyDashboardView({ companyId, initialTab = 'sites' }: { companyId: string; initialTab?: DashboardTab }) {
   const t = useTranslations('Company');
   const toPath = useLocalePath();
   return (
     <PageShell title={t('title')} back={{ href: toPath('/account/company'), label: t('backToList') }}>
       <RequireSignIn>
-        <Dashboard companyId={companyId} />
+        <Dashboard companyId={companyId} initialTab={initialTab} />
       </RequireSignIn>
     </PageShell>
   );
