@@ -99,6 +99,16 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>The search indexer and its worker. Requires <see cref="AddSearch"/>, the DbContext and Redis. Host it once (Worker).</summary>
+    public static IServiceCollection AddSearchIndexing(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<ProductSearchDocumentLoader>();
+        services.TryAddScoped<SearchIndexer>();
+        services.AddHostedService<SearchIndexWorker>();
+        return services;
+    }
+
     /// <summary>Adds the hosted workers (run these from <c>Mechware.Worker</c>, not from every API replica).</summary>
     public static IServiceCollection AddCatalogWorkers(this IServiceCollection services)
     {

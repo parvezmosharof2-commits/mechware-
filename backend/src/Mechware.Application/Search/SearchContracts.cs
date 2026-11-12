@@ -118,6 +118,12 @@ public interface ISearchProvider
 
     Task DeleteProductsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Rebuilds the whole index from <paramref name="batches"/> without an empty window: documents go into a fresh index,
+    /// which then replaces the live one in one swap. Settings and synonyms carry over; documents not in the batches disappear.
+    /// </summary>
+    Task ReplaceAllAsync(IAsyncEnumerable<IReadOnlyCollection<ProductSearchDocument>> batches, CancellationToken ct = default);
+
     /// <summary>Replaces the whole synonym set. Each key maps to the words that mean the same thing.</summary>
     Task UpdateSynonymsAsync(IReadOnlyDictionary<string, IReadOnlyList<string>> synonyms, CancellationToken ct = default);
 }

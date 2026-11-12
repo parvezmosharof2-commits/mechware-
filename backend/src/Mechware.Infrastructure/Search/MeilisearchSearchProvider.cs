@@ -57,12 +57,36 @@ public sealed class MeilisearchSearchProvider : ISearchProvider
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", options.ApiKey);
     }
 
-    public async Task EnsureIndexAsync(CancellationToken ct = default)
+    public Task EnsureIndexAsync(CancellationToken ct = default) => EnsureAsync(_index, ct);
+
+    private async Task EnsureAsync(string index, CancellationToken ct)
     {
-        var exists = await SendAsync(HttpMethod.Get, $"indexes/{_index}", null, ct, allow404: true);
+        var exists = await SendAsync(HttpMethod.Get, $"indexes/{index}", null, ct, allow404: true);
         if (exists is null)
-            await WaitAsync(await SendAsync(HttpMethod.Post, "indexes", new JsonObject { ["uid"] = _index, ["primaryKey"] = "id" }, ct), ct);
-        await WaitAsync(await SendAsync(HttpMethod.Patch, $"indexes/{_index}/settings", IndexSettings.DeepClone(), ct), ct);
+            await WaitAsync(await SendAsync(HttpMethod.Post, "indexes", new JsonObject { ["uid"] = index, ["primaryKey"] = "id" }, ct), ct);
+        await WaitAsync(await SendAsync(HttpMethod.Patch, $"indexes/{index}/settings", IndexSettings.DeepClone(), ct), ct);
+    }
+
+    public async Task ReplaceAllAsync(IAsyncEnumerable<IReadOnlyCollection<ProductSearchDocument>> batches, CancellationToken ct = default)
+    {
+        await EnsureAsync(_index, ct);
+        var fresh = $"{_index}_rebuild_{Guid.NewGuid():N}";
+        try
+        {
+            await EnsureAsync(fresh, ct);
+            if (await SendAsync(HttpMethod.Get, $"indexes/{_index}/settings/synonyms", null, ct) is JsonObject { Count: > 0 } synonyms)
+                await WaitAsync(await SendAsync(HttpMethod.Put, $"indexes/{fresh}/settings/synonyms", synonyms.DeepClone(), ct), ct);
+            await foreach (var batch in batches.WithCancellation(ct))
+                await IndexIntoAsync(fresh, batch, ct);
+            var swap = new JsonArray(new JsonObject { ["indexes"] = new JsonArray(_index, fresh) });
+            await WaitAsync(await SendAsync(HttpMethod.Post, "swap-indexes", swap, ct), ct);
+        }
+        finally
+        {
+            // After the swap `fresh` holds the old documents; before it, a half-built index. Either way it goes.
+            try { await SendAsync(HttpMethod.Delete, $"indexes/{fresh}", null, CancellationToken.None, allow404: true); }
+            catch (ServiceUnavailableException) { _logger.LogWarning("Could not delete temporary index {Index}", fresh); }
+        }
     }
 
     public async Task<SearchResultDto<ProductSearchDocument>> SearchAsync(SearchQuery query, CancellationToken ct = default)
@@ -118,11 +142,14 @@ public sealed class MeilisearchSearchProvider : ISearchProvider
         return new AutocompleteResultDto(suggestions, response["processingTimeMs"]?.GetValue<int>() ?? 0);
     }
 
-    public async Task IndexProductsAsync(IReadOnlyCollection<ProductSearchDocument> documents, CancellationToken ct = default)
+    public Task IndexProductsAsync(IReadOnlyCollection<ProductSearchDocument> documents, CancellationToken ct = default) =>
+        IndexIntoAsync(_index, documents, ct);
+
+    private async Task IndexIntoAsync(string index, IReadOnlyCollection<ProductSearchDocument> documents, CancellationToken ct)
     {
         if (documents.Count == 0) return;
         var body = JsonSerializer.SerializeToNode(documents, Json);
-        await WaitAsync(await SendAsync(HttpMethod.Post, $"indexes/{_index}/documents", body, ct), ct);
+        await WaitAsync(await SendAsync(HttpMethod.Post, $"indexes/{index}/documents", body, ct), ct);
     }
 
     public async Task DeleteProductsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default)

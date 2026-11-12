@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Mechware.Infrastructure;
 using Mechware.Infrastructure.Persistence;
 using Mechware.Infrastructure.Persistence.Outbox;
+using Mechware.Infrastructure.Search;
 using Mechware.Infrastructure.Seed;
 using StackExchange.Redis;
 
@@ -15,12 +16,18 @@ if (args.Length > 0 && args[0] == "seed-catalog")
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// `-- rebuild-search` asks the running indexer for a full rebuild (fresh index + swap) and exits.
+if (args.Length > 0 && args[0] == "rebuild-search")
+{
+    using var redis = await ConnectionMultiplexer.ConnectAsync(RedisConnection(builder.Configuration));
+    await redis.GetDatabase().StringSetAsync(SearchIndexer.RebuildRequestKey, DateTime.UtcNow.ToString("O"));
+    Console.WriteLine("Search rebuild requested; the running Worker performs it on its next tick.");
+    return 0;
+}
+
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
-    var conn = builder.Configuration.GetConnectionString("Redis")
-        ?? builder.Configuration["Redis:ConnectionString"]
-        ?? "localhost:6379";
-    var options = ConfigurationOptions.Parse(conn);
+    var options = ConfigurationOptions.Parse(RedisConnection(builder.Configuration));
     options.AbortOnConnectFail = false;
     return ConnectionMultiplexer.Connect(options);
 });
@@ -32,8 +39,16 @@ builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 });
 builder.Services.AddCatalogWorkers();
 
+// Search index (C6). Outside Development and Testing the engine key must be configured (Search__ApiKey).
+var search = builder.Configuration.GetSection(SearchOptions.SectionName).Get<SearchOptions>() ?? new SearchOptions();
+builder.Services.AddSearch(search, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")));
+builder.Services.AddSearchIndexing();
+
 await builder.Build().RunAsync();
 return 0;
+
+static string RedisConnection(IConfiguration configuration) =>
+    configuration.GetConnectionString("Redis") ?? configuration["Redis:ConnectionString"] ?? "localhost:6379";
 
 static string ConnectionString(IConfiguration configuration) =>
     configuration.GetConnectionString("DefaultConnection")
