@@ -1,4 +1,4 @@
-﻿# MECHWARE — Module index
+# MECHWARE — Module index
 
 > Revised 2026-11-12 after the Fable 5.2 plan review. One card per module in [`modules/`](modules/). Agents read **only**
 > `CLAUDE.md` → [`NOW.md`](NOW.md) → the current card → the card's context pack. Never this whole folder.
@@ -28,7 +28,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 | A2 | Audit & security | ✅ | [A2](modules/A2.md) |
 | A3 | Outbox & workers | ✅ | [A3](modules/A3.md) |
 | A4/A5 | Design system / API client | ✅ | [A4-A5](modules/A4-A5.md) |
-| A6 | CI, gates, agent tooling | 🟡 | [A6](modules/A6.md) |
+| A6 | CI, gates, agent tooling | ✅ | [A6](modules/A6.md) |
 | A7 | Staff passkeys | ⏭ | [A7](modules/A7.md) |
 | A8 | PDF engine (EN/BN) | ⬜ | [A8](modules/A8.md) |
 | B1 | Companies | ✅ | [B1](modules/B1.md) |
@@ -38,8 +38,8 @@ Console screens are **inside** each feature module (no separate "console phase")
 | C1/C2/C5 | Catalog, PIM, part numbers | ✅ | [C1](modules/C1.md) |
 | C3 | Document storage (S3) | 🟡 | [C3](modules/C3.md) |
 | C4 | PIM console screens | ⬜ | [C4](modules/C4.md) |
-| C6 | Search | 🟡 **now** | [C6](modules/C6.md) |
-| C7 | PLP / PDP / compare (web) | ⬜ | [C7](modules/C7.md) |
+| C6 | Search | ✅ | [C6](modules/C6.md) |
+| C7 | PLP / PDP / compare (web) | ✅ (C7.6 compare deferred) | [C7](modules/C7.md) |
 | C8 | Inventory | ✅ | [C8](modules/C8.md) |
 | C9 | Reviews & Q&A | ⏭ | [C9](modules/C9.md) |
 | C10 | Bulk catalogue import | ⬜ **new** | [C10](modules/C10.md) |
@@ -58,11 +58,11 @@ Console screens are **inside** each feature module (no separate "console phase")
 | E8 | Shipping rates & legal deadline | ⬜ **new** | [E8](modules/E8.md) |
 | F1 | Courier & shipments | ⬜ | [F1](modules/F1.md) |
 | F2 | RMA / returns | ⬜ | [F2](modules/F2.md) |
-| F3 | Notifications (F3a transport, F3b matrix) | ⬜ | [F3](modules/F3.md) |
+| F3 | Notifications (F3a transport, F3b matrix) | 🟡 (F3a.1, F3a.2a, F3a.3 ✅; F3a.2b SMS adapter waits for provider) | [F3](modules/F3.md) |
 | F4 | Service & projects | ⏭ (one inquiry form only) | [F4](modules/F4.md) |
 | F5 | Buyer dashboards | ⬜ | [F5](modules/F5.md) |
 | G1/G5 | Console shell / audit, users, exports, settings | ✅ / ⬜ | [G](modules/G.md) |
-| H1 | Home, help, legal pages, sitemap | ⬜ | [H1](modules/H1.md) |
+| H1 | Home, help, legal pages, sitemap | ✅ (legal texts await lawyer) | [H1](modules/H1.md) |
 | H2 | Hardening | ⬜ | [H2](modules/H2.md) |
 | H3 | Deploy (H3a staging, H3b production) | ⬜ | [H3](modules/H3.md) |
 | H4 | Performance | ⬜ | [H4](modules/H4.md) |
