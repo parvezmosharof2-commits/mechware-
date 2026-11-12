@@ -137,8 +137,10 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
           {variant && (
             <div className="flex items-center gap-1">
               <dt className="text-text-muted">{t('partNumber')}</dt>
-              <dd className="font-mono text-text">{partNumber}</dd>
-              <CopyPartNumber value={partNumber} label={t('copyPartNumber', { part: partNumber })} copiedLabel={t('copied')} />
+              <dd className="flex items-center gap-1 font-mono text-text">
+                {partNumber}
+                <CopyPartNumber value={partNumber} label={t('copyPartNumber', { part: partNumber })} copiedLabel={t('copied')} />
+              </dd>
             </div>
           )}
           {variant && partNumber !== variant.sku && (

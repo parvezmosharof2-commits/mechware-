@@ -1,9 +1,9 @@
 # NOW (keep ≤ 30 lines; update at the end of every unit)
 
-**Done (2026-11-12):** C6 search module ✅ (C6.1–C6.6; C6.2b moved to E5) · A6 tooling ✅ · C7.1 api-client · C7.2 search page + filters · C7.3 results table/list · C7.4 product page core ✅. Cards: [C6](modules/C6.md), [A6](modules/A6.md), [C7](modules/C7.md).
+**Done (2026-11-12):** C6 search module ✅ (C6.1–C6.6; C6.2b moved to E5) · A6 tooling ✅ · C7.1 api-client · C7.2 search page + filters · C7.3 results table/list · C7.4 product page core ✅ · C7.5, C7.7 ✅ · C7.8 🟡 quality gate (axe 0, E2E 58/58; Lighthouse Perf 75-84 < 90, see docs/perf/C7-storefront-quality.md). Cards: [C6](modules/C6.md), [A6](modules/A6.md), [C7](modules/C7.md).
 Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub).
 
-**Next:** C7.5 PDP specs/documents/stock/lifecycle (needs: manufacturer part number + quantity breaks in `ProductDetailDto` — small backend unit first), then C7.7 SEO/JSON-LD, C7.8 Lighthouse/a11y pass, H1 home/legal/sitemap.
+**Next:** H1 home/legal/sitemap; later a perf unit for Lighthouse >= 90 and the media CORP header (backend).
 
 **How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent (memory `feedback-subagent-delegation`). Tools: `python scripts/test_module.py <ID>`, `python scripts/check_cards.py`, `python scripts/api_snapshot.py` after API changes.
 

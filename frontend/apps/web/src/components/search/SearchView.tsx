@@ -212,6 +212,7 @@ export function SearchView({ params, result, errorStatus, brandLabels = {} }: Se
           ) : hits.length === 0 ? (
             <EmptyState
               title={t('emptyTitle')}
+              headingLevel={2}
               description={hasActiveFilters(params) ? t('emptyWithFilters') : t('emptyHint')}
               action={
                 hasActiveFilters(params) ? (

@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
 import { ToastProvider } from '@mechware/ui';
 import { AuthProvider } from '../../lib/auth';
+import { SITE_URL } from '../../lib/site-url';
 import '../globals.css';
 
 // The fonts are kept in the repository (../fonts, SIL Open Font License; from Fontsource 5.3.0), not fetched from Google
@@ -37,6 +38,8 @@ const hindSiliguri = localFont({
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
+  // Makes the relative canonical / hreflang paths absolute, which crawlers and Lighthouse require.
+  metadataBase: new URL(SITE_URL),
   title: 'MECHWARE — YOUR GATEWAY TO INDUSTRY 4.0',
   description: 'Enterprise Industrial Machinery, Automation Marketplace & Engineering Platform | Made in Bangladesh Machinery'
 };
