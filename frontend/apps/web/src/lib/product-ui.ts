@@ -66,3 +66,26 @@ export function absoluteMediaUrl(url: string, apiBase: string): string {
   if (/^(https?:)?\/\//i.test(url) || url.startsWith('data:')) return url;
   return `${apiBase.replace(/\/$/, '')}${url.startsWith('/') ? '' : '/'}${url}`;
 }
+
+/** "true"/"false"/"yes"/"no" spec values as booleans; undefined for anything else (ranges and units arrive pre-formatted). */
+export function specBoolean(value: string): boolean | undefined {
+  const v = value.trim().toLowerCase();
+  if (v === 'true' || v === 'yes') return true;
+  if (v === 'false' || v === 'no') return false;
+  return undefined;
+}
+
+/** "1.2 MB" / "340 KB" / "512 B"; empty for a missing or zero size. */
+export function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0 || !Number.isFinite(bytes)) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Spec groups with at least one non-empty row, in API order. */
+export function specGroups(specs: Record<string, Record<string, string>> | null | undefined): [string, [string, string][]][] {
+  return Object.entries(specs ?? {})
+    .map(([group, rows]) => [group, Object.entries(rows ?? {}).filter(([, v]) => v !== null && String(v).trim() !== "")] as [string, [string, string][]])
+    .filter(([, rows]) => rows.length > 0);
+}

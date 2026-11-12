@@ -7,6 +7,7 @@ import { Badge, Button } from '@mechware/ui';
 import { formatPriceMinor, type MediaDto, type ProductDetail, type VariantDto } from '@mechware/api-client';
 import { Availability } from '../search/hit-parts';
 import { CopyPartNumber } from '../search/CopyPartNumber';
+import { LifecycleBanner, ProductSections } from './ProductSections';
 import {
   absoluteMediaUrl,
   clampQuantity,
@@ -114,10 +115,13 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
   const stockStatus = variant?.stock.status ?? 'out_of_stock';
   const pack = Math.max(1, variant?.packSize ?? 1);
   const min = variant ? minQuantity(variant) : 1;
+  const partNumber = variant?.manufacturerPartNumber?.trim() || variant?.sku || '';
   const short = pickLocalized(locale, product.shortDescriptionEn, product.shortDescriptionBn);
 
   return (
-    <div className="grid gap-8 lg:grid-cols-2">
+    <>
+      <LifecycleBanner product={product} />
+      <div className="grid gap-8 lg:grid-cols-2">
       <Gallery images={images} title={title} mediaBase={mediaBase} t={t} />
 
       <div>
@@ -133,8 +137,14 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
           {variant && (
             <div className="flex items-center gap-1">
               <dt className="text-text-muted">{t('partNumber')}</dt>
-              <dd className="font-mono text-text">{variant.sku}</dd>
-              <CopyPartNumber value={variant.sku} label={t('copyPartNumber', { part: variant.sku })} copiedLabel={t('copied')} />
+              <dd className="font-mono text-text">{partNumber}</dd>
+              <CopyPartNumber value={partNumber} label={t('copyPartNumber', { part: partNumber })} copiedLabel={t('copied')} />
+            </div>
+          )}
+          {variant && partNumber !== variant.sku && (
+            <div className="flex gap-2 text-xs">
+              <dt className="text-text-muted">{t('sku')}</dt>
+              <dd className="font-mono text-text-muted">{variant.sku}</dd>
             </div>
           )}
         </dl>
@@ -242,6 +252,8 @@ export function ProductView({ product, initialSku, mediaBase }: ProductViewProps
           </div>
         </dl>
       </div>
-    </div>
+      </div>
+      <ProductSections product={product} variant={variant} mediaBase={mediaBase} />
+    </>
   );
 }

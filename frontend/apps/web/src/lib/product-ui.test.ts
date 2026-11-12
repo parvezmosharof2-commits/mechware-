@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { absoluteMediaUrl, clampQuantity, galleryFor, localePath, minQuantity, pickLocalized, pickVariant, productPath } from './product-ui.ts';
+import { absoluteMediaUrl, clampQuantity, formatFileSize, galleryFor, specBoolean, specGroups, localePath, minQuantity, pickLocalized, pickVariant, productPath } from './product-ui.ts';
 
 const variant = (sku: string, isDefault = false, id = sku) =>
   ({ id, sku, isDefault, options: {}, minOrderQty: 1, packSize: 1 }) as never;
@@ -47,4 +47,16 @@ test('quantity respects MOQ and pack size', () => {
 test('media urls', () => {
   assert.equal(absoluteMediaUrl('/m/1.svg', 'http://api/'), 'http://api/m/1.svg');
   assert.equal(absoluteMediaUrl('https://cdn/x.png', 'http://api'), 'https://cdn/x.png');
+});
+
+test('spec helpers', () => {
+  assert.equal(specBoolean("True"), true);
+  assert.equal(specBoolean("no"), false);
+  assert.equal(specBoolean("IP20"), undefined);
+  assert.equal(formatFileSize(0), '');
+  assert.equal(formatFileSize(512), '512 B');
+  assert.equal(formatFileSize(2048), '2 KB');
+  assert.equal(formatFileSize(1572864), '1.5 MB');
+  assert.deepEqual(specGroups({ A: { x: '1', y: ' ' }, B: {} }), [['A', [['x', '1']]]]);
+  assert.deepEqual(specGroups(null), []);
 });
