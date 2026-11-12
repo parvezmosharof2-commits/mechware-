@@ -4,6 +4,9 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { ProductView } from '../../../../components/product/ProductView';
 import { breadcrumbLabel, localePath, pickLocalized, productPath, productTitle } from '../../../../lib/product-ui';
+import { buildBreadcrumbJsonLd, buildProductJsonLd, jsonLdString } from '../../../../lib/json-ld';
+import { nodesToText, sanitizeHtml } from '../../../../lib/safe-html';
+import { absoluteUrl } from '../../../../lib/site-url';
 import { PUBLIC_API_BASE_URL, loadProduct } from '../../../../lib/storefront-server';
 
 type Props = {
@@ -50,8 +53,22 @@ export default async function ProductPage({ params, searchParams }: Props) {
   const t = await getTranslations('Product');
   const crumbs = product.breadcrumbs;
 
+  const title = productTitle(product, locale);
+  const url = absoluteUrl(productPath(locale, product.slug));
+  const description =
+    nodesToText(sanitizeHtml(product.descriptionHtml || '')).trim() || pickLocalized(locale, product.shortDescriptionEn, product.shortDescriptionBn);
+  const productLd = buildProductJsonLd({ product, title, description, url, mediaBase: PUBLIC_API_BASE_URL });
+  const breadcrumbLd = buildBreadcrumbJsonLd([
+    { name: t('home'), url: absoluteUrl(localePath(locale, '/')) },
+    ...crumbs.map((c) => ({ name: breadcrumbLabel(c, locale), url: absoluteUrl(`${localePath(locale, '/search')}?category=${encodeURIComponent(c.slug)}`) })),
+    { name: title, url }
+  ]);
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
+      {/* Structured data: serialised with < > & escaped, so product text cannot close the tag. */}
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(productLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(breadcrumbLd) }} />
       <nav aria-label={t('breadcrumb')} className="mb-4 text-sm">
         <ol className="flex flex-wrap items-center gap-x-2 gap-y-1 text-text-muted">
           <li>
@@ -69,7 +86,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
           ))}
           <li className="flex items-center gap-2" aria-current="page">
             <span aria-hidden="true">/</span>
-            <span className="text-text">{productTitle(product, locale)}</span>
+            <span className="text-text">{title}</span>
           </li>
         </ol>
       </nav>
