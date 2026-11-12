@@ -324,6 +324,23 @@
     "errorGeneric": "Something went wrong while searching. Please try again.",
     "retry": "Try again",
     "pagination": "Search results pages",
+    "tableCaption": "Search results",
+    "colProduct": "Product",
+    "colPartNumber": "Part number",
+    "colAvailability": "Availability",
+    "colPrice": "Price",
+    "colAction": "Action",
+    "view": "View",
+    "viewProduct": "View {title}",
+    "copyPartNumber": "Copy part number {part}",
+    "copied": "Copied",
+    "morePartNumbers": "+{count}",
+    "noPartNumber": "-",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "nrnd": "Not recommended for new designs",
+    "obsolete": "Obsolete",
+    "priceOnRequest": "Price on request",
     "goToPage": "Go to page {page}"
   }
 }

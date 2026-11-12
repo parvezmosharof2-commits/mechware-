@@ -47,6 +47,22 @@ export function clearFilters(params: SearchParams): SearchParams {
   return { q: params.q, sort: params.sort, pageSize: params.pageSize };
 }
 
+/** Part-number comparison form: A-Z0-9 uppercase, with the look-alikes O->0 and I/L->1 folded together. */
+export function normalizePartNumber(input: string): string {
+  return input
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1');
+}
+
+/** True when the buyer's query is the same part number as `partNumber` (ignoring case, punctuation, O/0 and I/L/1). */
+export function matchesPartNumber(query: string | undefined, partNumber: string): boolean {
+  if (!query) return false;
+  const q = normalizePartNumber(query);
+  return q.length > 0 && q === normalizePartNumber(partNumber);
+}
+
 export function hasActiveFilters(params: SearchParams): boolean {
   return Boolean(
     params.brand?.length ||

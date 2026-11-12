@@ -324,6 +324,23 @@
     "errorGeneric": "খোঁজার সময় সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।",
     "retry": "আবার চেষ্টা করুন",
     "pagination": "সার্চ ফলাফলের পৃষ্ঠা",
+    "tableCaption": "সার্চ ফলাফল",
+    "colProduct": "পণ্য",
+    "colPartNumber": "পার্ট নম্বর",
+    "colAvailability": "স্টক",
+    "colPrice": "দাম",
+    "colAction": "কার্যক্রম",
+    "view": "দেখুন",
+    "viewProduct": "{title} দেখুন",
+    "copyPartNumber": "পার্ট নম্বর {part} কপি করুন",
+    "copied": "কপি হয়েছে",
+    "morePartNumbers": "+{count}",
+    "noPartNumber": "-",
+    "inStock": "স্টকে আছে",
+    "outOfStock": "স্টক নেই",
+    "nrnd": "নতুন ডিজাইনের জন্য সুপারিশ করা হয় না",
+    "obsolete": "বন্ধ হয়ে গেছে",
+    "priceOnRequest": "দাম জানতে যোগাযোগ করুন",
     "goToPage": "পৃষ্ঠা {page}-এ যান"
   }
 }

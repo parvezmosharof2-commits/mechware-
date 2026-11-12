@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { clearFilters, hasActiveFilters, maxPage, minorToTaka, pageWindow, takaToMinor, toggleBrand, withFilter } from './search-ui.ts';
+import { matchesPartNumber, normalizePartNumber, clearFilters, hasActiveFilters, maxPage, minorToTaka, pageWindow, takaToMinor, toggleBrand, withFilter } from './search-ui.ts';
 
 test('taka to poisha', () => {
   assert.equal(takaToMinor('1,250.5'), 125050);
@@ -38,4 +38,15 @@ test('clear filters keeps q and sort', () => {
   assert.deepEqual(cleared, { q: 'x', sort: 'price-asc', pageSize: undefined });
   assert.equal(hasActiveFilters(cleared), false);
   assert.equal(hasActiveFilters({ inStock: true }), true);
+});
+
+test('part number normaliser folds case, punctuation and look-alikes', () => {
+  assert.equal(normalizePartNumber('vfd-037el43a'), 'VFD037E143A');
+  assert.equal(normalizePartNumber('VFD037EL43A'), normalizePartNumber('vfd037e143a'));
+  assert.equal(normalizePartNumber('ABOI'), 'AB01');
+  assert.equal(normalizePartNumber(' - '), '');
+  assert.equal(matchesPartNumber('vfd 037el43a', 'VFD037EL43A'), true);
+  assert.equal(matchesPartNumber('VFD037EL43', 'VFD037EL43A'), false);
+  assert.equal(matchesPartNumber('', 'X'), false);
+  assert.equal(matchesPartNumber(undefined, 'X'), false);
 });

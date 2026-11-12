@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import dynamic from 'next/dynamic';
-import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { Filter, Search, X } from 'lucide-react';
@@ -29,6 +28,8 @@ import {
 import { clearFilters, hasActiveFilters, maxPage, pageWindow, toggleBrand, withFilter } from '../../lib/search-ui';
 import { FilterPanel } from './FilterPanel';
 import { SearchSkeleton } from './SearchSkeleton';
+import { ResultsTable } from './ResultsTable';
+import { ResultsList } from './ResultsList';
 
 const FilterDrawer = dynamic(() => import('./FilterDrawer'), { ssr: false });
 
@@ -53,8 +54,6 @@ export function SearchView({ params, result, errorStatus }: SearchViewProps) {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [query, setQuery] = React.useState(params.q ?? '');
   React.useEffect(() => setQuery(params.q ?? ''), [params.q]);
-
-  const localePrefix = locale === 'bn' ? '/bn' : '';
 
   /** Single write path: every control changes the URL; the server component re-renders with the new results. */
   const navigate = React.useCallback(
@@ -107,7 +106,6 @@ export function SearchView({ params, result, errorStatus }: SearchViewProps) {
     navigate({ ...params, q: query.trim() || undefined, page: undefined });
   };
 
-  const title = (h: { titleEn: string; titleBn: string }) => (locale === 'bn' && h.titleBn ? h.titleBn : h.titleEn);
   const sortLabels: Record<SearchSort, string> = {
     relevance: t('sortRelevance'),
     'price-asc': t('sortPriceAsc'),
@@ -223,26 +221,8 @@ export function SearchView({ params, result, errorStatus }: SearchViewProps) {
             />
           ) : (
             <>
-              {/* Placeholder list: C7.3 replaces it with the table (desktop) and list (mobile). */}
-              <ul className="divide-y divide-surface-border rounded-lg border border-surface-border">
-                {hits.map((h) => (
-                  <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-                    <div className="min-w-0">
-                      <Link
-                        href={`${localePrefix}/products/${h.slug}`}
-                        className="rounded-sm font-medium text-text hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      >
-                        {title(h)}
-                      </Link>
-                      <p className="text-xs text-text-muted">
-                        {h.brandName}
-                        {h.partNumbers[0] ? ` · ${h.partNumbers[0]}` : ''}
-                      </p>
-                    </div>
-                    <span className="text-sm font-semibold text-text tabular-nums">{formatPriceMinor(h.priceMinor, h.currency, locale)}</span>
-                  </li>
-                ))}
-              </ul>
+              <ResultsTable hits={hits} locale={locale} query={params.q} highlight={meta?.matchedBy === 'partNumber'} t={t} />
+              <ResultsList hits={hits} locale={locale} query={params.q} highlight={meta?.matchedBy === 'partNumber'} t={t} />
 
               {last > 1 && (
                 <Pagination aria-label={t('pagination')} className="mt-6">
