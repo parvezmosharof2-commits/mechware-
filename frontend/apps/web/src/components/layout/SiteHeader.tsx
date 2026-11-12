@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { cookies, headers } from 'next/headers';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { topCategories } from '../../lib/storefront-server';
 import { LanguageSwitch } from './LanguageSwitch';
@@ -34,11 +35,14 @@ export function SearchForm({ locale, placeholder, label, button, id, large }: {
   );
 }
 
-/** Server component: only the language switch and the account menu are client islands. */
+/** Server component: only the account menu is a client island. */
 export async function SiteHeader() {
   const [locale, t, categories] = await Promise.all([getLocale(), getTranslations('Layout'), topCategories()]);
   const loc: 'en' | 'bn' = locale === 'bn' ? 'bn' : 'en';
   const prefix = loc === 'bn' ? '/bn' : '';
+  const current = (await headers()).get('x-mw-url') ?? '/';
+  // UX hint only (no credential): hides the "Sign In" placeholder for a visitor who is signed in until the menu loads.
+  const signedIn = (await cookies()).has('mw_session');
 
   return (
     <header className="sticky top-0 z-30 border-b border-surface-border bg-bg/95 backdrop-blur">
@@ -73,8 +77,8 @@ export async function SiteHeader() {
               </ul>
             </nav>
           </details>
-          <LanguageSwitch locale={loc} label={t('language')} />
-          <HeaderAccount locale={loc} />
+          <LanguageSwitch locale={loc} label={t('language')} current={current} />
+          <HeaderAccount locale={loc} initialSignedIn={signedIn} />
         </div>
       </div>
     </header>

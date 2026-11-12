@@ -30,6 +30,8 @@ export default function middleware(request: NextRequest) {
   // renderer; the response carries the policy to the browser.
   const requestHeaders = new Headers(request.headers);
   const csp = applyNonceCsp(requestHeaders);
+  // The page's own path and query, for the server-rendered language switch (always overwritten, never taken from the client).
+  requestHeaders.set('x-mw-url', `${request.nextUrl.pathname}${request.nextUrl.search}`);
   const forward = () => NextResponse.next({ request: { headers: requestHeaders } });
 
   let response: NextResponse;

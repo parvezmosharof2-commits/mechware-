@@ -32,6 +32,29 @@ Tried and dropped: `preload: false` on the local fonts (no change).
 
 Variance is +-4 points between runs; two runs overlapping on the same CPU dropped scores to 65-82, so run Lighthouse one at a time. The remaining gap to 100 is simulated LCP (about 3 s vs 0.5 s observed): Lantern charges the whole shared framework chunk against LCP.
 
+## H1.4 storefront gate (2026-11-13): all pages x locales
+Median of 3 (Lighthouse 12 mobile, simulated 4G + 4x CPU, `next start`, local API, one run at a time on an idle CPU).
+
+| Page | Perf | A11y | Best pr. | SEO | LCP (sim) | TBT |
+|---|---|---|---|---|---|---|
+| / (en) | 95 | 100 | 100 | 100 | 2.8 s | 80 ms |
+| /bn | 92 (92, 93, 91) re-run | 100 | 100 | 100 | 2.8 s | 219 ms |
+| /search?q=inverter (en) | 93 | 100 | 100 | 63* | 3.1 s | 84 ms |
+| /bn/search?q=inverter | 92 | 100 | 100 | 63* | 3.1 s | 157 ms |
+| PDP (en) | 93 | 100 | 93** | 100 | 3.2 s | 49 ms |
+| /bn PDP | 93 | 100 | 93** | 100 | 3.2 s | 49 ms |
+| /help (en) | 94 | 100 | 100 | 100 | 2.8 s | 144 ms |
+| /bn/help | 95 | 100 | 100 | 100 | 2.8 s | 98 ms |
+| /legal/terms (en) | 94 | 100 | 100 | 66* | 2.8 s | 117 ms |
+| /bn/legal/terms | 95 | 100 | 100 | 66* | 2.7 s | 70 ms |
+
+\* `is-crawlable` fails on purpose (search `noindex,follow`; draft legal pages `noindex` until `LEGAL_APPROVED`). \*\* seed images blocked by CORP (see above).
+Note: the first sweep had the owner's heavy `Bench.exe` running on the machine and scored 72-81; the table is the sweep on an idle CPU. /bn home came in at 86 (86, 86, 95) in that sweep; the main session re-ran it on a quieter CPU (`next start`, with the account-menu session-hint change): /bn 92 (92, 93, 91), en 94 (93, 93, 95, 94, 94).
+
+**Cause of "meta description missing / noindex not seen" (Problem 1).** Next 15.5 streams metadata (`<meta name=description|robots>`, canonical, hreflang) into `<body>` for every user agent that does not match `htmlLimitedBots` (a list of old bots); Googlebot also got it in the body. curl showed the tags, but they were after `</head>`, so Lighthouse did not count them. Fix: `htmlLimitedBots: /.*/` in `next.config.ts` makes metadata blocking (in `<head>`) for all agents. Cost: negligible, since pages are already `force-dynamic`; SEO score on /help and /legal went 91 -> 100 (legal 66 is the intended noindex). E2E (`storefront.mjs`, `headChecks`) now fetches /, /search, PDP, /help, /legal/terms (en+bn) with a browser UA and asserts description, canonical and robots are inside `<head>` and none after it.
+
+**Perf fix (Problem 2).** The language switch is a server component (the request path+query comes from `x-mw-url`, set by middleware), and the account menu is a lazy client island (`dynamic`, ssr false) mounted at idle, with the sign-in button as placeholder (a null `loading` caused a 0.16 CLS header shift; fixed). TBT on /help went from 160-210 ms to 60-140 ms, on home from ~545 to 80 on a quiet CPU.
+
 ## Exit bars
 - Lighthouse Perf >= 90: met after C7.8b (91-93; before 77-84). A11y, best practices (except **), SEO (except *) met.
 - LCP < 2.5 s: met in a real browser and with devtools throttling; Lantern simulation says 3.2-3.6 s.

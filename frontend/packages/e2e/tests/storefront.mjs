@@ -56,7 +56,38 @@ async function openFilters(page, loc, vp) {
   }
 }
 
+// H1.4 SEO tags must be in <head> for every user agent (Next streams metadata into <body> for browser UAs unless
+// htmlLimitedBots matches them). Parsed from the raw HTML with a normal browser UA.
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+async function headChecks() {
+  const pages = [
+    { path: '/', canonical: true },
+    { path: `/search?q=${QUERY}`, robots: /noindex/ },
+    { path: `/products/${MULTI_SLUG}`, canonical: true },
+    { path: '/help', canonical: true },
+    { path: '/legal/terms', canonical: true, robots: /noindex/ }
+  ];
+  for (const pfx of ['', '/bn']) {
+    for (const p of pages) {
+      const url = `${WEB}${pfx}${p.path === '/' && pfx ? '' : p.path}`;
+      const html = await (await fetch(url, { headers: { 'user-agent': BROWSER_UA } })).text();
+      const end = html.indexOf('</head>');
+      const head = html.slice(0, end);
+      const body = html.slice(end);
+      const tag = /<meta name="(?:description|robots)"|<link rel="(?:canonical|alternate)"/;
+      const ok =
+        end > 0 &&
+        /<meta name="description" content="[^"]+"/.test(head) &&
+        !tag.test(body) &&
+        (!p.canonical || /<link rel="canonical" href="[^"]+"/.test(head)) &&
+        (!p.robots || p.robots.test((head.match(/<meta name="robots" content="([^"]*)"/) ?? [])[1] ?? ''));
+      check(`head tags (description${p.canonical ? ', canonical' : ''}${p.robots ? ', robots' : ''}) are in <head>: ${pfx}${p.path}`, ok);
+    }
+  }
+}
+
 (async () => {
+  await headChecks();
   const browser = await launch();
   for (const [lname, loc] of Object.entries(LOCALES)) {
     for (const [vname, vp] of Object.entries(VIEWPORTS)) {

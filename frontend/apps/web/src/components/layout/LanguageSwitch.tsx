@@ -1,17 +1,13 @@
-'use client';
-
-import * as React from 'react';
-import { usePathname } from 'next/navigation';
-
 /**
- * en <-> bn on the same page. English is unprefixed, Bangla lives under /bn, but the link to English is written /en/...:
- * next-intl remembers the last locale in a cookie and would send a bare path back to Bangla; /en/... resets the cookie
- * and redirects to the unprefixed URL. The query string is carried over.
+ * en <-> bn on the same page, rendered on the server: no client JavaScript. English is unprefixed, Bangla lives under /bn,
+ * but the link to English is written /en/...: next-intl remembers the last locale in a cookie and would send a bare path
+ * back to Bangla; /en/... resets the cookie and redirects to the unprefixed URL. The query string is carried over.
+ * `current` is the request path plus query, set by middleware.ts (x-mw-url) and passed in by the header.
  */
-export function LanguageSwitch({ locale, label }: { locale: 'en' | 'bn'; label: string }) {
-  const pathname = usePathname() || '/';
-  const [search, setSearch] = React.useState('');
-  React.useEffect(() => setSearch(window.location.search), [pathname]);
+export function LanguageSwitch({ locale, label, current }: { locale: 'en' | 'bn'; label: string; current: string }) {
+  const q = current.indexOf('?');
+  const pathname = q < 0 ? current : current.slice(0, q);
+  const search = q < 0 ? '' : current.slice(q);
 
   const bare = pathname.replace(/^\/(bn|en)(?=\/|$)/, '') || '/';
   const hrefFor = (target: 'en' | 'bn') => `${target === 'bn' ? `/bn${bare === '/' ? '' : bare}` : `/en${bare === '/' ? '' : bare}`}${search}`;

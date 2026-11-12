@@ -10,6 +10,9 @@ const headers = securityHeaders({ googleSignIn: Boolean(process.env.NEXT_PUBLIC_
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Next 15 streams metadata into <body> for browser user agents. Lighthouse and crawlers need description, canonical,
+  // hreflang and the legal pages' noindex in <head>, so metadata blocks the first byte for every user agent.
+  htmlLimitedBots: /.*/,
   transpilePackages: ['@mechware/ui', '@mechware/api-client'],
   images: {
     remotePatterns: [
