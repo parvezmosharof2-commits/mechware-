@@ -12,6 +12,7 @@ namespace Mechware.IntegrationTests.Search;
 public sealed class SearchApiTests : IAsyncLifetime
 {
     private const string PartNumber = "6ES7214-1AG40-0XB0";
+    private const string SkuWithOIL = "OMR-PLC-24V";
 
     private readonly string _index = "api_test_" + Guid.NewGuid().ToString("N");
     private DbBackedFactory? _factory;
@@ -36,6 +37,12 @@ public sealed class SearchApiTests : IAsyncLifetime
                 Id = Guid.NewGuid(), Slug = "siemens-6es7214", TitleEn = "Siemens S7-1200 CPU 1214C", BrandName = "Siemens", BrandSlug = "siemens",
                 PartNumbers = [PartNumber], PartNumberKeys = [PartNumbers.Normalise(PartNumber), PartNumbers.Fuzzy(PartNumbers.Normalise(PartNumber))],
                 PriceMinor = 5_000_000, InStock = true, SoldCount = 7,
+            },
+            new ProductSearchDocument
+            {
+                Id = Guid.NewGuid(), Slug = "omron-plc", TitleEn = "Omron PLC module", BrandName = "Omron", BrandSlug = "omron",
+                PartNumbers = [SkuWithOIL], PartNumberKeys = [PartNumbers.Normalise(SkuWithOIL), PartNumbers.Fuzzy(PartNumbers.Normalise(SkuWithOIL))],
+                PriceMinor = 1_000_000, InStock = true,
             },
             new ProductSearchDocument
             {
@@ -158,7 +165,38 @@ public sealed class SearchApiTests : IAsyncLifetime
         var (response, body, _) = await Read(await client.GetAsync("/api/v1/search?q=x"));
 
         response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
-        body.Should().Contain("SEARCH_UNAVAILABLE").And.NotContain("127.0.0.1");
+        body.Should().Contain("SEARCH_UNAVAILABLE").And.NotContain("127.0.0.1").And.NotContain("unreachable").And.NotContain("401");
+    }
+
+    [SearchStackFact]
+    public async Task SkuContainingOIL_IsFoundAsAPartNumber_AsTypedAndWithDigitsForLetters()
+    {
+        foreach (var typed in new[] { "omr-plc-24v", "0MR-P1C-24V" })
+        {
+            var (response, _, json) = await Read(await _client.GetAsync("/api/v1/search?q=" + Uri.EscapeDataString(typed)));
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            json.RootElement.GetProperty("meta").GetProperty("matchedBy").GetString().Should().Be("partNumber");
+            Slugs(json).First().Should().Be("omron-plc");
+        }
+    }
+
+    [SearchStackFact]
+    public async Task AnonymousBrowsing_IsNotThrottledByTheGlobalOrIpLimiters()
+    {
+        using var strict = new DbBackedFactory(settings: new Dictionary<string, string>
+        {
+            ["Search:Url"] = MeiliInfra.Url,
+            ["Search:ApiKey"] = MeiliInfra.Key,
+            ["Search:IndexName"] = _index,
+            ["RateLimiting:GlobalPermitPerMinute"] = "100",
+            ["RateLimiting:IpCeilingPerMinute"] = "100",
+        });
+        using var client = strict.CreateClient();
+
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 120; i++) statuses.Add((await client.GetAsync("/api/v1/search?q=x")).StatusCode);
+
+        statuses.Should().NotContain(HttpStatusCode.TooManyRequests);
     }
 }
 

@@ -280,7 +280,7 @@ builder.Services.AddRateLimiter(options =>
     // addresses, and a 429 makes it retry later, which delays confirming paid orders. They never share the budget that
     // throttles browsers, and a flood of forged webhooks only exhausts its own bucket (each is refused on the signature).
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-        httpContext.Request.Path.StartsWithSegments("/api/v1/storefront")
+        httpContext.Request.Path.StartsWithSegments("/api/v1/storefront") || httpContext.Request.Path.StartsWithSegments("/api/v1/search")
         ? RateLimitPartition.GetNoLimiter("storefront")
         : httpContext.Request.Path.StartsWithSegments("/api/v1/payments/webhooks")
         ? RateLimitPartition.GetFixedWindowLimiter(
@@ -323,7 +323,8 @@ builder.Services.AddRateLimiter(options =>
 // before it reaches the database, and many accounts behind one address cannot add up to more than this.
 // Storefront reads and payment webhooks keep their own per-IP budgets (see above) and stay outside it.
 var ipCeiling = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-    httpContext.Request.Path.StartsWithSegments("/api/v1/storefront") || httpContext.Request.Path.StartsWithSegments("/api/v1/payments/webhooks")
+    httpContext.Request.Path.StartsWithSegments("/api/v1/storefront") || httpContext.Request.Path.StartsWithSegments("/api/v1/search")
+    || httpContext.Request.Path.StartsWithSegments("/api/v1/payments/webhooks")
     ? RateLimitPartition.GetNoLimiter("own-budget")
     : RateLimitPartition.GetFixedWindowLimiter(
         partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Mechware.Application.Search;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace Mechware.Infrastructure.Catalog;
 /// (A→B→A→C would otherwise violate the unique history index), refusing a slug another live entity owns, and
 /// rewriting descendant category paths in the same transaction.
 /// </summary>
-public sealed class CatalogSlugService(MechwareDbContext db)
+public sealed class CatalogSlugService(MechwareDbContext db, ISearchReindexQueue? reindex = null)
 {
     public async Task ChangeProductSlugAsync(Guid productId, string newSlug, CancellationToken ct = default)
     {
@@ -58,6 +59,16 @@ public sealed class CatalogSlugService(MechwareDbContext db)
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+
+        // The index stores each product's category path and slug chain; reload every product in the renamed subtree.
+        if (reindex is not null)
+        {
+            var newPath = category.MaterializedPath;
+            var newPrefix = newPath + ".";
+            var categoryIds = db.Categories.Where(c => c.MaterializedPath == newPath || c.MaterializedPath.StartsWith(newPrefix)).Select(c => c.Id);
+            var productIds = await db.Products.AsNoTracking().Where(p => categoryIds.Contains(p.CategoryId)).Select(p => p.Id).ToListAsync(ct);
+            await reindex.EnqueueProductsAsync(productIds, ct);
+        }
     }
 
     private async Task DropRetiredAsync(SlugEntityType type, string slug, CancellationToken ct)

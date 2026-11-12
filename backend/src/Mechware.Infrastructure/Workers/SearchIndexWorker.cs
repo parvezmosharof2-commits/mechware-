@@ -10,10 +10,11 @@ namespace Mechware.Infrastructure.Workers;
 /// Feeds the search index from the outbox queue every couple of seconds, and runs a full rebuild when one is requested.
 /// Host it once (Mechware.Worker); an outage of the engine only delays indexing (see <see cref="SearchIndexer"/>).
 /// </summary>
-internal sealed class SearchIndexWorker(IServiceScopeFactory scopes, ILogger<SearchIndexWorker> logger) : BackgroundService
+internal sealed class SearchIndexWorker(IServiceScopeFactory scopes, StackExchange.Redis.IConnectionMultiplexer redis, ILogger<SearchIndexWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(2);
     private bool _indexReady;
+    private readonly SearchIndexLease _lease = new(redis, $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}");
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -22,6 +23,7 @@ internal sealed class SearchIndexWorker(IServiceScopeFactory scopes, ILogger<Sea
         {
             try
             {
+                if (!await _lease.TryAcquireOrRenewAsync()) continue; // another instance is the consumer
                 await using var scope = scopes.CreateAsyncScope();
                 if (!_indexReady)
                 {
@@ -36,6 +38,9 @@ internal sealed class SearchIndexWorker(IServiceScopeFactory scopes, ILogger<Sea
                 logger.LogError(ex, "Search indexing failed; will retry");
             }
         } while (await WaitAsync(timer, stoppingToken));
+
+        try { await _lease.ReleaseAsync(); }
+        catch (Exception ex) { logger.LogWarning(ex, "Could not release the search indexer lease; it lapses on its own"); }
     }
 
     private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken ct)

@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.TryAddSingleton<DomainEventOutboxInterceptor>();
         services.TryAddSingleton<IDistributedLockProvider, RedLockProvider>();
         services.TryAddSingleton<IStorefrontCacheInvalidator, RedisStorefrontCacheInvalidator>();
+        services.TryAddSingleton<Mechware.Application.Search.ISearchReindexQueue, Mechware.Infrastructure.Search.RedisSearchReindexQueue>();
         services.TryAddScoped<IInventoryService, InventoryService>();
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
         services.TryAddScoped<ICatalogAdminService, CatalogAdminService>();
@@ -95,7 +96,8 @@ public static class DependencyInjection
 
         services.AddSingleton(options);
         services.TryAddSingleton<ISearchProvider>(sp => new MeilisearchSearchProvider(
-            new HttpClient(), options, sp.GetRequiredService<ILogger<MeilisearchSearchProvider>>()));
+            // Recycled connections follow DNS changes (engine failover, blue/green deploys).
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }), options, sp.GetRequiredService<ILogger<MeilisearchSearchProvider>>()));
         services.TryAddSingleton<IStorefrontSearch, StorefrontSearchService>();
         return services;
     }

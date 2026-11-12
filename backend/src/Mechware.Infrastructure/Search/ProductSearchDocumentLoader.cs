@@ -21,13 +21,17 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
         return await BuildAsync(products, ct);
     }
 
-    /// <summary>One page of indexable products in id order (keyset paging), for a full rebuild.</summary>
-    public async Task<IReadOnlyList<ProductSearchDocument>> LoadPageAsync(Guid? afterId, int take, CancellationToken ct = default)
+    /// <summary>
+    /// One page of indexable products in id order (keyset paging), for a full rebuild. <c>Scanned</c> counts the rows read, which
+    /// can exceed <c>Documents.Count</c> (a product with no active variant is skipped); <c>LastId</c> is the cursor for the next page.
+    /// </summary>
+    public async Task<(IReadOnlyList<ProductSearchDocument> Documents, int Scanned, Guid? LastId)> LoadPageAsync(
+        Guid? afterId, int take, CancellationToken ct = default)
     {
         var query = Indexable();
         if (afterId is { } after) query = query.Where(p => p.Id.CompareTo(after) > 0);
         var products = await query.OrderBy(p => p.Id).Take(take).ToListAsync(ct);
-        return await BuildAsync(products, ct);
+        return (await BuildAsync(products, ct), products.Count, products.Count == 0 ? null : products[^1].Id);
     }
 
     private IQueryable<Product> Indexable() => db.Products.AsNoTracking().AsSplitQuery()
@@ -66,6 +70,7 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
         foreach (var p in products)
         {
             var variants = p.Variants.Where(v => v.Status == VariantStatus.Active).ToList();
+            if (variants.Count == 0) continue;   // nothing to sell (and no price): not indexed, so the indexer removes it
             var (path, vatRate) = categories.TryGetValue(p.CategoryId, out var c) ? c : ("", 0m);
             var brand = p.BrandId is { } bid && brands.TryGetValue(bid, out var b) ? b : (Name: "", Slug: "");
 
@@ -93,12 +98,11 @@ public sealed class ProductSearchDocumentLoader(MechwareDbContext db, TimeProvid
                 CategoryPath = path.Split('.', StringSplitOptions.RemoveEmptyEntries).Skip(1).ToList(),
                 PartNumbers = variants.SelectMany(v => new[] { v.ManufacturerPartNumber, v.Sku })
                     .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!).Distinct().ToList(),
-                PartNumberKeys = variants.SelectMany(v => new[] { v.PartNumberKey, v.PartNumberFuzzyKey, PartNumbers.Normalise(v.Sku) })
+                PartNumberKeys = variants.SelectMany(v => new[] { v.PartNumberKey, v.PartNumberFuzzyKey, PartNumbers.Normalise(v.Sku), PartNumbers.Fuzzy(PartNumbers.Normalise(v.Sku)) })
                     .Where(k => !string.IsNullOrEmpty(k)).Select(k => k!).Distinct().ToList(),
                 // Guest-facing (VAT-inclusive) price at indexing time; a sale window that opens or closes later is picked up
                 // by the next reindex of the product (or a full rebuild).
-                PriceMinor = variants.Count == 0 ? 0
-                    : variants.Min(v => PricingEngine.Quote(PricingInput.From(v, vatRate), now, TaxMode.Inclusive).Display.ToMinorUnits()),
+                PriceMinor = variants.Min(v => PricingEngine.Quote(PricingInput.From(v, vatRate), now, TaxMode.Inclusive).Display.ToMinorUnits()),
                 Currency = variants.FirstOrDefault()?.Currency.ToIsoCode() ?? "BDT",
                 InStock = variants.Any(v => stock.TryGetValue(v.Id, out var available) && available > 0),
                 SupplyStatus = p.SupplyStatus.ToString().ToLowerInvariant(),

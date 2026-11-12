@@ -4,6 +4,7 @@ using Npgsql;
 using Mechware.Application.Catalog;
 using Mechware.Application.Common;
 using Mechware.Application.Inventory;
+using Mechware.Application.Search;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Pricing;
@@ -28,10 +29,13 @@ public sealed class InventoryService : IInventoryService
     private readonly IDistributedLockProvider _locks;
     private readonly IStorefrontCacheInvalidator? _cache;
     private readonly TimeProvider _clock;
+    private readonly ISearchReindexQueue? _reindex;
 
     public InventoryService(
-        MechwareDbContext db, IDistributedLockProvider locks, TimeProvider clock, IStorefrontCacheInvalidator? cache = null)
+        MechwareDbContext db, IDistributedLockProvider locks, TimeProvider clock, IStorefrontCacheInvalidator? cache = null,
+        ISearchReindexQueue? reindex = null)
     {
+        _reindex = reindex;
         _db = db;
         _locks = locks;
         _clock = clock;
@@ -315,6 +319,7 @@ public sealed class InventoryService : IInventoryService
             }
 
             if (ambient is null) await tx.CommitAsync(ct);
+            if (ambient is null && released > 0) await InvalidateStockAsync(variants, ct);
             return released;
         }
         catch
@@ -343,10 +348,11 @@ public sealed class InventoryService : IInventoryService
 
     private async Task InvalidateStockAsync(IEnumerable<Guid> variantIds, CancellationToken ct)
     {
-        if (_cache is null) return;
+        if (_cache is null && _reindex is null) return;
         var ids = variantIds.ToArray();
         var productIds = await _db.ProductVariants.AsNoTracking()
             .Where(v => ids.Contains(v.Id)).Select(v => v.ProductId).Distinct().ToListAsync(ct);
-        await _cache.InvalidateStockAsync(productIds, ct);
+        if (_cache is not null) await _cache.InvalidateStockAsync(productIds, ct);
+        if (_reindex is not null) await _reindex.EnqueueProductsAsync(productIds, ct);
     }
 }

@@ -246,6 +246,7 @@ public sealed class MeilisearchSearchProviderTests : IAsyncLifetime
         var act = () => wrong.SearchAsync(new SearchQuery());
         var thrown = (await act.Should().ThrowAsync<ServiceUnavailableException>()).Which;
         thrown.Message.Should().NotContain("api key", because: "engine messages stay in the log");
+        thrown.Message.Should().NotContain("401", because: "how the engine is set up is not the caller's business");
     }
 
     [MeiliFact]
@@ -262,7 +263,8 @@ public sealed class MeilisearchSearchProviderTests : IAsyncLifetime
             await Task.Delay(500);
             var act = () => Make(index: other).IndexProductsAsync([Doc("No sku field")]);
             // Must be reported as a failed task straight away, not discovered later as a timeout.
-            (await act.Should().ThrowAsync<ServiceUnavailableException>()).Which.Message.Should().Contain("did not succeed");
+            (await act.Should().ThrowAsync<ServiceUnavailableException>()).Which.Data["reason"].Should().BeOfType<string>()
+                .Which.Should().Contain("did not succeed");
         }
         finally { await http.DeleteAsync($"indexes/{other}"); }
     }

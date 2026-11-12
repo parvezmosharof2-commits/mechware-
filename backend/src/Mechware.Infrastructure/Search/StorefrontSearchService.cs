@@ -24,7 +24,7 @@ public sealed class StorefrontSearchService(ISearchProvider search) : IStorefron
 
         if (PartNumbers.LooksLikePartNumber(query.Text))
         {
-            // The fuzzy form of the input matches both keys stored per variant (normalised and fuzzy), so O/0 and I/L/1 mix-ups hit too.
+            // The fuzzy form of the input matches the fuzzy key stored for every part number and SKU, so O/0 and I/L/1 mix-ups hit too.
             var key = PartNumbers.Fuzzy(PartNumbers.Normalise(query.Text));
             var byKey = await search.SearchAsync(query with { Text = "", PartNumberKey = key }, ct);
             if (byKey.Total > 0) return Map(byKey, MatchedByPartNumber);

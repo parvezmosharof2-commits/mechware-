@@ -214,6 +214,15 @@ public sealed class MeilisearchSearchProvider : ISearchProvider
         throw Unavailable($"task {uid} timed out");
     }
 
-    private static ServiceUnavailableException Unavailable(string why) =>
-        new("SEARCH_UNAVAILABLE", $"Search is temporarily unavailable ({why}).");
+    /// <summary>
+    /// The caller sees one fixed message: details such as "engine answered 401" would tell an outsider how the engine is set up.
+    /// The reason goes to the log and to <c>Data["reason"]</c> for tests and diagnostics.
+    /// </summary>
+    private ServiceUnavailableException Unavailable(string why)
+    {
+        _logger.LogWarning("Search unavailable: {Reason}", why);
+        var ex = new ServiceUnavailableException("SEARCH_UNAVAILABLE", "Search is temporarily unavailable. Please try again shortly.");
+        ex.Data["reason"] = why;
+        return ex;
+    }
 }
