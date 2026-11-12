@@ -25,6 +25,7 @@ public sealed class DemoAccountGuardTests
             ["Antivirus:Host"] = "127.0.0.1",
             ["Email:Host"] = "localhost",
             ["Email:FromAddress"] = "no-reply@mechware.test",
+            ["Storefront:BaseUrl"] = "https://shop.mechware.test",
             ["Search:ApiKey"] = "test-search-key"
         });
 

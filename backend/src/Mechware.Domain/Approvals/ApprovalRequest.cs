@@ -3,6 +3,9 @@ using Mechware.Domain.Common.Primitives;
 
 namespace Mechware.Domain.Approvals;
 
+/// <summary>Raised when a request is created: the first approver is waiting (the outbox turns this into an email).</summary>
+public sealed record ApprovalRequestedEvent(Guid ApprovalRequestId, string SubjectType, Guid SubjectId, Guid RequesterUserId, long AmountMinor) : DomainEventBase;
+
 public enum ApprovalStatus { Pending = 1, Approved = 2, Rejected = 3, Cancelled = 4 }
 
 public enum StepDecision { Pending = 0, Approved = 1, Rejected = 2 }
@@ -97,6 +100,7 @@ public sealed class ApprovalRequest : AggregateRoot<Guid>
             RuleName = rule.Name
         };
         for (int i = 0; i < approvers.Count; i++) request._steps.Add(new ApprovalStep(Guid.NewGuid(), id, i, approvers[i]));
+        request.AddDomainEvent(new ApprovalRequestedEvent(id, subjectType, subjectId, requesterUserId, amountMinor));
         return request;
     }
 

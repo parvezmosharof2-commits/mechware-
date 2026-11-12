@@ -129,7 +129,8 @@ builder.Services.AddSearch(searchOptions, requireRealSetup: !(builder.Environmen
 
 builder.Services.AddNotifications(
     builder.Configuration.GetSection(Mechware.Infrastructure.Notifications.EmailOptions.SectionName).Get<Mechware.Infrastructure.Notifications.EmailOptions>() ?? new(),
-    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"),
+    storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"]);
 
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();

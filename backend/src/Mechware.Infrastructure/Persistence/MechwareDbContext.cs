@@ -67,6 +67,7 @@ public sealed class MechwareDbContext : DbContext
     public DbSet<Question> Questions => Set<Question>();
     public DbSet<Answer> Answers => Set<Answer>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<NotificationLogEntry> NotificationLog => Set<NotificationLogEntry>();
 
     // B2B company accounts
     public DbSet<Company> Companies => Set<Company>();

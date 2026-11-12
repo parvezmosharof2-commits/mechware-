@@ -108,7 +108,7 @@ public static class DependencyInjection
     /// Email (SMTP) and the bilingual template engine. Outside Development and Testing the SMTP host and the From address must be set.
     /// With no host in Development/Testing, messages are only logged.
     /// </summary>
-    public static IServiceCollection AddNotifications(this IServiceCollection services, EmailOptions options, bool requireRealSetup)
+    public static IServiceCollection AddNotifications(this IServiceCollection services, EmailOptions options, bool requireRealSetup, string? storefrontBaseUrl = null)
     {
         bool haveHost = !string.IsNullOrWhiteSpace(options.Host);
         if (requireRealSetup && !haveHost)
@@ -121,6 +121,9 @@ public static class DependencyInjection
             throw new InvalidOperationException("Email:Port must be between 1 and 65535.");
 
         services.AddSingleton(options);
+        services.TryAddSingleton(new StorefrontLinks(NotificationFormat.NormalizeBaseUrl(storefrontBaseUrl, requireRealSetup)));
+        services.TryAddScoped<NotificationDispatcher>();
+        services.AddScoped<IOutboxPublisher, NotificationOutboxPublisher>();
         services.TryAddSingleton<INotificationTemplates, EmbeddedTemplates>();
         if (haveHost) services.TryAddSingleton<INotificationSender, SmtpEmailSender>();
         else services.TryAddSingleton<INotificationSender, LoggingEmailSender>();
