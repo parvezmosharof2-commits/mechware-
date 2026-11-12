@@ -1,0 +1,38 @@
+{
+  "updated": "2026-11-13",
+  "title": "Returns",
+  "intro": "How returns and refunds are meant to work.",
+  "sections": [
+    {
+      "h": "Return window",
+      "p": [
+        "Each product has its own return policy. By default you can return a product within 7 days after delivery."
+      ]
+    },
+    {
+      "h": "What cannot be returned",
+      "p": [
+        "Electrical parts that have been opened or installed cannot be returned, unless they are faulty."
+      ]
+    },
+    {
+      "h": "How to return",
+      "p": [
+        "You open a return request with photos. If it is approved, you send the product back."
+      ]
+    },
+    {
+      "h": "Refunds",
+      "p": [
+        "Refunds go back to the original payment method, or as a credit note.",
+        "Refund deadline: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Warranty",
+      "p": [
+        "Warranty terms: [to be confirmed]."
+      ]
+    }
+  ]
+}

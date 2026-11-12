@@ -1,0 +1,26 @@
+{
+  "updated": "2026-11-13",
+  "title": "Credit terms",
+  "intro": "Credit terms are for approved companies only. They are not open yet.",
+  "sections": [
+    {
+      "h": "Who can use credit",
+      "p": [
+        "A company can buy on credit after MECHWARE finance approves it. Approval criteria: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Terms and limit",
+      "p": [
+        "Payment terms are net 15 or net 30 days. MECHWARE finance sets the credit limit for each company.",
+        "An order on credit is allowed only if the credit already used plus the new order total stays within the limit."
+      ]
+    },
+    {
+      "h": "Late payment",
+      "p": [
+        "Late payment charges and consequences: [to be confirmed]."
+      ]
+    }
+  ]
+}

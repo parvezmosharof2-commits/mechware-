@@ -1,0 +1,50 @@
+{
+  "updated": "2026-11-13",
+  "title": "Terms of service",
+  "intro": "These terms describe how purchases on the MECHWARE website work. They are a plain-language draft.",
+  "sections": [
+    {
+      "h": "Who sells to you",
+      "p": [
+        "MECHWARE sells directly, from its own stock and from the stock of authorised distributors. Legal entity name, trade licence and registration details: [to be confirmed]. BIN: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Prices and VAT",
+      "p": [
+        "Prices are in Bangladeshi taka (BDT).",
+        "VAT is set per product category (5% by default unless set otherwise: [to be confirmed]). Guests see prices including VAT. Signed-in company accounts see prices without VAT and the VAT as a separate line.",
+        "Our server calculates the final price, VAT and delivery fee. They are shown before you pay."
+      ]
+    },
+    {
+      "h": "Orders and payment",
+      "p": [
+        "An online payment is accepted as paid only after our server has verified it with the payment provider, not when your browser returns to our site.",
+        "An order waiting for online payment is cancelled automatically after 30 minutes."
+      ],
+      "l": [
+        "Card and net banking through SSLCommerz",
+        "bKash",
+        "Bank transfer against an invoice",
+        "Credit terms (net 15 or net 30) for approved companies",
+        "Cash on delivery for small orders in serviceable areas"
+      ],
+      "after": [
+        "Which of these are open at launch: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Delivery, returns and credit",
+      "p": [
+        "Delivery, returns, credit terms and quotes have their own pages: Shipping and delivery, Returns, Credit terms and Quote terms."
+      ]
+    },
+    {
+      "h": "Governing law and disputes",
+      "p": [
+        "Governing law, court and complaint contact: [to be confirmed]."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "updated": "2026-11-13",
+  "title": "Quote terms",
+  "intro": "Quotes are not open yet. This is how they are meant to work.",
+  "sections": [
+    {
+      "h": "Validity",
+      "p": [
+        "The prices in a quote are fixed while the quote is valid. The default validity is 15 days. An expired quote cannot be accepted."
+      ]
+    },
+    {
+      "h": "Accepting a quote",
+      "p": [
+        "Accepting a quote creates an order at the quote's prices. Stock is checked again at that moment."
+      ]
+    },
+    {
+      "h": "Changes",
+      "p": [
+        "Every change creates a new version of the quote. A version that has been sent is never edited."
+      ]
+    },
+    {
+      "h": "Export quotes",
+      "p": [
+        "Machinery for export is quote-only and priced in US dollars. Further terms: [to be confirmed]."
+      ]
+    }
+  ]
+}

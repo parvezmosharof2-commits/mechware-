@@ -1,0 +1,26 @@
+{
+  "updated": "2026-11-13",
+  "title": "Cookie policy",
+  "intro": "This page explains which cookies and similar storage the site uses.",
+  "sections": [
+    {
+      "h": "Cookies the site needs",
+      "p": [
+        "The site uses a small number of cookies to work: a marker that you are signed in, and your language choice. These do not need consent."
+      ]
+    },
+    {
+      "h": "Analytics and marketing",
+      "p": [
+        "Analytics and marketing tags are only loaded after you give consent. Before that, none are loaded.",
+        "Which analytics tools are used, and their cookie names and lifetimes: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Changing your choice",
+      "p": [
+        "How to change or withdraw consent: [to be confirmed]."
+      ]
+    }
+  ]
+}

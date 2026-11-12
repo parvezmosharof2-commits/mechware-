@@ -84,3 +84,18 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+
+@media print {
+  body > header,
+  body > footer,
+  .skip-link {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .legal-doc a {
+    text-decoration: underline;
+  }
+}

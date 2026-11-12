@@ -1,0 +1,36 @@
+{
+  "updated": "2026-11-13",
+  "title": "Shipping and delivery",
+  "intro": "How delivery areas, charges and times are meant to work.",
+  "sections": [
+    {
+      "h": "Delivery areas",
+      "l": [
+        "Inside Dhaka",
+        "Dhaka suburbs",
+        "Outside Dhaka",
+        "International: by quote only"
+      ]
+    },
+    {
+      "h": "Delivery charges",
+      "p": [
+        "The charge is a base amount for the area plus an amount per kilogram of chargeable weight. Heavy or oversize items are quote-only.",
+        "Rates: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Delivery times",
+      "p": [
+        "Under the Digital Commerce Operation Guidelines 2021, delivery is due within 5 days in the same city and 10 days in another city, counted from order confirmation.",
+        "We hand the order to the courier within 48 hours after an advance payment."
+      ]
+    },
+    {
+      "h": "Cash on delivery",
+      "p": [
+        "Cash on delivery is for small orders in serviceable areas only, with a phone code check. Maximum order value: [to be confirmed]."
+      ]
+    }
+  ]
+}

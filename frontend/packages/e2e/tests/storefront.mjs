@@ -35,8 +35,8 @@ const check = (name, ok, extra = '') => {
 };
 
 const LOCALES = {
-  en: { prefix: '', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'Part number' },
-  bn: { prefix: '/bn', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'পার্ট নম্বর' }
+  en: { prefix: '', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'Part number', draft: 'Draft — this text is pending legal review and is not yet in force.', contact: 'Contact details coming soon.' },
+  bn: { prefix: '/bn', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'পার্ট নম্বর', draft: 'খসড়া — এই লেখাটি আইনি পর্যালোচনার অপেক্ষায় আছে এবং এখনো কার্যকর নয়।', contact: 'যোগাযোগের তথ্য শীঘ্রই আসছে।' }
 };
 const VIEWPORTS = { m360: { width: 360, height: 740 }, d1280: { width: 1280, height: 800 } };
 
@@ -73,6 +73,27 @@ async function openFilters(page, loc, vp) {
       check(`[${tag}] home categories and best sellers`, (await page.locator('#home-categories').count()) === 1 && (await page.locator('section[aria-labelledby="home-best"] a[href*="/products/"]').count()) > 0);
       check(`[${tag}] home no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await axeCheck(page, `${tag} /`);
+
+      // H1.2 legal and help pages: every footer link reaches a 200 page, draft notice, axe 0
+      const footerHrefs = await page.locator('footer a[href]').evaluateAll((as) => as.map((a) => a.getAttribute('href')).filter((h) => h && h.startsWith('/') && !h.endsWith('/search')));
+      check(`[${tag}] footer has 8 legal/help links`, footerHrefs.length === 8, footerHrefs.join(' '));
+      for (const href of footerHrefs) {
+        const res = await page.request.get(WEB + href);
+        check(`[${tag}] footer link ${href} is 200`, res.status() === 200, String(res.status()));
+      }
+      await page.goto(`${WEB}${loc.prefix}/legal/terms`, { waitUntil: 'networkidle' });
+      const notice = (await page.locator('[data-testid="draft-notice"]').innerText()).trim();
+      check(`[${tag}] legal draft notice visible`, notice === loc.draft, notice);
+      check(`[${tag}] legal page noindex, toc and sections`, (await page.locator('meta[name="robots"][content*="noindex"]').count()) === 1 && (await page.locator('nav[aria-label] ol a').count()) >= 4 && (await page.locator('main section h2').count()) >= 4);
+      check(`[${tag}] legal no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await axeCheck(page, `${tag} /legal/terms`);
+      await page.goto(`${WEB}${loc.prefix}/help`, { waitUntil: 'networkidle' });
+      check(`[${tag}] help FAQ groups and contact placeholder`, (await page.locator('main details').count()) >= 10 && (await page.locator('main h2').count()) === 6 && (await page.locator('main', { hasText: loc.contact }).count()) === 1);
+      await page.locator('main details summary').first().click();
+      check(`[${tag}] help details opens`, (await page.locator('main details[open]').count()) === 1);
+      check(`[${tag}] help no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await axeCheck(page, `${tag} /help`);
+      await page.goto(`${WEB}${loc.prefix}/`, { waitUntil: 'networkidle' });
       await page.locator('#hero-search').fill(QUERY);
       await page.locator('#hero-search').press('Enter');
       await page.waitForURL(new RegExp(`${loc.prefix}/search\\?q=${QUERY}`));

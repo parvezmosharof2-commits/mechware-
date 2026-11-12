@@ -84,3 +84,22 @@ export function sitemapIndexXml(locs: string[]): string {
     '</sitemapindex>'
   );
 }
+
+/** Static pages (H1.3): one <url> per path and locale (en unprefixed, bn under /bn), each with both hreflang alternates. */
+export function pagesUrlsXml(paths: string[]): string {
+  const entries = paths.flatMap((p) => {
+    const en = absoluteUrl(p);
+    const bn = absoluteUrl(p === '/' ? '/bn' : `/bn${p}`);
+    const links =
+      `<xhtml:link rel="alternate" hreflang="en" href="${xmlEscape(en)}"/>` +
+      `<xhtml:link rel="alternate" hreflang="bn" href="${xmlEscape(bn)}"/>` +
+      `<xhtml:link rel="alternate" hreflang="x-default" href="${xmlEscape(en)}"/>`;
+    return [en, bn].map((loc) => `<url><loc>${xmlEscape(loc)}</loc>${links}</url>`);
+  });
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">' +
+    entries.join('') +
+    '</urlset>'
+  );
+}

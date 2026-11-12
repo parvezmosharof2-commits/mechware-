@@ -5,10 +5,10 @@ import { absoluteUrl } from '../../lib/site-url';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
-/** Sitemap index. Static pages (H1.3) add their own entry next to the product files. */
+/** Sitemap index: the static pages file first, then one file per block of products. */
 export async function GET() {
   const slugs = await getProductSlugs();
-  const locs = Array.from({ length: chunkCount(slugs.length) }, (_, i) => absoluteUrl(`/sitemaps/products-${i + 1}.xml`));
+  const locs = [absoluteUrl('/sitemaps/pages.xml'), ...Array.from({ length: chunkCount(slugs.length) }, (_, i) => absoluteUrl(`/sitemaps/products-${i + 1}.xml`))];
   return new Response(sitemapIndexXml(locs), {
     headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=0, s-maxage=3600' }
   });

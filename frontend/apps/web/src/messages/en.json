@@ -473,5 +473,115 @@
     "contactPlaceholder": "Contact details coming soon.",
     "copyright": "© {year} MECHWARE. All rights reserved.",
     "searchLabelHeader": "Search MECHWARE"
+  },
+  "Legal": {
+    "draftNotice": "Draft — this text is pending legal review and is not yet in force.",
+    "lastUpdated": "Last updated: {date}",
+    "toc": "On this page"
+  },
+  "Help": {
+    "metaTitle": "Help centre | MECHWARE",
+    "metaDescription": "Answers about searching by part number, ordering for companies, payment, delivery and returns.",
+    "title": "Help centre",
+    "intro": "Short answers to common questions. Some features are still being built; they are marked \"Coming soon\".",
+    "comingSoon": "Coming soon",
+    "contactTitle": "Contact us",
+    "contactPlaceholder": "Contact details coming soon.",
+    "groups": [
+      {
+        "id": "search",
+        "title": "Searching by part number",
+        "items": [
+          {
+            "q": "How do I find a product by its part number?",
+            "a": "Type the manufacturer part number into the search box at the top of any page. Capital letters, spaces and dashes do not matter, and small typing mistakes are tolerated."
+          },
+          {
+            "q": "What if I cannot find the part I need?",
+            "a": "Requests for a quote on a part you cannot find are being built.",
+            "soon": true
+          }
+        ]
+      },
+      {
+        "id": "companies",
+        "title": "Ordering for companies",
+        "items": [
+          {
+            "q": "Can my company have an account?",
+            "a": "Yes. A company account holds the company profile (trade licence, BIN and TIN). Signed-in companies see prices without VAT, with the VAT shown as a separate line."
+          },
+          {
+            "q": "Can I get a quote or buy on credit?",
+            "a": "Quotes (valid for 15 days by default) and credit terms for approved companies are being built.",
+            "soon": true
+          },
+          {
+            "q": "Do I get a VAT invoice?",
+            "a": "Mushak-6.3 VAT invoices are being built.",
+            "soon": true
+          }
+        ]
+      },
+      {
+        "id": "payment",
+        "title": "Payment methods",
+        "items": [
+          {
+            "q": "Cards and net banking (SSLCommerz)",
+            "a": "Planned for launch. Checkout is not open yet.",
+            "soon": true
+          },
+          {
+            "q": "bKash",
+            "a": "Planned for launch. Checkout is not open yet.",
+            "soon": true
+          },
+          {
+            "q": "Bank transfer against an invoice",
+            "a": "Planned for launch. Checkout is not open yet.",
+            "soon": true
+          },
+          {
+            "q": "Credit terms (net 15 or net 30) for approved companies",
+            "a": "Planned for launch, only for companies approved by MECHWARE finance.",
+            "soon": true
+          },
+          {
+            "q": "Cash on delivery",
+            "a": "Planned for small orders in serviceable areas only, with a phone code check.",
+            "soon": true
+          }
+        ]
+      },
+      {
+        "id": "delivery",
+        "title": "Delivery",
+        "items": [
+          {
+            "q": "Where do you deliver and what does it cost?",
+            "a": "Delivery areas are Inside Dhaka, Dhaka suburbs and Outside Dhaka. International orders and heavy or oversize items are by quote only. The delivery fee is shown before you pay. Rates: [to be confirmed]."
+          },
+          {
+            "q": "How long does delivery take?",
+            "a": "Under the Digital Commerce Operation Guidelines 2021, delivery is due within 5 days in the same city and 10 days in another city, counted from order confirmation."
+          }
+        ]
+      },
+      {
+        "id": "returns",
+        "title": "Returns",
+        "items": [
+          {
+            "q": "Can I return a product?",
+            "a": "By default within 7 days after delivery, but each product has its own policy. Electrical parts that were opened or installed cannot be returned unless they are faulty."
+          },
+          {
+            "q": "How do I get my money back?",
+            "a": "Refunds go to the original payment method or as a credit note. The refund deadline is [to be confirmed]."
+          }
+        ]
+      }
+    ]
   }
 }

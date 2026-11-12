@@ -1,0 +1,47 @@
+{
+  "updated": "2026-11-13",
+  "title": "Privacy policy",
+  "intro": "This notice explains what personal data MECHWARE handles and why. It is written to follow the Personal Data Protection Ordinance 2025 and will be available in Bangla and English.",
+  "sections": [
+    {
+      "h": "Data we collect",
+      "p": [
+        "When you create an account, place an order or ask for a quote we handle the data needed for that: your name and contact details, your delivery details and your order history.",
+        "For company accounts we also handle the company profile: trade licence, BIN and TIN.",
+        "Full list of data categories: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Why and on what basis",
+      "p": [
+        "We ask for explicit consent for each purpose. Consent is specific to that purpose, can be withdrawn at any time, and a record of it is kept."
+      ]
+    },
+    {
+      "h": "Your rights",
+      "p": [
+        "In your account you will be able to ask for an export of your data, a correction, or deletion or anonymisation of your data.",
+        "When these requests become available: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "How long we keep data",
+      "p": [
+        "Tax records are kept for as long as the law requires. Other retention periods: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Payments, processors and transfers abroad",
+      "p": [
+        "Card details are entered on the payment provider's hosted page and never reach our servers.",
+        "List of processors and any transfer of data outside Bangladesh: [to be confirmed]."
+      ]
+    },
+    {
+      "h": "Contact",
+      "p": [
+        "Data protection contact: [to be confirmed]."
+      ]
+    }
+  ]
+}
