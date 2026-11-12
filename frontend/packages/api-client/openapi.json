@@ -55,6 +55,46 @@
         }
       }
     },
+    "/api/v1/admin/catalog/import/commit": {
+      "post": {
+        "tags": [
+          "AdminCatalogImport"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "File": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "SellerId": {
+                    "type": "string",
+                    "description": "The approved seller that owns the products the file creates (and that existing products must already belong to).",
+                    "format": "uuid"
+                  }
+                }
+              },
+              "encoding": {
+                "File": {
+                  "style": "form"
+                },
+                "SellerId": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/companies": {
       "get": {
         "tags": [

@@ -221,6 +221,17 @@ public sealed class Product : AggregateRoot<Guid>
         MarkUpdated();
     }
 
+    /// <summary>Replaces both titles (bulk import update); the slug is untouched.</summary>
+    public void SetTitles(string titleEn, string titleBn)
+    {
+        EnsureEditable();
+        if (string.IsNullOrWhiteSpace(titleEn)) throw new ValidationException("titleEn", "English title is required.");
+        if (string.IsNullOrWhiteSpace(titleBn)) throw new ValidationException("titleBn", "Bengali title is required.");
+        TitleEn = titleEn.Trim();
+        TitleBn = titleBn.Trim();
+        MarkUpdated();
+    }
+
     public void Recategorize(Guid categoryId, Guid? brandId)
     {
         EnsureEditable();
@@ -279,6 +290,17 @@ public sealed class Product : AggregateRoot<Guid>
         _media.Add(new ProductMedia(mediaId, Id, variantId, url, altText, isVideo ? MediaType.Video : MediaType.Image,
             _media.Count, width, height, blurDataUrl));
         MarkUpdated();
+    }
+
+    /// <summary>Drops one attribute value from the product (a changed value replaces the old one). Returns the join row, or null if it was not there.</summary>
+    public ProductAttributeValue? RemoveAttributeValue(Guid attributeValueId)
+    {
+        EnsureEditable();
+        var link = _attributeValues.FirstOrDefault(a => a.AttributeValueId == attributeValueId);
+        if (link is null) return null;
+        _attributeValues.Remove(link);
+        MarkUpdated();
+        return link;
     }
 
     public void AssignAttributeValue(Guid attributeValueId)

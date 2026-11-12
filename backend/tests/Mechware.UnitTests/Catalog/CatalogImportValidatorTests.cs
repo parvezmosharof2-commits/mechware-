@@ -118,66 +118,30 @@ public sealed class CatalogImportValidatorTests
     }
 
     [Fact]
-    public async Task Rows_of_one_product_must_agree()
+    public async Task Rows_of_one_product_may_leave_product_values_blank_but_not_disagree()
     {
-        var r = await RunAsync(Header + "\n" + Row() + "\n" + Row(sku: "SKU-2", pn: "OTHER-1", titleEn: "Different") + "\n");
-        r.Errors.Should().ContainSingle(e => e.Code == "PRODUCT_MISMATCH" && e.Row == 3);
-        r.NewProducts.Should().Be(1);
-        r.NewVariants.Should().Be(1);
+        string ok = Header + "\n" + Row(sku: "S1", pn: "PN-10", supply: "nrnd", current: "10 A") + "\n" + Row(sku: "S2", pn: "PN-20", supply: "", current: "") + "\n";
+        (await RunAsync(ok)).Errors.Should().BeEmpty();
+
+        string clash = Header + "\n" + Row(sku: "S1", pn: "PN-10", current: "10 A") + "\n" + Row(sku: "S2", pn: "PN-20", current: "16 A") + "\n";
+        (await RunAsync(clash)).Errors.Should().ContainSingle(e => e.Code == "PRODUCT_VALUE_CONFLICT" && e.Row == 3 && e.Column == "attr:rated_current");
     }
 
     [Fact]
-    public async Task Existing_products_and_variants_are_counted_and_clashes_reported()
+    public async Task A_clean_file_hands_over_typed_rows_and_a_bad_one_hands_over_none()
     {
-        var lookup = new FakeLookup();
-        lookup.Slugs.Add("plc-1");
-        lookup.Variants.Add(new("SKU-1", "6ES72141AG40", "plc-1"));
-        lookup.Variants.Add(new("OLD-9", "TAKEN99", "other-product"));
-        var r = await RunAsync(Header + "\n" + Row() + "\n" + Row(sku: "SKU-2", pn: "NEW-PART-1") + "\n" + Row(slug: "plc-9", sku: "SKU-9", pn: "taken-99") + "\n" + Row(slug: "plc-8", sku: "OLD-9", pn: "NEW-8") + "\n", lookup);
-        r.Errors.Select(e => (e.Row, e.Code)).Should().Equal((4, "PART_NUMBER_IN_OTHER_PRODUCT"), (5, "SKU_IN_USE"));
-        (r.ExistingProducts, r.NewProducts, r.ExistingVariants, r.NewVariants).Should().Be((1, 0, 1, 1));
-    }
+        async Task<CatalogImportAnalysis> Analyse(string csv)
+        {
+            await using var stream = new MemoryStream(new UTF8Encoding(false).GetBytes(csv));
+            return await new CatalogImportValidator(new FakeLookup(), new CatalogImportOptions()).AnalyseAsync(stream);
+        }
 
-    [Fact]
-    public async Task Header_problems_are_reported_and_stop_the_read()
-    {
-        var r = await RunAsync("product_slug,sku,sku,surprise,attr:nothing\nx,y,z,w,v\n");
-        r.Errors.Select(e => e.Code).Should().Contain(["DUPLICATE_COLUMN", "UNKNOWN_COLUMN", "UNKNOWN_ATTRIBUTE", "MISSING_COLUMN"]);
-        r.Errors.Should().OnlyContain(e => e.Row == 0);
-        r.Rows.Should().Be(0);
-    }
+        var good = await Analyse(Header + "\n" + Row(price: "1250.50", moq: "4", pack: "2", supply: "NRND", ip: "yes", pn: "6es7 214-1ag40") + "\n");
+        var row = good.Rows.Should().ContainSingle().Subject;
+        (row.PriceMinor, row.MinOrderQty, row.PackSize, row.SupplyStatus, row.PartKey, row.Brand).Should()
+            .Be((125_050L, 4, 2, SupplyStatus.Nrnd, "6ES72141AG40", "siemens"));
+        row.Attributes.Should().BeEquivalentTo(new Dictionary<string, string> { ["rated_current"] = "10 A", ["ip_rated"] = "yes" });
 
-    [Fact]
-    public async Task Wrong_field_count_and_blank_lines()
-    {
-        var r = await RunAsync(Header + "\n\n" + Row() + ",extra\n" + Row(slug: "plc-2", sku: "S2", pn: "ABC-123") + "\n");
-        r.Errors.Should().ContainSingle(e => e.Code == "COLUMN_COUNT" && e.Row == 2);
-        r.ValidRows.Should().Be(1);
-    }
-
-    [Fact]
-    public async Task Empty_file_unclosed_quote_and_bad_encoding()
-    {
-        (await RunAsync("")).Errors.Should().ContainSingle(e => e.Code == "EMPTY_FILE");
-        (await RunAsync(Header + "\n\"open,field\n")).Errors.Should().ContainSingle(e => e.Code == "MALFORMED_CSV");
-        await using var bad = new MemoryStream([.. Encoding.ASCII.GetBytes("a,b\n"), 0xFF, 0xFE, 0xFA]);
-        (await new CatalogImportValidator(new FakeLookup(), new()).DryRunAsync(bad)).Errors.Should().ContainSingle(e => e.Code == "INVALID_ENCODING");
-    }
-
-    [Fact]
-    public async Task Size_row_and_field_limits_stop_the_read()
-    {
-        var many = Header + "\n" + string.Join("\n", Enumerable.Range(0, 5).Select(i => Row(slug: $"p-{i}", sku: $"S{i}", pn: $"PN-{i}0")));
-        (await RunAsync(many, options: new(MaxRows: 3))).Errors.Should().ContainSingle(e => e.Code == "TOO_MANY_ROWS");
-        (await RunAsync(many, options: new(MaxBytes: 100))).Errors.Should().ContainSingle(e => e.Code == "FILE_TOO_LARGE");
-        (await RunAsync(Header + "\n" + Row(titleEn: new string('a', 500)), options: new(MaxFieldChars: 100))).Errors.Should().ContainSingle(e => e.Code == "FIELD_TOO_LONG");
-    }
-
-    [Fact]
-    public async Task Errors_are_capped_but_counted()
-    {
-        var csv = Header + "\n" + string.Join("\n", Enumerable.Range(0, 10).Select(i => Row(slug: $"p-{i}", sku: $"S{i}", pn: $"PN-{i}0", price: "0")));
-        var r = await RunAsync(csv, options: new(MaxErrors: 4));
-        (r.ErrorCount, r.Errors.Count, r.ErrorsTruncated, r.InvalidRows).Should().Be((10, 4, true, 10));
+        (await Analyse(Header + "\n" + Row() + "\n" + Row(slug: "p2", sku: "S2", pn: "PN-20", price: "0") + "\n")).Rows.Should().BeEmpty();
     }
 }

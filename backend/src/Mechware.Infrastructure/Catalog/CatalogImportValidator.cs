@@ -45,10 +45,15 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
         }
     }
 
-    public async Task<CatalogImportDryRun> DryRunAsync(Stream csv, CancellationToken ct = default)
+    public async Task<CatalogImportDryRun> DryRunAsync(Stream csv, CancellationToken ct = default) =>
+        (await AnalyseAsync(csv, ct)).Report;
+
+    public async Task<CatalogImportAnalysis> AnalyseAsync(Stream csv, CancellationToken ct = default)
     {
         var run = new Run(options.MaxErrors);
         var kept = new List<Kept>();
+        var parsed = new List<CatalogImportRow>();
+        var productValues = new Dictionary<(string Slug, string Column), (string Value, int Row)>();
         var existingSlugs = new HashSet<string>(StringComparer.Ordinal);
         int rows = 0;
         try
@@ -58,12 +63,12 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
             if (header is null)
             {
                 run.Add(0, "", "EMPTY_FILE", "The file has no header row.");
-                return Report();
+                return Result();
             }
 
             var attributes = (await lookup.AttributesAsync(ct)).ToDictionary(a => a.Code, StringComparer.Ordinal);
             var columns = ReadHeader(header, attributes, run);
-            if (columns is null) return Report();
+            if (columns is null) return Result();
 
             var brandKeys = new HashSet<string>((await lookup.BrandsAsync(ct)).SelectMany(b => new[] { b.Slug, b.Name }), StringComparer.OrdinalIgnoreCase);
             var categoryKeys = new HashSet<string>((await lookup.CategoriesAsync(ct)).SelectMany(c => new[] { c.Slug, c.Path }), StringComparer.OrdinalIgnoreCase);
@@ -119,7 +124,13 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
                 foreach (var name in columns.Keys.Where(n => n.StartsWith(AttributePrefix, StringComparison.Ordinal)))
                     if (cells[name].Length > 0) CheckAttribute(attributes[name[AttributePrefix.Length..]], name, cells[name], row, run);
 
-                if (slug.Length > 0) kept.Add(new Kept(row, slug, key, sku));
+                if (slug.Length > 0)
+                {
+                    CheckProductValues(slug, cells, row, productValues, run);
+                    kept.Add(new Kept(row, slug, key, sku));
+                }
+
+                if (!run.Invalid.Contains(row)) parsed.Add(ToRow(row, cells, sku, key!));
             }
 
             await CheckExistingAsync(kept, existingSlugs, run, ct);
@@ -129,7 +140,10 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
             run.Add(0, "", ex.Code, ex.Message);
         }
 
-        return Report();
+        return Result();
+
+        CatalogImportAnalysis Result() =>
+            new(Report(), run.ErrorCount > 0 ? [] : [.. parsed.Where(r => !run.Invalid.Contains(r.Row))]);
 
         CatalogImportDryRun Report()
         {
@@ -141,6 +155,34 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
             return new CatalogImportDryRun(rows, rows - invalid, invalid, products - existingProducts, existingProducts,
                 good.Count - existingVariants, existingVariants, run.ErrorCount, run.ErrorCount > run.Errors.Count,
                 [.. run.Errors.OrderBy(e => e.Row)]);
+        }
+    }
+
+    private static CatalogImportRow ToRow(int row, Dictionary<string, string> cells, string sku, string key)
+    {
+        string Cell(string name) => cells.GetValueOrDefault(name, "");
+        decimal price = decimal.Parse(cells["price_bdt"], NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+        return new CatalogImportRow(
+            row, cells["product_slug"], cells["product_title_en"], cells["product_title_bn"],
+            Cell("brand") is { Length: > 0 } b ? b : null, cells["category"], sku, cells["manufacturer_part_number"], key,
+            (long)(price * 100m),
+            Cell("min_order_qty") is { Length: > 0 } m ? int.Parse(m, CultureInfo.InvariantCulture) : null,
+            Cell("pack_size") is { Length: > 0 } p ? int.Parse(p, CultureInfo.InvariantCulture) : null,
+            Cell("supply_status") is { Length: > 0 } s ? Enum.Parse<SupplyStatus>(s, true) : null,
+            Cell("datasheet_url") is { Length: > 0 } d ? d : null,
+            cells.Where(c => c.Key.StartsWith(AttributePrefix, StringComparison.Ordinal) && c.Value.Length > 0)
+                .ToDictionary(c => c.Key[AttributePrefix.Length..], c => c.Value, StringComparer.Ordinal));
+    }
+
+    /// <summary>Supply status, datasheet and attributes belong to the product: rows of one product may leave them blank but not disagree.</summary>
+    private static void CheckProductValues(string slug, Dictionary<string, string> cells, int row,
+        Dictionary<(string Slug, string Column), (string Value, int Row)> seen, Run run)
+    {
+        foreach (var (column, value) in cells)
+        {
+            if (value.Length == 0 || !(column is "supply_status" or "datasheet_url" || column.StartsWith(AttributePrefix, StringComparison.Ordinal))) continue;
+            if (!seen.TryAdd((slug, column), (value, row)) && !string.Equals(seen[(slug, column)].Value, value, StringComparison.OrdinalIgnoreCase))
+                run.Add(row, column, "PRODUCT_VALUE_CONFLICT", $"Row {seen[(slug, column)].Row} gives this product a different {column}.");
         }
     }
 

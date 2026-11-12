@@ -17,8 +17,34 @@ public sealed record CatalogImportDryRun(
     int NewProducts, int ExistingProducts, int NewVariants, int ExistingVariants,
     int ErrorCount, bool ErrorsTruncated, IReadOnlyList<CatalogImportRowError> Errors);
 
+/// <summary>One valid file row, typed. Blank optional cells are null ("not in the file": an update leaves that field alone).</summary>
+public sealed record CatalogImportRow(
+    int Row, string Slug, string TitleEn, string TitleBn, string? Brand, string Category, string Sku, string PartNumber, string PartKey,
+    long PriceMinor, int? MinOrderQty, int? PackSize, SupplyStatus? SupplyStatus, string? DatasheetUrl,
+    IReadOnlyDictionary<string, string> Attributes);
+
+/// <summary><c>Rows</c> is filled only when the file has no error at all.</summary>
+public sealed record CatalogImportAnalysis(CatalogImportDryRun Report, IReadOnlyList<CatalogImportRow> Rows);
+
+/// <summary>Totals of a committed file. "Updated" counts existing rows where at least one stored value changed.</summary>
+public sealed record CatalogImportCommitResult(
+    string Sha256, int Rows, int CreatedProducts, int CreatedVariants, int UpdatedProducts, int UpdatedVariants,
+    int UnchangedProducts, int UnchangedVariants);
+
+/// <summary>Either the totals, or (nothing written) the report that says why.</summary>
+public sealed record CatalogImportCommitOutcome(CatalogImportCommitResult? Result, CatalogImportDryRun? Rejected);
+
+public interface ICatalogImportCommitter
+{
+    /// <summary>All-or-nothing, in one transaction, serialised with other imports. Products are created as drafts for <paramref name="sellerId"/>.</summary>
+    Task<CatalogImportCommitOutcome> CommitAsync(Stream csv, string sha256, Guid sellerId, CancellationToken ct = default);
+}
+
 public interface ICatalogImportValidator
 {
+    /// <summary>Like <see cref="DryRunAsync"/>, and also returns the typed rows when the file is clean.</summary>
+    Task<CatalogImportAnalysis> AnalyseAsync(Stream csv, CancellationToken ct = default);
+
     /// <summary>Reads the CSV as a stream and reports. Never writes to the database.</summary>
     Task<CatalogImportDryRun> DryRunAsync(Stream csv, CancellationToken ct = default);
 }

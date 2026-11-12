@@ -44,6 +44,7 @@ public static class DependencyInjection
         services.TryAddSingleton(new Mechware.Application.Catalog.CatalogImportOptions());
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportLookup, CatalogImportLookup>();
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportValidator, CatalogImportValidator>();
+        services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportCommitter, CatalogImportCommitter>();
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
