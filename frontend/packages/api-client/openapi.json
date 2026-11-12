@@ -23,6 +23,38 @@
         }
       }
     },
+    "/api/v1/admin/catalog/import/dry-run": {
+      "post": {
+        "tags": [
+          "AdminCatalogImport"
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "File": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "File": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/companies": {
       "get": {
         "tags": [
@@ -3826,6 +3858,9 @@
   "tags": [
     {
       "name": "AdminAudit"
+    },
+    {
+      "name": "AdminCatalogImport"
     },
     {
       "name": "AdminCompanies"

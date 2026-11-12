@@ -25,6 +25,8 @@ public class NumericAttributeTests
     [InlineData("145 psi", "bar", 9.9974)]
     [InlineData("12 A", "A", 12)]
     [InlineData("500 mA", "A", 0.5)]
+    [InlineData("6 kA", "A", 6000)]
+    [InlineData("10 KA", "kA", 10)]
     [InlineData("91.4 %", "%", 91.4)]
     [InlineData("50 Hz", "Hz", 50)]
     [InlineData("0.75 KW", "kW", 0.75)]

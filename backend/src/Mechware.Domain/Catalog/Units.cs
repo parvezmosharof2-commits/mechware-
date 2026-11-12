@@ -23,7 +23,7 @@ public static partial class UnitCatalog
     [
         new("W", "power", 1m), new("kW", "power", 1_000m), new("HP", "power", 745.7m),
         new("V", "voltage", 1m), new("kV", "voltage", 1_000m),
-        new("mA", "current", 0.001m), new("A", "current", 1m),
+        new("mA", "current", 0.001m), new("A", "current", 1m), new("kA", "current", 1_000m),   // kA: breaking capacity (MCB/MCCB)
         new("mm", "length", 1m), new("cm", "length", 10m), new("m", "length", 1_000m),
         new("kPa", "pressure", 1_000m), new("bar", "pressure", 100_000m), new("MPa", "pressure", 1_000_000m),
         new("psi", "pressure", 6_894.757m),
