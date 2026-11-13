@@ -52,6 +52,12 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "GET api/v1/storefront/brands",   // name, slug and logo of brands with a published product, public like the category tree (StorefrontReadTests)
         "GET api/v1/search",   // published products only (the index holds nothing else), validated input, storefront rate limit (SearchApiTests)
         "GET api/v1/search/autocomplete",   // titles of published products only, limit 10, storefront rate limit (SearchApiTests)
+        // The cart is open to guests (E1.3): a signed-in user is keyed by the access token, a guest by the signed __Host-mw_cart cookie; prices are the server's own (CartApiTests).
+        "GET api/v1/cart",
+        "DELETE api/v1/cart",
+        "POST api/v1/cart/items",
+        "PUT api/v1/cart/items/{variantId:guid}",
+        "DELETE api/v1/cart/items/{variantId:guid}",
         "POST api/v1/payments/webhooks/{provider}",   // provider-to-server; its authority is the HMAC signature over the raw body, checked in PaymentService
         "GET api/v1/storefront/categories/{slug}/products",
         "* /health/live",

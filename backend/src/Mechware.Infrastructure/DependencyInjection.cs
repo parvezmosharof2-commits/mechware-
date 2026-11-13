@@ -155,6 +155,10 @@ public static class DependencyInjection
         services.TryAddSingleton<Mechware.Application.Cart.IGuestCartTokenService>(sp =>
             new Cart.GuestCartTokenService(tokenKey, previousTokenKeys, sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<Mechware.Application.Cart.ICartStore, Cart.RedisCartStore>();
+        services.TryAddSingleton<Mechware.Application.Cart.IGuestCartCreationLimiter>(sp => new Cart.GuestCartCreationLimiter(
+            (int.TryParse(configuration["Cart:NewGuestCartsPerIpPerHour"], out int perHour) ? perHour : Cart.GuestCartCreationLimiter.DefaultPerHour), sp.GetRequiredService<TimeProvider>()));
+        services.TryAddScoped<Mechware.Application.Cart.ICartCatalogReader, Cart.CartCatalogReader>();
+        services.TryAddScoped<Mechware.Application.Cart.ICartService, Mechware.Application.Cart.CartService>();
         return services;
     }
 
