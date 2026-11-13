@@ -106,6 +106,12 @@ public sealed class GlobalExceptionHandlingMiddleware
                 conflictEx.Message,
                 Array.Empty<object>()
             ),
+            UnprocessableException unprocessableEx => (
+                HttpStatusCode.UnprocessableEntity,
+                unprocessableEx.Code,
+                unprocessableEx.Message,
+                unprocessableEx.Details.Select(e => (object)new { field = e.Field, message = e.Message }).ToArray()
+            ),
             DomainException domainEx => (
                 HttpStatusCode.BadRequest,
                 domainEx.Code,

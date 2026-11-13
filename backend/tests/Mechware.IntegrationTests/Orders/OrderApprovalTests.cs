@@ -37,7 +37,7 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
     {
         await using var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db)));
     }
 
     /// <summary>Approvals wired to orders as in the running API: a decision moves the order on at once.</summary>
@@ -45,7 +45,7 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
     {
         await using var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
-        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock);
+        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db));
         return await action(new ApprovalService(db, clock, wiredToOrders ? orders : null));
     }
 

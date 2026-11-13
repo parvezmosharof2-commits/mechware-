@@ -50,12 +50,12 @@ Console screens are **inside** each feature module (no separate "console phase")
 | D5 | Quick order & line validator | 🟡 (D5.1 parser ✅) | [D5](modules/D5.md) |
 | E1 | Cart | ✅ (web cart UI lands with E3) | [E1](modules/E1.md) |
 | E2 | Orders | ✅ | [E2](modules/E2.md) |
-| E3 | Checkout (web) | ⬜ | [E3](modules/E3.md) |
+| E3 | Checkout (web) | 🟡 (E3.1 client, E3.2 cart page ✅) | [E3](modules/E3.md) |
 | E4 | Payments core | ✅ | [E4](modules/E4.md) |
 | E5 | Gateway adapters | ⬜ | [E5](modules/E5.md) |
 | E6 | Invoicing (Mushak-6.3/6.7/9.1) | ⬜ | [E6](modules/E6.md) |
 | E7 | Restock & confirmed-order cancel | ⬜ **new** | [E7](modules/E7.md) |
-| E8 | Shipping rates & legal deadline | ⬜ **new** | [E8](modules/E8.md) |
+| E8 | Shipping rates & legal deadline | 🟡 (E8.1, E8.2 ✅; tariffs are owner data) | [E8](modules/E8.md) |
 | F1 | Courier & shipments | ⬜ | [F1](modules/F1.md) |
 | F2 | RMA / returns | ⬜ | [F2](modules/F2.md) |
 | F3 | Notifications (F3a transport, F3b matrix) | 🟡 (F3a.1, F3a.2a, F3a.3 ✅; F3a.2b SMS adapter waits for provider) | [F3](modules/F3.md) |

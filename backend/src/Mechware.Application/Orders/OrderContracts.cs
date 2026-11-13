@@ -18,7 +18,8 @@ public sealed record PlaceOrderRequest(
     bool PayOnCredit = false,
     IReadOnlyList<string>? CouponCodes = null,
     Guid? ShipToSiteId = null,
-    Guid? CostCentreId = null)
+    Guid? CostCentreId = null,
+    string? PurchaseOrderNumber = null)
 {
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;
@@ -43,7 +44,16 @@ public sealed record SubOrderDto(Guid Id, string SubOrderNumber, Guid SellerId, 
 
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
-    long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders);
+    long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null);
+
+/// <summary>What the checkout would charge for delivery, without placing anything (E8.2; the checkout page is E3.4).</summary>
+public sealed record ShippingQuoteRequest(
+    Guid UserId, IReadOnlyList<PlaceOrderLine> Lines, Guid? ShippingAddressId = null, Guid? CompanyId = null,
+    IReadOnlyList<string>? CouponCodes = null, Guid? ShipToSiteId = null);
+
+public sealed record SellerShippingDto(Guid SellerId, long ShippingMinor);
+
+public sealed record ShippingQuoteDto(IReadOnlyList<SellerShippingDto> PerSeller, long TotalMinor, bool FreeShippingApplied);
 
 public interface IOrderService
 {
@@ -71,4 +81,10 @@ public interface IOrderService
     /// the original order; the same key with a different request is refused.
     /// </summary>
     Task<PlacedOrder> PlaceAsync(PlaceOrderRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The shipping <see cref="PlaceAsync"/> would charge for these lines and destination, computed the same way and from the
+    /// database only; holds no stock and writes no order. Refusals are the same 422 codes placement gives.
+    /// </summary>
+    Task<ShippingQuoteDto> QuoteShippingAsync(ShippingQuoteRequest request, CancellationToken ct = default);
 }

@@ -149,6 +149,25 @@ public sealed class Order : AggregateRoot<Guid>
     /// </summary>
     public DateTime? PaymentDueAtUtc { get; private set; }
 
+    /// <summary>The company's own purchase order number (company orders only), as normalised by <see cref="NormalisePurchaseOrderNumber"/>.</summary>
+    public string? PurchaseOrderNumber { get; private set; }
+
+    public const int PurchaseOrderNumberMaxLength = 40;
+
+    /// <summary>
+    /// Trims the buyer's PO number; blank means none. 1 to 40 characters of ASCII letters, digits, space and <c>- _ . # /</c>,
+    /// so it can never carry control characters, markup or formula prefixes into invoices, e-mails or CSV exports.
+    /// </summary>
+    public static string? NormalisePurchaseOrderNumber(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var trimmed = value.Trim();
+        if (trimmed.Length > PurchaseOrderNumberMaxLength || !trimmed.All(c => char.IsAsciiLetterOrDigit(c) || c is ' ' or '-' or '_' or '.' or '#' or '/'))
+            throw new ValidationException("purchaseOrderNumber",
+                $"A purchase order number is at most {PurchaseOrderNumberMaxLength} letters, digits, spaces or - _ . # /.");
+        return trimmed;
+    }
+
     public IReadOnlyCollection<SubOrder> SubOrders => _subOrders.AsReadOnly();
     public IReadOnlyCollection<OrderEventRecord> Events => _events.AsReadOnly();
 
@@ -156,8 +175,12 @@ public sealed class Order : AggregateRoot<Guid>
 
     public static Order Place(
         Guid id, string orderNumber, Guid userId, Guid? companyId, PricedOrder priced, TaxMode taxMode, string shipToJson,
-        OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null, Guid? costCentreId = null)
+        OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null, Guid? costCentreId = null,
+        string? purchaseOrderNumber = null)
     {
+        var po = NormalisePurchaseOrderNumber(purchaseOrderNumber);
+        if (po is not null && companyId is null)
+            throw new ValidationException("purchaseOrderNumber", "A purchase order number applies to company orders only.");
         if (!OrderNumber_IsValid(orderNumber)) throw new ValidationException("orderNumber", "Invalid order number.");
         if (initialStatus is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
             throw new ValidationException("status", "An order starts pending payment or pending approval.");
@@ -179,6 +202,7 @@ public sealed class Order : AggregateRoot<Guid>
             PlacedAtUtc = nowUtc,
             PaysOnCredit = paysOnCredit,
             CostCentreId = costCentreId,
+            PurchaseOrderNumber = po,
             PaymentDueAtUtc = initialStatus == OrderStatus.PendingPayment ? paymentDueAtUtc : null
         };
 

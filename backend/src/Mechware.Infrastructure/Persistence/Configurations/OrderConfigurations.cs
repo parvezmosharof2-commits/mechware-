@@ -36,6 +36,9 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         b.HasIndex(o => new { o.CostCentreId, o.PlacedAtUtc }).HasDatabaseName("ix_orders_cost_centre_placed");
         b.Property(o => o.PaymentDueAtUtc).HasColumnName("payment_due_at");
         b.Property(o => o.EventSequence).HasColumnName("event_seq");
+        b.Property(o => o.PurchaseOrderNumber).HasColumnName("purchase_order_number").HasMaxLength(Order.PurchaseOrderNumberMaxLength);
+        // A company looks its orders up by its own PO number (E8.2, "searchable later").
+        b.HasIndex(o => new { o.CompanyId, o.PurchaseOrderNumber }).HasFilter("purchase_order_number IS NOT NULL").HasDatabaseName("ix_orders_company_po");
 
         b.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(o => o.SubOrders).WithOne().HasForeignKey(s => s.OrderId).OnDelete(DeleteBehavior.Cascade);

@@ -24,7 +24,7 @@ public class ShipToTests(PostgresDatabaseFixture fixture) : IClassFixture<Postgr
     private async Task<T> With<T>(Func<OrderService, Task<T>> action)
     {
         await using var db = fixture.CreateContext();
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db)));
     }
 
     private async Task<SeededVariant> SeedAsync()

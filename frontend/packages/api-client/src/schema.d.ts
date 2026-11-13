@@ -2533,6 +2533,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/shipping-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What delivery would cost for these lines and destination, per seller, without placing an order or holding stock (E8.2).
+         *     Refused with 422 `SHIPPING_NOT_AVAILABLE`, `SHIPPING_QUOTE_ONLY` or `VARIANT_WEIGHT_MISSING`, as placement would be.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ShippingQuoteBody"];
+                    "text/json": components["schemas"]["ShippingQuoteBody"];
+                    "application/*+json": components["schemas"]["ShippingQuoteBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unprocessable Content */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/orders/{orderId}/cancel": {
         parameters: {
             query?: never;
@@ -3430,6 +3484,7 @@ export interface components {
             shipToSiteId?: string | null;
             /** Format: uuid */
             costCentreId?: string | null;
+            purchaseOrderNumber?: string | null;
         };
         PlaceOrderLine: {
             /** Format: uuid */
@@ -3573,6 +3628,17 @@ export interface components {
             successorIsDropIn?: boolean | null;
             successorNote?: string | null;
             clearSuccessor?: boolean | null;
+        };
+        /** @description The lines and destination to price delivery for. Like an order, it carries no money: shipping is the server's own. */
+        ShippingQuoteBody: {
+            lines?: components["schemas"]["PlaceOrderLine"][] | null;
+            /** Format: uuid */
+            shippingAddressId?: string | null;
+            /** Format: uuid */
+            companyId?: string | null;
+            couponCodes?: string[] | null;
+            /** Format: uuid */
+            shipToSiteId?: string | null;
         };
         SiteRequest: {
             name?: string | null;

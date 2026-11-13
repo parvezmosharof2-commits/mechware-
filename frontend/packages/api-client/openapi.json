@@ -2207,6 +2207,58 @@
         }
       }
     },
+    "/api/v1/orders/shipping-quote": {
+      "post": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "What delivery would cost for these lines and destination, per seller, without placing an order or holding stock (E8.2).\r\nRefused with 422 `SHIPPING_NOT_AVAILABLE`, `SHIPPING_QUOTE_ONLY` or `VARIANT_WEIGHT_MISSING`, as placement would be.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingQuoteBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingQuoteBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingQuoteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders/{orderId}/cancel": {
       "post": {
         "tags": [
@@ -3219,6 +3271,10 @@
             "type": "string",
             "format": "uuid",
             "nullable": true
+          },
+          "purchaseOrderNumber": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -3679,6 +3735,42 @@
           }
         },
         "additionalProperties": false
+      },
+      "ShippingQuoteBody": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlaceOrderLine"
+            },
+            "nullable": true
+          },
+          "shippingAddressId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "companyId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "couponCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "shipToSiteId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The lines and destination to price delivery for. Like an order, it carries no money: shipping is the server's own."
       },
       "SiteRequest": {
         "type": "object",

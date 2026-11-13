@@ -23,7 +23,7 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
         var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
-        return (new OrderService(db, inv, TimeProvider.System), new PaymentService(db, [_mock], inv, clock), db);
+        return (new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db)), new PaymentService(db, [_mock], inv, clock), db);
     }
 
     private sealed class FixedClock(DateTime utc) : TimeProvider

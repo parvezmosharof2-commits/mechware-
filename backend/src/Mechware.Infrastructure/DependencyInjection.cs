@@ -49,6 +49,9 @@ public static class DependencyInjection
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Shipping.IShippingRateProvider, Shipping.ShippingRateProvider>();
+        // Fail closed unless the host registered its own options first (the API does, from Shipping:AllowFreeWhenNoZones).
+        services.TryAddSingleton(new Shipping.ShippingOptions());
+        services.TryAddScoped<Mechware.Application.Shipping.IOrderShippingQuoter, Shipping.OrderShippingQuoter>();
         services.TryAddScoped<IPaymentService, PaymentService>();
         services.TryAddScoped<IRefundService, RefundService>();
 

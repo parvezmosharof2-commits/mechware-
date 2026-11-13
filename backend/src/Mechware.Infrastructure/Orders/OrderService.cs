@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Mechware.Application.Inventory;
 using Mechware.Application.Orders;
+using Mechware.Application.Shipping;
 using Mechware.Domain.Approvals;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Companies;
@@ -17,7 +18,8 @@ using Mechware.Infrastructure.Persistence;
 namespace Mechware.Infrastructure.Orders;
 
 public sealed partial class OrderService(
-    MechwareDbContext db, IInventoryService inventory, TimeProvider clock, Func<DateTime, string>? orderNumbers = null) : IOrderService
+    MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter,
+    Func<DateTime, string>? orderNumbers = null) : IOrderService
 {
     private readonly Func<DateTime, string> _nextOrderNumber = orderNumbers ?? (now => OrderNumber.Generate(now));
 
@@ -26,6 +28,8 @@ public sealed partial class OrderService(
 
     public async Task<PlacedOrder> PlaceAsync(PlaceOrderRequest request, CancellationToken ct = default)
     {
+        if (!KeyPattern().IsMatch(request.IdempotencyKey ?? string.Empty))
+            throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
         var lines = Normalise(request);
         var hash = HashOf(request, lines);
 
@@ -77,11 +81,11 @@ public sealed partial class OrderService(
             if (!member.CostCentreIds.Contains(chosen))
                 throw new ForbiddenException("COST_CENTRE_NOT_ASSIGNED", "You are not assigned to this cost centre.");
         }
-        var shipTo = await ResolveShipToAsync(request, ct);
+        var (shipTo, districtId) = await ResolveShipToAsync(request, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, applied, categories) = await PriceAsync(request, lines, mode, now, ct);
+        var (priced, applied, categories, _) = await PriceAsync(request, lines, mode, now, districtId, ct);
 
         // A company order that one of the company's approval rules covers waits for that approval before it can be paid or
         // charged to credit (threat model v1, H1). The amount is the server's own total, never a number from the client.
@@ -109,7 +113,7 @@ public sealed partial class OrderService(
             var reserved = await ReserveAsync(orderId, lines, approvalRule is null ? UnpaidOrderLifetime : ApprovalHoldLifetime + UnpaidOrderLifetime, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime, request.CostCentreId);
+                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime, request.CostCentreId, request.PurchaseOrderNumber);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
@@ -173,7 +177,7 @@ public sealed partial class OrderService(
     /// 500, two megabytes were stored, and an order could be placed with no address at all. Someone else's address or
     /// site answers "not found", like any other id the caller cannot see. Called after the company check.
     /// </summary>
-    private async Task<string> ResolveShipToAsync(PlaceOrderRequest r, CancellationToken ct)
+    private async Task<(string Json, Guid? DistrictId)> ResolveShipToAsync(PlaceOrderRequest r, CancellationToken ct)
     {
         if (r.ShippingAddressId is not null && r.ShipToSiteId is not null)
             throw new ValidationException("shipTo", "Give either a saved address or a company site, not both.");
@@ -184,7 +188,7 @@ public sealed partial class OrderService(
         {
             var address = await db.Addresses.AsNoTracking().FirstOrDefaultAsync(a => a.Id == addressId && a.UserId == r.UserId, ct)
                           ?? throw new KeyNotFoundException("Shipping address not found.");
-            return ShipToFromAddress(address);
+            return await FromAddressAsync(address, ct);
         }
 
         if (r.CompanyId is { } companyId)
@@ -192,20 +196,54 @@ public sealed partial class OrderService(
             var site = await db.CompanySites.AsNoTracking()
                 .Where(s => s.CompanyId == companyId && (r.ShipToSiteId == null ? s.IsDefaultDelivery : s.Id == r.ShipToSiteId))
                 .FirstOrDefaultAsync(ct);
-            if (site is not null) return ShipToFromSite(site);
+            if (site is not null)
+            {
+                var siteDistrict = await DistrictIdAsync(site.District, site.Division, ct);
+                return (ShipToFromSite(site, siteDistrict), siteDistrict);
+            }
             if (r.ShipToSiteId is not null) throw new KeyNotFoundException("Delivery site not found.");
         }
 
         var fallback = await db.Addresses.AsNoTracking().FirstOrDefaultAsync(a => a.UserId == r.UserId && a.IsDefaultShipping, ct);
         return fallback is not null
-            ? ShipToFromAddress(fallback)
+            ? await FromAddressAsync(fallback, ct)
             : throw new ValidationException("shippingAddressId", "Add a shipping address before placing an order.");
     }
 
-    private static string ShipToFromAddress(Domain.Identity.Address a) => System.Text.Json.JsonSerializer.Serialize(new
+    private async Task<(string Json, Guid? DistrictId)> FromAddressAsync(Domain.Identity.Address a, CancellationToken ct)
+    {
+        var districtId = await DistrictIdAsync(a.District, a.Division, ct);
+        return (ShipToFromAddress(a, districtId), districtId);
+    }
+
+    /// <summary>
+    /// The <c>bd_locations</c> district an address names (E8.2). Addresses and sites keep the district as text (English or
+    /// Bangla name, checked against the location list when saved), so it is looked up here: by name, then by the division when
+    /// two districts share a name. No match or still ambiguous gives null, which shipping refuses rather than guesses.
+    /// </summary>
+    private async Task<Guid?> DistrictIdAsync(string district, string division, CancellationToken ct)
+    {
+        var name = district.Trim();
+        var lower = name.ToLowerInvariant();
+        var candidates = await (from d in db.BdLocations.AsNoTracking()
+                                where d.Level == "district" && (d.NameEn.ToLower() == lower || d.NameBn == name)
+                                join p in db.BdLocations.AsNoTracking() on d.ParentId equals p.Id into parents
+                                from p in parents.DefaultIfEmpty()
+                                select new { d.Id, ParentEn = p == null ? null : p.NameEn, ParentBn = p == null ? null : p.NameBn })
+            .Take(10).ToListAsync(ct);
+        if (candidates.Count <= 1) return candidates.SingleOrDefault()?.Id;
+
+        var div = division.Trim();
+        var inDivision = candidates.Where(c => string.Equals(c.ParentEn, div, StringComparison.OrdinalIgnoreCase) || c.ParentBn == div).ToList();
+        return inDivision.Count == 1 ? inDivision[0].Id : null;
+    }
+
+    /// <summary>The address as it was at purchase. <c>districtId</c> is what shipping (and the E8.3 delivery deadline) uses.</summary>
+    private static string ShipToFromAddress(Domain.Identity.Address a, Guid? districtId) => System.Text.Json.JsonSerializer.Serialize(new
     {
         source = "address",
         sourceId = a.Id,
+        districtId,
         recipientName = a.RecipientName,
         phone = a.Phone,
         line1 = a.Line1,
@@ -218,10 +256,11 @@ public sealed partial class OrderService(
         country = a.Country
     });
 
-    private static string ShipToFromSite(Domain.Companies.CompanySite s) => System.Text.Json.JsonSerializer.Serialize(new
+    private static string ShipToFromSite(Domain.Companies.CompanySite s, Guid? districtId) => System.Text.Json.JsonSerializer.Serialize(new
     {
         source = "company_site",
         sourceId = s.Id,
+        districtId,
         siteName = s.Name,
         recipientName = s.ContactName,
         phone = s.ContactPhone,
@@ -436,7 +475,22 @@ public sealed partial class OrderService(
             order.SubOrders.OrderBy(s => s.SubOrderNumber).Select(s => new SubOrderDto(s.Id, s.SubOrderNumber, s.SellerId, ToWire(s.Status),
                 s.ShippingMinor, s.TotalMinor,
                 s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
-                    i.DiscountMinor, i.TaxMinor, i.TotalMinor)).ToList())).ToList());
+                    i.DiscountMinor, i.TaxMinor, i.TotalMinor)).ToList())).ToList(),
+            order.PurchaseOrderNumber);
+    }
+
+    public async Task<ShippingQuoteDto> QuoteShippingAsync(ShippingQuoteRequest request, CancellationToken ct = default)
+    {
+        // Same checks, destination and pricing path as placement, minus the stock hold and the write.
+        var asOrder = new PlaceOrderRequest(request.UserId, string.Empty, request.Lines, request.ShippingAddressId, request.CompanyId,
+            CouponCodes: request.CouponCodes, ShipToSiteId: request.ShipToSiteId);
+        var lines = Normalise(asOrder);
+        if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
+        var (_, districtId) = await ResolveShipToAsync(asOrder, ct);
+        var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
+        var (_, _, _, shipping) = await PriceAsync(asOrder, lines, mode, clock.GetUtcNow().UtcDateTime, districtId, ct);
+        return new ShippingQuoteDto(shipping.PerSeller.Select(s => new SellerShippingDto(s.SellerId, s.ShippingMinor)).ToList(),
+            shipping.TotalMinor, shipping.FreeShippingApplied);
     }
 
     /// <summary>The snake_case name the API and the database use for a state.</summary>
@@ -448,8 +502,8 @@ public sealed partial class OrderService(
 
     private static List<PlaceOrderLine> Normalise(PlaceOrderRequest r)
     {
-        if (!KeyPattern().IsMatch(r.IdempotencyKey ?? string.Empty))
-            throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
+        if (Order.NormalisePurchaseOrderNumber(r.PurchaseOrderNumber) is not null && r.CompanyId is null)
+            throw new ValidationException("purchaseOrderNumber", "A purchase order number applies to company orders only.");
         if ((r.CouponCodes?.Count ?? 0) > PlaceOrderRequest.MaxCoupons)
             throw new ValidationException("couponCodes", $"At most {PlaceOrderRequest.MaxCoupons} coupon codes per order.");
         if (r.PayOnCredit && r.CompanyId is null) throw new ValidationException("payOnCredit", "Credit terms apply to company orders only.");
@@ -471,6 +525,8 @@ public sealed partial class OrderService(
     private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
     {
         var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.CostCentreId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
+        // The PO number is part of what was asked (E8.2). Appended only when present, so keys stored before it existed still replay.
+        if (Order.NormalisePurchaseOrderNumber(r.PurchaseOrderNumber) is { } po) canonical += $"|po:{po}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
 
@@ -487,8 +543,8 @@ public sealed partial class OrderService(
     }
 
 
-    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, IReadOnlyList<Guid> Categories)> PriceAsync(
-        PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, CancellationToken ct)
+    private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, IReadOnlyList<Guid> Categories, OrderShipping Shipping)> PriceAsync(
+        PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, Guid? districtId, CancellationToken ct)
     {
         var ids = lines.Select(l => l.VariantId).ToList();
         var rows = await (from v in db.ProductVariants.AsNoTracking()
@@ -515,7 +571,8 @@ public sealed partial class OrderService(
 
         var drafts = new List<OrderLineDraft>();
         var categoryOf = new Dictionary<Guid, Guid>();
-        var terms = new Dictionary<Guid, SellerTerms>();
+        var commission = new Dictionary<Guid, decimal>();
+        var shippingLines = new List<ShippingQuoteLine>();
         foreach (var line in lines)
         {
             var r = byId[line.VariantId];
@@ -524,13 +581,24 @@ public sealed partial class OrderService(
             categoryOf[lineId] = r.Product.CategoryId;
             drafts.Add(new OrderLineDraft(lineId, r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
                 line.Quantity, quote.Display.ToMinorUnits(), r.Category.VatRate, 0));
-            // Shipping zones and seller-specific commission tiers arrive with their own slices; until then shipping is 0.
-            terms.TryAdd(r.Seller.Id, new SellerTerms(r.Seller.Id, 0, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate));
+            commission.TryAdd(r.Seller.Id, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate);
+            shippingLines.Add(new ShippingQuoteLine(r.Variant.Id, r.Variant.Sku, r.Seller.Id, line.Quantity, r.Variant.WeightKg,
+                r.Product.LengthCm, r.Product.WidthCm, r.Product.HeightCm));
         }
 
         var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
         var discounted = applied.Lines.Select((d, i) => drafts[i] with { DiscountMinor = d.DiscountMinor }).ToList();
-        return (OrderPricing.Price(discounted, terms.Values.ToList(), mode), applied.Applied, categoryOf.Values.Distinct().ToList());
+
+        // Shipping (E8.2) comes only from the database: the destination's zone and the variants' weights; the client sends no
+        // money and nothing it sends is read. Free-shipping basis: the goods as the buyer pays for them (after discounts, VAT
+        // included, shipping excluded), i.e. this order's total before shipping, the same in VAT-inclusive and -exclusive orders.
+        // TODO(E8, owner + tax adviser): VAT on shipping. Today the fee is a final amount with no VAT split (OrderPricing).
+        var goodsTotal = OrderPricing.Price(discounted, commission.Select(c => new SellerTerms(c.Key, 0, c.Value)).ToList(), mode).GrandTotalMinor;
+        var shipping = await shippingQuoter.QuoteAsync(districtId, shippingLines, goodsTotal, ct);
+        var fees = shipping.PerSeller.ToDictionary(s => s.SellerId, s => s.ShippingMinor);
+        var terms = commission.Select(c => new SellerTerms(c.Key,
+            fees.TryGetValue(c.Key, out var fee) ? fee : throw new InvalidOperationException($"No shipping fee for seller {c.Key}."), c.Value)).ToList();
+        return (OrderPricing.Price(discounted, terms, mode), applied.Applied, categoryOf.Values.Distinct().ToList(), shipping);
     }
 
     /// <summary>

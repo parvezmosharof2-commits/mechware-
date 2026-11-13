@@ -31,7 +31,7 @@ public class CompanySpendControlTests(PostgresDatabaseFixture fixture) : IClassF
     {
         await using var db = fixture.CreateContext();
         return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System),
-            now is null ? TimeProvider.System : new FixedClock(now.Value)));
+            now is null ? TimeProvider.System : new FixedClock(now.Value), ShippingTestKit.DevelopmentQuoter(db)));
     }
 
     private async Task<Team> TeamAsync(long? budget)

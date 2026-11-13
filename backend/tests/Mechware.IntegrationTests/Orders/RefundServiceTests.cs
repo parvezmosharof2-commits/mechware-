@@ -36,7 +36,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
         await using (var seed = fixture.CreateContext()) variant = await CatalogTestData.SeedVariantAsync(seed, onHand: 10, priceMinor: Paid);
         await using var db = fixture.CreateContext();
         var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
-        var placed = await new OrderService(db, inv, TimeProvider.System).PlaceAsync(
+        var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db)).PlaceAsync(
             new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
         var payments = new PaymentService(db, [_mock], inv, TimeProvider.System);
         var session = await payments.StartAsync(buyer, placed.OrderId, "mock");
@@ -187,7 +187,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
         await using (var db = fixture.CreateContext())
         {
             var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
-            var placed = await new OrderService(db, inv, TimeProvider.System).PlaceAsync(
+            var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db)).PlaceAsync(
                 new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
             unpaid = (await new PaymentService(db, [_mock], inv, TimeProvider.System).StartAsync(buyer, placed.OrderId, "mock")).PaymentId;
         }
@@ -216,7 +216,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
         await using (var db = fixture.CreateContext())
         {
             var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
-            var placed = await new OrderService(db, inv, TimeProvider.System).PlaceAsync(
+            var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db)).PlaceAsync(
                 new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
             var payments = new PaymentService(db, [_mock], inv, TimeProvider.System);
             var tabs = new[] { await payments.StartAsync(buyer, placed.OrderId, "mock"), await payments.StartAsync(buyer, placed.OrderId, "mock") };

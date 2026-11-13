@@ -489,6 +489,32 @@ merge-এর পরে cookie না মোছা (৪), logout-এ cookie ন�
 
 ---
 
+## ১০. E8.2 — অর্ডারের দামে shipping ও PO নম্বর: অপব্যবহারের ঘটনা ও টেস্ট (২০২৬-১১-১৩) [TEST / RULE]
+
+> **অবস্থা:** ইউনিট E8.2-এর অংশ, AI সহকারীর লেখা; কোনো মানুষ রিভিউ করেননি। কোড: `backend/src/Mechware.Infrastructure/Shipping/OrderShippingQuoter.cs`, `backend/src/Mechware.Infrastructure/Orders/OrderService.cs` (`PriceAsync`, `DistrictIdAsync`, `QuoteShippingAsync`), `backend/src/Mechware.Domain/Orders/Order.cs` (`NormalisePurchaseOrderNumber`)। টেস্ট: `backend/tests/Mechware.IntegrationTests/Orders/OrderShippingTests.cs`, `backend/tests/Mechware.IntegrationTests/Orders/OrderShippingApiTests.cs`, `backend/tests/Mechware.UnitTests/Shipping/OrderShippingQuoterTests.cs`।
+
+**Asset:** অর্ডারের shipping fee (প্রতি seller-এর sub-order-এ, grand total-এ), seller-এর payout-এর হিসাব, কোম্পানির PO নম্বর (invoice, e-mail, CSV-তে যাবে)। **Trust boundary:** browser → `POST /api/v1/orders` ও `POST /api/v1/orders/shipping-quote`; body-তে টাকার কোনো field নেই, অচেনা JSON member bind হয় না।
+
+| ID | অপব্যবহার | প্রতিকার | যে টেস্ট প্রমাণ করে |
+|---|---|---|---|
+| SH1 | **Client নিজের shipping পাঠায়** (`shippingMinor: 0`, `freeShipping: true`, line-এ `weightKg`) | Shipping শুধু database থেকে: ঠিকানার district-এর zone, variant-এর `weight_kg`, product-এর মাপ। Body-তে টাকার field নেই; যা পাঠানো হয় তা পড়াই হয় না | `AClientThatSendsItsOwnShipping_StillPaysTheZonesFee`, `AClientThatSendsItsOwnPricesAndTotals_StillPaysTheServersPrice` |
+| SH2 | Shipping grand total-এ দুবার (বা sub-order আর order-এ আলাদা) | Fee শুধু `SellerTerms`-এ যায়; `OrderPricing` প্রতিটা sub-order total-এ একবার যোগ করে, grand total = sub-order total-এর যোগফল। Preview আর placement একই pricing path | `Shipping_ComesFromTheZone_AndIsInTheGrandTotalExactlyOnce`, `TwoSellers_EachPayForTheirOwnParcel_AndTheOrderSumsThem`, `ThePreview_ChargesWhatPlacementCharges_AndHoldsNothing` |
+| SH3 | **Zone না থাকলে fail-open:** production-এ shipping নীরবে ০ | `Shipping:AllowFreeWhenNoZones` শুধু Development/Testing-এ (ডিফল্ট সেখানে চালু, অন্য সব জায়গায় বন্ধ); বাইরে চালু করলে API চালুই হয় না। চালু থাকলেও শুধু যতক্ষণ একটাও active zone নেই; একটা zone হলেই প্রতিটা ঠিকানা হয় priced, নয় 422 `SHIPPING_NOT_AVAILABLE`। অচেনা বা দ্ব্যর্থক district = null = refused, অনুমান নয়। `OrderService`-এ quoter বাধ্যতামূলক dependency (লুকানো default নেই) | `Production_RefusesToStart_WithFreeShippingWithoutZonesSwitchedOn`, `TheContainersOrderService_FailsClosedInProduction_AndShipsFreeInDevelopment_WhenNoZoneExists`, `WithTheDevelopmentSwitch_ShippingIsZero_AndWithoutIt_TheOrderIsRefused`, `TheSwitch_DefaultsOnOnlyInDevelopmentOrTesting`, `OutsideDevelopment_TheSwitchCannotBeTurnedOn`, `OnceAZoneExists_TheSwitchNoLongerHelps_AnUnservedOrUnknownDestination`, `ADestinationNoZoneServes_IsRefused_AndHoldsNoStock` |
+| SH4 | **Quote-only এড়িয়ে যাওয়া:** ভারী/বড় মাল সাধারণ band-এ বা বিনা খরচে | Heavy, oversize বা শেষ band-এর বেশি = পুরো অর্ডার 422 `SHIPPING_QUOTE_ONLY` (কারণ + SKU সহ), stock ধরা হয় না; free shipping-এর চেয়ে quote-only আগে। ক্রেতা RFQ (D4) ব্যবহার করবেন | `QuoteOnlyGoods_AreRefused_WithTheReasonAndSku_AndHoldNoStock`, `QuoteOnly_IsRefused_NamingTheSku_AndWinsOverFreeShipping`, `TheShippingQuoteEndpoint_PricesPerSeller_AndRefusesQuoteOnlyWith422` |
+| SH5 | Weight নেই এমন listing দিয়ে বিনা খরচে পাঠানো, বা 500 | Weight ≤ 0 হলে 422 `VARIANT_WEIGHT_MISSING`, SKU-র নাম সহ, free shipping থাকলেও | `AVariantWithoutWeight_IsRefusedByItsSku_NeverPricedAsFree`, `AMissingWeight_IsRefusedWithTheSku_NeverFree` |
+| SH6 | Free-shipping threshold কুপন দিয়ে ফাঁকি | Threshold-এর ভিত্তি discount-এর **পরের** পণ্যের মোট (VAT সহ, shipping ছাড়া) | `FreeShipping_StartsExactlyAtTheThreshold_OnTheGoodsTotal`, `FreeShipping_StartsAtTheThreshold_OfTheGoodsTotal` (সীমানা; কুপন-সহ threshold-এর আলাদা টেস্ট এখনো নেই, শুধু code-এ) |
+| SH7 | **PO নম্বরে injection:** control character, CSV formula (`=…`), HTML, অদৃশ্য অক্ষর, বিশাল string | Trim, ১-৪০ অক্ষর, শুধু ASCII অক্ষর/সংখ্যা/space ও `- _ . # /`; বাকি সব 400, stock ধরার আগেই। শুধু কোম্পানির অর্ডারে। DB-তে `varchar(40)` | `APurchaseOrderNumber_WithAnythingElse_IsRefused`, `ABadPurchaseOrderNumber_IsRefused_BeforeAnyStockIsHeld`, `APurchaseOrderNumber_OnAPersonalOrder_IsRefused` |
+| SH8 | একই `Idempotency-Key`-এ অন্য PO নম্বর দিয়ে আগের অর্ডার ফেরত পাওয়া | PO নম্বর idempotency hash-এর অংশ (থাকলে তবেই যোগ হয়, তাই পুরোনো key-ও replay হয়); অন্য বা না-থাকা PO = 409 `IDEMPOTENCY_KEY_REUSED` | `TheSameKey_WithAnotherPurchaseOrderNumber_IsRefused_AndWithTheSameOneReplays` |
+
+**Mutation check (২০২৬-১১-১৩):** হাতে করা, প্রতিটা আলাদা করে, তারপর ফাইল হুবহু ফেরত। ৫টার ৫টাই ধরা পড়েছে: client-এর `shippingMinor` মেনে নেওয়া (`AClientThatSendsItsOwnShipping…`), grand total-এ shipping দুবার (৫টা টেস্ট), quote-only-কে ০ দামে চালানো (৩টা), quoter switch উপেক্ষা করে zone না থাকলে সবসময় free (৩টা, production container সহ), switch সব environment-এ ডিফল্ট চালু ও guard বাদ (৪টা)।
+
+**যে ঝুঁকি থেকে যায়:**
+- **VAT on shipping ঠিক হয়নি** (মালিক + কর উপদেষ্টা): fee এখন final amount, VAT ভাগ নেই। বদলাতে হলে `OrderPricing`-এ, এক জায়গায়।
+- ক্রেতা নিজের ঠিকানার district নিজেই বেছে নেন (সস্তা zone-এর district লিখে অন্য জায়গায় নেওয়া)। Courier ঠিকানাতেই দেয়, তাই ক্ষতি সীমিত; district text সংরক্ষণের সময় তালিকার সাথে মেলানো হয়। Lat/long বা postal code যাচাই পরে।
+- Zone প্রতিটা pricing call-এ database থেকে পড়া হয় (cache নেই); বেশি load-এ cache লাগতে পারে।
+
+---
+
 ## সম্পর্কিত ডক
 - D2 নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md) (§৮ এর ভিত্তি)
 - কার্ট: [`docs/modules/E1.md`](../modules/E1.md) (§৯-এর ইউনিট ও handoff)

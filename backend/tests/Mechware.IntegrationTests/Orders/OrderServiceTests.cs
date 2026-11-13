@@ -20,7 +20,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
     private async Task<T> With<T>(Func<OrderService, Task<T>> action, Func<DateTime, string>? orderNumbers = null)
     {
         await using var db = fixture.CreateContext();
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, orderNumbers));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), orderNumbers));
     }
 
     private async Task<SeededVariant> SeedAsync(int onHand, long price = 150_000)

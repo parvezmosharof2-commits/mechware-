@@ -2208,6 +2208,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("placed_at");
 
+                    b.Property<string>("PurchaseOrderNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("purchase_order_number");
+
                     b.Property<string>("ShipToJson")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -2259,6 +2264,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_orders_status");
+
+                    b.HasIndex("CompanyId", "PurchaseOrderNumber")
+                        .HasDatabaseName("ix_orders_company_po")
+                        .HasFilter("purchase_order_number IS NOT NULL");
 
                     b.HasIndex("CostCentreId", "PlacedAtUtc")
                         .HasDatabaseName("ix_orders_cost_centre_placed");

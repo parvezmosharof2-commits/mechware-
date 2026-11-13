@@ -28,7 +28,7 @@ public class OrderUnitsTests(PostgresDatabaseFixture fixture) : IClassFixture<Po
     private async Task<PlacedOrder> PlaceAsync(Guid buyer, Guid variantId, int quantity)
     {
         await using var db = fixture.CreateContext();
-        var service = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
+        var service = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db));
         return await service.PlaceAsync(new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variantId, quantity)]));
     }
 

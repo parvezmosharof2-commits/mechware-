@@ -63,7 +63,7 @@ public class NotificationOutboxPublisherTests(PostgresDatabaseFixture fixture) :
     {
         await using var db = fixture.CreateContext();
         var variant = (await CatalogTestData.SeedVariantAsync(db, 20, priceMinor: 100_000)).VariantId;
-        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
+        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, Mechware.IntegrationTests.Orders.ShippingTestKit.DevelopmentQuoter(db));
         return await orders.PlaceAsync(new PlaceOrderRequest(t.Buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant, qty)], null, t.Company, false, null, null, null));
     }
 
