@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server';
 import { topCategories } from '../../lib/storefront-server';
 import { LanguageSwitch } from './LanguageSwitch';
 import { HeaderAccount } from './HeaderAccount';
+import { HeaderCart } from './HeaderCart';
 
 export function SearchForm({ locale, placeholder, label, button, id, large }: {
   locale: 'en' | 'bn';
@@ -78,6 +79,7 @@ export async function SiteHeader() {
             </nav>
           </details>
           <LanguageSwitch locale={loc} label={t('language')} current={current} />
+          <HeaderCart locale={loc} />
           <HeaderAccount locale={loc} initialSignedIn={signedIn} />
         </div>
       </div>

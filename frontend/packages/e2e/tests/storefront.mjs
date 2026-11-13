@@ -5,7 +5,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { WEB, SHOTS, launch } from './lib.mjs';
+import { WEB, API, SHOTS, launch } from './lib.mjs';
 
 if (process.env.E2E_STOREFRONT !== '1') {
   console.log('SKIP  storefront E2E (set E2E_STOREFRONT=1 with API + Meilisearch + seeded catalogue running)');
@@ -35,8 +35,8 @@ const check = (name, ok, extra = '') => {
 };
 
 const LOCALES = {
-  en: { prefix: '', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'Part number', draft: 'Draft — this text is pending legal review and is not yet in force.', contact: 'Contact details coming soon.' },
-  bn: { prefix: '/bn', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'পার্ট নম্বর', draft: 'খসড়া — এই লেখাটি আইনি পর্যালোচনার অপেক্ষায় আছে এবং এখনো কার্যকর নয়।', contact: 'যোগাযোগের তথ্য শীঘ্রই আসছে।' }
+  en: { prefix: '', cartAdd: 'Add to cart', cartTitle: 'Your cart', cartEmpty: 'Your cart is empty', cartUnavailable: /temporarily unavailable/, cartUp: /^Increase quantity of /, cartRemove: /^Remove .* from the cart$/, viewCart: 'View cart', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'Part number', draft: 'Draft — this text is pending legal review and is not yet in force.', contact: 'Contact details coming soon.' },
+  bn: { prefix: '/bn', cartAdd: 'কার্টে যোগ করুন', cartTitle: 'আপনার কার্ট', cartEmpty: 'আপনার কার্ট খালি', cartUnavailable: /সাময়িকভাবে পাওয়া যাচ্ছে না/, cartUp: /পরিমাণ বাড়ান$/, cartRemove: /^কার্ট থেকে .* সরান$/, viewCart: 'কার্ট দেখুন', filters: /^(Filters|ফিল্টার)( \(.+\))?$/, partNumber: 'পার্ট নম্বর', draft: 'খসড়া — এই লেখাটি আইনি পর্যালোচনার অপেক্ষায় আছে এবং এখনো কার্যকর নয়।', contact: 'যোগাযোগের তথ্য শীঘ্রই আসছে।' }
 };
 const VIEWPORTS = { m360: { width: 360, height: 740 }, d1280: { width: 1280, height: 800 } };
 
@@ -65,7 +65,8 @@ async function headChecks() {
     { path: `/search?q=${QUERY}`, robots: /noindex/ },
     { path: `/products/${MULTI_SLUG}`, canonical: true },
     { path: '/help', canonical: true },
-    { path: '/legal/terms', canonical: true, robots: /noindex/ }
+    { path: '/legal/terms', canonical: true, robots: /noindex/ },
+    { path: '/cart', robots: /noindex/ }
   ];
   for (const pfx of ['', '/bn']) {
     for (const p of pages) {
@@ -95,7 +96,7 @@ async function headChecks() {
       const ctx = await browser.newContext({ viewport: vp, locale: lname === 'bn' ? 'bn-BD' : 'en-US' });
       const page = await ctx.newPage();
       const errors = [];
-      page.on('pageerror', (e) => errors.push(e.message));
+      page.on('pageerror', (e) => errors.push(`${page.url()} ${e.message.slice(0, 60)}`));
 
       // H1.1 home: hero search (works as a plain GET form), real example chips, categories, header + footer
       await page.goto(`${WEB}${loc.prefix}/`, { waitUntil: 'networkidle' });
@@ -190,6 +191,60 @@ async function headChecks() {
       check(`[${tag}] no horizontal overflow (PDP)`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
       await axeCheck(page, `${tag} /products/<slug>`);
       await page.screenshot({ path: `${SHOTS}/storefront-${lname}-${vname}.png` });
+
+      // E3.2 cart: add from the PDP, header badge, cart page shows the server price, qty step, forged price ignored,
+      // 503 is an error (never an empty cart), remove -> empty state. The guest-cart cookie lives in this browser context.
+      // the default variant has enough stock to step the quantity (the second one has 1 unit)
+      await page.goto(`${WEB}${loc.prefix}/products/${MULTI_SLUG}`, { waitUntil: 'networkidle' });
+      const pdpPrice = (await page.locator('span.text-3xl').first().innerText()).trim();
+      const addBtn = page.getByRole('button', { name: loc.cartAdd, exact: true });
+      await addBtn.click();
+      await page.getByRole('link', { name: loc.viewCart }).waitFor();
+      check(`[${tag}] PDP add to cart confirms and offers the cart`, true);
+      const badge = page.locator('header a[href$="/cart"] span[aria-hidden="true"]');
+      await badge.waitFor();
+      check(`[${tag}] header cart badge shows the item count`, (await badge.innerText()).trim() === (lname === 'bn' ? '১' : '1'), await badge.innerText());
+      await page.goto(`${WEB}${loc.prefix}/cart`, { waitUntil: 'networkidle' });
+      await page.getByRole('heading', { level: 1, name: loc.cartTitle }).waitFor();
+      check(`[${tag}] cart page noindex and no JSON-LD`, (await page.locator('meta[name="robots"][content*="noindex"]').count()) === 1 && (await page.locator('script[type="application/ld+json"]').count()) === 0);
+      const rowsLoc = page.locator('main section ul > li');
+      await rowsLoc.first().waitFor();
+      const unitText = (await rowsLoc.first().locator('p.text-sm.text-text').first().innerText()).trim();
+      check(`[${tag}] cart unit price is the server price shown on the PDP`, unitText === pdpPrice, `${unitText} vs ${pdpPrice}`);
+      if (lname === 'bn') check(`[${tag}] cart uses Bangla digits`, /[০-৯]/.test(unitText) && !/[0-9]/.test(unitText) && /[০-৯]/.test(await page.locator('aside').innerText()), unitText);
+      check(`[${tag}] cart no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await axeCheck(page, `${tag} /cart`);
+      const qtyInput = rowsLoc.first().locator('input[type="number"]');
+      const q0 = Number(await qtyInput.inputValue());
+      const total0 = (await rowsLoc.first().locator('p.font-semibold').nth(1).innerText()).trim();
+      await rowsLoc.first().getByRole('button', { name: loc.cartUp }).click();
+      await page.waitForFunction((before) => document.querySelectorAll('main section ul > li p.font-semibold')[1]?.textContent !== before && !document.querySelector('section[aria-busy="true"]'), total0);
+      const q1 = Number(await qtyInput.inputValue());
+      const total1 = (await rowsLoc.first().locator('p.font-semibold').nth(1).innerText()).trim();
+      check(`[${tag}] qty step is saved by the server and the line total follows`, q1 > q0 && total1 !== total0, `${q0}->${q1}, ${total0}->${total1}`);
+      // forged price: the API must ignore unitPriceMinor / price members
+      const forged = await page.evaluate(async ([api, id]) => {
+        const r = await fetch(`${api}/api/v1/cart/items`, { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ variantId: id, quantity: 1, unitPriceMinor: 1, price: 1, lineTotalMinor: 1 }) });
+        return { status: r.status, body: await r.json() };
+      }, [API, await page.evaluate(async (api) => (await (await fetch(`${api}/api/v1/cart`, { credentials: 'include' })).json()).data.lines[0].variantId, API)]);
+      const forgedLine = forged.body.data?.lines?.[0];
+      check(`[${tag}] forged price in the request is ignored`, forged.status === 200 && forgedLine && forgedLine.unitPriceMinor > 1 && forgedLine.lineTotalMinor === forgedLine.unitPriceMinor * forgedLine.quantity, `${forged.status} ${JSON.stringify(forgedLine ?? forged.body)}`);
+      // 503 from the cart API is an error with retry, never an empty cart
+      await page.route('**/api/v1/cart', (route) => route.request().method() === 'GET' ? route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ status: 503, error: { code: 'CART_UNAVAILABLE', message: 'x' } }) }) : route.continue());
+      await page.goto(`${WEB}${loc.prefix}/cart`, { waitUntil: 'networkidle' });
+      const alertText = await page.getByRole('alert').first().innerText();
+      check(`[${tag}] cart 503 shows "temporarily unavailable" + retry, not an empty cart`, loc.cartUnavailable.test(alertText) && (await page.getByText(loc.cartEmpty).count()) === 0 && (await page.locator('main button').count()) === 1, alertText);
+      await axeCheck(page, `${tag} /cart error`);
+      await page.unroute('**/api/v1/cart');
+      await page.locator('main button').click();
+      await rowsLoc.first().waitFor();
+      check(`[${tag}] retry loads the cart again`, true);
+      await rowsLoc.first().getByRole('button', { name: loc.cartRemove }).click();
+      await page.getByText(loc.cartEmpty).waitFor();
+      check(`[${tag}] remove leads to the empty state with a link to search`, (await page.locator(`main a[href="${loc.prefix}/search"]`).count()) === 1);
+      check(`[${tag}] header badge clears when the cart is empty`, (await badge.count()) === 0);
+      check(`[${tag}] cart empty no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+      await axeCheck(page, `${tag} /cart empty`);
       check(`[${tag}] no page errors`, errors.length === 0, errors.join(' | '));
       await ctx.close();
     }

@@ -2,10 +2,12 @@
 
 import * as React from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
-import { formatPriceMinor, type MediaDto, type ProductDetail, type VariantDto } from '@mechware/api-client';
+import { classifyCartError, formatPriceMinor, type MediaDto, type ProductDetail, type VariantDto } from '@mechware/api-client';
+import { addErrorKey } from '../../lib/cart-ui';
 import { Availability } from '../search/hit-parts';
 import { CopyPartNumber } from '../search/CopyPartNumber';
 import {
@@ -107,6 +109,23 @@ export function ProductView({ product, initialSku, mediaBase, banner, sections }
       window.history.replaceState(window.history.state, '', url);
     } catch {
       /* not fatal: the selection still works without the URL */
+    }
+  };
+
+  const [cartState, setCartState] = React.useState<{ kind: 'idle' | 'adding' | 'added' | 'error'; text?: string }>({ kind: 'idle' });
+  // Posts the variant id and quantity only: the server decides the price. The cart code loads on the first click, not with the page.
+  const addToCart = async () => {
+    if (!variant) return;
+    const quantity = clampQuantity(Number(qtyText), variant);
+    setQtyText(String(quantity));
+    setCartState({ kind: 'adding' });
+    try {
+      const [{ cartApi }, { announceCart }] = await Promise.all([import('../../lib/cart-client'), import('../../lib/cart-events')]);
+      const cart = await cartApi.addItem(variant.id, quantity);
+      announceCart(cart.lineCount);
+      setCartState({ kind: 'added', text: t('addedToCart', { sku: variant.sku, count: quantity }) });
+    } catch (error) {
+      setCartState({ kind: 'error', text: t(addErrorKey(classifyCartError(error))) });
     }
   };
 
@@ -233,6 +252,29 @@ export function ProductView({ product, initialSku, mediaBase, banner, sections }
           <p id="pdp-qty-hint" className="mt-1 text-xs text-text-muted">
             {pack > 1 ? t('qtyHintPack', { min, pack }) : min > 1 ? t('qtyHintMin', { min }) : t('qtyHintNone')}
           </p>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="accent"
+            size="lg"
+            disabled={!variant || onRequest || stockStatus === 'out_of_stock' || cartState.kind === 'adding'}
+            onClick={() => void addToCart()}
+          >
+            {cartState.kind === 'adding' ? t('addingToCart') : t('addToCart')}
+          </Button>
+          <div aria-live="polite" className="text-sm">
+            {cartState.kind === 'added' && (
+              <span className="text-text">
+                {cartState.text}{' '}
+                <Link prefetch={false} href={locale === 'bn' ? '/bn/cart' : '/cart'} className="font-medium text-accent underline-offset-4 hover:underline">
+                  {t('viewCart')}
+                </Link>
+              </span>
+            )}
+            {cartState.kind === 'error' && <span role="alert" className="text-fault">{cartState.text}</span>}
+          </div>
         </div>
 
         <div className="mt-4">
