@@ -95,6 +95,8 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CouponFailureWindow> CouponFailureWindows => Set<CouponFailureWindow>();
     public DbSet<PromotionRedemption> PromotionRedemptions => Set<PromotionRedemption>();
 
+    public DbSet<Mechware.Domain.Shipping.ShippingZone> ShippingZones => Set<Mechware.Domain.Shipping.ShippingZone>();
+
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

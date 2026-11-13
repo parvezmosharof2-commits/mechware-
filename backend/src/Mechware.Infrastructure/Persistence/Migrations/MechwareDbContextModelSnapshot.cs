@@ -3164,6 +3164,114 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("sellers", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingRateBand", b =>
+                {
+                    b.Property<Guid>("ZoneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("zone_id");
+
+                    b.Property<int>("MaxGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_grams");
+
+                    b.Property<long>("FeeMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("fee_minor");
+
+                    b.HasKey("ZoneId", "MaxGrams");
+
+                    b.ToTable("shipping_rate_bands", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_shipping_rate_bands_fee", "fee_minor >= 0");
+
+                            t.HasCheckConstraint("ck_shipping_rate_bands_grams", "max_grams > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("FreeShippingThresholdMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("free_shipping_threshold_minor");
+
+                    b.Property<int?>("HeavyUnitGrams")
+                        .HasColumnType("integer")
+                        .HasColumnName("heavy_unit_grams");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<long>("MaxFeeMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("max_fee_minor");
+
+                    b.Property<string>("NameBn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_bn");
+
+                    b.Property<string>("NameEn")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name_en");
+
+                    b.Property<int?>("OversizeDimensionMm")
+                        .HasColumnType("integer")
+                        .HasColumnName("oversize_dimension_mm");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shipping_zones_code");
+
+                    b.ToTable("shipping_zones", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_shipping_zones_free_threshold", "free_shipping_threshold_minor IS NULL OR free_shipping_threshold_minor > 0");
+
+                            t.HasCheckConstraint("ck_shipping_zones_max_fee", "max_fee_minor > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingZoneDistrict", b =>
+                {
+                    b.Property<Guid>("DistrictId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("district_id");
+
+                    b.Property<Guid>("ZoneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("zone_id");
+
+                    b.HasKey("DistrictId");
+
+                    b.HasIndex("ZoneId")
+                        .HasDatabaseName("ix_shipping_zone_districts_zone");
+
+                    b.ToTable("shipping_zone_districts", (string)null);
+                });
+
             modelBuilder.Entity("Mechware.Infrastructure.Persistence.Outbox.NotificationLogEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3692,6 +3800,30 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingRateBand", b =>
+                {
+                    b.HasOne("Mechware.Domain.Shipping.ShippingZone", null)
+                        .WithMany("Bands")
+                        .HasForeignKey("ZoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingZoneDistrict", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.BdLocation", null)
+                        .WithMany()
+                        .HasForeignKey("DistrictId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Shipping.ShippingZone", null)
+                        .WithMany("Districts")
+                        .HasForeignKey("ZoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mechware.Domain.Approvals.ApprovalRequest", b =>
                 {
                     b.Navigation("Steps");
@@ -3742,6 +3874,13 @@ namespace Mechware.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Mechware.Domain.Reviews.Review", b =>
                 {
                     b.Navigation("Media");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Shipping.ShippingZone", b =>
+                {
+                    b.Navigation("Bands");
+
+                    b.Navigation("Districts");
                 });
 #pragma warning restore 612, 618
         }

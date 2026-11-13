@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
         services.TryAddScoped<IOrderService, OrderService>();
+        services.TryAddScoped<Mechware.Application.Shipping.IShippingRateProvider, Shipping.ShippingRateProvider>();
         services.TryAddScoped<IPaymentService, PaymentService>();
         services.TryAddScoped<IRefundService, RefundService>();
 
