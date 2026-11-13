@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IMPORT_MAX_BYTES, checkImportFile, csvCell, errorsToCsv, isGuid } from '../src/catalog-import-model.ts';
+import { IMPORT_MAX_BYTES, checkImportFile, csvCell, errorsToCsv, isGuid, sellerPickQuery } from '../src/catalog-import-model.ts';
 
 test('client-side file checks: csv only, not empty, at most 10 MB', () => {
   assert.equal(checkImportFile(null), 'file.missing');
@@ -33,4 +33,11 @@ test('error csv: header, null column, escaping', () => {
     { row: 3, column: 'sku', code: 'FORMULA_INJECTION', message: '=cmd' }
   ]);
   assert.equal(csv, 'row,column,code,message\r\n0,,MISSING_COLUMN,"Missing ""sku"""\r\n3,sku,FORMULA_INJECTION,\'=cmd\r\n');
+});
+
+test('seller picker query: approved only, trimmed search, page size capped at 50', () => {
+  assert.equal(sellerPickQuery(''), 'status=approved&page=1&pageSize=50');
+  assert.equal(sellerPickQuery('  Alpha & Co ', 2), 'status=approved&q=Alpha+%26+Co&page=2&pageSize=50');
+  assert.equal(sellerPickQuery('x', 0, 500), 'status=approved&q=x&page=1&pageSize=50');
+  assert.equal(sellerPickQuery('', 1, 0), 'status=approved&page=1&pageSize=1');
 });

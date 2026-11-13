@@ -145,6 +145,8 @@ const jsonBody = (status, code, message = 'x', details = []) => ({ status, conte
       const ctx = await browser.newContext({ viewport: vp, locale: lname === 'bn' ? 'bn-BD' : 'en-US' });
       const page = await ctx.newPage();
       const errors = [];
+      const cartDeletes = [];
+      page.on('request', (rq) => { if (rq.method() === 'DELETE' && /\/api\/v1\/cart$/.test(new URL(rq.url()).pathname)) cartDeletes.push(rq.url()); });
       page.on('pageerror', (e) => errors.push(`${page.url()} ${e.message.slice(0, 80)}`));
       await fillCart();
 
@@ -294,7 +296,7 @@ const jsonBody = (status, code, message = 'x', details = []) => ({ status, conte
       await page.unroute('**/api/v1/orders');
       const order = (await call('GET', `/api/v1/orders/${orderId}`)).json.data;
       check(`[${tag}] placed order has server prices and no PO number`, order.status === 'pending_payment' && order.purchaseOrderNumber == null && order.grandTotalMinor > 0, `${order.grandTotalMinor}`);
-      check(`[${tag}] cart is emptied after the order`, (await call('GET', '/api/v1/cart')).json.data.lines.length === 0);
+      check(`[${tag}] the ordered lines are gone from the cart (removed by the server) and the UI sent no DELETE /cart`, (await call('GET', '/api/v1/cart')).json.data.lines.length === 0 && cartDeletes.length === 0, `${cartDeletes.length} DELETEs`);
       await cleanup.done();
 
       // Company order: site + cost centre + PO number, validated, sent with the order

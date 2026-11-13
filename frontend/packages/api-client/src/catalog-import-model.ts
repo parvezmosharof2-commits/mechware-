@@ -63,3 +63,22 @@ export function errorsToCsv(errors: readonly ImportError[]): string {
   for (const e of errors) lines.push([e.row, e.column ?? '', e.code, e.message].map(csvCell).join(','));
   return lines.join('\r\n') + '\r\n';
 }
+
+/** One row of the seller picker (`GET /api/v1/admin/sellers`): no owner or contact data is ever returned. */
+export interface SellerPick {
+  id: string;
+  storeName: string;
+  status: string;
+}
+
+export const SELLER_PICK_PAGE_SIZE = 50;
+
+/** Query string for the seller picker: approved sellers only, search by part of the store name, page size capped at 50. */
+export function sellerPickQuery(q: string, page = 1, pageSize = SELLER_PICK_PAGE_SIZE): string {
+  const p = new URLSearchParams({ status: 'approved' });
+  const term = q.trim();
+  if (term) p.set('q', term);
+  p.set('page', String(Math.max(1, Math.floor(page))));
+  p.set('pageSize', String(Math.min(SELLER_PICK_PAGE_SIZE, Math.max(1, Math.floor(pageSize)))));
+  return p.toString();
+}

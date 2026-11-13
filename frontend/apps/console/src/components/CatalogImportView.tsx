@@ -1,14 +1,15 @@
 'use client';
 
 import * as React from 'react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input } from '@mechware/ui';
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui';
 import {
-  checkImportFile, errorsToCsv, isGuid,
+  checkImportFile, errorsToCsv,
   type ImportCommitResult, type ImportFileProblem, type ImportReport
 } from '@mechware/api-client';
 import { catalogImportApi, problemCode, problemMessage, problemStatus } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { ConsoleShell } from './ConsoleShell';
+import { SellerPicker } from './SellerPicker';
 
 const PAGE_SIZE = 50;
 const FILE_TEXT: Record<ImportFileProblem, string> = {
@@ -123,7 +124,7 @@ function CatalogImport() {
   const [file, setFile] = React.useState<File | null>(null);
   const [fileError, setFileError] = React.useState<string | null>(null);
   const [sellerId, setSellerId] = React.useState('');
-  const [sellerError, setSellerError] = React.useState<string | null>(null);
+  const [sellerName, setSellerName] = React.useState('');
   const [checked, setChecked] = React.useState<{ report: ImportReport; file: File } | null>(null);
   const [rejected, setRejected] = React.useState<ImportReport | null>(null);
   const [result, setResult] = React.useState<ImportCommitResult | null>(null);
@@ -161,13 +162,11 @@ function CatalogImport() {
     }
   };
 
-  const sellerOk = isGuid(sellerId);
+  const sellerOk = sellerId !== '';
   const canImport = busy === null && checked !== null && checked.file === file && checked.report.errorCount === 0 && sellerOk;
 
   const openConfirm = () => {
-    if (!sellerOk) return setSellerError('Enter the seller id as a GUID, for example 3f2504e0-4f89-41d3-9a0c-0305e82c3301.');
-    setSellerError(null);
-    setConfirmOpen(true);
+    if (sellerOk) setConfirmOpen(true);
   };
 
   const commit = async () => {
@@ -175,7 +174,7 @@ function CatalogImport() {
     setBusy('commit');
     setError(null);
     try {
-      setResult((await catalogImportApi.commit(file, sellerId.trim())).data);
+      setResult((await catalogImportApi.commit(file, sellerId)).data);
       setChecked(null);
     } catch (err) {
       const report = rejectedReport(err);
@@ -220,16 +219,9 @@ function CatalogImport() {
         <div className="space-y-5 rounded-xl border border-surface-border bg-surface p-6">
           <ReportView report={report} title="Check result" />
           <div className="space-y-3 border-t border-surface-border pt-4">
-            <Input
-              label="Seller id"
-              helperText="Temporary field: there is no seller list endpoint yet. Paste the id (GUID) of an approved seller; the API refuses any other."
-              value={sellerId}
-              onChange={(e) => { setSellerId(e.target.value); setSellerError(null); }}
-              error={sellerError ?? undefined}
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <SellerPicker onChange={(id, name) => { setSellerId(id); setSellerName(name); }} />
             <Button type="button" onClick={openConfirm} disabled={!canImport}>Import</Button>
+            {report.errorCount === 0 && !sellerOk && <p className="text-xs text-text-muted">Choose a seller to enable the import.</p>}
             {report.errorCount > 0 && <p className="text-xs text-text-muted">Fix the errors in the file and check it again to enable the import.</p>}
           </div>
         </div>
@@ -265,7 +257,7 @@ function CatalogImport() {
             <DialogTitle>Import {report?.rows.toLocaleString('en')} rows?</DialogTitle>
             <DialogDescription>
               {report && `${report.newProducts} new and ${report.existingProducts} existing products, ${report.newVariants} new and ${report.existingVariants} existing variants`}
-              {' '}for seller {sellerId.trim()}. All of it is written, or none of it.
+              {' '}for seller {sellerName}. All of it is written, or none of it.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

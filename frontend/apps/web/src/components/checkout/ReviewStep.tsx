@@ -113,8 +113,9 @@ export function ReviewStep({ locale, cart, dest, destinationText, initialKey, on
       attemptRef.current = attempt;
       onKeyChange(attempt.key);
       const placed = await ordersApi.place(buildOrderBody(lines, dest), attempt.key);
-      // The order exists now; emptying the cart is best effort and must never block the confirmation.
-      void cartApi.clear().then(() => announceCart(0), () => undefined);
+      // The server removed exactly the ordered lines. Do not clear the cart here (it would drop lines the buyer did not order);
+      // just tell the header badge to re-read it.
+      void cartApi.get().then((c) => announceCart(c.lines.length), () => undefined);
       navigating = true; // the button stays disabled while the page changes
       router.push(`${prefix}/checkout/confirmation?order=${encodeURIComponent(placed.orderNumber)}&id=${encodeURIComponent(placed.orderId)}`);
     } catch (error) {
