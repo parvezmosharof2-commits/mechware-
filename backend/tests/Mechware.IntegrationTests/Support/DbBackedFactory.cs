@@ -44,6 +44,7 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         using var db = new MechwareDbContext(new DbContextOptionsBuilder<MechwareDbContext>().UseNpgsql(ConnectionString).Options);
         db.Database.EnsureCreated();
         db.Database.ExecuteSqlRaw(AuditChainSql.Install);
+        db.Database.ExecuteSqlRaw(PriceListSql.Install);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

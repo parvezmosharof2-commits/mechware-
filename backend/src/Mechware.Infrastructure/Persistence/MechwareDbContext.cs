@@ -97,6 +97,10 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
 
     public DbSet<Mechware.Domain.Shipping.ShippingZone> ShippingZones => Set<Mechware.Domain.Shipping.ShippingZone>();
 
+    // Price lists (D2.4): entries and contributors are loaded through the aggregate; triggers in PriceListSql.
+    public DbSet<Mechware.Domain.Pricing.PriceLists.PriceList> PriceLists => Set<Mechware.Domain.Pricing.PriceLists.PriceList>();
+    public DbSet<Mechware.Domain.Pricing.PriceLists.MarginFloor> MarginFloors => Set<Mechware.Domain.Pricing.PriceLists.MarginFloor>();
+
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

@@ -139,7 +139,7 @@ public static class MarginFloorPolicy
         return (long)(percent * 100m);
     }
 
-    private static void Validate(MarginFloorRow row)
+    internal static void Validate(MarginFloorRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
         var shapeOk = row.Scope switch

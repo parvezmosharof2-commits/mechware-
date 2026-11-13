@@ -131,6 +131,9 @@ bool dataProtectionKeysEncrypted = builder.Services.AddPersistedDataProtection(
 // and turning the switch on outside Development/Testing stops the host here. Registered before AddCatalogServices (TryAdd).
 builder.Services.AddSingleton(Mechware.Infrastructure.Shipping.ShippingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+// Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
+builder.Services.AddSingleton(Mechware.Infrastructure.Pricing.PricingOptions.From(
+    builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 
 // 2.4 Phase 4 Catalog, Inventory, Outbox and storefront cache (hosted workers live in Mechware.Worker)
 builder.Services.AddCatalogServices();

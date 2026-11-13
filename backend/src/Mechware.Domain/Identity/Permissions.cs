@@ -29,6 +29,18 @@ public static class Permissions
     public const string CompaniesManage = "companies.manage";
     public const string CompaniesCredit = "companies.credit";
 
+    // Price lists and margin floors (ADR-0008 §1, owner decision 3). Approval is four-eyes: holding both edit and approve
+    // never lets anyone approve a list they created, changed or submitted (domain + database).
+    public const string PriceListsView = "pricelists.view";
+    /// <summary>Create, change, submit and revise a price list.</summary>
+    public const string PriceListsEdit = "pricelists.edit";
+    /// <summary>Approve, reject and withdraw a price list (with step-up).</summary>
+    public const string PriceListsApprove = "pricelists.approve";
+    public const string PriceListsApproveBelowFloor = "pricelists.approve_below_floor";
+    /// <summary>See cost, floor and margin figures; no buyer-facing response ever carries them.</summary>
+    public const string PricingViewCost = "pricing.view_cost";
+    public const string PricingManageFloors = "pricing.manage_floors";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -51,9 +63,14 @@ public static class Permissions
         {
             Roles.Buyer => [OrdersViewOwn],
             Roles.Seller => [OrdersViewOwn, CatalogCreate, CatalogUpdateOwn, SellersManageOwn],
-            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView],
+            // Support is the sales-facing staff role: it prepares price lists but never approves them.
+            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView, PriceListsView, PriceListsEdit],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
-            Roles.Finance => [OrdersViewAll, OrdersRefund, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit],
+            Roles.Finance =>
+            [
+                OrdersViewAll, OrdersRefund, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
+                PriceListsView, PriceListsApprove, PricingViewCost
+            ],
             Roles.Admin =>
             [
                 OrdersViewOwn,
@@ -71,7 +88,13 @@ public static class Permissions
                 AuditView,
                 CompaniesView,
                 CompaniesManage,
-                CompaniesCredit
+                CompaniesCredit,
+                PriceListsView,
+                PriceListsEdit,
+                PriceListsApprove,
+                PriceListsApproveBelowFloor,
+                PricingViewCost,
+                PricingManageFloors
             ],
             _ => []
         };

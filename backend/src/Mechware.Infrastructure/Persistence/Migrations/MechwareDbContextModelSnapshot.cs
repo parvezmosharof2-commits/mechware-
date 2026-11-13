@@ -2721,6 +2721,317 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.MarginFloor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("BrandId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("brand_id");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("MinMarkupPercent")
+                        .HasColumnType("numeric")
+                        .HasColumnName("min_markup_percent");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BrandId");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("Scope", "BrandId", "CategoryId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_margin_floors_scope_brand_category");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("Scope", "BrandId", "CategoryId"), false);
+
+                    b.ToTable("margin_floors", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_margin_floors_markup", "min_markup_percent >= 0 AND min_markup_percent <= 1000 AND min_markup_percent = round(min_markup_percent, 2)");
+
+                            t.HasCheckConstraint("ck_margin_floors_shape", "(scope = 'Global' AND brand_id IS NULL AND category_id IS NULL) OR (scope = 'Category' AND brand_id IS NULL AND category_id IS NOT NULL) OR (scope = 'Brand' AND brand_id IS NOT NULL AND category_id IS NULL) OR (scope = 'BrandAndCategory' AND brand_id IS NOT NULL AND category_id IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("content_hash")
+                        .IsFixedLength();
+
+                    b.Property<string>("ContractRef")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("contract_ref");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("EffectiveFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_from_utc");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rejected_by");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("scope");
+
+                    b.Property<Guid>("SeriesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("series_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime>("ValidFromUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTime>("ValidToUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_to");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<string>("WithdrawReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("withdraw_reason");
+
+                    b.Property<DateTime?>("WithdrawnAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.Property<Guid?>("WithdrawnBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("withdrawn_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_price_lists_one_open_version")
+                        .HasFilter("status IN ('Draft', 'PendingApproval')");
+
+                    b.HasIndex("CompanyId", "Status")
+                        .HasDatabaseName("ix_price_lists_company_status");
+
+                    b.HasIndex("Scope", "Status")
+                        .HasDatabaseName("ix_price_lists_scope_status");
+
+                    b.HasIndex("SeriesId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_price_lists_series_version");
+
+                    b.ToTable("price_lists", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_price_lists_approval_shape", "(status IN ('Approved', 'Withdrawn')) = (approved_by IS NOT NULL) AND (approved_by IS NULL) = (approved_at IS NULL) AND (approved_by IS NULL) = (effective_from_utc IS NULL)");
+
+                            t.HasCheckConstraint("ck_price_lists_company_shape", "(scope = 'Company' AND company_id IS NOT NULL AND contract_ref IS NOT NULL) OR (scope <> 'Company' AND company_id IS NULL AND contract_ref IS NULL)");
+
+                            t.HasCheckConstraint("ck_price_lists_content_hash", "content_hash IS NULL OR content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_price_lists_currency", "currency = 'BDT'");
+
+                            t.HasCheckConstraint("ck_price_lists_effective_from", "effective_from_utc IS NULL OR (effective_from_utc >= valid_from AND effective_from_utc >= approved_at + interval '60 seconds' AND effective_from_utc < valid_to)");
+
+                            t.HasCheckConstraint("ck_price_lists_four_eyes", "approved_by IS NULL OR (submitted_by IS NOT NULL AND approved_by <> created_by AND approved_by <> submitted_by)");
+
+                            t.HasCheckConstraint("ck_price_lists_rejection_shape", "(rejected_by IS NULL) = (rejected_at IS NULL) AND (rejected_by IS NULL) = (rejection_reason IS NULL)");
+
+                            t.HasCheckConstraint("ck_price_lists_scope", "scope IN ('General', 'Group', 'Company')");
+
+                            t.HasCheckConstraint("ck_price_lists_status", "status IN ('Draft', 'PendingApproval', 'Approved', 'Withdrawn')");
+
+                            t.HasCheckConstraint("ck_price_lists_status_shape", "(status = 'Draft' AND submitted_by IS NULL AND submitted_at IS NULL AND content_hash IS NULL) OR (status <> 'Draft' AND submitted_by IS NOT NULL AND submitted_at IS NOT NULL AND content_hash IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_price_lists_version", "version >= 1");
+
+                            t.HasCheckConstraint("ck_price_lists_window", "valid_to > valid_from AND valid_to - valid_from <= interval '366 days'");
+
+                            t.HasCheckConstraint("ck_price_lists_withdrawal_shape", "(status = 'Withdrawn') = (withdrawn_by IS NOT NULL) AND (withdrawn_by IS NULL) = (withdrawn_at IS NULL) AND (withdrawn_by IS NULL) = (withdraw_reason IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceListContributor", b =>
+                {
+                    b.Property<Guid>("PriceListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("FirstContributedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_contributed_at");
+
+                    b.HasKey("PriceListId", "UserId");
+
+                    b.ToTable("price_list_contributors", (string)null);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceListEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool?>("BelowFloorAtApproval")
+                        .HasColumnType("boolean")
+                        .HasColumnName("below_floor_at_approval");
+
+                    b.Property<string>("BelowFloorReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("below_floor_reason");
+
+                    b.Property<long?>("CostMinorAtApproval")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cost_minor_at_approval");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("FloorMinorAtApproval")
+                        .HasColumnType("bigint")
+                        .HasColumnName("floor_minor_at_approval");
+
+                    b.Property<int>("MinQty")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_qty");
+
+                    b.Property<Guid>("PriceListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_id");
+
+                    b.Property<long>("UnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_price_minor");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VariantId")
+                        .HasDatabaseName("ix_price_list_entries_variant");
+
+                    b.HasIndex("PriceListId", "VariantId", "MinQty")
+                        .IsUnique()
+                        .HasDatabaseName("ux_price_list_entries_variant_min_qty");
+
+                    b.ToTable("price_list_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_price_list_entries_approval_values", "(cost_minor_at_approval IS NULL OR cost_minor_at_approval > 0) AND (floor_minor_at_approval IS NULL OR floor_minor_at_approval > 0)");
+
+                            t.HasCheckConstraint("ck_price_list_entries_min_qty", "min_qty >= 1 AND min_qty <= 10000");
+
+                            t.HasCheckConstraint("ck_price_list_entries_price", "unit_price_minor > 0 AND unit_price_minor <= 100000000000");
+
+                            t.HasCheckConstraint("ck_price_list_entries_reason", "below_floor_reason IS NULL OR char_length(below_floor_reason) BETWEEN 5 AND 500");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Pricing.PromotionDefinition", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3716,6 +4027,51 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.MarginFloor", b =>
+                {
+                    b.HasOne("Mechware.Domain.Catalog.Brand", null)
+                        .WithMany()
+                        .HasForeignKey("BrandId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Catalog.Category", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceList", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceListContributor", b =>
+                {
+                    b.HasOne("Mechware.Domain.Pricing.PriceLists.PriceList", null)
+                        .WithMany("Contributors")
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceListEntry", b =>
+                {
+                    b.HasOne("Mechware.Domain.Pricing.PriceLists.PriceList", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Catalog.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("VariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mechware.Domain.Pricing.PromotionRedemption", b =>
                 {
                     b.HasOne("Mechware.Domain.Orders.Order", null)
@@ -3873,6 +4229,13 @@ namespace Mechware.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Mechware.Domain.Orders.SubOrder", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Pricing.PriceLists.PriceList", b =>
+                {
+                    b.Navigation("Contributors");
+
+                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("Mechware.Domain.Reviews.Question", b =>
