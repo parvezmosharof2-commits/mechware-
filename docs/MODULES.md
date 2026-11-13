@@ -30,7 +30,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 | A4/A5 | Design system / API client | ✅ | [A4-A5](modules/A4-A5.md) |
 | A6 | CI, gates, agent tooling | ✅ | [A6](modules/A6.md) |
 | A7 | Staff passkeys | ⏭ | [A7](modules/A7.md) |
-| A8 | PDF engine (EN/BN) | ⬜ | [A8](modules/A8.md) |
+| A8 | PDF engine (EN/BN) | ✅ (A8.1, A8.2) | [A8](modules/A8.md) |
 | B1 | Companies | ✅ | [B1](modules/B1.md) |
 | B2 | Approvals | ✅ | [B2](modules/B2.md) |
 | B3 | Credit settlement (receivables) | ⬜ **new** | [B3](modules/B3.md) |
@@ -42,13 +42,13 @@ Console screens are **inside** each feature module (no separate "console phase")
 | C7 | PLP / PDP / compare (web) | ✅ (C7.6 compare deferred) | [C7](modules/C7.md) |
 | C8 | Inventory | ✅ | [C8](modules/C8.md) |
 | C9 | Reviews & Q&A | ⏭ | [C9](modules/C9.md) |
-| C10 | Bulk catalogue import | ⬜ **new** | [C10](modules/C10.md) |
+| C10 | Bulk catalogue import | 🟡 (C10.1-C10.3 ✅; C10.4 images waits for C3) | [C10](modules/C10.md) |
 | D1 | Pricing engine | ✅ | [D1](modules/D1.md) |
 | D2 | Price lists & contract prices | 🟡 (D2.1 design ✅) | [D2](modules/D2.md) |
 | D3 | Promotions admin | ⏭ (engine ✅) | [D3](modules/D3.md) |
 | D4 | RFQ & quotes | ⬜ | [D4](modules/D4.md) |
-| D5 | Quick order & line validator | ⬜ | [D5](modules/D5.md) |
-| E1 | Cart | 🟡 | [E1](modules/E1.md) |
+| D5 | Quick order & line validator | 🟡 (D5.1 parser ✅) | [D5](modules/D5.md) |
+| E1 | Cart | ✅ (web cart UI lands with E3) | [E1](modules/E1.md) |
 | E2 | Orders | ✅ | [E2](modules/E2.md) |
 | E3 | Checkout (web) | ⬜ | [E3](modules/E3.md) |
 | E4 | Payments core | ✅ | [E4](modules/E4.md) |
@@ -64,7 +64,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 | G1/G5 | Console shell / audit, users, exports, settings | ✅ / ⬜ | [G](modules/G.md) |
 | H1 | Home, help, legal pages, sitemap | ✅ (legal texts await lawyer) | [H1](modules/H1.md) |
 | H2 | Hardening | ⬜ | [H2](modules/H2.md) |
-| H3 | Deploy (H3a staging, H3b production) | ⬜ | [H3](modules/H3.md) |
+| H3 | Deploy (H3a staging, H3b production) | 🟡 (H3a part 1 + H3a.2 ✅; staging host waits for hosting choice) | [H3](modules/H3.md) |
 | H4 | Performance | ⬜ | [H4](modules/H4.md) |
 | H6 | Consent + analytics | ⬜ **new** | [H6](modules/H6.md) |
 | H5 | Seller marketplace, payouts, AI | ⏭ | — |

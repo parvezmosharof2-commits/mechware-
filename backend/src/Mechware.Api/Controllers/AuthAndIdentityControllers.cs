@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Mechware.Api.Authorization;
+using Mechware.Api.Services;
+using Mechware.Application.Cart;
 using Mechware.Application.Identity;
 using Mechware.Domain.Identity;
 
@@ -16,11 +18,13 @@ public sealed class AuthController : ControllerBase
 
     private readonly IIdentityService _identityService;
     private readonly ICurrentUserService _currentUser;
+    private readonly GuestCartHandover _guestCart;
 
-    public AuthController(IIdentityService identityService, ICurrentUserService currentUser)
+    public AuthController(IIdentityService identityService, ICurrentUserService currentUser, GuestCartHandover guestCart)
     {
         _identityService = identityService;
         _currentUser = currentUser;
+        _guestCart = guestCart;
     }
 
     [HttpPost("register")]
@@ -80,7 +84,7 @@ public sealed class AuthController : ControllerBase
             _currentUser.UserAgent);
 
         WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
-        return Ok(new { data = MapTokenEnvelope(result) });
+        return Ok(new { data = MapTokenEnvelope(result, await TakeOverGuestCartAsync(result)) });
     }
 
     [HttpPost("login")]
@@ -120,7 +124,7 @@ public sealed class AuthController : ControllerBase
         }
 
         WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
-        return Ok(new { data = MapTokenEnvelope(result) });
+        return Ok(new { data = MapTokenEnvelope(result, await TakeOverGuestCartAsync(result)) });
     }
 
     [HttpPost("google")]
@@ -133,7 +137,7 @@ public sealed class AuthController : ControllerBase
             _currentUser.UserAgent);
 
         WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
-        return Ok(new { data = MapTokenEnvelope(result) });
+        return Ok(new { data = MapTokenEnvelope(result, await TakeOverGuestCartAsync(result)) });
     }
 
     [HttpPost("refresh")]
@@ -146,6 +150,7 @@ public sealed class AuthController : ControllerBase
             _currentUser.UserAgent);
 
         WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
+        CartMergeResult? cartMerged = await TakeOverGuestCartAsync(result);
 
         return Ok(new
         {
@@ -153,7 +158,8 @@ public sealed class AuthController : ControllerBase
             {
                 accessToken = result.AccessToken,
                 expiresIn = result.ExpiresIn,
-                tokenType = result.TokenType
+                tokenType = result.TokenType,
+                cartMerged
             }
         });
     }
@@ -181,6 +187,8 @@ public sealed class AuthController : ControllerBase
             SameSite = SameSiteMode.Lax,
             Path = "/api/v1/auth"
         });
+        // The next guest cart in this browser starts under a new id; a guest token from before is not carried on (CT10).
+        GuestCartHandover.Expire(Response);
 
         return Ok(new { data = new { loggedOut = true } });
     }
@@ -238,7 +246,7 @@ public sealed class AuthController : ControllerBase
         AuthTokenResponseDto result = await _identityService.CompleteTwoFactorEnrollmentAsync(
             request.EnrollmentToken, request.Code, _currentUser.IpAddress, _currentUser.UserAgent);
         WriteRefreshCookieIfPresent(result.RefreshTokenCookieValue);
-        return Ok(new { data = MapTokenEnvelope(result) });
+        return Ok(new { data = MapTokenEnvelope(result, await TakeOverGuestCartAsync(result)) });
     }
 
     [Authorize]
@@ -295,13 +303,23 @@ public sealed class AuthController : ControllerBase
         });
     }
 
-    private static object MapTokenEnvelope(AuthTokenResponseDto result) =>
+    /// <summary>
+    /// E1.4: a session that has just started takes over this browser's guest cart (merged, then the cookie is expired). Never
+    /// throws; null when there was nothing to merge. <c>cartMerged</c> on the response is additive and optional.
+    /// </summary>
+    private Task<CartMergeResult?> TakeOverGuestCartAsync(AuthTokenResponseDto result) =>
+        string.IsNullOrEmpty(result.AccessToken) || result.RequiresTwoFactor || result.RequiresTwoFactorEnrollment
+            ? Task.FromResult<CartMergeResult?>(null)
+            : _guestCart.OnSignedInAsync(HttpContext, result.User.Id);
+
+    private static object MapTokenEnvelope(AuthTokenResponseDto result, CartMergeResult? cartMerged) =>
         new
         {
             accessToken = result.AccessToken,
             expiresIn = result.ExpiresIn,
             tokenType = result.TokenType,
-            user = result.User
+            user = result.User,
+            cartMerged
         };
 }
 

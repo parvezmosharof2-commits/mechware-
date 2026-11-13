@@ -68,6 +68,16 @@ public interface ICartStore
 
     /// <summary>Removes the cart (after checkout, or after a guest cart was merged into a user cart). Idempotent.</summary>
     Task DeleteAsync(CartOwner owner, CancellationToken ct = default);
+
+    /// <summary>
+    /// Commits a login merge in one atomic step (E1.4): stores <paramref name="merged"/> as the user's cart (compare-and-set on
+    /// <paramref name="expectedUserETag"/>, null = must not exist) <b>and</b> deletes the guest cart, but only while the guest
+    /// cart still carries <paramref name="guestETag"/>, the version that was merged. Either both happen or nothing is written
+    /// (<see cref="CartSaveStatus.Conflict"/>): a guest cart can never be merged twice, and a guest change made after it was
+    /// read is never deleted unmerged. Both keys must live on one Redis node (no Redis Cluster).
+    /// </summary>
+    Task<(CartSaveStatus Status, string? ETag)> SaveMergedAsync(
+        CartOwner user, Domain.Cart.Cart merged, string? expectedUserETag, CartOwner guest, string guestETag, CancellationToken ct = default);
 }
 
 /// <summary>

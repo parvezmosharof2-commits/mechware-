@@ -1,6 +1,8 @@
 # NOW (keep ≤ 30 lines; update at the end of every unit)
 
-**Done (2026-11-13):** C10.2 import commit (`POST .../import/commit`, all-or-nothing, idempotent, advisory-locked; needs `sellerId`) · C10.1 bulk-import dry run (`POST /api/v1/admin/catalog/import/dry-run`, docs/catalog/IMPORT_FORMAT.md; `kA` unit added) ·
+**Done (2026-11-13):** E1 cart ✅ (E1.1 boundary + store contract · E1.2 Redis CAS store + signed guest token · E1.3 `/api/v1/cart` endpoints, server prices only ·
+E1.4 atomic merge on login/refresh; carts need ONE Redis node, no Cluster; web cart UI comes with E3) · D5.1 quick-order parser · C10.3 console import screen
+(seller is a temporary GUID field: needs an admin sellers list endpoint) · C10.2 import commit (`POST .../import/commit`, all-or-nothing, idempotent, advisory-locked; needs `sellerId`) · C10.1 bulk-import dry run (`POST /api/v1/admin/catalog/import/dry-run`, docs/catalog/IMPORT_FORMAT.md; `kA` unit added) ·
 H3a part 1 Dockerfiles ×4 + staging compose · H3a.2 deploy readiness (one DB setting, optional S3, persisted Data Protection keys,
 `Mechware.Worker migrate`) · pnpm pinned to 10.34.9 (`packageManager`; keeps the lockfile's security overrides) ·
 A8.1/A8.2 PDF engine EN/BN (ADR-0009) · H1.4 metadata in `<head>`, Lighthouse mobile 92-95 · D2.1 price-list design (ADR-0008) ·
@@ -11,7 +13,7 @@ TOTP secrets + recovery-code hashes encrypted at rest (A1 HANDOFF; deploy: `migr
 **Watch:** `InventoryConcurrencyTests.FiftyParallelBuyers_TenUnits_ExactlyTenSucceed_PostgresRowLocksOnly` failed once in a full
 integration run on 2026-11-13 (message not captured), then passed 3× alone and in a full 552/552 run — if it fails again, capture
 the message (oversell = bug; `busy > 0` = lock timeout under load).
-**Next:** C10.3 import console screen ·
+**Next:** D5.2 line-validate API (price part waits for D2) · E8 shipping rates · E3 checkout · small unit: admin sellers list endpoint ·
 then MODULES.md order (D2.2+ waits for owner decisions MODULES.md §5 #7; C3 waits for S3-vs-volume).
 
 **How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent

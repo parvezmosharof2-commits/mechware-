@@ -13,8 +13,9 @@ namespace Mechware.Infrastructure.Cart;
 
 /// <summary>
 /// <see cref="ICartStore"/> on Redis. One hash per cart at <see cref="CartOwner.StoreKey"/>: field <c>e</c> = ETag (128
-/// random bits, hex), field <c>v</c> = the cart as versioned JSON. Every operation is one single-key Lua script, so it is
-/// atomic and also works on a Redis cluster without a hash tag.
+/// random bits, hex), field <c>v</c> = the cart as versioned JSON. Every operation is one Lua script, so it is atomic. All
+/// are single-key except the login merge (<see cref="SaveMergedAsync"/>: user + guest key), so cart keys must live on one
+/// Redis node (a single instance or a dedicated one, no Redis Cluster).
 /// <list type="bullet">
 /// <item>Save is compare-and-set: it writes only when the stored ETag equals the expected one (<c>null</c> = the key must
 /// not exist), and a conflict writes nothing. A random ETag (not a content hash) means a cart that changed and changed back
@@ -74,6 +75,24 @@ public sealed class RedisCartStore(IConnectionMultiplexer redis, ILogger<RedisCa
         return 1
         """;
 
+    // KEYS[1] user cart, KEYS[2] guest cart. ARGV: 1 expected user etag ('' = must not exist), 2 guest etag that was merged,
+    // 3 new user etag, 4 payload, 5 user ttl seconds. 1 = user cart saved and guest cart deleted, 0 = conflict, nothing written.
+    // The only two-key script: the save and the delete must be one step, so both keys must be on one node (no Redis Cluster;
+    // on a cluster Redis refuses it with CROSSSLOT, which is a 503 and the login goes on without merging).
+    private const string MergeScript = """
+        local t = redis.call('TYPE', KEYS[1])['ok']
+        if ARGV[1] == '' then
+          if t ~= 'none' then return 0 end
+        elseif t ~= 'hash' or redis.call('HGET', KEYS[1], 'e') ~= ARGV[1] then
+          return 0
+        end
+        if redis.call('TYPE', KEYS[2])['ok'] ~= 'hash' or redis.call('HGET', KEYS[2], 'e') ~= ARGV[2] then return 0 end
+        redis.call('HSET', KEYS[1], 'e', ARGV[3], 'v', ARGV[4])
+        redis.call('EXPIRE', KEYS[1], ARGV[5])
+        redis.call('DEL', KEYS[2])
+        return 1
+        """;
+
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -90,7 +109,7 @@ public sealed class RedisCartStore(IConnectionMultiplexer redis, ILogger<RedisCa
 
     public async Task<StoredCart?> GetAsync(CartOwner owner, CancellationToken ct = default)
     {
-        RedisResult result = await RunAsync(ReadScript, owner, [MaxPayloadBytes, TtlSeconds(owner)], ct);
+        RedisResult result = await RunAsync(ReadScript, [Key(owner)], [MaxPayloadBytes, TtlSeconds(owner)], ct);
         if (result.IsNull) return null;
         var parts = (RedisResult[])result!;
         string status = (string)parts[0]!, etag = (string)parts[1]!;
@@ -109,25 +128,43 @@ public sealed class RedisCartStore(IConnectionMultiplexer redis, ILogger<RedisCa
 
         logger.LogError("The stored {Kind} cart {Owner} is unreadable ({Problem}, {Bytes} bytes); it is discarded and read as absent.",
             owner.Kind, Short(owner), problem, payload.Length);
-        await RunAsync(DiscardScript, owner, [etag], ct);
+        await RunAsync(DiscardScript, [Key(owner)], [etag], ct);
         return null;
     }
 
     public async Task<(CartSaveStatus Status, string? ETag)> SaveAsync(CartOwner owner, DomainCart cart, string? expectedETag, CancellationToken ct = default)
+    {
+        byte[] payload = Serialize(cart);
+
+        // A malformed ETag can never equal a stored one; it is answered without sending it to Redis.
+        if (expectedETag is not null && !IsETag(expectedETag)) return (CartSaveStatus.Conflict, null);
+
+        string etag = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        int saved = (int)await RunAsync(SaveScript, [Key(owner)], [expectedETag ?? "", etag, payload, TtlSeconds(owner)], ct);
+        return saved == 1 ? (CartSaveStatus.Saved, etag) : (CartSaveStatus.Conflict, null);
+    }
+
+    public async Task<(CartSaveStatus Status, string? ETag)> SaveMergedAsync(
+        CartOwner user, DomainCart merged, string? expectedUserETag, CartOwner guest, string guestETag, CancellationToken ct = default)
+    {
+        if (user.Kind != CartOwnerKind.User) throw new ArgumentException("The merged cart belongs to a user.", nameof(user));
+        if (guest.Kind != CartOwnerKind.Guest) throw new ArgumentException("Only a guest cart is merged away.", nameof(guest));
+        byte[] payload = Serialize(merged);
+        if ((expectedUserETag is not null && !IsETag(expectedUserETag)) || guestETag is null || !IsETag(guestETag)) return (CartSaveStatus.Conflict, null);
+
+        string etag = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
+        int saved = (int)await RunAsync(MergeScript, [Key(user), Key(guest)], [expectedUserETag ?? "", guestETag, etag, payload, TtlSeconds(user)], ct);
+        return saved == 1 ? (CartSaveStatus.Saved, etag) : (CartSaveStatus.Conflict, null);
+    }
+
+    private static byte[] Serialize(DomainCart cart)
     {
         ArgumentNullException.ThrowIfNull(cart);
         string? problem = Violation(cart);
         if (problem is not null) throw new ValidationException("cart", $"The cart cannot be stored ({problem}).");
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(
             new CartDocument(SchemaVersion, cart.Version, [.. cart.Items.Select(i => new CartLine(i.VariantId, i.Quantity, i.SeenUnitNetMinor))]), Json);
-        if (payload.Length > MaxPayloadBytes) throw new ValidationException("cart", "The cart is too large to store.");
-
-        // A malformed ETag can never equal a stored one; it is answered without sending it to Redis.
-        if (expectedETag is not null && !IsETag(expectedETag)) return (CartSaveStatus.Conflict, null);
-
-        string etag = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16));
-        int saved = (int)await RunAsync(SaveScript, owner, [expectedETag ?? "", etag, payload, TtlSeconds(owner)], ct);
-        return saved == 1 ? (CartSaveStatus.Saved, etag) : (CartSaveStatus.Conflict, null);
+        return payload.Length <= MaxPayloadBytes ? payload : throw new ValidationException("cart", "The cart is too large to store.");
     }
 
     public async Task DeleteAsync(CartOwner owner, CancellationToken ct = default)
@@ -182,9 +219,8 @@ public sealed class RedisCartStore(IConnectionMultiplexer redis, ILogger<RedisCa
         catch (JsonException) { return false; }
     }
 
-    private async Task<RedisResult> RunAsync(string script, CartOwner owner, RedisValue[] args, CancellationToken ct)
+    private async Task<RedisResult> RunAsync(string script, RedisKey[] keys, RedisValue[] args, CancellationToken ct)
     {
-        RedisKey[] keys = [Key(owner)];
         ct.ThrowIfCancellationRequested();
         try { return await redis.GetDatabase().ScriptEvaluateAsync(script, keys, args); }
         catch (Exception ex) when (ex is RedisException or TimeoutException) { throw Unavailable(ex); }   // RedisTimeoutException is a TimeoutException

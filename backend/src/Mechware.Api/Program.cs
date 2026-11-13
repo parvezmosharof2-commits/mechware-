@@ -142,6 +142,7 @@ builder.Services.AddNotifications(
 builder.Services.AddPdfRendering();
 // Cart (E1.2): Redis cart store + signed guest-cart token; GuestCart:TokenKey is required outside Development/Testing.
 builder.Services.AddCartStore(builder.Configuration, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+builder.Services.AddScoped<Mechware.Api.Services.GuestCartHandover>();   // E1.4: merge the guest cart at sign-in
 
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();

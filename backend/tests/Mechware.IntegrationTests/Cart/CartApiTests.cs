@@ -56,6 +56,13 @@ public sealed class ScriptedCartStore(ICartStore inner) : ICartStore
     }
 
     public Task DeleteAsync(CartOwner owner, CancellationToken ct = default) => inner.DeleteAsync(owner, ct);
+
+    public Task<(CartSaveStatus Status, string? ETag)> SaveMergedAsync(
+        CartOwner user, DomainCart merged, string? expectedUserETag, CartOwner guest, string guestETag, CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref Saves);
+        return inner.SaveMergedAsync(user, merged, expectedUserETag, guest, guestETag, ct);
+    }
 }
 
 /// <summary>

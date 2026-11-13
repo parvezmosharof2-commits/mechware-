@@ -18,7 +18,12 @@ public interface ICartCatalogReader
 
 public sealed record CartLineView(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long LineTotalMinor, int MinOrderQty, int PackSize);
 
-public sealed record CartNoticeView(string Kind, Guid VariantId, long? Was, long? Now);
+public sealed record CartNoticeView(string Kind, Guid VariantId, long? Was, long? Now)
+{
+    /// <summary>The kind in camelCase, e.g. <c>priceChanged</c>, <c>quantityCapped</c>, <c>cartFull</c>.</summary>
+    public static CartNoticeView From(CartNotice n) =>
+        new(char.ToLowerInvariant(n.Kind.ToString()[0]) + n.Kind.ToString()[1..], n.VariantId, n.Was, n.Now);
+}
 
 /// <summary>The cart as the buyer sees it: current server prices, notices for anything that changed, and the totals.</summary>
 /// <param name="ETag">Opaque version of the stored cart; null when there is no stored cart yet.</param>
@@ -137,7 +142,7 @@ public sealed class CartService(ICartStore store, ICartCatalogReader catalog) : 
             var v = views[i.VariantId];
             return new CartLineView(i.VariantId, v.Sku, v.Title, i.Quantity, v.Facts.UnitNetMinor, checked(i.Quantity * v.Facts.UnitNetMinor), v.Facts.MinOrderQty, v.Facts.PackSize);
         }).ToList();
-        var noticeViews = notices.Select(n => new CartNoticeView(char.ToLowerInvariant(n.Kind.ToString()[0]) + n.Kind.ToString()[1..], n.VariantId, n.Was, n.Now)).ToList();
+        var noticeViews = notices.Select(CartNoticeView.From).ToList();
         return new CartView(lines, noticeViews, lines.Count, lines.Sum(l => l.Quantity), lines.Sum(l => l.LineTotalMinor), CartView.CurrencyCode, etag);
     }
 }

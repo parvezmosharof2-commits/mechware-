@@ -31,7 +31,10 @@ public enum CartNoticeKind
     Unavailable = 4,
     BelowMinimumOrder = 5,
     QuantityAdjustedToPack = 6,
-    QuantityCapped = 7
+    QuantityCapped = 7,
+
+    /// <summary>A guest line was left out of a merge because the cart already held <see cref="CartEngine.MaxLines"/> lines.</summary>
+    CartFull = 8
 }
 
 public sealed record CartNotice(CartNoticeKind Kind, Guid VariantId, long? Was = null, long? Now = null);
@@ -91,8 +94,10 @@ public static class CartEngine
 
     /// <summary>
     /// Folds a guest cart into the signed-in buyer's cart on login. Quantities of the same variant add up (capped);
-    /// the buyer's own lines keep their position, new guest lines follow in the guest's order. Safe to run twice on the
-    /// same inputs: it depends only on its arguments.
+    /// the buyer's own lines keep their position, new guest lines follow in the guest's order; a guest line that would be
+    /// line 101 is left out with a <see cref="CartNoticeKind.CartFull"/> notice. Pure (depends only on its arguments) but
+    /// not idempotent: merging the result with the same guest again adds the guest's quantities again, so a guest cart
+    /// must be merged at most once (the store commits the merged cart and deletes the guest cart in one step, E1.4).
     /// </summary>
     public static CartChange Merge(Cart user, Cart guest)
     {
@@ -111,6 +116,10 @@ public static class CartEngine
             else if (items.Count < MaxLines)
             {
                 items.Add(g);
+            }
+            else
+            {
+                notices.Add(new(CartNoticeKind.CartFull, g.VariantId, g.Quantity, 0));
             }
         }
 

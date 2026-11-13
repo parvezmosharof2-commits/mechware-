@@ -90,6 +90,32 @@ public class CartEngineTests
     }
 
     [Fact]
+    public void Merge_IntoAFullCart_KeepsTheLineLimit_StillGrowsSharedLines_AndNamesEachGuestLineLeftOut()
+    {
+        var user = CartOf([.. Enumerable.Range(1, CartEngine.MaxLines).Select(n => (n, 1, 100L))]);
+        var guest = CartOf((1, 2, 100), (CartEngine.MaxLines + 1, 3, 100), (CartEngine.MaxLines + 2, 4, 100));
+
+        var merged = CartEngine.Merge(user, guest);
+
+        merged.Cart.Items.Should().HaveCount(CartEngine.MaxLines);
+        merged.Cart.Items.Single(i => i.VariantId == V(1)).Quantity.Should().Be(3);
+        merged.Notices.Should().BeEquivalentTo(new[]
+        {
+            new CartNotice(CartNoticeKind.CartFull, V(CartEngine.MaxLines + 1), 3, 0),
+            new CartNotice(CartNoticeKind.CartFull, V(CartEngine.MaxLines + 2), 4, 0),
+        });
+    }
+
+    [Fact]
+    public void Merge_IsNotIdempotent_SoTheStoreMustMergeAGuestCartAtMostOnce()
+    {
+        // Documents why E1.4 commits the merge and the guest delete atomically: merging the same guest twice doubles it.
+        var guest = CartOf((1, 2, 100));
+        var once = CartEngine.Merge(Mechware.Domain.Cart.Cart.Empty, guest).Cart;
+        CartEngine.Merge(once, guest).Cart.Items.Single().Quantity.Should().Be(4);
+    }
+
+    [Fact]
     public void Merge_WithAnEmptyGuest_ChangesNothingButTheVersion()
     {
         var user = CartOf((1, 2, 100));

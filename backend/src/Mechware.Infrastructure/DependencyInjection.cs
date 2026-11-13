@@ -159,6 +159,7 @@ public static class DependencyInjection
             (int.TryParse(configuration["Cart:NewGuestCartsPerIpPerHour"], out int perHour) ? perHour : Cart.GuestCartCreationLimiter.DefaultPerHour), sp.GetRequiredService<TimeProvider>()));
         services.TryAddScoped<Mechware.Application.Cart.ICartCatalogReader, Cart.CartCatalogReader>();
         services.TryAddScoped<Mechware.Application.Cart.ICartService, Mechware.Application.Cart.CartService>();
+        services.TryAddScoped<Mechware.Application.Cart.ICartMergeService, Mechware.Application.Cart.CartMergeService>();
         return services;
     }
 
