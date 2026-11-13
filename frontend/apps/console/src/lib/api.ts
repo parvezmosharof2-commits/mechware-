@@ -1,10 +1,11 @@
-import { MechWareApiClient, createCompaniesApi, createStaffApi } from '@mechware/api-client';
+import { MechWareApiClient, createCatalogImportApi, createCompaniesApi, createStaffApi } from '@mechware/api-client';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
 
 export const api = new MechWareApiClient({ baseUrl: API_BASE_URL });
 export const companiesApi = createCompaniesApi(api);
 export const staffApi = createStaffApi(api);
+export const catalogImportApi = createCatalogImportApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus } from '@mechware/api-client';
 

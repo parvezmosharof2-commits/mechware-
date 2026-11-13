@@ -25,6 +25,12 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     requiredPermission: 'orders.refund'
   },
   {
+    id: 'catalog-import',
+    label: 'Bulk catalogue import',
+    requiredPermission: 'catalog.manage',
+    href: '/catalog/import'
+  },
+  {
     id: 'catalog-moderate',
     label: 'Machinery Spec Moderation',
     requiredPermission: 'catalog.moderate'
