@@ -53,8 +53,8 @@ export function HeaderAccountMenu({
         className="flex items-center gap-2 rounded-md border border-border-subtle bg-bg-surface px-3 py-2 text-xs font-semibold text-fg-primary hover:bg-bg-elevated"
       >
         <span className="inline-block h-2 w-2 rounded-full bg-state-success" />
-        <span>{user.fullName}</span>
-        <span className="rounded-sm bg-bg-elevated px-1.5 py-0.5 font-mono text-xs uppercase text-brand-accent">
+        <span className="max-w-[6rem] truncate sm:max-w-none">{user.fullName}</span>
+        <span className="hidden rounded-sm bg-bg-elevated px-1.5 sm:inline py-0.5 font-mono text-xs uppercase text-brand-accent">
           {user.roles[0] ?? 'buyer'}
         </span>
       </button>

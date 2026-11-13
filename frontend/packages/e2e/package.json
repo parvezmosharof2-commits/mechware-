@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node tests/web.mjs && node tests/console.mjs",
     "test:console-import": "node tests/console-import.mjs",
-    "test:storefront": "node tests/storefront.mjs"
+    "test:storefront": "node tests/storefront.mjs",
+    "test:checkout": "node tests/checkout.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

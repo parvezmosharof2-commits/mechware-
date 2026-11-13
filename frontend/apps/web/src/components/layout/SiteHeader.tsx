@@ -59,7 +59,7 @@ export async function SiteHeader() {
           <SearchForm locale={loc} id="header-search" placeholder={t('searchPlaceholder')} label={t('searchLabelHeader')} button={t('searchButton')} />
         </div>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 md:ml-0">
           <details className="group relative">
             <summary className="flex h-10 cursor-pointer list-none items-center gap-1 rounded-md border border-surface-border bg-bg-subtle px-3 text-sm font-semibold text-text hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
               {t('categories')}
