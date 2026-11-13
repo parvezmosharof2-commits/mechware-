@@ -14,6 +14,7 @@
 | Pricing ও Promotions | আছে | ঝুঁকি যাচাই করা হয়েছে, প্রমাণসহ |
 | Quotes | এখনো বানানো হয়নি | কোড লেখার **আগেই** নিরাপত্তার নিয়ম (design rules) ঠিক করা হয়েছে |
 | Invoicing | এখনো বানানো হয়নি | কোড লেখার **আগেই** নিরাপত্তার নিয়ম (design rules) ঠিক করা হয়েছে |
+| Cart (E1) | store ও guest token আছে (E1.2); endpoint ও merge এখনো নেই | §৯: ঝুঁকি যাচাই করা হয়েছে টেস্টসহ; endpoint আর merge-এর নিয়ম আগেই |
 
 **এই ডকের বাইরে:** Companies ও Approvals (v1-এ আছে), Catalog, Inventory, Identity।
 
@@ -439,8 +440,49 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
 
 ---
 
+## ৯. E1 — কার্টের store ও guest-cart token: অপব্যবহারের ঘটনা ও টেস্ট (২০২৬-১১-১৩) [TEST / RULE]
+
+> **অবস্থা:** ইউনিট E1.2-এর অংশ, AI সহকারীর লেখা; কোনো মানুষ রিভিউ করেননি। কোড: `backend/src/Mechware.Infrastructure/Cart/RedisCartStore.cs`, `backend/src/Mechware.Infrastructure/Cart/GuestCartTokenService.cs`।
+> কার্টের endpoint (E1.3) আর login-এ merge (E1.4) এখনো নেই; তাদের নিয়ম নিচে [RULE] চিহ্নে, টেস্টের নামসহ (এগুলো এখনো লেখা হয়নি)।
+
+**Asset:** কার্ট (কোন variant, কত; দাম শুধু "ক্রেতা শেষবার যা দেখেছিলেন", checkout সবসময় সার্ভারে নতুন করে দাম ধরে, PL7)। Guest-cart cookie (কোন কার্ট কার, তার প্রমাণ)। গোপন `GuestCart:TokenKey`।
+
+**Trust boundary:** (১) Browser → কার্টের API: token শুধু cookie-তে। (২) API → Redis: Redis-এ যা আছে তা-ও বিশ্বাস করা হয় না, প্রতিবার পড়ার সময় আবার যাচাই হয়।
+
+| ID | অপব্যবহার | প্রতিকার | যে টেস্ট প্রমাণ করে | ইউনিট |
+|---|---|---|---|---|
+| CT1 | **Guest id বানিয়ে বা অনুমান করে অন্যের কার্ট পড়া বা বদলানো** | Guest id সার্ভারের বানানো random v4 GUID (১২২ random bit), অনুমান করা অসম্ভব। Token-এ HMAC-SHA256 স্বাক্ষর (key আলাদা secret থেকে HKDF দিয়ে), তাই বানানো বা বদলানো id বাতিল। Token গোপনীয়তা দেয় না, অখণ্ডতা দেয়: payload যে কেউ পড়তে পারে, তাতে গোপন কিছু নেই। `CartOwner` কাঁচা string নেয় না | `ForgedSignature_IsRefused`, `AForgedGuestId_WithTheSignatureOfAnotherToken_IsRefused`, `FlippingAnyBitOfAnyByte_InPayloadOrSignature_IsRefused`, `ChangingAnyCharacter_IsRefused_IncludingSpellingsThatDecodeToTheSameBytes`, `ATokenSignedWithAnotherKey_IsRefused`, `ASignedTokenForTheEmptyGuid_IsRefused` | E1.2 |
+| CT2 | মেয়াদ শেষের পরেও token চালানো; অসীম মেয়াদের token | মেয়াদ স্বাক্ষর করা payload-এর ভেতরে (৭ দিন, `ICartStore.GuestTtl`)। এর চেয়ে বেশি মেয়াদ দাবি করা token বাতিল। Version byte যাচাই হয় | `AnExpiredToken_IsRefused_ExactlyAtItsExpiry`, `ATokenThatClaimsToLiveLongerThanAnyIssuedToken_IsRefused`, `ASignedTokenOfAnotherVersion_IsRefused` | E1.2 |
+| CT3 | উল্টাপাল্টা input দিয়ে API ভাঙা, বা কেন বাতিল হলো তা জেনে নেওয়া (oracle) | আগে নির্দিষ্ট দৈর্ঘ্য (৭৮ অক্ষর) মেলে, তারপর decode। শুধু canonical base64url। কোনো field পড়ার আগে MAC যাচাই, constant-time-এ, সব key-এ (আগে থামে না)। যেকোনো ব্যর্থতায় একই `null`, exception কখনো নয় | `TruncatedOrExtendedTokens_AreRefused`, `HugeInput_IsRefusedWithoutDecoding`, `NonBase64UrlCharacters_OfTheRightLength_AreRefused`, `EmptyOrJunkInput_IsRefused`, `ANonCanonicalSpelling_OfAValidToken_IsRefused`, `RandomGarbage_NeverThrows_AndIsNeverAccepted`, `Validate_ComparesTheSignatureInConstantTime` | E1.2 |
+| CT4 | Key ফাঁস, দুর্বল key, বা প্রকাশিত dev key production-এ | `GuestCart:TokenKey` নিজস্ব secret, কমপক্ষে ৩২ random byte। Development/Testing ছাড়া key না থাকলে, ছোট হলে, বা প্রকাশিত dev key হলে (previous key-এর মধ্যে থাকলেও) API চালুই হয় না। Staging compose key ছাড়া চালু হয় না, আর key শুধু `api` container পায়। Rotation: নতুন key সই করে, পুরোনোটা (`PreviousTokenKeys`) ৭ দিন শুধু যাচাই করে | `OutsideDevelopment_AWeakOrMissingKey_RefusesStartup`, `Production_RefusesToStart_WithoutARealGuestCartKey`, `Production_Starts_WithARealGuestCartKey_TheControl`, `KeyRotation_OldTokensStillValidate_NewTokensUseTheNewKey` | E1.2, H3b (secret store) |
+| CT5 | **কার্ট overwrite race:** দুই tab বা দুই API instance একসাথে লেখে, একজনের বদল নীরবে হারায় | Redis-এ একটা Lua script-এ compare-and-set: ETag (১২৮ random bit) মিললে তবেই লেখা। না মিললে কিছুই লেখা হয় না (TTL-ও না), caller আবার পড়ে আবার চেষ্টা করে। `null` মানে "কার্ট থাকতেই পারবে না" (SET NX)। Random ETag বলে ABA নেই: কার্ট বদলে আগের অবস্থায় ফিরলেও পুরোনো ETag conflict দেয় | `FiftyConcurrentWriters_WithTheSameETag_ExactlyOneSaves`, `ConcurrentFirstSaves_ExactlyOneCreatesTheCart`, `Save_WithAStaleETag_Conflicts_AndWritesNothing`, `AConflict_DoesNotRefreshTheTtl`, `TheETagIsRandom_ACartThatChangesBack_StillConflictsForAnOldReader`, `Save_WithAMalformedExpectedETag_Conflicts_AndWritesNothing` | E1.2 |
+| CT6 | **Cart stuffing:** বিশাল কার্ট দিয়ে মেমরি খাওয়া বা পরে checkout ভারী করা | সীমা save-এ ও load-এ দুবারই: সর্বোচ্চ ১০০ লাইন, প্রতি লাইনে ১ থেকে ১০,০০০, দাম ঋণাত্মক নয়, একই variant দুবার নয় (`OrderLimits`)। JSON সর্বোচ্চ ৩২ KB, আর Redis থেকে আনার আগেই আকার মাপা হয় | `Save_OverTheLimits_IsRefused_AndWritesNothing`, `StoreLimits_RefuseWhatTheEngineNeverProduces`, `StoreLimits_AcceptAFullCart_AtTheLimits`, `InvalidUtf8_AnOversizedPayload_AWrongKeyType_AMissingOrMalformedETag_AllReadAsAbsent` | E1.2 |
+| CT7 | Redis-এ নষ্ট বা অচেনা ডেটা (bug, হাতে লেখা, পুরোনো format) বিশ্বাস করা | কঠোর JSON: অচেনা, duplicate বা না-থাকা field বাতিল; schema নম্বর; সীমা আবার যাচাই। পড়া না গেলে: log (কারণ ও আকার, বিষয়বস্তু নয়), এর মধ্যে কেউ না লিখে থাকলে মুছে ফেলা, আর "কার্ট নেই" উত্তর, যাতে ক্রেতা আটকে না যান। নতুন build-এর লেখা কার্ট (বড় schema নম্বর) রেখে দেওয়া হয় আর request 503 পায়: rolling deploy কার্ট মুছবে না | `AnUnreadableOrOverLimitCart_ReadsAsAbsent_IsDiscarded_AndANewCartCanBeSaved` (২৫ রকম payload), `AHandWrittenValidPayload_IsRead_SoTheUnreadableCasesFailForTheirOwnReason` (control), `ACartWrittenByANewerBuild_Is503_AndIsKept` | E1.2 |
+| CT8 | **Redis বন্ধ বা flush** | বন্ধ বা timeout: 503 `CART_UNAVAILABLE`, খালি কার্ট কখনো নয় (খালি দেখালে ক্রেতা ভাবতেন কার্ট হারিয়েছে, নতুন করে ভরতেন)। Flush: কার্ট হারায়, অর্ডার বা টাকা নয় (দাম checkout-এ সার্ভারে); পুরোনো ETag তখন conflict দেয়, caller আবার পড়ে নতুন কার্ট পায়। Compose-এ AOF চালু | `WithoutRedis_EveryOperationIs503_NeverAnEmptyCart`, `Delete_IsIdempotent_AndFreesTheCart`, `AnExpiredCart_ReadsAsAbsent_AndCanBeCreatedAgain` | E1.2, H3b |
+| CT9 | User আর guest-এর কার্ট মিশে যাওয়া; কার্ট enumeration | আলাদা key: `cart:u:{id}` আর `cart:g:{id}`। User id শুধু sign-in করা principal থেকে, guest id শুধু যাচাই করা token থেকে; অন্য কোনোভাবে `CartOwner` বানানো যায় না | `AUserAndAGuest_WithTheSameId_NeverShareACart`, `UserAndGuest_WithTheSameId_HaveDifferentStoreKeys`, `AnOwnerNotMadeByTheFactories_IsRefused` | E1.1, E1.2 |
+| CT10 | **Login-এর পরে token replay;** cookie fixation দিয়ে অন্যের account-এ জিনিস ঢোকানো | [RULE] Token stateless, তাই আলাদা করে বাতিল করা যায় না। (১) E1.4: user কার্টের CAS সফল হলে তবেই guest কার্ট মুছবে আর guest cookie মুছবে; replay করা token তখন শুধু খালি কার্ট পায়। (২) E1.3: token শুধু `__Host-` cookie থেকে (HttpOnly, Secure, SameSite=Lax), URL, body বা header থেকে কখনো নয়; তাই অন্য subdomain cookie বসাতে পারে না। (৩) Logout-এর পরে নতুন guest id। (৪) Merge-এর notice (`QuantityCapped`) ক্রেতাকে দেখানো | লিখতে হবে: `GuestToken_IsReadOnlyFromTheHostCookie`, `AfterMerge_TheGuestCartIsGone_AndReplayingItsTokenShowsAnEmptyCart`, `Logout_StartsANewGuestId` | E1.3, E1.4 |
+| CT11 | অসংখ্য guest কার্ট বানিয়ে Redis-এর মেমরি শেষ করা | [RULE] E1.3: guest id আর কার্ট শুধু প্রথম লেখায়, GET-এ নয়; নতুন guest কার্টের per-IP সীমা; TTL ৭ দিন; কার্ট ≤৩২ KB। H3b: Redis-এ `maxmemory` + alert আর `noeviction` (কার্ট নীরবে মুছবে না, ভরে গেলে 503), অথবা কার্টের জন্য আলাদা Redis | লিখতে হবে: `ReadingWithoutAToken_CreatesNoCart`, `NewGuestCarts_ArePerIpLimited` | E1.3, H3b |
+
+**TTL-এর সিদ্ধান্ত:** guest ৭ দিন, user ৩০ দিন, প্রতিটা save-এ **আর** কার্ট পাওয়া প্রতিটা read-এ নতুন করে শুরু (read script-এর ভেতরেই, আলাদা round trip নেই)। কারণ: B2B ক্রেতা approval বা বাজেটের অপেক্ষায় কার্ট বারবার খোলেন কিন্তু বদলান না; শুধু save-এ বাড়ালে খোলা অবস্থাতেই ৮ বা ৩১ দিনে কার্ট হারাত। Token-ও প্রতিটা response-এ নতুন করে দেওয়া হবে (E1.3), তাই দুটো একসাথে চলে। Conflict কিছুই লেখে না, TTL-ও বাড়ায় না।
+
+**Mutation check (২০২৬-১১-১৩):** হাতে করা; প্রতিটা বদল আলাদা করে, তারপর ফাইল হুবহু ফিরিয়ে আনা। ১৩টার মধ্যে ১১টা ধরা পড়েছে (বন্ধনীতে কয়টা টেস্ট ব্যর্থ হয়েছে):
+স্বাক্ষর যাচাই বাদ (৭), CAS-এ expected ETag উপেক্ষা (৪), "থাকতে পারবে না" উপেক্ষা (৩), মেয়াদ যাচাই বাদ (১), load-এ সীমা আবার যাচাই বাদ (৮),
+read-এ TTL বাড়ানো বাদ (১), Redis-এর ত্রুটি 503-এ না বদলানো (১), `FixedTimeEquals`-এর বদলে `SequenceEqual` (১, IL পরীক্ষা), version যাচাই বাদ (৩),
+অপাঠ্য কার্ট না মোছা (২৬), সর্বোচ্চ মেয়াদ যাচাই বাদ (১)। দুটো বেঁচে গেছে, কারণ সেগুলো দ্বিতীয় স্তর: canonical re-encode (এখনকার .NET-এর Base64Url
+নিজেই non-canonical লেখা বাতিল করে) আর নির্দিষ্ট দৈর্ঘ্যের check (লম্বা input decode-এর সময়ই আটকায়; check-টা শুধু অকারণ কাজ বাঁচায়)। দুটো একসাথে বাদ দিলে
+ধরা পড়ে (`TruncatedOrExtendedTokens_AreRefused`, `HugeInput_IsRefusedWithoutDecoding`)।
+
+**যে ঝুঁকি থেকে যায়:**
+- Token চুরি (XSS, শেয়ার করা কম্পিউটার) মানে ৭ দিন পর্যন্ত ওই guest কার্ট দেখা বা বদলানো। Guest কার্টে ব্যক্তিগত তথ্য নেই আর দাম checkout-এ নতুন করে ধরা হয়, তাই ক্ষতি কম। প্রতিকার: HttpOnly cookie, CSP (v1 M5)।
+- Redis-এ কার্ট এনক্রিপ্ট করা নয় (কী কেনা হচ্ছে, user id)। Redis-এ ঢুকতে পারা মানে সব ডেটা দেখা; staging-এ Redis শুধু ভেতরের network-এ। Production-এ AUTH/TLS: H3b।
+- পড়া যায় না এমন কার্ট মুছে ফেলা হয়। সেটা ডেটা হারানো, কিন্তু সেই কার্ট এমনিতেই ব্যবহার করা যেত না; log-এ কারণ আর আকার থাকে।
+- `DeleteAsync` শর্তহীন: login-এর merge ঠিক যে মুহূর্তে হয়, তখন অন্য tab-এ guest যা যোগ করছেন তা হারাতে পারে (বিরল, টাকার ক্ষতি নেই)। দরকার হলে E1.4 ETag-সহ delete যোগ করবে।
+
+---
+
 ## সম্পর্কিত ডক
 - D2 নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md) (§৮ এর ভিত্তি)
+- কার্ট: [`docs/modules/E1.md`](../modules/E1.md) (§৯-এর ইউনিট ও handoff)
 - v1: [`THREAT_MODEL_COMPANIES_APPROVALS.md`](THREAT_MODEL_COMPANIES_APPROVALS.md) (H1 approval, H3 audit — এখানে উল্লেখ আছে)
 - ASVS ম্যাট্রিক্স: [`ASVS_MATRIX.md`](ASVS_MATRIX.md)
 - আগের রিভিউ: `docs/reviews/R3_ORDERS_AND_PAYMENTS.md`

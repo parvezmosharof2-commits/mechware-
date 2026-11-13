@@ -140,6 +140,8 @@ builder.Services.AddNotifications(
     storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"]);
 
 builder.Services.AddPdfRendering();
+// Cart (E1.2): Redis cart store + signed guest-cart token; GuestCart:TokenKey is required outside Development/Testing.
+builder.Services.AddCartStore(builder.Configuration, requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 
 builder.Services.AddSingleton<IPasswordHasherService, PasswordHasherService>();
 builder.Services.AddSingleton<ITotpService, TotpService>();

@@ -17,6 +17,9 @@ public class DbBackedFactory : WebApplicationFactory<Program>
     private readonly string? _environment;
     private readonly IReadOnlyDictionary<string, string> _settings;
 
+    public static readonly string GuestCartTokenKey = Convert.ToBase64String(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("mechware-integration-tests-guest-cart-key")));
+
     public string ConnectionString { get; }
 
     public DbBackedFactory(string? environment = null, IReadOnlyDictionary<string, string>? settings = null)
@@ -54,6 +57,8 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         builder.UseSetting("RateLimiting:GlobalPermitPerMinute", "1000000");
         builder.UseSetting("RateLimiting:UserPermitPerMinute", "1000000");
         builder.UseSetting("RateLimiting:IpCeilingPerMinute", "1000000");
+        // Production-like hosts refuse to start without a real guest-cart key (E1.2); a test's own settings override it.
+        builder.UseSetting("GuestCart:TokenKey", GuestCartTokenKey);
         foreach (var (key, value) in _settings)
         {
             builder.UseSetting(key, value);

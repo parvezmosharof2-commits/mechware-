@@ -143,6 +143,21 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>
+    /// The cart store (Redis) and the signed guest-cart token (E1.2). Requires <c>IConnectionMultiplexer</c>. Outside
+    /// Development and Testing <c>GuestCart:TokenKey</c> must be a real secret (at least 32 random bytes, base64) and not the
+    /// published development key, or startup is refused here.
+    /// </summary>
+    public static IServiceCollection AddCartStore(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration configuration, bool requireRealSetup)
+    {
+        var (tokenKey, previousTokenKeys) = Cart.GuestCartTokenOptions.From(configuration).ResolveKeys(requireRealSetup);
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<Mechware.Application.Cart.IGuestCartTokenService>(sp =>
+            new Cart.GuestCartTokenService(tokenKey, previousTokenKeys, sp.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<Mechware.Application.Cart.ICartStore, Cart.RedisCartStore>();
+        return services;
+    }
+
     /// <summary>The search indexer and its worker. Requires <see cref="AddSearch"/>, the DbContext and Redis. Host it once (Worker).</summary>
     public static IServiceCollection AddSearchIndexing(this IServiceCollection services)
     {
