@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Mechware.Application.Cart;
 using Mechware.Application.Identity;
 using Mechware.Application.Orders;
 using Mechware.Domain.Common.Exceptions;
@@ -20,7 +21,7 @@ public sealed record CancelOrderBody(string? Reason);
 [ApiController]
 [Authorize]
 [Route("api/v1/orders")]
-public sealed class OrdersController(IOrderService orders, ICurrentUserService currentUser) : ControllerBase
+public sealed class OrdersController(IOrderService orders, ICurrentUserService currentUser, ICartService cart, ILogger<OrdersController> logger) : ControllerBase
 {
     private Guid Actor => currentUser.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
 
@@ -35,11 +36,21 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
 
         var placed = await orders.PlaceAsync(new PlaceOrderRequest(Actor, idempotencyKey, body.Lines ?? [], body.ShippingAddressId, body.CompanyId, body.PayOnCredit, body.CouponCodes, body.ShipToSiteId, body.CostCentreId, body.PurchaseOrderNumber), ct);
 
+        // The order is committed; the ordered lines now leave the buyer's server cart. A cart store that is down must never undo
+        // or fail an order that exists, so this only logs. A replay cleans too: the first response may have been lost before it did.
+        await RemoveOrderedLinesFromCartAsync(body.Lines, ct);
+
         // A replay is not a new resource: 200 with the original order, 201 only for the request that created it.
         return placed.Replayed
             ? Ok(new { data = placed })
             : Created($"/api/v1/orders/{placed.OrderId}", new { data = placed });
     }
+
+    /// <summary>The signed-in buyer's own orders, newest first. <c>pageSize</c> is at most 50.</summary>
+    [HttpGet]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default) =>
+        Ok(new { data = await orders.ListAsync(Actor, page, pageSize, ct) });
 
     /// <summary>
     /// What delivery would cost for these lines and destination, per seller, without placing an order or holding stock (E8.2).
@@ -59,4 +70,19 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
     [HttpGet("{orderId:guid}")]
     public async Task<IActionResult> Get(Guid orderId, CancellationToken ct) =>
         Ok(new { data = await orders.GetAsync(Actor, orderId, ct) });
+
+    /// <summary>Removes exactly the ordered variants from the caller's cart; other lines stay. Best effort: any failure is logged, never raised.</summary>
+    private async Task RemoveOrderedLinesFromCartAsync(IReadOnlyList<PlaceOrderLine>? lines, CancellationToken ct)
+    {
+        try
+        {
+            var owner = CartOwner.ForUser(Actor);
+            foreach (var variantId in (lines ?? []).Select(l => l.VariantId).Distinct())
+                await cart.ApplyAsync(owner, new CartOperation.Remove(variantId), ifMatch: null, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "The order was placed but the ordered lines could not be removed from the buyer's cart.");
+        }
+    }
 }

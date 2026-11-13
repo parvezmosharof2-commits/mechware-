@@ -488,9 +488,26 @@ public sealed partial class OrderService(
         if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
         var (_, districtId) = await ResolveShipToAsync(asOrder, ct);
         var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (_, _, _, shipping) = await PriceAsync(asOrder, lines, mode, clock.GetUtcNow().UtcDateTime, districtId, ct);
-        return new ShippingQuoteDto(shipping.PerSeller.Select(s => new SellerShippingDto(s.SellerId, s.ShippingMinor)).ToList(),
-            shipping.TotalMinor, shipping.FreeShippingApplied);
+        var (priced, _, _, shipping) = await PriceAsync(asOrder, lines, mode, clock.GetUtcNow().UtcDateTime, districtId, ct);
+        var sellerIds = shipping.PerSeller.Select(s => s.SellerId).ToList();
+        var names = await db.Sellers.AsNoTracking().Where(s => sellerIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StoreName, ct);
+        return new ShippingQuoteDto(shipping.PerSeller.Select(s => new SellerShippingDto(s.SellerId, s.ShippingMinor, names.GetValueOrDefault(s.SellerId, string.Empty))).ToList(),
+            shipping.TotalMinor, shipping.FreeShippingApplied, priced.TaxMinor, priced.GrandTotalMinor);
+    }
+
+    public async Task<Mechware.Application.Catalog.PagedResult<OrderSummaryDto>> ListAsync(Guid userId, int page, int pageSize, CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, IOrderService.MaxListPageSize);
+        // Same rule as GetAsync: the caller's own orders, nothing else.
+        var own = db.Orders.AsNoTracking().Where(o => o.UserId == userId);
+        var total = await own.CountAsync(ct);
+        var rows = await own.OrderByDescending(o => o.PlacedAtUtc).ThenByDescending(o => o.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(o => new { o.Id, o.OrderNumber, o.Status, o.GrandTotalMinor, o.PlacedAtUtc, ItemCount = o.SubOrders.SelectMany(s => s.Items).Count(), o.CompanyId, o.PurchaseOrderNumber })
+            .ToListAsync(ct);
+        return new(rows.Select(r => new OrderSummaryDto(r.Id, r.OrderNumber, ToWire(r.Status), r.GrandTotalMinor, r.PlacedAtUtc, r.ItemCount, r.CompanyId, r.PurchaseOrderNumber)).ToList(),
+            page, pageSize, total);
     }
 
     /// <summary>The snake_case name the API and the database use for a state.</summary>

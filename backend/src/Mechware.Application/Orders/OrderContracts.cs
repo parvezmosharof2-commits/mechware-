@@ -51,9 +51,19 @@ public sealed record ShippingQuoteRequest(
     Guid UserId, IReadOnlyList<PlaceOrderLine> Lines, Guid? ShippingAddressId = null, Guid? CompanyId = null,
     IReadOnlyList<string>? CouponCodes = null, Guid? ShipToSiteId = null);
 
-public sealed record SellerShippingDto(Guid SellerId, long ShippingMinor);
+/// <summary>One seller's delivery fee; <paramref name="StoreName"/> is the storefront name the buyer sees, for the review step.</summary>
+public sealed record SellerShippingDto(Guid SellerId, long ShippingMinor, string StoreName);
 
-public sealed record ShippingQuoteDto(IReadOnlyList<SellerShippingDto> PerSeller, long TotalMinor, bool FreeShippingApplied);
+/// <summary>
+/// <paramref name="TaxMinor"/> and <paramref name="GrandTotalMinor"/> are what placing the same lines would total (the same
+/// pricing path, VAT as placement treats it, shipping a final amount with no VAT split), so the review step shows a real total.
+/// </summary>
+public sealed record ShippingQuoteDto(
+    IReadOnlyList<SellerShippingDto> PerSeller, long TotalMinor, bool FreeShippingApplied, long TaxMinor, long GrandTotalMinor);
+
+/// <summary>One row of the buyer's order list. No cost, margin or seller-payout fields.</summary>
+public sealed record OrderSummaryDto(
+    Guid Id, string OrderNumber, string Status, long GrandTotalMinor, DateTime CreatedAt, int ItemCount, Guid? CompanyId, string? PurchaseOrderNumber);
 
 public interface IOrderService
 {
@@ -74,6 +84,14 @@ public interface IOrderService
 
     /// <summary>The buyer's own order. Someone else's order answers "not found", never "forbidden", so ids reveal nothing.</summary>
     Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The orders this user placed, newest first (same visibility rule as <see cref="GetAsync"/>: own orders only, whether or not
+    /// they were placed for a company). <paramref name="pageSize"/> is capped at <see cref="MaxListPageSize"/>.
+    /// </summary>
+    Task<Mechware.Application.Catalog.PagedResult<OrderSummaryDto>> ListAsync(Guid userId, int page, int pageSize, CancellationToken ct = default);
+
+    public const int MaxListPageSize = 50;
 
     /// <summary>
     /// Re-prices the lines from the database, reserves stock, and writes the order, its sub-orders, its first event and

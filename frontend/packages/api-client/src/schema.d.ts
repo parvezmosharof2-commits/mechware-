@@ -798,6 +798,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Query: `status` (pending, approved by default, rejected, suspended), `q` (part of the store name), `page`, `pageSize` (at most 50). */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    q?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/awaiting-two-factor": {
         parameters: {
             query?: never;
@@ -2491,7 +2530,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The signed-in buyer's own orders, newest first. `pageSize` is at most 50. */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         put?: never;
         /** Places an order. The `Idempotency-Key` header is required: retrying a request with the same key and body returns the first order. */
         post: {

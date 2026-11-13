@@ -15,6 +15,28 @@ namespace Mechware.Infrastructure.Catalog;
 /// </summary>
 public sealed class CatalogAdminService(MechwareDbContext db) : ICatalogAdminService
 {
+    public async Task<PagedResult<SellerPickDto>> ListSellersAsync(string? status, string? query, int page, int pageSize, CancellationToken ct = default)
+    {
+        if (!Enum.TryParse<Mechware.Domain.Sellers.SellerStatus>(string.IsNullOrWhiteSpace(status) ? "approved" : status.Trim(), ignoreCase: true, out var wanted)
+            || !Enum.IsDefined(wanted))
+            throw new ValidationException("status", "Status must be pending, approved, rejected or suspended.");
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, ICatalogAdminService.MaxSellerPageSize);
+
+        var sellers = db.Sellers.AsNoTracking().Where(s => s.Status == wanted);
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            // Literal contains, case-insensitive: LIKE wildcards typed by the caller are escaped.
+            var pattern = "%" + query.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            sellers = sellers.Where(s => EF.Functions.ILike(s.StoreName, pattern, "\\"));
+        }
+
+        var total = await sellers.CountAsync(ct);
+        var rows = await sellers.OrderBy(s => s.StoreName).ThenBy(s => s.Id).Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(s => new { s.Id, s.StoreName, s.Status }).ToListAsync(ct);
+        return new(rows.Select(r => new SellerPickDto(r.Id, r.StoreName, r.Status.ToString().ToLowerInvariant())).ToList(), page, pageSize, total);
+    }
+
     public async Task<ProductPimDto> GetPimAsync(Guid productId, CancellationToken ct = default) =>
         await ToDtoAsync(await LoadAsync(productId, ct), ct);
 

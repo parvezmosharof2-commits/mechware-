@@ -36,8 +36,19 @@ public sealed record SetOrderUnitsRequest(int MinOrderQty, int PackSize);
 /// <summary>The manufacturer part number as printed; null or blank clears it.</summary>
 public sealed record SetPartNumberRequest(string? ManufacturerPartNumber);
 
+/// <summary>A seller as the staff picker shows it. Deliberately no owner, e-mail, phone, address or payout data.</summary>
+public sealed record SellerPickDto(Guid Id, string StoreName, string Status);
+
 public interface ICatalogAdminService
 {
+    public const int MaxSellerPageSize = 50;
+
+    /// <summary>
+    /// Sellers by status (default <c>approved</c>; one of pending, approved, rejected, suspended), optionally whose store name
+    /// contains <paramref name="query"/>, ordered by store name. Used by the console import picker.
+    /// </summary>
+    Task<PagedResult<SellerPickDto>> ListSellersAsync(string? status, string? query, int page, int pageSize, CancellationToken ct = default);
+
     Task<ProductPimDto> GetPimAsync(Guid productId, CancellationToken ct = default);
     Task<ProductPimDto> SetSupplyAsync(Guid productId, SetSupplyRequest request, CancellationToken ct = default);
     Task<ProductPimDto> SetAlternativesAsync(Guid productId, SetAlternativesRequest request, CancellationToken ct = default);

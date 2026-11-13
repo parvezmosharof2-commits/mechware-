@@ -720,6 +720,53 @@
         }
       }
     },
+    "/api/v1/admin/sellers": {
+      "get": {
+        "tags": [
+          "AdminSellers"
+        ],
+        "summary": "Query: `status` (pending, approved by default, rejected, suspended), `q` (part of the store name), `page`, `pageSize` (at most 50).",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/awaiting-two-factor": {
       "get": {
         "tags": [
@@ -2201,6 +2248,37 @@
           "201": {
             "description": "Created"
           },
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "The signed-in buyer's own orders, newest first. `pageSize` is at most 50.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
           "200": {
             "description": "OK"
           }
@@ -4148,6 +4226,9 @@
     },
     {
       "name": "AdminRefunds"
+    },
+    {
+      "name": "AdminSellers"
     },
     {
       "name": "AdminUserSecurity"
