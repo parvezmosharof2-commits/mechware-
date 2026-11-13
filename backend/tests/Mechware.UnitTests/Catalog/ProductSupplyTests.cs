@@ -169,7 +169,7 @@ public class ProductSupplyTests
     {
         var v = Published("cable").Variants.Single();
         v.SetOrderUnits(20, 10);
-        var facts = v.ToCartFacts(sellable: true, unitNetMinor: 100_00, available: 1000);
+        var facts = Mechware.Domain.Cart.VariantFacts.From(v, sellable: true, unitNetMinor: 100_00, available: 1000);
 
         var cart = new Mechware.Domain.Cart.Cart([]);
         var below = () => CartEngine.Set(cart, facts, 10);

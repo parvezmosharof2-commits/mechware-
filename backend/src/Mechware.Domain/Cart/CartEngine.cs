@@ -1,3 +1,5 @@
+using Mechware.Domain.Catalog;
+using Mechware.Domain.Common;
 using Mechware.Domain.Common.Exceptions;
 
 namespace Mechware.Domain.Cart;
@@ -14,7 +16,12 @@ public sealed record Cart(IReadOnlyList<CartItem> Items, int Version = 0)
 /// <param name="Sellable">Active, published and visible to this buyer.</param>
 /// <param name="Available">Units that can still be reserved (on hand minus reserved).</param>
 public sealed record VariantFacts(
-    Guid VariantId, bool Sellable, long UnitNetMinor, int Available, int MinOrderQty = 1, int PackSize = 1);
+    Guid VariantId, bool Sellable, long UnitNetMinor, int Available, int MinOrderQty = 1, int PackSize = 1)
+{
+    /// <summary>Snapshot of a catalog SKU with its order units. The cart knows the catalog; the catalog does not know the cart.</summary>
+    public static VariantFacts From(ProductVariant variant, bool sellable, long unitNetMinor, int available) =>
+        new(variant.Id, sellable, unitNetMinor, available, variant.MinOrderQty, variant.PackSize);
+}
 
 public enum CartNoticeKind
 {
@@ -37,8 +44,8 @@ public sealed record CartChange(Cart Cart, IReadOnlyList<CartNotice> Notices);
 /// </summary>
 public static class CartEngine
 {
-    public const int MaxLines = 100;
-    public const int MaxQuantityPerLine = 10_000;
+    public const int MaxLines = OrderLimits.MaxCartLines;
+    public const int MaxQuantityPerLine = OrderLimits.MaxQuantityPerLine;
 
     public static Cart Add(Cart cart, VariantFacts facts, int quantity)
     {

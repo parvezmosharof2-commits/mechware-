@@ -48,6 +48,24 @@ public class ModuleBoundaryTests
         stale.Should().BeEmpty("these allow-listed violations are gone; remove them from ExistingViolations (ratchet)");
     }
 
+    /// <summary>
+    /// Domain ratchet (E1.1): the catalog domain must not know about the cart. The cart may use catalog facts; the
+    /// shared limits live in <c>Mechware.Domain.Common.OrderLimits</c>. No allow-list: this pair is empty and must stay so.
+    /// </summary>
+    [Fact]
+    public void DomainCatalog_DoesNotReferenceDomainCart()
+    {
+        using var asm = AssemblyDefinition.ReadAssembly(typeof(Mechware.Domain.Catalog.ProductVariant).Assembly.Location);
+        var offenders = asm.MainModule.GetTypes()
+            .Where(t => t.Namespace == "Mechware.Domain.Catalog" || t.Namespace.StartsWith("Mechware.Domain.Catalog.", StringComparison.Ordinal))
+            .SelectMany(t => ReferencedTypes(t).Where(r => r.Type.Namespace == "Mechware.Domain.Cart"
+                    || r.Type.Namespace.StartsWith("Mechware.Domain.Cart.", StringComparison.Ordinal))
+                .Select(r => $"{r.Via} -> {r.Type.FullName}"))
+            .Distinct().OrderBy(x => x).ToList();
+
+        offenders.Should().BeEmpty("the catalog domain must not depend on the cart domain; share constants via Domain.Common");
+    }
+
     private static List<(string From, string To, string Via, string Target)> FindCrossModuleUses()
     {
         var path = typeof(MechwareDbContext).Assembly.Location;

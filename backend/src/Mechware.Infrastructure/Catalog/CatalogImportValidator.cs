@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using Mechware.Application.Catalog;
-using Mechware.Domain.Cart;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Common;
 using Mechware.Domain.Common.Exceptions;
@@ -255,9 +254,9 @@ public sealed class CatalogImportValidator(ICatalogImportLookup lookup, CatalogI
     {
         int moq = 1, pack = 1;
         bool ok = true;
-        if (moqText.Length > 0 && !(int.TryParse(moqText, NumberStyles.None, CultureInfo.InvariantCulture, out moq) && moq >= 1 && moq <= CartEngine.MaxQuantityPerLine))
+        if (moqText.Length > 0 && !(int.TryParse(moqText, NumberStyles.None, CultureInfo.InvariantCulture, out moq) && moq >= 1 && moq <= OrderLimits.MaxQuantityPerLine))
         {
-            run.Add(row, "min_order_qty", "INVALID_MOQ", $"The minimum order quantity is a whole number from 1 to {CartEngine.MaxQuantityPerLine}.");
+            run.Add(row, "min_order_qty", "INVALID_MOQ", $"The minimum order quantity is a whole number from 1 to {OrderLimits.MaxQuantityPerLine}.");
             ok = false;
         }
 

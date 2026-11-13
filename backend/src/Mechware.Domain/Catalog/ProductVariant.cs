@@ -1,3 +1,4 @@
+using Mechware.Domain.Common;
 using Mechware.Domain.Common.Enums;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Common.Primitives;
@@ -120,8 +121,8 @@ public sealed class ProductVariant : Entity<Guid>
     {
         // No upper bound of its own: a pack larger than one line could ever hold leaves no valid minimum (checked below).
         if (packSize < 1) throw new ValidationException("packSize", "Pack size must be at least 1.");
-        if (minOrderQty < 1 || minOrderQty > Cart.CartEngine.MaxQuantityPerLine)
-            throw new ValidationException("minOrderQty", $"Minimum order quantity must be between 1 and {Cart.CartEngine.MaxQuantityPerLine}.");
+        if (minOrderQty < 1 || minOrderQty > OrderLimits.MaxQuantityPerLine)
+            throw new ValidationException("minOrderQty", $"Minimum order quantity must be between 1 and {OrderLimits.MaxQuantityPerLine}.");
         if (minOrderQty % packSize != 0)
             throw new ValidationException("minOrderQty", "The minimum order quantity must be a whole number of packs.");
         MinOrderQty = minOrderQty;
@@ -169,10 +170,6 @@ public sealed class ProductVariant : Entity<Guid>
     private static bool IsInvisible(char c) => char.GetUnicodeCategory(c) is System.Globalization.UnicodeCategory.Control
         or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
         or System.Globalization.UnicodeCategory.ParagraphSeparator;
-
-    /// <summary>What the cart needs to know about this SKU, with its order units.</summary>
-    public Cart.VariantFacts ToCartFacts(bool sellable, long unitNetMinor, int available) =>
-        new(Id, sellable, unitNetMinor, available, MinOrderQty, PackSize);
 
     public void Deactivate() => Status = VariantStatus.Inactive;
     public void Activate() => Status = VariantStatus.Active;
