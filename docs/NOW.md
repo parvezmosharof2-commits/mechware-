@@ -16,7 +16,8 @@ integration run on 2026-11-13 (message not captured), then passed 3× alone and 
 the message (oversell = bug; `busy > 0` = lock timeout under load).
 **Watch:** intermittent React hydration error #418 on /search after a language switch (seen twice in E2E, not reproduced in 40+ loads); bn home Lighthouse varies 74-95 on this PC (re-measure on a quiet CPU after the preview API is updated).
 **Next:** E3.3-E3.7 checkout pages · E8.3 legal deadline · E8.4 console zones editor · D5.2 line-validate API (price part waits for D2) · small unit: admin sellers list endpoint ·
-then MODULES.md order (D2.2+ waits for owner decisions MODULES.md §5 #7; C3 waits for S3-vs-volume).
+D2 price lists D2.2+ (owner decisions made 2026-11-13, ADR-0008 §12: lowest valid price, VAT-inclusive catalogue price, 10 % floor, no group lists) ·
+then MODULES.md order (C3 waits for S3-vs-volume).
 
 **How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent
 (memory `feedback-subagent-delegation`). Tools: `python scripts/test_module.py <ID>`, `python scripts/check_cards.py`,

@@ -1,8 +1,9 @@
 # ADR 0008: Price Lists, Contract Prices and Price Resolution
 
 ## Status
-Proposed (design unit D2.1, no production code yet). Buildable as written. Four points wait for the owner (§12);
-until they are answered, the option marked **recommended** is the one that gets built.
+Accepted 2026-11-13. The owner delegated the §12 decisions to the main session ("tomar jeta valo money hoi koro"); the
+choices are recorded in §12 under **Decided**. The margin-floor numbers are a conservative default and are data, not
+code: the owner can change them at any time (D2.9) without a release.
 
 ## Date
 2026-11-13
@@ -281,6 +282,24 @@ list expires or is withdrawn meanwhile. An idempotent replay returns the origina
   the live resolver, and §9 catches a difference.
 
 ### 12. Owner decisions
+**Decided 2026-11-13 (owner delegated to the main session; reversible as noted):**
+1. **Rule A, lowest valid price wins.** A signed-in company never pays more than a guest; nobody re-checks contracts when
+   public prices drop. Switching to B later is one function plus its property test.
+2. **(a): the catalogue price is the VAT-inclusive public price for everyone.** A company sees price ÷ (1 + VAT) plus the
+   VAT line and pays the same total as a guest (to within rounding of the unit price to whole poisha). D2.5 changes the two
+   `OrderServiceTests` expectations (company total 105,000 → 100,000 for a 1,000.00 item).
+3. **Margin floor default: 10 % minimum markup on cost, global; no per-brand/category rows at launch; below-cost refused
+   (`Pricing:AllowBelowCost = false`).** D2.4 seeds the single global row (reference data, so fail-closed "no global floor"
+   never bites in a fresh database); the owner changes values or adds brand/category rows through D2.9. Permission
+   defaults: `pricelists.edit` = catalogue/sales staff; `pricelists.approve` = finance or admin, never the author;
+   `pricelists.approve_below_floor` and `pricing.manage_floors` = admin only. Role names are settled in G5.
+4. **No group lists at launch (D2.14 stays after launch).** Contracts (`Company` lists) are the must-have; public quantity
+   breaks stay in the model and are used only when real break prices exist.
+5. **Defaults confirmed:** longest validity 366 days; a new list starts 60 seconds after approval at the earliest.
+6. **Third-party sellers:** contract lists cover MECHWARE's own store products only until the marketplace launches (H5);
+   the discount cost question is revisited then.
+
+Original options (kept for the record):
 1. **Resolution rule** (§5.1): A lowest valid wins (**recommended**, the brief) or B precedence.
 2. **What the catalogue price means for a company** (§2 finding). (a) **recommended:** the catalogue price is the
    VAT-inclusive public price; a company sees price ÷ (1 + VAT) plus the VAT line and pays the same total as a
