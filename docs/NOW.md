@@ -1,31 +1,22 @@
 # NOW (keep ≤ 30 lines; update at the end of every unit)
 
-**Done (2026-11-13):** E8.1 shipping zones + calculator · E8.2 shipping priced inside orders (server-side; no zones ⇒ Production refuses orders with SHIPPING_NOT_AVAILABLE until the owner enters tariffs; `POST /api/v1/orders/shipping-quote`; PO number on company orders) ·
-E3.1/E3.2 cart api-client + `/cart` page + header badge + PDP Add to cart · E1 cart ✅ (E1.1 boundary + store contract · E1.2 Redis CAS store + signed guest token · E1.3 `/api/v1/cart` endpoints, server prices only ·
-E1.4 atomic merge on login/refresh; carts need ONE Redis node, no Cluster; web cart UI comes with E3) · D5.1 quick-order parser · C10.3 console import screen
-(seller is a temporary GUID field: needs an admin sellers list endpoint) · C10.2 import commit (`POST .../import/commit`, all-or-nothing, idempotent, advisory-locked; needs `sellerId`) · C10.1 bulk-import dry run (`POST /api/v1/admin/catalog/import/dry-run`, docs/catalog/IMPORT_FORMAT.md; `kA` unit added) ·
-H3a part 1 Dockerfiles ×4 + staging compose · H3a.2 deploy readiness (one DB setting, optional S3, persisted Data Protection keys,
-`Mechware.Worker migrate`) · pnpm pinned to 10.34.9 (`packageManager`; keeps the lockfile's security overrides) ·
-A8.1/A8.2 PDF engine EN/BN (ADR-0009) · H1.4 metadata in `<head>`, Lighthouse mobile 92-95 · D2.1 price-list design (ADR-0008) ·
-F3a.1/.2a/.3 email + OTP SMS limits · company page `?tab=`. Earlier: C6 ✅, C7 ✅ (C7.6 deferred), H1 ✅, A6 ✅.
-Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub).
+**Stopped cleanly 2026-11-14 (owner shut the laptop). Everything is committed and pushed (last commit `45c42ae`, D2.4); working tree clean; no agent running; auto-resume cron removed.**
+**To resume:** start Claude Code in the repo, read this file, start Docker Desktop, then run **D2.5** (see Next). If the 5-hour usage limit message appears, wait for the reset.
 
-TOTP secrets + recovery-code hashes encrypted at rest (A1 HANDOFF; deploy: `migrate` converts old rows).
-**Watch:** `InventoryConcurrencyTests.FiftyParallelBuyers_TenUnits_ExactlyTenSucceed_PostgresRowLocksOnly` failed once in a full
-integration run on 2026-11-13 (message not captured), then passed 3× alone and in a full 552/552 run — if it fails again, capture
-the message (oversell = bug; `busy > 0` = lock timeout under load).
-**Watch:** intermittent React hydration error #418 on /search after a language switch (seen twice in E2E, not reproduced in 40+ loads); bn home Lighthouse varies 74-95 on this PC (re-measure on a quiet CPU after the preview API is updated).
-**Next:** E3.3-E3.7 checkout pages · E8.3 legal deadline · E8.4 console zones editor · D5.2 line-validate API (price part waits for D2) · small unit: admin sellers list endpoint ·
-D2 price lists D2.2+ (owner decisions made 2026-11-13, ADR-0008 §12: lowest valid price, VAT-inclusive catalogue price, 10 % floor, no group lists) ·
-then MODULES.md order (C3 waits for S3-vs-volume).
+**Done:** C6 search ✅ · C7 storefront ✅ · H1 home/legal/help ✅ · A6 tooling ✅ · A8 PDF engine EN/BN ✅ · E1 cart ✅ (Redis CAS store, signed guest token, endpoints, atomic merge on login; needs ONE Redis node) ·
+E3.1–E3.4 cart page + checkout delivery/review (placeholder confirmation) · E3b backend follow-ups (quote totals, `GET /orders`, cart cleared on order, `GET /admin/sellers`) ·
+E8.1/E8.2 shipping zones + calculator + priced inside orders (no zones ⇒ Production refuses orders until the owner enters tariffs; `POST /orders/shipping-quote`; PO number) ·
+C10.1–C10.3b bulk catalogue import (dry run, commit, console screen + seller picker; images C10.4 wait for C3) · D5.1 quick-order parser ·
+D2.1–D2.4 price lists: ADR-0008 + decisions (lowest valid price, VAT-inclusive catalogue price for everyone, 10 % global margin floor, no group lists), pure resolver, PriceList aggregate + four-eyes, tables + DB triggers + permissions ·
+H3a Dockerfiles ×4 + staging compose + H3a.2 deploy readiness (`Mechware.Worker migrate`) · TOTP secrets encrypted at rest · F3a.1/.2a/.3 email + OTP limits · D2/E1/E8 threat-model sections.
+Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub). Tests at last full run: 1137 unit + 688 integration, Skipped 0.
 
-**How work runs:** main session Opus plans and verifies; routine code → Sonnet sub-agent; money/security → Opus sub-agent
-(memory `feedback-subagent-delegation`). Tools: `python scripts/test_module.py <ID>`, `python scripts/check_cards.py`,
-`python scripts/api_snapshot.py [--out <dir>]` after API changes (`--out` when a running API locks bin/Release).
+**Next (in order):** **D2.5** resolver into order pricing + snapshot columns + company VAT fix (company totals become equal to guest totals: update `OrderServiceTests` expectations; Opus xhigh; brief is in the session history: IPriceResolver adapter loading ALL Approved+Withdrawn versions, snapshot on `order_items`, PRICE_CHANGED guard, coupons never on negotiated lines, 1 migration) ·
+D2.7–D2.13 staff API + console screens + storefront price display · D5.2 line-validate API · E3.5 payment choice (needs gateway) · E3.6/E3.7 confirmation + guest checkout · E8.3/E8.4 · E4/E5 gateways · E6 invoicing · F1/F2 · H2 hardening.
+**Watch:** concurrency tests (`InventoryConcurrencyTests…`) failed twice only while other servers loaded the machine (pass alone); intermittent React hydration error #418 on /search after a language switch (not reproduced); /cart Lighthouse mobile ~81 (LCP 3.3 s, client-fetched content; fix in H4); bn home Lighthouse varies 74-95 on this PC.
 
-**Before starting:** Docker Desktop running → `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch mailpit`.
-Seeded catalogue lives in DB `mechware` (the default for API and Worker; one setting `ConnectionStrings__DefaultConnection`).
-Deploy: `docker run --env-file … mechware-worker migrate` before starting a new api/worker (docs/modules/H3.md).
+**How work runs:** main session plans + verifies; routine code → Sonnet sub-agent; money/security → Opus (high/xhigh); design → Fable. Verify every agent report myself (unit + integration with Skipped 0, `dotnet format` EXIT CODE, `check_cards.py`, typecheck/lint) before commit; never push to main.
+Tools: `python scripts/test_module.py <ID>`, `python scripts/check_cards.py`, `python scripts/api_snapshot.py --out <dir>` after API changes. Build/test with `-p:BaseOutputPath=<scratch>/bo/` (forward slashes, trailing slash).
+**Before starting:** Docker Desktop → `docker compose -f infra/docker/docker-compose.yml up -d postgres redis meilisearch mailpit`. Seeded catalogue is in DB `mechware`. Deploy: `mechware-worker migrate` before a new api/worker (docs/modules/H3.md). Preview used 3001 (web, git worktree in the session scratchpad) and 5200 (API from a scratch build); both die with the laptop — rebuild the API from HEAD and run `Mechware.Worker migrate` on `mechware` first.
 
-**Owner actions (start now):** VAT consultant · lawyer · SSLCommerz/bKash merchant · SMS sender ID + email domain · pen-test booking ·
-hosting choice (staging) · 5 real buyers + real product data. Open decisions: [MODULES.md](MODULES.md) §5.
+**Owner actions (start now):** shipping tariffs per zone + heavy/oversize limits + free-shipping threshold + VAT-on-shipping · VAT consultant · lawyer (docs/LEGAL_REVIEW.md) · SSLCommerz/bKash merchant · SMS sender ID + email domain · hosting choice (staging) · pen-test booking · 5 real buyers + real product data · S3 vs volume. Open decisions: [MODULES.md](MODULES.md) §5.
