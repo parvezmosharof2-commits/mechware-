@@ -145,6 +145,9 @@ public sealed class StepUpTests : IDisposable
         actions.Should().Contain("AdminCompaniesController.SetCredit", "company.credit");
         actions.Should().Contain("AdminRefundsController.Approve", "refund.approve");
         actions.Should().Contain("AdminUserSecurityController.IssueSetupCode", "user.two_factor_setup_code");
+        actions.Should().Contain("AdminPriceListsController.Approve", "pricelist.approve");
+        actions.Should().Contain("AdminPriceListsController.Withdraw", "pricelist.withdraw");
+        actions.Should().NotContainKey("AdminPriceListsController.Reject", "a rejection never makes a price apply (D2.8 decision)");
     }
 
     [PostgresFact]

@@ -669,6 +669,135 @@
         }
       }
     },
+    "/api/v1/admin/price-lists/{priceListId}/approve": {
+      "post": {
+        "tags": [
+          "AdminPriceLists"
+        ],
+        "summary": "Approve the version the approver reviewed: `expectedContentHash` from the detail and exactly its\r\n`belowFloorEntryIds`. Needs a fresh authenticator code in `X-Step-Up-Code`; the floors are checked again now.",
+        "parameters": [
+          {
+            "name": "priceListId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovePriceListRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovePriceListRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovePriceListRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-lists/{priceListId}/reject": {
+      "post": {
+        "tags": [
+          "AdminPriceLists"
+        ],
+        "summary": "Back to Draft with a reason. No step-up: a rejection can never make a price apply or change what a buyer pays, it only\r\nsends the list back to its authors (like a refund rejection).",
+        "parameters": [
+          {
+            "name": "priceListId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/price-lists/{priceListId}/withdraw": {
+      "post": {
+        "tags": [
+          "AdminPriceLists"
+        ],
+        "summary": "Emergency stop of an approved version, with a reason and a fresh authenticator code: it changes what buyers pay.",
+        "parameters": [
+          {
+            "name": "priceListId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PriceListDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/products/{productId}/documents": {
       "get": {
         "tags": [
@@ -3781,6 +3910,24 @@
         },
         "additionalProperties": false
       },
+      "ApprovePriceListRequest": {
+        "type": "object",
+        "properties": {
+          "expectedContentHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "acknowledgedBelowFloorEntryIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "BrandDto": {
         "type": "object",
         "properties": {
@@ -4075,6 +4222,16 @@
           "quantity": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PriceListDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

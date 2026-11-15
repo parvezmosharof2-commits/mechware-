@@ -59,8 +59,13 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
                 p.CreatedAtUtc,
                 p.SubmittedBy,
                 p.SubmittedAtUtc,
+                p.ApprovedBy,
                 p.ApprovedAtUtc,
                 p.EffectiveFromUtc,
+                p.RejectedBy,
+                p.RejectedAtUtc,
+                p.WithdrawnBy,
+                p.WithdrawnAtUtc,
                 Count = p.Entries.Count,
             }).ToListAsync(ct);
         var later = await StartedVersionsAsync(rows.Select(r => r.SeriesId).Distinct().ToList(), ct);
@@ -86,6 +91,13 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
             CreatedAtUtc = r.CreatedAtUtc,
             SubmittedBy = r.SubmittedBy,
             SubmittedAtUtc = r.SubmittedAtUtc,
+            ApprovedBy = r.ApprovedBy,
+            ApprovedAtUtc = r.ApprovedAtUtc,
+            EffectiveFromUtc = r.EffectiveFromUtc,
+            RejectedBy = r.RejectedBy,
+            RejectedAtUtc = r.RejectedAtUtc,
+            WithdrawnBy = r.WithdrawnBy,
+            WithdrawnAtUtc = r.WithdrawnAtUtc,
         }).ToList();
         return new PriceListPageDto(items, page, size, total);
     }
@@ -202,7 +214,8 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
             throw new ConflictException("PRICE_LIST_OPEN_VERSION_EXISTS", "This price list already has a version in progress.");
 
         db.PriceLists.Add(next);
-        db.AuditLogs.Add(Audit("pricelist.revised", next.Id, JsonSerializer.Serialize(new { RevisedFrom = source.Id, next.Version }), actor, now));
+        db.AuditLogs.Add(Audit("pricelist.revised", next.Id,
+            JsonSerializer.Serialize(new { RevisedFrom = source.Id, next.Version, RevisedFromContentHash = source.ContentHash }), actor, now));
         try
         {
             await db.SaveChangesAsync(ct);
@@ -230,6 +243,76 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
         db.AuditLogs.Add(Audit("pricelist.deleted", id, null, actor, now));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    // ---- decisions (D2.8) ----------------------------------------------------------------------------------------------
+
+    public async Task<PriceListDetailDto> ApproveAsync(Guid id, ApprovePriceListRequest request, CancellationToken ct = default)
+    {
+        var expectedHash = request.ExpectedContentHash;
+        if (string.IsNullOrWhiteSpace(expectedHash))
+            throw new ValidationException("expectedContentHash", "Send the content hash of the version you reviewed.");
+        var acknowledged = request.AcknowledgedBelowFloorEntryIds ?? [];
+        if (acknowledged.Count > PriceListLimits.MaxEntriesPerList)
+            throw new ValidationException("acknowledgedBelowFloorEntryIds", $"A price list has at most {PriceListLimits.MaxEntriesPerList} entries.");
+
+        // The lock first: a second approval waits here and then finds the list no longer pending (ADR-0008 §3 point 6).
+        return await LockedAsync(id, async list =>
+        {
+            var (approver, now) = (Actor, Now);
+            // Cost, brand, category ancestry and floor rows of this moment, read inside the approval's transaction (§4).
+            var floors = await EvaluateAsync(list, ct);
+            try
+            {
+                list.Approve(approver, user.HasPermission(Permissions.PriceListsApproveBelowFloor), expectedHash, acknowledged, floors, options.AllowBelowCost, now);
+            }
+            catch (ConflictException ex) when (ex.Code == "BELOW_FLOOR_NOT_ACKNOWLEDGED")
+            {
+                // Ids only, so an approver without pricing.view_cost learns which entries, never an amount.
+                var ids = floors.Entries.Where(e => e.BelowFloor).Select(e => e.EntryId).Order().ToList();
+                throw new ConflictException(ex.Code, ids.Count == 0
+                    ? "No entry is below the margin floor now; approve without acknowledging any."
+                    : $"{ids.Count} {(ids.Count == 1 ? "entry is" : "entries are")} below the margin floor: {string.Join(", ", ids)}. Acknowledge exactly these.");
+            }
+
+            db.AuditLogs.Add(Audit("pricelist.approved", list.Id, JsonSerializer.Serialize(new
+            {
+                list.Version,
+                list.ContentHash,
+                list.EffectiveFromUtc,
+                BelowFloorAcknowledged = acknowledged.Distinct().Count(),
+            }), approver, now));
+            await db.SaveChangesAsync(ct);
+            return await DetailAsync(list, ct);
+        }, ct);
+    }
+
+    public async Task<PriceListDetailDto> RejectAsync(Guid id, PriceListDecisionRequest request, CancellationToken ct = default)
+    {
+        return await LockedAsync(id, async list =>
+        {
+            var (actor, now, hash) = (Actor, Now, list.ContentHash);
+            list.Reject(actor, request.Reason ?? string.Empty, now); // clears submitter and hash: the next submit is a new review
+            db.AuditLogs.Add(Audit("pricelist.rejected", list.Id,
+                JsonSerializer.Serialize(new { list.Version, ContentHash = hash, Reason = list.RejectionReason }), actor, now));
+            await db.SaveChangesAsync(ct);
+            return await DetailAsync(list, ct);
+        }, ct);
+    }
+
+    public async Task<PriceListDetailDto> WithdrawAsync(Guid id, PriceListDecisionRequest request, CancellationToken ct = default)
+    {
+        // FOR UPDATE here against the FOR SHARE re-read in the order's save transaction (§10): no order that commits after this
+        // withdrawal carries its prices.
+        return await LockedAsync(id, async list =>
+        {
+            var (actor, now) = (Actor, Now);
+            list.Withdraw(actor, request.Reason ?? string.Empty, now);
+            db.AuditLogs.Add(Audit("pricelist.withdrawn", list.Id,
+                JsonSerializer.Serialize(new { list.Version, list.ContentHash, list.EffectiveFromUtc, Reason = list.WithdrawReason }), actor, now));
+            await db.SaveChangesAsync(ct);
+            return await DetailAsync(list, ct);
+        }, ct);
     }
 
     // ---- helpers -------------------------------------------------------------------------------------------------------
@@ -317,10 +400,18 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
                             join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
                             select new { v.Id, v.Sku, p.TitleEn }).ToDictionaryAsync(x => x.Id, ct);
 
-        // Cost and floor: never read for a caller without view_cost. Open lists use the cost of this moment, decided ones what the approval stored.
+        // Open lists are evaluated with the cost of this moment (the same evaluation an approval runs), decided ones show what the
+        // approval stored. Amounts go only to a caller with view_cost; everyone gets the below-floor entry ids.
         IReadOnlyDictionary<Guid, EntryFloorEvaluation>? live = null;
-        if (CanSeeCost && list.Status is PriceListStatus.Draft or PriceListStatus.PendingApproval)
+        if (list.Entries.Count > 0 && list.Status is PriceListStatus.Draft or PriceListStatus.PendingApproval)
             live = (await EvaluateAsync(list, ct)).Entries.ToDictionary(e => e.EntryId);
+        var belowFloor = live is not null
+            ? live.Values.Where(e => e.BelowFloor).Select(e => e.EntryId)
+            : list.Entries.Where(e => e.BelowFloorAtApproval == true).Select(e => e.Id);
+
+        Guid?[] named = [list.CreatedBy, list.SubmittedBy, list.ApprovedBy, list.RejectedBy, list.WithdrawnBy, .. list.Contributors.Select(c => (Guid?)c.UserId)];
+        var actorIds = named.OfType<Guid>().Distinct().ToList();
+        var actorNames = await db.Users.AsNoTracking().Where(u => actorIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName, ct);
 
         PriceListEntryDto Entry(PriceListEntry e)
         {
@@ -365,9 +456,15 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
             EffectiveFromUtc = list.EffectiveFromUtc,
             ApprovedBy = list.ApprovedBy,
             ApprovedAtUtc = list.ApprovedAtUtc,
+            RejectedBy = list.RejectedBy,
+            RejectedAtUtc = list.RejectedAtUtc,
             RejectionReason = list.RejectionReason,
+            WithdrawnBy = list.WithdrawnBy,
+            WithdrawnAtUtc = list.WithdrawnAtUtc,
             WithdrawReason = list.WithdrawReason,
             Contributors = list.Contributors.Select(c => c.UserId).Order().ToList(),
+            BelowFloorEntryIds = belowFloor.Order().ToList(),
+            ActorNames = actorNames,
             Entries = list.Entries.OrderBy(e => labels.GetValueOrDefault(e.VariantId)?.Sku, StringComparer.Ordinal).ThenBy(e => e.MinQty).Select(Entry).ToList(),
         };
     }

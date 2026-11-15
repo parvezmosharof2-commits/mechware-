@@ -716,6 +716,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/price-lists/{priceListId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve the version the approver reviewed: `expectedContentHash` from the detail and exactly its
+         *     `belowFloorEntryIds`. Needs a fresh authenticator code in `X-Step-Up-Code`; the floors are checked again now.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    priceListId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApprovePriceListRequest"];
+                    "text/json": components["schemas"]["ApprovePriceListRequest"];
+                    "application/*+json": components["schemas"]["ApprovePriceListRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{priceListId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Back to Draft with a reason. No step-up: a rejection can never make a price apply or change what a buyer pays, it only
+         *     sends the list back to its authors (like a refund rejection).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    priceListId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PriceListDecisionRequest"];
+                    "text/json": components["schemas"]["PriceListDecisionRequest"];
+                    "application/*+json": components["schemas"]["PriceListDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{priceListId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Emergency stop of an approved version, with a reason and a fresh authenticator code: it changes what buyers pay. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    priceListId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["PriceListDecisionRequest"];
+                    "text/json": components["schemas"]["PriceListDecisionRequest"];
+                    "application/*+json": components["schemas"]["PriceListDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/products/{productId}/documents": {
         parameters: {
             query?: never;
@@ -4165,6 +4297,10 @@ export interface components {
             approverUserIds?: string[] | null;
             isActive?: boolean;
         };
+        ApprovePriceListRequest: {
+            expectedContentHash?: string | null;
+            acknowledgedBelowFloorEntryIds?: string[] | null;
+        };
         BrandDto: {
             name?: string | null;
             slug?: string | null;
@@ -4268,6 +4404,9 @@ export interface components {
             variantId?: string;
             /** Format: int32 */
             quantity?: number;
+        };
+        PriceListDecisionRequest: {
+            reason?: string | null;
         };
         ProblemDetails: {
             type?: string | null;
