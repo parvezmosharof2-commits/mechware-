@@ -460,6 +460,7 @@ export * from "./catalog-import";
 export * from "./cart-model";
 export * from "./cart";
 export * from "./checkout-model";
+export * from "./orders-model";
 export * from "./orders";
 export * from "./price-lists-model";
 export * from "./price-lists";

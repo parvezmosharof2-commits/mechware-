@@ -10,6 +10,7 @@
     "test:console-pricelists": "node tests/console-pricelists.mjs",
     "test:storefront": "node tests/storefront.mjs",
     "test:checkout": "node tests/checkout.mjs",
+    "test:orders": "node tests/orders.mjs",
     "test:quick-order": "node tests/quick-order.mjs"
   },
   "devDependencies": {

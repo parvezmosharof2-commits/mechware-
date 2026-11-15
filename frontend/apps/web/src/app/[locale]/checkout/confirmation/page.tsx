@@ -7,7 +7,6 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('confirmMetaTitle'), robots: { index: false, follow: false } };
 }
 
-// TODO(E3.6): the real confirmation and order page (payment choice is E3.5). This placeholder only shows the number and status.
 export default async function ConfirmationPage() {
   const [t, locale] = await Promise.all([getTranslations('Checkout'), getLocale()]);
   return (

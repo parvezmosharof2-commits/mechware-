@@ -1,4 +1,5 @@
 import type { MechWareApiClient } from './index';
+import type { OrderDetail, OrderPage } from './orders-model';
 import type { PlacedOrder, ShippingQuote, buildOrderBody, buildQuoteBody } from './checkout-model';
 
 type Data<T> = { data: T };
@@ -31,7 +32,13 @@ export function createOrdersApi(client: MechWareApiClient) {
         })
         .then((r) => r.data),
 
-    get: (orderId: string) => client.fetch<Data<OrderSummary>>(`/api/v1/orders/${encodeURIComponent(orderId)}`).then((r) => r.data)
+    get: (orderId: string) => client.fetch<Data<OrderDetail>>(`/api/v1/orders/${encodeURIComponent(orderId)}`).then((r) => r.data),
+
+    /** The signed-in buyer own orders, newest first (pageSize at most 50). */
+    list: (page = 1, pageSize = 20) =>
+      client
+        .fetch<Data<OrderPage>>(`/api/v1/orders?page=${Math.max(1, Math.floor(page))}&pageSize=${Math.min(50, Math.max(1, Math.floor(pageSize)))}`)
+        .then((r) => r.data)
   };
 }
 
