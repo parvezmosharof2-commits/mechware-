@@ -73,6 +73,13 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
     public async Task<IActionResult> Get(Guid orderId, CancellationToken ct) =>
         Ok(new { data = await orders.GetAsync(Actor, orderId, ct) });
 
+    /// <summary>The caller's own order by its number (<c>MW-YYMMDD-XXXXXX</c>); anything else, however malformed, is the same 404.</summary>
+    [HttpGet("by-number/{orderNumber}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetByNumber(string orderNumber, CancellationToken ct) =>
+        Ok(new { data = await orders.GetByNumberAsync(Actor, orderNumber, ct) });
+
     /// <summary>Removes exactly the ordered variants from the caller's cart; other lines stay. Best effort: any failure is logged, never raised.</summary>
     private async Task RemoveOrderedLinesFromCartAsync(IReadOnlyList<PlaceOrderLine>? lines, CancellationToken ct)
     {

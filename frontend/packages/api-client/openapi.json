@@ -3000,6 +3000,49 @@
         }
       }
     },
+    "/api/v1/orders/by-number/{orderNumber}": {
+      "get": {
+        "tags": [
+          "Orders"
+        ],
+        "summary": "The caller's own order by its number (`MW-YYMMDD-XXXXXX`); anything else, however malformed, is the same 404.",
+        "parameters": [
+          {
+            "name": "orderNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/orders/{orderId}/payments": {
       "post": {
         "tags": [

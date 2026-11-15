@@ -474,19 +474,64 @@ public sealed partial class OrderService(
         return true;
     }
 
-    public async Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default)
+    public async Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default) =>
+        await ReadOwnAsync(db.Orders.AsNoTracking().Where(o => o.Id == orderId && o.UserId == userId), ct);
+
+    public async Task<OrderDto> GetByNumberAsync(Guid userId, string orderNumber, CancellationToken ct = default)
     {
-        var order = await db.Orders.AsNoTracking().Include(o => o.SubOrders).ThenInclude(s => s.Items)
-                        .FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct)
+        // A malformed number can never match, so it gets the very same answer as an unknown or foreign one.
+        if (!OrderNumber.IsValid(orderNumber)) throw new KeyNotFoundException("Order not found.");
+        return await ReadOwnAsync(db.Orders.AsNoTracking().Where(o => o.OrderNumber == orderNumber && o.UserId == userId), ct);
+    }
+
+    /// <summary>One caller-scoped order with its sub-orders, store names, ship-to snapshot and payment summary (three small queries).</summary>
+    private async Task<OrderDto> ReadOwnAsync(IQueryable<Order> ownOrder, CancellationToken ct)
+    {
+        var order = await ownOrder.Include(o => o.SubOrders).ThenInclude(s => s.Items).FirstOrDefaultAsync(ct)
                     ?? throw new KeyNotFoundException("Order not found.");
+
+        var sellerIds = order.SubOrders.Select(s => s.SellerId).Distinct().ToList();
+        var storeNames = await db.Sellers.AsNoTracking().Where(s => sellerIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StoreName, ct);
+        var payments = await db.Payments.AsNoTracking().Where(p => p.OrderId == order.Id).ToListAsync(ct);
 
         return new OrderDto(order.Id, order.OrderNumber, ToWire(order.Status), order.Currency, order.SubtotalMinor, order.DiscountMinor,
             order.TaxMinor, order.ShippingMinor, order.GrandTotalMinor, order.PlacedAtUtc,
             order.SubOrders.OrderBy(s => s.SubOrderNumber).Select(s => new SubOrderDto(s.Id, s.SubOrderNumber, s.SellerId, ToWire(s.Status),
                 s.ShippingMinor, s.TotalMinor,
                 s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
-                    i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList())).ToList(),
-            order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc);
+                    i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList(),
+                storeNames.GetValueOrDefault(s.SellerId))).ToList(),
+            order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments));
+    }
+
+    /// <summary>Only the display members of the stored snapshot; its ids and district link never leave the server.</summary>
+    internal static OrderShipToDto? ShipToForBuyer(string shipToJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(shipToJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != System.Text.Json.JsonValueKind.Object || !root.EnumerateObject().Any()) return null;
+            string? Text(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String && !string.IsNullOrWhiteSpace(v.GetString())
+                    ? v.GetString() : null;
+            return new OrderShipToDto(Text("recipientName"), Text("line1"), Text("line2"), Text("upazila"), Text("district"), Text("division"),
+                Text("postalCode"), Text("phone"), Text("siteName"));
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The attempt that carries money (captured, refunded, needs refund) wins over later failed or pending ones; else the latest.</summary>
+    internal static OrderPaymentDto? PaymentForBuyer(IReadOnlyCollection<Domain.Payments.Payment> payments)
+    {
+        if (payments.Count == 0) return null;
+        var chosen = payments
+            .OrderByDescending(p => p.Status is Domain.Payments.PaymentStatus.Captured or Domain.Payments.PaymentStatus.Refunded or Domain.Payments.PaymentStatus.NeedsRefund)
+            .ThenByDescending(p => p.CreatedAtUtc).First();
+        return new OrderPaymentDto(ToWire(chosen.Status), chosen.Provider, chosen.AmountMinor, chosen.CapturedAtUtc, payments.Count);
     }
 
     public async Task<ShippingQuoteDto> QuoteShippingAsync(ShippingQuoteRequest request, CancellationToken ct = default)

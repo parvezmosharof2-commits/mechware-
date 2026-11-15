@@ -52,12 +52,29 @@ public sealed record PlacedOrder(
 public sealed record OrderItemDto(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor,
     string? PriceSource = null, string? ContractRef = null);
 
-public sealed record SubOrderDto(Guid Id, string SubOrderNumber, Guid SellerId, string Status, long ShippingMinor, long TotalMinor, IReadOnlyList<OrderItemDto> Items);
+/// <param name="StoreName">The seller's storefront name.</param>
+public sealed record SubOrderDto(Guid Id, string SubOrderNumber, Guid SellerId, string Status, long ShippingMinor, long TotalMinor, IReadOnlyList<OrderItemDto> Items,
+    string? StoreName = null);
+
+/// <summary>
+/// Where the order goes, exactly as copied into the order when it was placed (later address-book edits never change it).
+/// <paramref name="SiteName"/> is set for company orders delivered to a company site. No ids, no company registration numbers.
+/// </summary>
+public sealed record OrderShipToDto(
+    string? RecipientName, string? Line1, string? Line2, string? Upazila, string? District, string? Division, string? PostalCode, string? Phone,
+    string? SiteName = null);
+
+/// <summary>
+/// What the buyer needs to know about paying: the status (<c>pending</c>, <c>captured</c>, <c>failed</c>, <c>needs_refund</c>,
+/// <c>refunded</c>), the method (the payment channel name), the amount asked and when it was received. With several attempts
+/// it is the money-bearing one, else the latest; <paramref name="Attempts"/> counts them all. No gateway references.
+/// </summary>
+public sealed record OrderPaymentDto(string Status, string? Method, long AmountMinor, DateTime? PaidAt, int Attempts);
 
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
     long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null,
-    DateTime? EstimatedDeliveryBy = null);
+    DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null);
 
 /// <summary>What the checkout would charge for delivery, without placing anything (E8.2; the checkout page is E3.4).</summary>
 public sealed record ShippingQuoteRequest(
@@ -97,6 +114,12 @@ public interface IOrderService
 
     /// <summary>The buyer's own order. Someone else's order answers "not found", never "forbidden", so ids reveal nothing.</summary>
     Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The same order by its number (the one in emails). Same visibility as <see cref="GetAsync"/>; a malformed, unknown or
+    /// someone else's number all answer the same "not found".
+    /// </summary>
+    Task<OrderDto> GetByNumberAsync(Guid userId, string orderNumber, CancellationToken ct = default);
 
     /// <summary>
     /// The orders this user placed, newest first (same visibility rule as <see cref="GetAsync"/>: own orders only, whether or not
