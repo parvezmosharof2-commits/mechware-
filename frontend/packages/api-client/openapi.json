@@ -109,6 +109,60 @@
             }
           },
           {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/companies/lookup": {
+      "get": {
+        "tags": [
+          "AdminCompanies"
+        ],
+        "summary": "Company picker for staff screens (price lists): id, legal name and status. `q` matches part of the legal name only; no BIN in or out.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "schema": {
@@ -281,6 +335,39 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/overdue": {
+      "get": {
+        "tags": [
+          "AdminOrders"
+        ],
+        "summary": "Orders past a legal deadline right now (E8.3): past the delivery deadline and not delivered, or past the courier handover\r\ndeadline and not shipped. Order number, status, district and deadlines only. `pageSize` is at most 50.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK"
@@ -1087,6 +1174,53 @@
             "schema": {
               "type": "string",
               "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/variants": {
+      "get": {
+        "tags": [
+          "AdminVariants"
+        ],
+        "summary": "Query: `sku` (exact, case-insensitive), `q` (part of SKU, part number or title), `page`, `pageSize` (at most 50).",
+        "parameters": [
+          {
+            "name": "sku",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
             }
           }
         ],
@@ -4648,6 +4782,9 @@
       "name": "AdminCompanies"
     },
     {
+      "name": "AdminOrders"
+    },
+    {
       "name": "AdminPriceLists"
     },
     {
@@ -4664,6 +4801,9 @@
     },
     {
       "name": "AdminUserSecurity"
+    },
+    {
+      "name": "AdminVariants"
     },
     {
       "name": "Approvals"

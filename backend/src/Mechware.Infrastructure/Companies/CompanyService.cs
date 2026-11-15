@@ -351,20 +351,44 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
 
     // ---------- staff ----------
 
-    public async Task<PagedResult<CompanyDto>> AdminListAsync(string? status, int page, int pageSize, CancellationToken ct = default)
+    public async Task<PagedResult<CompanyDto>> AdminListAsync(string? status, int page, int pageSize, string? q = null, CancellationToken ct = default)
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
-        var query = db.Companies.AsNoTracking().AsQueryable();
+        var query = FilterForStaff(db.Companies.AsNoTracking(), status, q);
+        int total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(c => c.CreatedAtUtc).ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new PagedResult<CompanyDto>(rows.Select(ToDto).ToList(), page, pageSize, total);
+    }
+
+    /// <summary>Status filter and a literal, case-insensitive "contains" on the legal name. The BIN is never searched.</summary>
+    private static IQueryable<Company> FilterForStaff(IQueryable<Company> query, string? status, string? q)
+    {
         if (!string.IsNullOrWhiteSpace(status))
         {
             if (!Enum.TryParse<CompanyStatus>(status, true, out var parsed) || !Enum.IsDefined(parsed))
                 throw new ValidationException("status", "Unknown status.");
             query = query.Where(c => c.Status == parsed);
         }
+
+        if (q?.Trim() is { Length: > 0 } term)
+        {
+            var like = "%" + term.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            query = query.Where(c => EF.Functions.ILike(c.LegalName, like, "\\"));
+        }
+
+        return query;
+    }
+
+    public async Task<PagedResult<CompanyLookupDto>> AdminLookupAsync(string? q, string? status, int page, int pageSize, CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var query = FilterForStaff(db.Companies.AsNoTracking(), status, q);
         int total = await query.CountAsync(ct);
-        var rows = await query.OrderByDescending(c => c.CreatedAtUtc).ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return new PagedResult<CompanyDto>(rows.Select(ToDto).ToList(), page, pageSize, total);
+        var rows = await query.OrderBy(c => c.LegalName).ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(c => new { c.Id, c.LegalName, c.Status }).ToListAsync(ct);
+        return new PagedResult<CompanyLookupDto>(rows.Select(r => new CompanyLookupDto(r.Id, r.LegalName, r.Status.ToString().ToLowerInvariant())).ToList(), page, pageSize, total);
     }
 
     public async Task<CompanyDto> AdminGetAsync(Guid companyId, CancellationToken ct = default) =>

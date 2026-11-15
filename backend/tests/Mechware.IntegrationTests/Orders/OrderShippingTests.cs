@@ -21,6 +21,10 @@ namespace Mechware.IntegrationTests.Orders;
 /// <summary>Shared set-up: a district of its own per test (so tests never share a zone), addresses in it, and the service.</summary>
 public static class ShippingTestKit
 {
+    /// <summary>The E8.3 deadline calculator with the default (5 / 10 / 48) or the given periods.</summary>
+    public static Mechware.Application.Orders.IDeliveryDeadlineCalculator Deadlines(MechwareDbContext db, Mechware.Infrastructure.Orders.DeliveryOptions? options = null) =>
+        new Mechware.Infrastructure.Orders.DeliveryDeadlineCalculator(db, options ?? new Mechware.Infrastructure.Orders.DeliveryOptions());
+
     /// <summary>
     /// What Development/Testing hosts use: free while no zone exists at all. The older order tests have no zones; their test
     /// databases are their own, so this never hides a zone. Shipping itself is tested with the production options.

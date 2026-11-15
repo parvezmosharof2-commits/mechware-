@@ -118,7 +118,7 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
         (await StockOf(v.VariantId)).Reserved.Should().Be(4, "an order waiting for approval still holds its stock");
 
         await using var db = fixture.CreateContext();
-        var payments = new PaymentService(db, [new MockPaymentProvider()], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
+        var payments = new PaymentService(db, [new MockPaymentProvider()], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.Deadlines(db));
         (await FluentActions.Awaiting(() => payments.StartAsync(t.Buyer, big.OrderId, "mock")).Should().ThrowAsync<ConflictException>())
             .Which.Code.Should().Be("ORDER_NOT_PAYABLE", "nobody can pay their way past the approval");
     }
@@ -189,7 +189,10 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
         var request = (await RequestForAsync(placed.OrderId))!;
         await Approvals(s => s.DecideAsync(t.Approver, t.Company, request.Id, new DecisionRequest(true, null)));
 
-        (await LoadAsync(placed.OrderId)).Status.Should().Be(OrderStatus.Confirmed);
+        var approved = await LoadAsync(placed.OrderId);
+        approved.Status.Should().Be(OrderStatus.Confirmed);
+        approved.LegalDeliveryDeadlineUtc.Should().NotBeNull("approval on credit terms confirms the order, which fixes its deadlines (E8.3)");
+        approved.CourierHandoverDeadlineUtc.Should().NotBeNull();
         (await CreditUsedAsync(t.Company)).Should().Be(placed.GrandTotalMinor);
         (await StockOf(v.VariantId)).Should().Be((0, 17), "a confirmed order turns its hold into a deduction");
     }

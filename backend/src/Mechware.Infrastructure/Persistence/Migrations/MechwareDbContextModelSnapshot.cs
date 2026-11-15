@@ -2164,9 +2164,17 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("company_id");
 
+                    b.Property<DateTime?>("ConfirmedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
                     b.Property<Guid?>("CostCentreId")
                         .HasColumnType("uuid")
                         .HasColumnName("cost_centre_id");
+
+                    b.Property<DateTime?>("CourierHandoverDeadlineUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("courier_handover_deadline_at");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -2177,6 +2185,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
+
+                    b.Property<bool?>("DeadlineSameCity")
+                        .HasColumnType("boolean")
+                        .HasColumnName("deadline_same_city");
 
                     b.Property<long>("DiscountMinor")
                         .HasColumnType("bigint")
@@ -2189,6 +2201,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Property<long>("GrandTotalMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("grand_total");
+
+                    b.Property<DateTime?>("LegalDeliveryDeadlineUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("legal_delivery_deadline_at");
 
                     b.Property<string>("OrderNumber")
                         .IsRequired()
@@ -2257,6 +2273,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnName("xmin");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("LegalDeliveryDeadlineUtc")
+                        .HasDatabaseName("ix_orders_legal_deadline")
+                        .HasFilter("legal_delivery_deadline_at IS NOT NULL");
 
                     b.HasIndex("OrderNumber")
                         .IsUnique()

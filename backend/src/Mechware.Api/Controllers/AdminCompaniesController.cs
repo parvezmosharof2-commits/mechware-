@@ -12,8 +12,14 @@ public sealed class AdminCompaniesController(ICompanyService companies) : Contro
 {
     [HttpGet]
     [RequirePermission(Permissions.CompaniesView)]
-    public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default) =>
-        Ok(new { data = await companies.AdminListAsync(status, page, pageSize, ct) });
+    public async Task<IActionResult> List([FromQuery] string? status, [FromQuery] string? q, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default) =>
+        Ok(new { data = await companies.AdminListAsync(status, page, pageSize, q, ct) });
+
+    /// <summary>Company picker for staff screens (price lists): id, legal name and status. <c>q</c> matches part of the legal name only; no BIN in or out.</summary>
+    [HttpGet("lookup")]
+    [RequirePermission(Permissions.CompaniesView)]
+    public async Task<IActionResult> Lookup([FromQuery] string? q, [FromQuery] string? status, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default) =>
+        Ok(new { data = await companies.AdminLookupAsync(q, status, page, pageSize, ct) });
 
     [HttpGet("{companyId:guid}")]
     [RequirePermission(Permissions.CompaniesView)]

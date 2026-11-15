@@ -131,6 +131,8 @@ bool dataProtectionKeysEncrypted = builder.Services.AddPersistedDataProtection(
 // and turning the switch on outside Development/Testing stops the host here. Registered before AddCatalogServices (TryAdd).
 builder.Services.AddSingleton(Mechware.Infrastructure.Shipping.ShippingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
+// Legal delivery periods (E8.3): Delivery:SameCityDays / OtherCityDays / HandoverHours; a value that is not a whole number above 0 stops the host here.
+builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.From(builder.Configuration));
 // Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
 builder.Services.AddSingleton(Mechware.Infrastructure.Pricing.PricingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));

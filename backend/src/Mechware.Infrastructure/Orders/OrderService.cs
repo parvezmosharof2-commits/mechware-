@@ -21,8 +21,9 @@ namespace Mechware.Infrastructure.Orders;
 
 public sealed partial class OrderService(
     MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter, IPriceResolver prices,
-    Func<DateTime, string>? orderNumbers = null) : IOrderService
+    Func<DateTime, string>? orderNumbers = null, DeliveryOptions? delivery = null) : IOrderService
 {
+    private readonly DeliveryOptions deliveryOptions = delivery ?? new DeliveryOptions();
     private readonly Func<DateTime, string> _nextOrderNumber = orderNumbers ?? (now => OrderNumber.Generate(now));
 
     [GeneratedRegex("^[A-Za-z0-9_-]{8,100}$")]
@@ -394,7 +395,7 @@ public sealed partial class OrderService(
                     await tx.RollbackAsync(ct);
                     return await CancelOneAsync(orderId, null, "Approved, but the company's credit no longer covers this order", now, WaitingForApproval, ct);
                 }
-                order.Transition(OrderStatus.Confirmed, null, "Placed on credit terms after approval", now);
+                order.Confirm(await ConfirmationDeadlinesAsync(order, now, ct), null, "Placed on credit terms after approval", now);
                 confirmed = true;
             }
 
@@ -485,7 +486,7 @@ public sealed partial class OrderService(
                 s.ShippingMinor, s.TotalMinor,
                 s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
                     i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList())).ToList(),
-            order.PurchaseOrderNumber);
+            order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc);
     }
 
     public async Task<ShippingQuoteDto> QuoteShippingAsync(ShippingQuoteRequest request, CancellationToken ct = default)
@@ -521,7 +522,10 @@ public sealed partial class OrderService(
     }
 
     /// <summary>The snake_case name the API uses for a state or a price source.</summary>
-    private static string ToWire<T>(T value) where T : struct, Enum =>
+    private Task<Domain.Orders.DeliveryDeadlines> ConfirmationDeadlinesAsync(Order order, DateTime now, CancellationToken ct) =>
+        OrderDeadlineService.ForConfirmationAsync(db, deliveryOptions, order.ShipToJson, order.SubOrders.Select(s => s.SellerId).ToList(), now, ct);
+
+    internal static string ToWire<T>(T value) where T : struct, Enum =>
         string.Concat(value.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
     private static List<string> NormalisedCodes(PlaceOrderRequest r) =>
@@ -759,7 +763,7 @@ public sealed partial class OrderService(
         {
             var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {request.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
             company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
-            order.Transition(OrderStatus.Confirmed, order.UserId, "Placed on credit terms", now);
+            order.Confirm(await ConfirmationDeadlinesAsync(order, now, ct), order.UserId, "Placed on credit terms", now);
         }
 
         // A fixed order avoids two orders waiting on each other's promotion rows.

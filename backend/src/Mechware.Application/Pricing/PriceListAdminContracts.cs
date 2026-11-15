@@ -25,6 +25,9 @@ public record PriceListSummaryDto
     public string Name { get; init; } = string.Empty;
     public string Scope { get; init; } = string.Empty;
     public Guid? CompanyId { get; init; }
+
+    /// <summary>The company's legal name for a company list (a join, so the screen needs no extra lookup); null for a general list. Never the BIN.</summary>
+    public string? CompanyName { get; init; }
     public string? ContractRef { get; init; }
 
     /// <summary>The stored status: Draft, PendingApproval, Approved or Withdrawn.</summary>

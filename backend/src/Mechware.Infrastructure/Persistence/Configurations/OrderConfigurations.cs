@@ -41,6 +41,13 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         // A company looks its orders up by its own PO number (E8.2, "searchable later").
         b.HasIndex(o => new { o.CompanyId, o.PurchaseOrderNumber }).HasFilter("purchase_order_number IS NOT NULL").HasDatabaseName("ix_orders_company_po");
 
+        // Legal delivery deadlines (E8.3): set once at confirmation. The partial index serves the overdue query only.
+        b.Property(o => o.ConfirmedAtUtc).HasColumnName("confirmed_at");
+        b.Property(o => o.LegalDeliveryDeadlineUtc).HasColumnName("legal_delivery_deadline_at");
+        b.Property(o => o.CourierHandoverDeadlineUtc).HasColumnName("courier_handover_deadline_at");
+        b.Property(o => o.DeadlineSameCity).HasColumnName("deadline_same_city");
+        b.HasIndex(o => o.LegalDeliveryDeadlineUtc).HasFilter("legal_delivery_deadline_at IS NOT NULL").HasDatabaseName("ix_orders_legal_deadline");
+
         b.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(o => o.SubOrders).WithOne().HasForeignKey(s => s.OrderId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(o => o.Events).WithOne().HasForeignKey(e => e.OrderId).OnDelete(DeleteBehavior.Cascade);

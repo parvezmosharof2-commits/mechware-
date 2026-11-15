@@ -23,7 +23,7 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
         var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
         var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
-        return (new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)), new PaymentService(db, [_mock], inv, clock), db);
+        return (new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)), new PaymentService(db, [_mock], inv, clock, ShippingTestKit.Deadlines(db)), db);
     }
 
     private sealed class FixedClock(DateTime utc) : TimeProvider
@@ -272,7 +272,7 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
     {
         await using var db = fixture.CreateContext();
         var clock = clockNow is null ? TimeProvider.System : new FixedClock(clockNow.Value);
-        var payments = new PaymentService(db, [provider], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock);
+        var payments = new PaymentService(db, [provider], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.Deadlines(db));
         return await payments.HandleWebhookAsync("mock", w.Signature, w.Timestamp, w.Body);
     }
 
@@ -362,7 +362,7 @@ public class PaymentServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
     private async Task<int> ReconcileAsync(DateTime now, IPaymentProvider? provider = null)
     {
         await using var db = fixture.CreateContext();
-        var payments = new PaymentService(db, [provider ?? _mock], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System);
+        var payments = new PaymentService(db, [provider ?? _mock], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.Deadlines(db));
         return await payments.ReconcileAsync(now, 1000);
     }
 

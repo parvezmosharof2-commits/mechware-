@@ -41,12 +41,17 @@ public static class DependencyInjection
         services.TryAddScoped<IInventoryService, InventoryService>();
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
         services.TryAddScoped<ICatalogAdminService, CatalogAdminService>();
+        services.TryAddScoped<IAdminVariantLookup, AdminVariantLookup>();
         services.TryAddSingleton(new Mechware.Application.Catalog.CatalogImportOptions());
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportLookup, CatalogImportLookup>();
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportValidator, CatalogImportValidator>();
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportCommitter, CatalogImportCommitter>();
         services.TryAddScoped<ICompanyService, CompanyService>();
         services.TryAddScoped<IApprovalService, ApprovalService>();
+        // Legal delivery periods: defaults unless the host registered options read (and validated) from Delivery:* first (the API does).
+        services.TryAddSingleton(new Orders.DeliveryOptions());
+        services.TryAddScoped<Mechware.Application.Orders.IOrderDeadlineService, Orders.OrderDeadlineService>();
+        services.TryAddScoped<Mechware.Application.Orders.IDeliveryDeadlineCalculator, Orders.DeliveryDeadlineCalculator>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();
         services.TryAddScoped<Mechware.Application.Shipping.IShippingRateProvider, Shipping.ShippingRateProvider>();

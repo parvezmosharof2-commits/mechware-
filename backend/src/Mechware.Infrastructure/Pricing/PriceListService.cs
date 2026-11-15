@@ -64,6 +64,8 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
                 Count = p.Entries.Count,
             }).ToListAsync(ct);
         var later = await StartedVersionsAsync(rows.Select(r => r.SeriesId).Distinct().ToList(), ct);
+        var companyIds = rows.Where(r => r.CompanyId != null).Select(r => r.CompanyId!.Value).Distinct().ToList();
+        var companyNames = companyIds.Count == 0 ? [] : await db.Companies.AsNoTracking().Where(c => companyIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.LegalName, ct);
         var now = Now;
         var items = rows.Select(r => new PriceListSummaryDto
         {
@@ -73,6 +75,7 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
             Name = r.Name,
             Scope = r.Scope.ToString(),
             CompanyId = r.CompanyId,
+            CompanyName = r.CompanyId is { } cid ? companyNames.GetValueOrDefault(cid) : null,
             ContractRef = r.ContractRef,
             Status = r.Status.ToString(),
             ValidFromUtc = r.ValidFromUtc,
@@ -347,6 +350,7 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
             Name = list.Name,
             Scope = list.Scope.ToString(),
             CompanyId = list.CompanyId,
+            CompanyName = list.CompanyId is { } companyId ? await db.Companies.AsNoTracking().Where(c => c.Id == companyId).Select(c => c.LegalName).FirstOrDefaultAsync(ct) : null,
             ContractRef = list.ContractRef,
             Status = list.Status.ToString(),
             ValidFromUtc = list.ValidFromUtc,

@@ -12,7 +12,7 @@ namespace Mechware.Infrastructure.Payments;
 
 public sealed class PaymentService(
     MechwareDbContext db, IEnumerable<IPaymentProvider> providers, IInventoryService inventory, TimeProvider clock,
-    ILogger<PaymentService>? log = null) : IPaymentService
+    Application.Orders.IDeliveryDeadlineCalculator deadlineCalculator, ILogger<PaymentService>? log = null) : IPaymentService
 {
     private readonly ILogger<PaymentService> logger = log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PaymentService>.Instance;
 
@@ -220,7 +220,9 @@ public sealed class PaymentService(
         if (order.Status == OrderStatus.PendingPayment)
         {
             payment.MarkCaptured(now);
-            order.Transition(OrderStatus.Confirmed, null, $"Payment captured via {provider}", now);
+            var sellerIds = await db.Set<SubOrder>().AsNoTracking().Where(s => s.OrderId == order.Id).Select(s => s.SellerId).ToListAsync(ct);
+            var deadlines = await deadlineCalculator.ForConfirmationAsync(order.ShipToJson, sellerIds, now, ct);
+            order.Confirm(deadlines, null, $"Payment captured via {provider}", now);
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
             return (WebhookOutcome.Confirmed, order.Id);

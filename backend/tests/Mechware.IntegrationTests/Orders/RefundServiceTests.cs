@@ -38,7 +38,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
         var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
         var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)).PlaceAsync(
             new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
-        var payments = new PaymentService(db, [_mock], inv, TimeProvider.System);
+        var payments = new PaymentService(db, [_mock], inv, TimeProvider.System, ShippingTestKit.Deadlines(db));
         var session = await payments.StartAsync(buyer, placed.OrderId, "mock");
         var providerRef = session.RedirectUrl[(session.RedirectUrl.LastIndexOf('/') + 1)..];
         _mock.SimulatePayment(providerRef);
@@ -189,7 +189,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
             var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
             var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)).PlaceAsync(
                 new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
-            unpaid = (await new PaymentService(db, [_mock], inv, TimeProvider.System).StartAsync(buyer, placed.OrderId, "mock")).PaymentId;
+            unpaid = (await new PaymentService(db, [_mock], inv, TimeProvider.System, ShippingTestKit.Deadlines(db)).StartAsync(buyer, placed.OrderId, "mock")).PaymentId;
         }
         (await Throws<ConflictException>(() => Refunds(s => s.RequestAsync(asker, unpaid, new RequestRefund(1, "Never paid at all"))))).Code
             .Should().Be("PAYMENT_NOT_REFUNDABLE");
@@ -218,7 +218,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
             var inv = new InventoryService(db, new NoopLockProvider(), TimeProvider.System);
             var placed = await new OrderService(db, inv, TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)).PlaceAsync(
                 new PlaceOrderRequest(buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant.VariantId, 1)]));
-            var payments = new PaymentService(db, [_mock], inv, TimeProvider.System);
+            var payments = new PaymentService(db, [_mock], inv, TimeProvider.System, ShippingTestKit.Deadlines(db));
             var tabs = new[] { await payments.StartAsync(buyer, placed.OrderId, "mock"), await payments.StartAsync(buyer, placed.OrderId, "mock") };
             foreach (var tab in tabs)
             {
@@ -250,7 +250,7 @@ public class RefundServiceTests(PostgresDatabaseFixture fixture) : IClassFixture
             var row = await db.Payments.AsNoTracking().SingleAsync(p => p.Id == payment);
             var body = $$"""{ "id": "evt_late_{{Guid.NewGuid():N}}", "providerRef": "{{row.ProviderRef}}" }""";
             var ts = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var outcome = await new PaymentService(db, [_mock], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System)
+            var outcome = await new PaymentService(db, [_mock], new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.Deadlines(db))
                 .HandleWebhookAsync("mock", WebhookVerifier.Sign(MockPaymentProvider.DefaultSecret, ts, body), ts.ToString(), body);
             outcome.Should().Be(WebhookOutcome.AlreadyRefunded);
         }

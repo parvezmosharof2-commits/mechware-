@@ -10,6 +10,9 @@ public sealed record CompanyDto(
     DateTime CreatedAtUtc, string? RejectionReason = null);
 
 /// <summary>A company as seen by one of its members, with that member's own roles.</summary>
+/// <summary>One company in a staff picker: no BIN, trade licence, TIN or credit data.</summary>
+public sealed record CompanyLookupDto(Guid Id, string LegalName, string Status);
+
 public sealed record MyCompanyDto(CompanyDto Company, CompanyRoles Roles);
 
 public sealed record RegisterCompanyRequest(string LegalName, string TradeLicenceNo, string Bin, string? Tin, string? Industry);
@@ -73,7 +76,10 @@ public interface ICompanyService
     Task DeclineInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default);
 
     // MECHWARE staff. Authorised by permission at the API; not scoped to membership.
-    Task<PagedResult<CompanyDto>> AdminListAsync(string? status, int page, int pageSize, CancellationToken ct = default);
+    Task<PagedResult<CompanyDto>> AdminListAsync(string? status, int page, int pageSize, string? q = null, CancellationToken ct = default);
+
+    /// <summary>Staff picker (E8.3b): id, legal name and status only, matched by a case-insensitive part of the legal name. Never by or with BIN, trade licence or TIN.</summary>
+    Task<PagedResult<CompanyLookupDto>> AdminLookupAsync(string? q, string? status, int page, int pageSize, CancellationToken ct = default);
     Task<CompanyDto> AdminGetAsync(Guid companyId, CancellationToken ct = default);
     Task<CompanyDto> AdminActivateAsync(Guid companyId, CancellationToken ct = default);
     Task<CompanyDto> AdminSuspendAsync(Guid companyId, CancellationToken ct = default);

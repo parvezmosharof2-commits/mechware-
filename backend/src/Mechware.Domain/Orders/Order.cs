@@ -189,6 +189,18 @@ public sealed class Order : AggregateRoot<Guid>
         return trimmed;
     }
 
+    /// <summary>When the order became confirmed (paid, or accepted on credit terms). Null until then and on orders confirmed before E8.3.</summary>
+    public DateTime? ConfirmedAtUtc { get; private set; }
+
+    /// <summary>The legal delivery deadline (E8.3), set once at confirmation by <see cref="Confirm"/>; never client-supplied, never recomputed. Order level: sub-orders do not ship on separate dates yet.</summary>
+    public DateTime? LegalDeliveryDeadlineUtc { get; private set; }
+
+    /// <summary>The courier handover deadline (E8.3), set with <see cref="LegalDeliveryDeadlineUtc"/>.</summary>
+    public DateTime? CourierHandoverDeadlineUtc { get; private set; }
+
+    /// <summary>Whether the same-city period applied (true), the other-city one (false), or the destination or dispatch district was unknown (null, short period used).</summary>
+    public bool? DeadlineSameCity { get; private set; }
+
     public IReadOnlyCollection<SubOrder> SubOrders => _subOrders.AsReadOnly();
     public IReadOnlyCollection<OrderEventRecord> Events => _events.AsReadOnly();
 
@@ -241,6 +253,23 @@ public sealed class Order : AggregateRoot<Guid>
 
     /// <summary>The only way the state changes: validated, recorded, and applied to every sub-order.</summary>
     public void Transition(OrderStatus to, Guid? actorId, string? reason, DateTime nowUtc)
+    {
+        if (to == OrderStatus.Confirmed)
+            throw new InvalidOperationException("An order is confirmed through Confirm, which sets its delivery deadlines.");
+        Apply(to, actorId, reason, nowUtc);
+    }
+
+    /// <summary>Confirms the order (paid, or accepted on credit) and fixes its delivery deadlines in the same step, once.</summary>
+    public void Confirm(DeliveryDeadlines deadlines, Guid? actorId, string? reason, DateTime nowUtc)
+    {
+        Apply(OrderStatus.Confirmed, actorId, reason, nowUtc);
+        ConfirmedAtUtc = nowUtc;
+        LegalDeliveryDeadlineUtc = deadlines.LegalDeliveryDeadlineUtc;
+        CourierHandoverDeadlineUtc = deadlines.CourierHandoverDeadlineUtc;
+        DeadlineSameCity = deadlines.SameCity;
+    }
+
+    private void Apply(OrderStatus to, Guid? actorId, string? reason, DateTime nowUtc)
     {
         var e = OrderStateMachine.Transition(Id, Status, to, actorId, reason, nowUtc);
         Status = to;

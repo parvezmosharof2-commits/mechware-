@@ -347,6 +347,12 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         await using var db = fixture.CreateContext();
         var events = await db.OrderEvents.AsNoTracking().Where(e => e.OrderId == placed.OrderId).OrderBy(e => e.Sequence).ToListAsync();
         events.Select(e => e.ToStatus).Should().Equal(OrderStatus.PendingPayment, OrderStatus.Confirmed);
+
+        // E8.3: confirmation on credit terms fixes both legal deadlines, once, from the confirmation instant.
+        var stored = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == placed.OrderId);
+        stored.ConfirmedAtUtc.Should().NotBeNull();
+        stored.LegalDeliveryDeadlineUtc.Should().NotBeNull();
+        stored.CourierHandoverDeadlineUtc.Should().Be(stored.ConfirmedAtUtc!.Value.AddHours(48));
     }
 
     [PostgresFact]
