@@ -55,6 +55,7 @@ public static class DependencyInjection
         // Below cost refused unless the host registered its own options first (the API does, from Pricing:AllowBelowCost).
         services.TryAddSingleton(new Pricing.PricingOptions());
         services.TryAddScoped<Mechware.Application.Pricing.IPriceResolver, Pricing.PriceListResolver>();
+        services.TryAddScoped<Mechware.Application.Pricing.IPriceListService, Pricing.PriceListService>();
         services.TryAddScoped<IPaymentService, PaymentService>();
         services.TryAddScoped<IRefundService, RefundService>();
 

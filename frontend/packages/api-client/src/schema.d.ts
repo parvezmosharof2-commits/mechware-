@@ -347,6 +347,295 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/price-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    scope?: string;
+                    companyId?: string;
+                    q?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreatePriceListRequest"];
+                    "text/json": components["schemas"]["CreatePriceListRequest"];
+                    "application/*+json": components["schemas"]["CreatePriceListRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdatePriceListHeaderRequest"];
+                    "text/json": components["schemas"]["UpdatePriceListHeaderRequest"];
+                    "application/*+json": components["schemas"]["UpdatePriceListHeaderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{id}/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpsertPriceListEntriesRequest"];
+                    "text/json": components["schemas"]["UpsertPriceListEntriesRequest"];
+                    "application/*+json": components["schemas"]["UpsertPriceListEntriesRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{id}/entries/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                    entryId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/price-lists/{id}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/products/{productId}/documents": {
         parameters: {
             query?: never;
@@ -3488,6 +3777,17 @@ export interface components {
             /** Format: int64 */
             monthlyBudgetMinor?: number | null;
         };
+        CreatePriceListRequest: {
+            scope?: string | null;
+            /** Format: uuid */
+            companyId?: string | null;
+            contractRef?: string | null;
+            name?: string | null;
+            /** Format: date-time */
+            validFromUtc?: string;
+            /** Format: date-time */
+            validToUtc?: string;
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -3755,6 +4055,14 @@ export interface components {
             costCentreIds?: string[] | null;
             isActive?: boolean;
         };
+        UpdatePriceListHeaderRequest: {
+            name?: string | null;
+            contractRef?: string | null;
+            /** Format: date-time */
+            validFromUtc?: string;
+            /** Format: date-time */
+            validToUtc?: string;
+        };
         UpdateSellerResourceRequestDto: {
             sku?: string | null;
             /** Format: double */
@@ -3779,6 +4087,18 @@ export interface components {
             latitude?: number | null;
             /** Format: double */
             longitude?: number | null;
+        };
+        UpsertPriceListEntriesRequest: {
+            entries?: components["schemas"]["UpsertPriceListEntryItem"][] | null;
+        };
+        UpsertPriceListEntryItem: {
+            /** Format: uuid */
+            variantId?: string;
+            /** Format: int32 */
+            minQty?: number;
+            /** Format: int64 */
+            unitPriceMinor?: number;
+            belowFloorReason?: string | null;
         };
         VariantDto: {
             /** Format: uuid */
