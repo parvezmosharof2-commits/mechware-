@@ -9,7 +9,19 @@ public sealed record BreadcrumbDto(string NameEn, string NameBn, string Slug);
 public sealed record MediaDto(string Url, string Alt, string Type, int Width, int Height, string? BlurDataUrl, Guid? VariantId);
 
 /// <summary>Stock presentation: <c>in_stock</c>, <c>low_stock</c> or <c>out_of_stock</c>.</summary>
-public sealed record StockDto(int Available, string Status);
+public sealed record StockDto(int Available, string Status)
+{
+    /// <summary>At or below this many available units the page says "low stock".</summary>
+    public const int LowStockDisplayThreshold = 5;
+
+    /// <summary>The band the product page, listings and the quick order show for <paramref name="available"/> units (one rule for all).</summary>
+    public static StockDto Of(int available) => new(Math.Max(available, 0), available switch
+    {
+        <= 0 => "out_of_stock",
+        <= LowStockDisplayThreshold => "low_stock",
+        _ => "in_stock"
+    });
+}
 
 public sealed record VariantPriceDto(
     MoneyDto Price, MoneyDto? CompareAt, int DiscountPercent, bool SaleActive, bool TaxIncluded, MoneyDto? Tax);

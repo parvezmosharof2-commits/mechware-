@@ -2763,6 +2763,37 @@
         }
       }
     },
+    "/api/v1/quick-order/validate": {
+      "post": {
+        "tags": [
+          "QuickOrder"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickOrderValidateBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickOrderValidateBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickOrderValidateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -3890,6 +3921,17 @@
         },
         "additionalProperties": false
       },
+      "QuickOrderValidateBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The only thing read from the client: the pasted text. No prices, ids or company are bound."
+      },
       "RegisterCompanyRequest": {
         "type": "object",
         "properties": {
@@ -4643,6 +4685,9 @@
     },
     {
       "name": "Payments"
+    },
+    {
+      "name": "QuickOrder"
     },
     {
       "name": "Search"

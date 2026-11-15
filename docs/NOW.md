@@ -1,7 +1,7 @@
 # NOW (keep ≤ 30 lines; update at the end of every unit)
 
-**Stopped cleanly 2026-11-14 (owner shut the laptop). Everything is committed and pushed (last commit `45c42ae`, D2.4); working tree clean; no agent running; auto-resume cron removed.**
-**To resume:** start Claude Code in the repo, read this file, start Docker Desktop, then run **D2.5** (see Next). If the 5-hour usage limit message appears, wait for the reset.
+**State 2026-11-16:** work resumed after the owner's go-ahead; everything below is committed and pushed. Auto-resume cron runs every 20 min inside the session (dies with the session). Start Docker Desktop first. If the 5-hour usage limit message appears, wait for the reset (Opus-only units like D2.8 wait for it; Sonnet units can run).
+**Done since the stop:** D2.5+D2.6 (resolver in order pricing, company VAT fix, price snapshot, PRICE_CHANGED guard) · D2.7 (staff API for price lists, part 1) · D2.11 (console price-list editor) · D5.2 (`POST /api/v1/quick-order/validate`, 4 SQL queries for 500 lines).
 
 **Done:** C6 search ✅ · C7 storefront ✅ · H1 home/legal/help ✅ · A6 tooling ✅ · A8 PDF engine EN/BN ✅ · E1 cart ✅ (Redis CAS store, signed guest token, endpoints, atomic merge on login; needs ONE Redis node) ·
 E3.1–E3.4 cart page + checkout delivery/review (placeholder confirmation) · E3b backend follow-ups (quote totals, `GET /orders`, cart cleared on order, `GET /admin/sellers`) ·
@@ -11,8 +11,8 @@ D2.1–D2.4 price lists: ADR-0008 + decisions (lowest valid price, VAT-inclusive
 H3a Dockerfiles ×4 + staging compose + H3a.2 deploy readiness (`Mechware.Worker migrate`) · TOTP secrets encrypted at rest · F3a.1/.2a/.3 email + OTP limits · D2/E1/E8 threat-model sections.
 Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub). Tests at last full run: 1137 unit + 688 integration, Skipped 0.
 
-**Next (in order):** **D2.5** resolver into order pricing + snapshot columns + company VAT fix (company totals become equal to guest totals: update `OrderServiceTests` expectations; Opus xhigh; brief is in the session history: IPriceResolver adapter loading ALL Approved+Withdrawn versions, snapshot on `order_items`, PRICE_CHANGED guard, coupons never on negotiated lines, 1 migration) ·
-D2.7–D2.13 staff API + console screens + storefront price display · D5.2 line-validate API · E3.5 payment choice (needs gateway) · E3.6/E3.7 confirmation + guest checkout · E8.3/E8.4 · E4/E5 gateways · E6 invoicing · F1/F2 · H2 hardening.
+**Next (in order):** **D2.8** approve/reject/withdraw with step-up (Opus; HANDOFF in docs/modules/D2.md has the exact domain calls and the `LockedAsync` helper) · D2.9 margin-floor staff API (Opus) · D2.10 buyer company-price API · D2.12 console approval queue + floors · D2.13 storefront price display ·
+D5.3 web quick-order page · E3.5 payment choice (needs gateway) · E3.6/E3.7 confirmation + guest checkout · E8.3 legal deadline / E8.4 console zones editor (needs a zones admin API) · small: admin SKU→variant lookup endpoint (the price-list editor needs it), `GET /admin/companies?q=` · E4/E5 gateways · E6 invoicing · F1/F2 · H2 hardening.
 **Watch:** concurrency tests (`InventoryConcurrencyTests…`) failed twice only while other servers loaded the machine (pass alone); intermittent React hydration error #418 on /search after a language switch (not reproduced); /cart Lighthouse mobile ~81 (LCP 3.3 s, client-fetched content; fix in H4); bn home Lighthouse varies 74-95 on this PC.
 
 **How work runs:** main session plans + verifies; routine code → Sonnet sub-agent; money/security → Opus (high/xhigh); design → Fable. Verify every agent report myself (unit + integration with Skipped 0, `dotnet format` EXIT CODE, `check_cards.py`, typecheck/lint) before commit; never push to main.

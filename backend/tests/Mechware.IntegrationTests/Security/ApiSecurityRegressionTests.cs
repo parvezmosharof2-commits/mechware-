@@ -53,6 +53,8 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         "GET api/v1/search",   // published products only (the index holds nothing else), validated input, storefront rate limit (SearchApiTests)
         "GET api/v1/search/autocomplete",   // titles of published products only, limit 10, storefront rate limit (SearchApiTests)
         // The cart is open to guests (E1.3): a signed-in user is keyed by the access token, a guest by the signed __Host-mw_cart cookie; prices are the server's own (CartApiTests).
+        // Quick-order line validation (D5.2): reads only the pasted text; public prices and stock bands the storefront already shows; per-IP rate limit.
+        "POST api/v1/quick-order/validate",
         "GET api/v1/cart",
         "DELETE api/v1/cart",
         "POST api/v1/cart/items",

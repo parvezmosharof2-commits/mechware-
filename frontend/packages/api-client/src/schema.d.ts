@@ -3094,6 +3094,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/quick-order/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["QuickOrderValidateBody"];
+                    "text/json": components["schemas"]["QuickOrderValidateBody"];
+                    "application/*+json": components["schemas"]["QuickOrderValidateBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -3913,6 +3952,10 @@ export interface components {
             /** Format: int64 */
             sizeBytes?: number;
             url?: string | null;
+        };
+        /** @description The only thing read from the client: the pasted text. No prices, ids or company are bound. */
+        QuickOrderValidateBody: {
+            text?: string | null;
         };
         RegisterCompanyRequest: {
             legalName?: string | null;

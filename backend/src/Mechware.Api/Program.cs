@@ -307,6 +307,19 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1)
             }));
 
+    // The quick-order validator runs a handful of queries for up to 500 lines: heavier than a cart read, so its own small
+    // per-IP budget (D5.2). Anonymous and signed-in buyers share it per address.
+    options.AddPolicy("QuickOrderValidate", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: $"qo:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:QuickOrderPermitPerMinute") ?? 30,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+
     // Payment-provider webhooks get their own bucket per IP (threat model v2, P6): a provider delivers bursts from a few
     // addresses, and a 429 makes it retry later, which delays confirming paid orders. They never share the budget that
     // throttles browsers, and a flood of forged webhooks only exhausts its own bucket (each is refused on the signature).

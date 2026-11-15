@@ -21,7 +21,7 @@ namespace Mechware.Infrastructure.Catalog;
 /// </summary>
 public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
 {
-    public const int LowStockDisplayThreshold = 5;
+    public const int LowStockDisplayThreshold = StockDto.LowStockDisplayThreshold;
 
     private static readonly Func<MechwareDbContext, string, Task<Product?>> ProductBySlug =
         EF.CompileAsyncQuery((MechwareDbContext db, string slug) =>
@@ -263,12 +263,7 @@ public sealed class StorefrontCatalogReader : IStorefrontCatalogReader
             ToStock(stock.TryGetValue(v.Id, out var a) ? a : 0), v.MinOrderQty, v.PackSize, v.ManufacturerPartNumber)).ToList(),
         d.SupplyStatus, d.Successor, d.Alternatives, d.Documents);
 
-    internal static StockDto ToStock(int available) => new(Math.Max(available, 0), available switch
-    {
-        <= 0 => "out_of_stock",
-        <= LowStockDisplayThreshold => "low_stock",
-        _ => "in_stock"
-    });
+    internal static StockDto ToStock(int available) => StockDto.Of(available);
 
     internal static VariantPriceDto PriceFor(CachedVariant v, decimal vatRate, DateTime nowUtc)
     {

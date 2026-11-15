@@ -41,6 +41,9 @@ public sealed record CartNotice(CartNoticeKind Kind, Guid VariantId, long? Was =
 
 public sealed record CartChange(Cart Cart, IReadOnlyList<CartNotice> Notices);
 
+/// <summary>A quantity fitted to the order units of a variant, and why it moved (null = unchanged).</summary>
+public readonly record struct OrderUnitFit(int Quantity, CartNoticeKind? Notice);
+
 /// <summary>
 /// Pure cart rules (Phase 8): add, set, remove, merge a guest cart into a signed-in one, and re-validate against the
 /// catalog so price and stock drift is reported instead of silently changing what the buyer pays.
@@ -85,6 +88,31 @@ public static class CartEngine
         }
 
         return new Cart(items, cart.Version + 1);
+    }
+
+    /// <summary>
+    /// The quantity a buyer who asked for <paramref name="requested"/> units gets on one line, under the same order-unit rules
+    /// <see cref="Set"/> enforces: at least the minimum, whole packs. Rounds up (the quick order tells the buyer; the cart's
+    /// <see cref="Revalidate"/> rounds down because it must never raise a quantity the buyer chose). Not capped: the caller
+    /// checks <see cref="MaxQuantityPerLine"/> and stock. <see cref="OrderUnitFit.Notice"/> is null when nothing changed.
+    /// </summary>
+    public static OrderUnitFit FitToOrderUnits(int requested, int minOrderQty, int packSize)
+    {
+        long min = Math.Max(1, minOrderQty), pack = Math.Max(1, packSize), quantity = Math.Max(1, requested);
+        CartNoticeKind? notice = null;
+        if (quantity < min)
+        {
+            quantity = min;
+            notice = CartNoticeKind.BelowMinimumOrder;
+        }
+
+        if (quantity % pack != 0)
+        {
+            quantity = (quantity + pack - 1) / pack * pack;
+            notice ??= CartNoticeKind.QuantityAdjustedToPack;
+        }
+
+        return new OrderUnitFit((int)Math.Min(quantity, int.MaxValue), notice);
     }
 
     public static Cart Remove(Cart cart, Guid variantId) =>
