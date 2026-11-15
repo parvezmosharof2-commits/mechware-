@@ -10,6 +10,8 @@ export interface ConsoleNavItem {
   /** Route of a built page. Items without one are planned modules and render as disabled. */
   href?: string;
   badge?: string;
+  /** Heading shown above the first visible item of each group. */
+  group?: string;
 }
 
 export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
@@ -29,6 +31,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     label: 'Bulk catalogue import',
     requiredPermission: 'catalog.manage',
     href: '/catalog/import'
+  },
+  {
+    id: 'price-lists',
+    label: 'Price lists',
+    requiredPermission: 'pricelists.view',
+    href: '/pricing/price-lists',
+    group: 'Pricing'
   },
   {
     id: 'catalog-moderate',
@@ -94,7 +103,8 @@ export function RoleAwareSidebar({ roles, permissions, activeItemId }: RoleAware
         </div>
 
         <nav className="space-y-1" aria-label="Modules">
-          {visibleItems.map((item) => {
+          {visibleItems.map((item, index) => {
+            const heading = item.group && item.group !== visibleItems[index - 1]?.group ? item.group : null;
             const isActive = item.id === activeItemId;
             const body = (
               <>
@@ -113,16 +123,23 @@ export function RoleAwareSidebar({ roles, permissions, activeItemId }: RoleAware
               </>
             );
             const base = 'w-full rounded-md px-3 py-2.5 text-left text-xs transition-colors flex flex-col gap-1';
+            const groupHeading = heading ? (
+              <p key={`${item.id}-group`} className="px-3 pt-2 text-xs font-semibold uppercase tracking-wider text-fg-muted">{heading}</p>
+            ) : null;
             if (!item.href) {
               return (
-                <div key={item.id} aria-disabled="true" className={`${base} cursor-not-allowed text-fg-muted opacity-70`}>
-                  {body}
-                </div>
+                <React.Fragment key={item.id}>
+                  {groupHeading}
+                  <div aria-disabled="true" className={`${base} cursor-not-allowed text-fg-muted opacity-70`}>
+                    {body}
+                  </div>
+                </React.Fragment>
               );
             }
             return (
+              <React.Fragment key={item.id}>
+                {groupHeading}
               <Link
-                key={item.id}
                 href={item.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={`${base} ${
@@ -133,6 +150,7 @@ export function RoleAwareSidebar({ roles, permissions, activeItemId }: RoleAware
               >
                 {body}
               </Link>
+              </React.Fragment>
             );
           })}
           {visibleItems.length === 0 && <p className="px-3 text-xs text-fg-muted">No console modules are available for your role yet.</p>}
