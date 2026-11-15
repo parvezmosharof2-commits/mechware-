@@ -125,7 +125,7 @@ const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10
   await p.getByLabel('Search by legal name or BIN').or(p.getByLabel('Company', { exact: true })).first().fill(legalName.slice(0, 22));
   const companyList = p.getByTestId('company-list');
   await companyList.waitFor();
-  await companyList.selectOption({ label: `${legalName} (BIN ${reg.json.data.bin})` });
+  await companyList.selectOption({ label: legalName });
   await p.getByLabel('Contract reference').fill('CT-E2E-1');
   await axeCheck(p, '/pricing/price-lists/new');
   await p.screenshot({ path: `${SHOTS}/d2-11-new-1280.png`, fullPage: true });
@@ -148,7 +148,7 @@ const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10
   r.check('paste: three lines became three entries (SKUs resolved through search)', (await p.getByTestId('entry-row').count()) === 3);
   await paste.fill('NO-SUCH-SKU-ZZ, 1, 5');
   await p.getByRole('button', { name: 'Add lines' }).click();
-  await p.getByText(/No published variant has the SKU: NO-SUCH-SKU-ZZ/).waitFor();
+  await p.getByText(/No variant has the SKU: NO-SUCH-SKU-ZZ/).waitFor();
   r.check('paste: an unknown SKU is named and nothing is added', (await p.getByTestId('entry-row').count()) === 3);
 
   // ---- manual add

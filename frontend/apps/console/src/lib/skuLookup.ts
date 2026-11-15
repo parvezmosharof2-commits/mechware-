@@ -1,4 +1,5 @@
-import { storefrontApi } from './api';
+import { exactSkuMatch } from '@mechware/api-client';
+import { lookupsApi } from './api';
 
 export interface ResolvedSku {
   variantId: string;
@@ -7,21 +8,14 @@ export interface ResolvedSku {
 }
 
 /**
- * SKU to variant id. There is no admin SKU lookup yet, so this goes through the public search (SKUs are indexed as part
- * numbers) and then the product page to read the variant id. Only published products are found.
- * Returns null when no variant has exactly that SKU.
+ * SKU to variant id through the staff lookup (`GET /admin/variants?sku=`): exact, case-insensitive, drafts and unpublished
+ * products included. Returns null when no variant has exactly that SKU.
  */
 export async function resolveSku(sku: string): Promise<ResolvedSku | null> {
-  const wanted = sku.trim().toLowerCase();
-  if (!wanted) return null;
-  const found = await storefrontApi.search({ q: sku.trim(), pageSize: 5 });
-  const hits = found.data.filter((h) => h.partNumbers.some((p) => p.toLowerCase() === wanted));
-  for (const hit of hits) {
-    const product = (await storefrontApi.productBySlug(hit.slug)).data;
-    const variant = product.variants.find((v) => v.sku.toLowerCase() === wanted);
-    if (variant) return { variantId: variant.id, sku: variant.sku, title: product.titleEn };
-  }
-  return null;
+  if (!sku.trim()) return null;
+  const found = (await lookupsApi.variants({ sku: sku.trim(), pageSize: 5 })).data.items;
+  const hit = exactSkuMatch(found, sku);
+  return hit ? { variantId: hit.variantId, sku: hit.sku, title: hit.title } : null;
 }
 
 /** Resolves many SKUs with at most `concurrency` requests in flight; a failed lookup rejects the whole call. */

@@ -8,7 +8,6 @@ import { priceListError, priceListsApi } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
-import { useCompanyNames } from './CompanyPicker';
 
 export const fmtDate = (iso: string | null | undefined) => (iso ? iso.slice(0, 10) : '');
 
@@ -24,7 +23,8 @@ export function StateBadges({ status, displayState }: { status: string; displayS
 
 const SELECT = 'block w-full rounded-md border border-surface-border bg-surface p-2 text-sm';
 
-function Row({ item, company }: { item: PriceListSummary; company: string }) {
+function Row({ item }: { item: PriceListSummary }) {
+  const company = item.companyName ?? `Company ${(item.companyId ?? '').slice(0, 8)}`;
   return (
     <tr className="border-t border-surface-border align-top">
       <td className="px-3 py-2"><Link className="font-semibold text-brand-accent underline" href={`/pricing/price-lists/${item.id}`}>{item.name}</Link></td>
@@ -45,7 +45,6 @@ function PriceLists({ canEdit }: { canEdit: boolean }) {
   const [q, setQ] = React.useState('');
   const [applied, setApplied] = React.useState({ status: '', scope: '', q: '' });
   const [page, setPage] = React.useState(1);
-  const names = useCompanyNames();
   const list = useResource(() => priceListsApi.list({ ...applied, page, pageSize: PRICE_LIST_PAGE_SIZE }), `${applied.status}|${applied.scope}|${applied.q}|${page}`);
 
   const apply = (e: React.FormEvent) => {
@@ -118,7 +117,7 @@ function PriceLists({ canEdit }: { canEdit: boolean }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.items.map((item) => <Row key={item.id} item={item} company={item.companyId ? names[item.companyId] ?? `Company ${item.companyId.slice(0, 8)}` : ''} />)}
+                  {data.items.map((item) => <Row key={item.id} item={item} />)}
                 </tbody>
               </table>
             </div>

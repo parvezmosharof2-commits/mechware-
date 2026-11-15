@@ -40,6 +40,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Pricing'
   },
   {
+    id: 'shipping-zones',
+    label: 'Shipping zones',
+    requiredPermission: 'shipping.view',
+    href: '/shipping/zones',
+    group: 'Shipping'
+  },
+  {
     id: 'catalog-moderate',
     label: 'Machinery Spec Moderation',
     requiredPermission: 'catalog.moderate'

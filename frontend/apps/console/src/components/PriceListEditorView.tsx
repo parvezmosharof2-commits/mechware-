@@ -14,7 +14,6 @@ import { useAuth } from '../lib/auth';
 import { resolveSkus } from '../lib/skuLookup';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
-import { useCompanyNames } from './CompanyPicker';
 import { StateBadges, fmtDate } from './PriceListsView';
 
 interface Notice { text: string; retry: boolean }
@@ -207,7 +206,6 @@ function HeaderForm({ detail, busy, onSave }: { detail: PriceListDetail; busy: b
 
 function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
   const router = useRouter();
-  const names = useCompanyNames();
   const res = useResource(() => priceListsApi.get(id), id);
   const [detail, setDetail] = React.useState<PriceListDetail | null>(null);
   const [notice, setNotice] = React.useState<Notice | null>(null);
@@ -252,7 +250,7 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
   const editable = canEdit && isEditable(detail.status);
   const entries = detail.entries;
   const showCost = entries.some((e) => e.costMinor !== undefined || e.floorMinor !== undefined || e.belowFloor !== undefined);
-  const companyName = detail.companyId ? names[detail.companyId] ?? detail.companyId : null;
+  const companyName = detail.companyId ? detail.companyName ?? detail.companyId : null;
 
   const apply = (d: PriceListDetail) => { setDetail(d); setRowErrors({}); };
 
@@ -275,7 +273,7 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
     setBusy(true);
     try {
       const found = (await resolveSkus([sku])).get(sku.toLowerCase());
-      if (!found) return `No published variant has the SKU ${sku}.`;
+      if (!found) return `No variant has the SKU ${sku}.`;
       const d = (await priceListsApi.upsertEntries(detail.id, [{ ...item, variantId: found.variantId }])).data;
       apply(d);
       setOkText(`${found.sku} added.`);
@@ -292,7 +290,7 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
     try {
       const resolved = await resolveSkus(lines.map((l) => l.sku));
       const unknown = [...new Set(lines.filter((l) => !resolved.get(l.sku.toLowerCase())).map((l) => l.sku))];
-      if (unknown.length > 0) return [`No published variant has the SKU: ${unknown.slice(0, 20).join(', ')}${unknown.length > 20 ? ', ...' : ''}. Nothing was added.`];
+      if (unknown.length > 0) return [`No variant has the SKU: ${unknown.slice(0, 20).join(', ')}${unknown.length > 20 ? ', ...' : ''}. Nothing was added.`];
       const items: UpsertEntryItem[] = lines.map((l) => ({ variantId: resolved.get(l.sku.toLowerCase())!.variantId, minQty: l.minQty, unitPriceMinor: l.unitPriceMinor, belowFloorReason: l.belowFloorReason }));
       let d = detail;
       const batches = chunkEntries(items);

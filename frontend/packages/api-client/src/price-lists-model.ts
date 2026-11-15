@@ -20,6 +20,8 @@ export interface PriceListSummary {
   name: string;
   scope: PriceListScope | 'Group' | string;
   companyId: string | null;
+  /** Legal name of the company (null on a General list). Added by E8.3b. */
+  companyName?: string | null;
   contractRef: string | null;
   status: PriceListStatus | string;
   displayState: PriceListDisplayState | string;
