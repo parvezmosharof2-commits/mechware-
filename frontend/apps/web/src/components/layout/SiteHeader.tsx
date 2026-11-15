@@ -78,6 +78,9 @@ export async function SiteHeader() {
               </ul>
             </nav>
           </details>
+          <Link prefetch={false} href={`${prefix}/quick-order`} className="flex h-10 items-center rounded-md border border-surface-border bg-bg-subtle px-3 text-sm font-semibold text-text hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            {t('quickOrder')}
+          </Link>
           <LanguageSwitch locale={loc} label={t('language')} current={current} />
           <HeaderCart locale={loc} />
           <HeaderAccount locale={loc} initialSignedIn={signedIn} />

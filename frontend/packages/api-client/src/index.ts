@@ -463,3 +463,5 @@ export * from "./checkout-model";
 export * from "./orders";
 export * from "./price-lists-model";
 export * from "./price-lists";
+export * from "./quick-order-model";
+export * from "./quick-order";

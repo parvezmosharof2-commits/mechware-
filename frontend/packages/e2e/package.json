@@ -9,7 +9,8 @@
     "test:console-import": "node tests/console-import.mjs",
     "test:console-pricelists": "node tests/console-pricelists.mjs",
     "test:storefront": "node tests/storefront.mjs",
-    "test:checkout": "node tests/checkout.mjs"
+    "test:checkout": "node tests/checkout.mjs",
+    "test:quick-order": "node tests/quick-order.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"
