@@ -385,7 +385,7 @@ public class OrderShippingWithoutZonesTests(PostgresDatabaseFixture fixture) : I
 /// <summary>The switch through the real host: off by default outside Development/Testing, and refused there if switched on.</summary>
 public class OrderShippingStartupTests
 {
-    private static Dictionary<string, string> ProductionSettings(string? allowFree = null)
+    internal static Dictionary<string, string> ProductionSettings(string? allowFree = null)
     {
         var settings = new Dictionary<string, string>
         {

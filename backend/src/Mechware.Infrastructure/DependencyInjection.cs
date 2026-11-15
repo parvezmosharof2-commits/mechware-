@@ -58,6 +58,7 @@ public static class DependencyInjection
         // Fail closed unless the host registered its own options first (the API does, from Shipping:AllowFreeWhenNoZones).
         services.TryAddSingleton(new Shipping.ShippingOptions());
         services.TryAddScoped<Mechware.Application.Shipping.IOrderShippingQuoter, Shipping.OrderShippingQuoter>();
+        services.TryAddScoped<Mechware.Application.Shipping.IShippingZoneService, Shipping.ShippingZoneService>();
         // Below cost refused unless the host registered its own options first (the API does, from Pricing:AllowBelowCost).
         services.TryAddSingleton(new Pricing.PricingOptions());
         services.TryAddScoped<Mechware.Application.Pricing.IPriceResolver, Pricing.PriceListResolver>();

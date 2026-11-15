@@ -1148,6 +1148,175 @@
         }
       }
     },
+    "/api/v1/admin/shipping/zones": {
+      "get": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/shipping/zones/{id}": {
+      "get": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingZoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/shipping/zones/preview": {
+      "post": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "summary": "Dry run of the calculator against the current active zones. Writes nothing.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingPreviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingPreviewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShippingPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/shipping/coverage": {
+      "get": {
+        "tags": [
+          "AdminShippingZones"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/awaiting-two-factor": {
       "get": {
         "tags": [
@@ -4320,6 +4489,75 @@
         },
         "additionalProperties": false
       },
+      "ShippingBandDto": {
+        "type": "object",
+        "properties": {
+          "maxGrams": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "feeMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShippingPreviewLine": {
+        "type": "object",
+        "properties": {
+          "sellerId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unitWeightGrams": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "lengthMm": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "widthMm": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "heightMm": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShippingPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "districtId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShippingPreviewLine"
+            },
+            "nullable": true
+          },
+          "subtotalMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "ShippingQuoteBody": {
         "type": "object",
         "properties": {
@@ -4355,6 +4593,75 @@
         },
         "additionalProperties": false,
         "description": "The lines and destination to price delivery for. Like an order, it carries no money: shipping is the server's own."
+      },
+      "ShippingRatesDto": {
+        "type": "object",
+        "properties": {
+          "bands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShippingBandDto"
+            },
+            "nullable": true
+          },
+          "freeShippingThresholdMinor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "heavyUnitGrams": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "oversizeDimensionMm": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "maxFeeMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ShippingZoneRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "nameEn": {
+            "type": "string",
+            "nullable": true
+          },
+          "nameBn": {
+            "type": "string",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "districtIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "rates": {
+            "$ref": "#/components/schemas/ShippingRatesDto"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "SiteRequest": {
         "type": "object",
@@ -4798,6 +5105,9 @@
     },
     {
       "name": "AdminSellers"
+    },
+    {
+      "name": "AdminShippingZones"
     },
     {
       "name": "AdminUserSecurity"

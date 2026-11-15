@@ -20,6 +20,7 @@ public sealed class ShippingRateBand
     public long FeeMinor { get; private set; }
     private ShippingRateBand() { }
     internal ShippingRateBand(Guid zoneId, int maxGrams, long feeMinor) { ZoneId = zoneId; MaxGrams = maxGrams; FeeMinor = feeMinor; }
+    internal void SetFee(long feeMinor) => FeeMinor = feeMinor;
 }
 
 /// <summary>An admin-managed shipping zone with its rate card (editor comes in E8.4). Tariffs come from the owner/courier, never from code.</summary>
@@ -65,8 +66,36 @@ public sealed class ShippingZone : Entity<Guid>
         HeavyUnitGrams = rates.HeavyUnitGrams;
         OversizeDimensionMm = rates.OversizeDimensionMm;
         MaxFeeMinor = rates.MaxFeeMinor;
-        _bands.Clear();
-        _bands.AddRange(rates.Bands.Select(b => new ShippingRateBand(Id, b.MaxGrams, b.FeeMinor)));
+        // Diff, not clear-and-add: a band keeping its upper weight keeps its key (zone, max grams), so one save never deletes and re-inserts a key.
+        var incoming = rates.Bands.ToDictionary(b => b.MaxGrams);
+        _bands.RemoveAll(b => !incoming.ContainsKey(b.MaxGrams));
+        foreach (var (grams, band) in incoming)
+        {
+            var existing = _bands.FirstOrDefault(b => b.MaxGrams == grams);
+            if (existing is null) _bands.Add(new ShippingRateBand(Id, grams, band.FeeMinor));
+            else existing.SetFee(band.FeeMinor);
+        }
+
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Names and on/off switch of an existing zone (the code never changes: it is the stable handle in audit rows and tests).</summary>
+    public void Edit(string nameEn, string nameBn, bool isActive)
+    {
+        if (string.IsNullOrWhiteSpace(nameEn) || string.IsNullOrWhiteSpace(nameBn)) throw new ValidationException("name", "A zone needs an English and a Bangla name.");
+        NameEn = nameEn.Trim();
+        NameBn = nameBn.Trim();
+        IsActive = isActive;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
+    /// <summary>Replaces the served districts, keeping the rows of districts that stay (their key is the district id).</summary>
+    public void SetDistricts(IEnumerable<Guid> districtIds)
+    {
+        var wanted = districtIds.ToList();
+        if (wanted.Distinct().Count() != wanted.Count) throw new ValidationException("districts", "A district is listed twice in the zone.");
+        _districts.RemoveAll(d => !wanted.Contains(d.DistrictId));
+        foreach (var d in wanted.Where(w => _districts.All(x => x.DistrictId != w))) _districts.Add(new ShippingZoneDistrict(Id, d));
         UpdatedAtUtc = DateTime.UtcNow;
     }
 

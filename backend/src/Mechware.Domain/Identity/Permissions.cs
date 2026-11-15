@@ -41,6 +41,11 @@ public static class Permissions
     public const string PricingViewCost = "pricing.view_cost";
     public const string PricingManageFloors = "pricing.manage_floors";
 
+    // Shipping zones and rate cards (E8.4a). Tariffs decide what every buyer pays and whether production orders are possible at all.
+    public const string ShippingView = "shipping.view";
+    /// <summary>Create, change and delete zones and rate cards (money-affecting configuration: Admin only).</summary>
+    public const string ShippingManage = "shipping.manage";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -64,12 +69,12 @@ public static class Permissions
             Roles.Buyer => [OrdersViewOwn],
             Roles.Seller => [OrdersViewOwn, CatalogCreate, CatalogUpdateOwn, SellersManageOwn],
             // Support is the sales-facing staff role: it prepares price lists but never approves them.
-            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView, PriceListsView, PriceListsEdit],
+            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, CompaniesView, PriceListsView, PriceListsEdit, ShippingView],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
-                PriceListsView, PriceListsApprove, PricingViewCost
+                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView
             ],
             Roles.Admin =>
             [
@@ -94,7 +99,9 @@ public static class Permissions
                 PriceListsApprove,
                 PriceListsApproveBelowFloor,
                 PricingViewCost,
-                PricingManageFloors
+                PricingManageFloors,
+                ShippingView,
+                ShippingManage
             ],
             _ => []
         };

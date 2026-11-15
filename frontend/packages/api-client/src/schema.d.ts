@@ -1206,6 +1206,214 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/shipping/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ShippingZoneRequest"];
+                    "text/json": components["schemas"]["ShippingZoneRequest"];
+                    "application/*+json": components["schemas"]["ShippingZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/shipping/zones/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ShippingZoneRequest"];
+                    "text/json": components["schemas"]["ShippingZoneRequest"];
+                    "application/*+json": components["schemas"]["ShippingZoneRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/shipping/zones/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dry run of the calculator against the current active zones. Writes nothing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ShippingPreviewRequest"];
+                    "text/json": components["schemas"]["ShippingPreviewRequest"];
+                    "application/*+json": components["schemas"]["ShippingPreviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/shipping/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/awaiting-two-factor": {
         parameters: {
             query?: never;
@@ -4155,6 +4363,33 @@ export interface components {
             successorNote?: string | null;
             clearSuccessor?: boolean | null;
         };
+        ShippingBandDto: {
+            /** Format: int32 */
+            maxGrams?: number;
+            /** Format: int64 */
+            feeMinor?: number;
+        };
+        ShippingPreviewLine: {
+            /** Format: uuid */
+            sellerId?: string | null;
+            /** Format: int32 */
+            quantity?: number;
+            /** Format: int32 */
+            unitWeightGrams?: number;
+            /** Format: int32 */
+            lengthMm?: number | null;
+            /** Format: int32 */
+            widthMm?: number | null;
+            /** Format: int32 */
+            heightMm?: number | null;
+        };
+        ShippingPreviewRequest: {
+            /** Format: uuid */
+            districtId?: string;
+            lines?: components["schemas"]["ShippingPreviewLine"][] | null;
+            /** Format: int64 */
+            subtotalMinor?: number;
+        };
         /** @description The lines and destination to price delivery for. Like an order, it carries no money: shipping is the server's own. */
         ShippingQuoteBody: {
             lines?: components["schemas"]["PlaceOrderLine"][] | null;
@@ -4165,6 +4400,27 @@ export interface components {
             couponCodes?: string[] | null;
             /** Format: uuid */
             shipToSiteId?: string | null;
+        };
+        ShippingRatesDto: {
+            bands?: components["schemas"]["ShippingBandDto"][] | null;
+            /** Format: int64 */
+            freeShippingThresholdMinor?: number | null;
+            /** Format: int32 */
+            heavyUnitGrams?: number | null;
+            /** Format: int32 */
+            oversizeDimensionMm?: number | null;
+            /** Format: int64 */
+            maxFeeMinor?: number;
+        };
+        ShippingZoneRequest: {
+            code?: string | null;
+            nameEn?: string | null;
+            nameBn?: string | null;
+            isActive?: boolean;
+            districtIds?: string[] | null;
+            rates?: components["schemas"]["ShippingRatesDto"];
+            /** Format: int64 */
+            expectedVersion?: number | null;
         };
         SiteRequest: {
             name?: string | null;

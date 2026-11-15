@@ -42,3 +42,6 @@ dump.rdb
 
 # Staging compose secrets
 infra/docker/staging.env
+
+# Media written by local seed-catalog runs (generated, not source)
+backend/src/Mechware.Worker/seed-media/
