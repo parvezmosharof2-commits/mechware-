@@ -1,13 +1,16 @@
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Pricing;
+using Mechware.Domain.Pricing.PriceLists;
 
 namespace Mechware.Domain.Orders;
 
 /// <summary>One purchased line as the server resolved it: price, VAT rate and promotion discount are never taken from the client.</summary>
 /// <param name="UnitPriceMinor">Unit price from price resolution (brief §8.1); gross when the mode is inclusive, net when exclusive.</param>
 /// <param name="DiscountMinor">Promotion discount allocated to this line (from <see cref="PromotionEngine"/>).</param>
+/// <param name="Price">Where the unit price came from (ADR-0008 §8); frozen on the order line. When given, its variant and unit price must be the line's.</param>
 public sealed record OrderLineDraft(
-    Guid LineId, Guid VariantId, Guid SellerId, string Sku, string Title, int Quantity, long UnitPriceMinor, decimal VatRate, long DiscountMinor);
+    Guid LineId, Guid VariantId, Guid SellerId, string Sku, string Title, int Quantity, long UnitPriceMinor, decimal VatRate, long DiscountMinor,
+    PriceResolution? Price = null);
 
 /// <param name="ShippingMinor">Shipping charged by this seller's shipment (already tax-inclusive or not per the mode).</param>
 /// <param name="CommissionRate">Marketplace commission on the seller's net goods value (seller override, else category rate).</param>
@@ -15,7 +18,7 @@ public sealed record SellerTerms(Guid SellerId, long ShippingMinor, decimal Comm
 
 public sealed record PricedLine(
     Guid LineId, Guid VariantId, Guid SellerId, string Sku, string Title, int Quantity, long UnitPriceMinor, decimal VatRate,
-    long GrossMinor, long DiscountMinor, long NetMinor, long TaxMinor, long TotalMinor);
+    long GrossMinor, long DiscountMinor, long NetMinor, long TaxMinor, long TotalMinor, PriceResolution? Price = null);
 
 /// <param name="GoodsNetMinor">Seller's goods after discount, before VAT: the base for commission.</param>
 public sealed record PricedSubOrder(
@@ -74,11 +77,41 @@ public static class OrderPricing
             subOrders.Sum(s => s.TotalMinor));
     }
 
+    /// <summary>
+    /// What the goods count toward a free-shipping threshold (E8.2): after discounts, VAT included, shipping excluded. A
+    /// VAT-inclusive (guest or personal) order counts its own line totals. A company order counts what the same lines count
+    /// for a guest: quantity × the guest's VAT-inclusive unit price, less the line's own discount with its VAT. So neither
+    /// the rounding of public prices to net (owner decision 2) nor a contract price (rule A) ever costs a company the free
+    /// shipping a guest gets for the same cart, and a company never pays more than a guest for it.
+    /// </summary>
+    /// <param name="guestUnitPriceMinor">Per line id: what a guest pays per unit for that quantity at the order's instant; read only for exclusive orders.</param>
+    public static long FreeShippingBasisMinor(IReadOnlyList<OrderLineDraft> lines, IReadOnlyDictionary<Guid, long> guestUnitPriceMinor, TaxMode mode)
+    {
+        long basis = 0;
+        foreach (var line in lines)
+        {
+            var total = PriceLine(line, mode).TotalMinor;
+            if (mode == TaxMode.Exclusive)
+            {
+                // undiscounted − discounted = the line's discount with its VAT; never below zero (rule A keeps the guest value higher).
+                var discountWithVat = PriceLine(line with { DiscountMinor = 0 }, mode).TotalMinor - total;
+                total = Math.Max(total, checked(line.Quantity * guestUnitPriceMinor[line.LineId]) - discountWithVat);
+            }
+
+            basis = checked(basis + total);
+        }
+
+        return basis;
+    }
+
     private static PricedLine PriceLine(OrderLineDraft l, TaxMode mode)
     {
         if (l.Quantity <= 0) throw new ValidationException("quantity", "Quantity must be positive.");
         if (l.UnitPriceMinor < 0) throw new ValidationException("unitPrice", "Unit price cannot be negative.");
         if (l.VatRate is < 0m or > 0.5m) throw new ValidationException("vatRate", "VAT rate must be between 0 and 0.5.");
+        // The snapshot must describe the price actually charged, or an audit would explain a different number.
+        if (l.Price is { } p && (p.VariantId != l.VariantId || p.UnitPriceMinor != l.UnitPriceMinor))
+            throw new ValidationException("price", "The price snapshot does not match the line.");
 
         var gross = checked(l.Quantity * l.UnitPriceMinor);
         if (l.DiscountMinor < 0 || l.DiscountMinor > gross) throw new ValidationException("discount", "A discount cannot exceed the line's value.");
@@ -100,6 +133,6 @@ public static class OrderPricing
         }
 
         return new PricedLine(l.LineId, l.VariantId, l.SellerId, l.Sku, l.Title, l.Quantity, l.UnitPriceMinor, l.VatRate,
-            gross, l.DiscountMinor, net, tax, total);
+            gross, l.DiscountMinor, net, tax, total, l.Price);
     }
 }

@@ -20,7 +20,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
     private async Task<T> With<T>(Func<OrderService, Task<T>> action, Func<DateTime, string>? orderNumbers = null)
     {
         await using var db = fixture.CreateContext();
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), orderNumbers));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db), orderNumbers));
     }
 
     private async Task<SeededVariant> SeedAsync(int onHand, long price = 150_000)
@@ -275,7 +275,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
 
         var placed = await With(s => s.PlaceAsync(ForCompany(buyer, company, v.VariantId)));
 
-        placed.GrandTotalMinor.Should().Be(105_000, "company orders are VAT-exclusive: 5 % is added to the 1,000.00 price");
+        placed.GrandTotalMinor.Should().Be(100_000, "owner decision 2: the 1,000.00 catalogue price includes VAT for everyone, so a company pays 952.38 net + 47.62 VAT, what a guest pays");
         await using var db = fixture.CreateContext();
         (await db.Orders.AsNoTracking().SingleAsync(o => o.Id == placed.OrderId)).CompanyId.Should().Be(company);
     }
@@ -339,8 +339,8 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         var placed = await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 2)));
 
         placed.Status.Should().Be("confirmed");
-        placed.GrandTotalMinor.Should().Be(210_000);                    // 2 x 1,000.00 plus 5 % VAT on top
-        (await CreditUsedAsync(company)).Should().Be(210_000);
+        placed.GrandTotalMinor.Should().Be(200_000);                    // 2 x 1,000.00 VAT-inclusive (owner decision 2): 1,904.76 net + 95.24 VAT
+        (await CreditUsedAsync(company)).Should().Be(200_000);
         var (reserved, onHand) = await StockAsync(v.VariantId);
         (reserved, onHand).Should().Be((0, 8), "credit orders deduct stock on confirmation");
 
@@ -355,11 +355,11 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         var (company, buyer) = await CreditCompanyAsync(limitMinor: 250_000);
         var v = await SeedAsync(10, 100_000);
 
-        await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 2)));       // 210,000 of 250,000 used
-        var act = () => With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 1)));   // +105,000 would be 315,000
+        await With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 2)));       // 200,000 of 250,000 used
+        var act = () => With(s => s.PlaceAsync(OnCredit(buyer, company, v.VariantId, qty: 1)));   // +100,000 would be 300,000
 
         (await act.Should().ThrowAsync<ConflictException>()).Which.Code.Should().Be("CREDIT_LIMIT_EXCEEDED");
-        (await CreditUsedAsync(company)).Should().Be(210_000);
+        (await CreditUsedAsync(company)).Should().Be(200_000);
         (await StockAsync(v.VariantId)).Should().Be((0, 8), "the refused order gave its stock back");
         await using var db = fixture.CreateContext();
         (await db.Orders.CountAsync(o => o.CompanyId == company)).Should().Be(1);
@@ -368,7 +368,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
     [PostgresFact]
     public async Task TwelveParallelCreditOrders_NeverPassTheLimit_ExactlyTheAffordableOnesSucceed()
     {
-        var (company, buyer) = await CreditCompanyAsync(limitMinor: 320_000);   // room for exactly three 105,000 orders
+        var (company, buyer) = await CreditCompanyAsync(limitMinor: 320_000);   // room for exactly three 100,000 orders
 
         // One variant per order: nothing in the inventory serialises them, so only the credit check stands in the way.
         var variants = new List<SeededVariant>();
@@ -386,7 +386,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
 
         outcomes.Count(o => o == "ok").Should().Be(3);
         outcomes.Where(o => o != "ok").Should().OnlyContain(o => o == "CREDIT_LIMIT_EXCEEDED");
-        (await CreditUsedAsync(company)).Should().Be(315_000).And.BeLessThanOrEqualTo(320_000);
+        (await CreditUsedAsync(company)).Should().Be(300_000).And.BeLessThanOrEqualTo(320_000);
         foreach (var v in variants) (await StockAsync(v.VariantId)).Reserved.Should().Be(0, "refused orders hold no stock");
     }
 
@@ -416,7 +416,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
         again.OrderId.Should().Be(first.OrderId);
         again.Status.Should().Be("confirmed");
         again.Replayed.Should().BeTrue();
-        (await CreditUsedAsync(company)).Should().Be(105_000);
+        (await CreditUsedAsync(company)).Should().Be(100_000);
     }
 
     [PostgresFact]
@@ -498,7 +498,7 @@ public class OrderServiceTests(PostgresDatabaseFixture fixture) : IClassFixture<
 
         (await Assert.ThrowsAsync<ConflictException>(() => With(s => s.CancelAsync(buyer, placed.OrderId, "changed my mind")))).Code.Should().Be("ORDER_NOT_CANCELLABLE");
 
-        (await CreditUsedAsync(company)).Should().Be(105_000);
+        (await CreditUsedAsync(company)).Should().Be(100_000);
         (await StockAsync(v.VariantId)).Should().Be((0, 9));
     }
 

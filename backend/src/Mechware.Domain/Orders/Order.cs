@@ -1,6 +1,7 @@
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Common.Primitives;
 using Mechware.Domain.Pricing;
+using Mechware.Domain.Pricing.PriceLists;
 
 namespace Mechware.Domain.Orders;
 
@@ -23,10 +24,30 @@ public sealed class OrderItem : Entity<Guid>
     public long TaxMinor { get; private set; }
     public long TotalMinor { get; private set; }
 
+    // Price snapshot (ADR-0008 §8): where the unit price came from at the order's instant. Null on lines placed before D2.5,
+    // except the basis, which the migration filled in from the order's tax mode. Nothing reads a price list for a placed order.
+    public PriceSource? PriceSource { get; private set; }
+    public PriceBasis? PriceBasis { get; private set; }
+    public Guid? PriceListId { get; private set; }
+    public int? PriceListVersion { get; private set; }
+    public Guid? PriceListEntryId { get; private set; }
+
+    /// <summary>The contract number, for a <see cref="Pricing.PriceLists.PriceSource.Contract"/> price only.</summary>
+    public string? ContractRef { get; private set; }
+
+    /// <summary>The lowest public price (list, sale, public break) for this quantity at that instant, on <see cref="PriceBasis"/>.</summary>
+    public long? PublicUnitPriceMinor { get; private set; }
+
     private OrderItem() { }
 
     internal OrderItem(Guid id, Guid subOrderId, PricedLine line) : base(id)
     {
+        if (line.Price is { } price)
+        {
+            (PriceSource, PriceBasis, PriceListId, PriceListVersion, PriceListEntryId, ContractRef, PublicUnitPriceMinor) =
+                (price.Source, price.Basis, price.PriceListId, price.PriceListVersion, price.EntryId, price.ContractRef, price.PublicUnitPriceMinor);
+        }
+
         SubOrderId = subOrderId;
         VariantId = line.VariantId;
         Sku = line.Sku;

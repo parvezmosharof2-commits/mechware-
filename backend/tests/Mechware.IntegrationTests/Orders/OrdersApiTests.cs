@@ -98,6 +98,46 @@ public class OrdersApiTests : IClassFixture<DefaultApiFactory>
         order.GetProperty("subOrders")[0].GetProperty("items")[0].GetProperty("unitPriceMinor").GetInt64().Should().Be(250_000);
     }
 
+    /// <summary>Threat model §৮ PL7 (D2.5): a price-list id, source or contract number from the client is never read.</summary>
+    [PostgresFact]
+    public async Task ClientSentPriceOrPriceListId_IsIgnored()
+    {
+        var v = await SeedAsync(onHand: 10, price: 250_000);
+        var options = new DbContextOptionsBuilder<MechwareDbContext>().UseNpgsql(_factory.ConnectionString).Options;
+        Mechware.Domain.Pricing.PriceLists.PriceList contract;
+        await using (var db = new MechwareDbContext(options))
+        {
+            // Someone else's approved contract with a much lower price for this very variant.
+            var bin = (6_300_000_000_000L + Random.Shared.NextInt64(0, 99_999_999_999L)).ToString("D13");
+            var company = Mechware.Domain.Companies.Company.Register(Guid.NewGuid(), "Other Buyer Ltd", "TL-PL7-1", bin, null, null);
+            db.Companies.Add(company);
+            await db.SaveChangesAsync();
+            var now = PriceListTestData.WholeSecond(DateTime.UtcNow);
+            contract = await PriceListTestData.ApprovedAsync(db, Mechware.Domain.Pricing.PriceLists.PriceListScope.Company, company.Id,
+                now.AddHours(-3), now.AddDays(30), now.AddHours(-2), new PriceListTestData.Entry(v.VariantId, 1, 1_000));
+        }
+
+        var client = await BuyerAsync();
+        var entryId = contract.Entries.Single().Id;
+        var tampered = $$"""
+            { "priceListId": "{{contract.Id}}", "priceSource": "contract", "contractRef": "{{contract.ContractRef}}", "expectedGrandTotalMinor": null,
+              "lines": [ { "variantId": "{{v.VariantId}}", "quantity": 2, "unitPriceMinor": 1000, "priceListId": "{{contract.Id}}",
+                           "priceListEntryId": "{{entryId}}", "priceListVersion": 1, "priceSource": "contract", "publicUnitPriceMinor": 1 } ] }
+            """;
+        using var response = await client.SendAsync(Post(tampered, NewKey()));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var placed = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("data");
+        placed.GetProperty("grandTotalMinor").GetInt64().Should().Be(2 * 250_000, "the public price; the contract belongs to nobody in this order");
+        var orderId = placed.GetProperty("orderId").GetGuid();
+        var item = (await (await client.GetAsync($"/api/v1/orders/{orderId}")).Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").GetProperty("subOrders")[0].GetProperty("items")[0];
+        (item.GetProperty("unitPriceMinor").GetInt64(), item.GetProperty("priceSource").GetString()).Should().Be((250_000, "list"));
+        (!item.TryGetProperty("contractRef", out var contractRef) || contractRef.ValueKind == JsonValueKind.Null).Should().BeTrue("no contract number");
+        await using var check = new MechwareDbContext(options);
+        (await check.OrderItems.CountAsync(i => i.PriceListId == contract.Id)).Should().Be(0);
+    }
+
     [PostgresFact]
     public async Task TheIdempotencyKeyHeader_IsRequired_AndAReplayAnswers200WithTheSameOrder()
     {

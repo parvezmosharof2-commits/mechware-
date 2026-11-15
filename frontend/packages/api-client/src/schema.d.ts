@@ -3531,6 +3531,8 @@ export interface components {
         /**
          * @description What the buyer asks for: items and quantities, and which saved address or company site to deliver to. Every price,
          *     tax, discount, total and the address text itself are the server's own; other JSON members are not bound and are ignored.
+         *     `ExpectedGrandTotalMinor`, the total the buyer was shown, can only refuse the order (409 `PRICE_CHANGED` when the
+         *     server's total is higher); it never sets a price.
          */
         PlaceOrderBody: {
             lines?: components["schemas"]["PlaceOrderLine"][] | null;
@@ -3545,6 +3547,8 @@ export interface components {
             /** Format: uuid */
             costCentreId?: string | null;
             purchaseOrderNumber?: string | null;
+            /** Format: int64 */
+            expectedGrandTotalMinor?: number | null;
         };
         PlaceOrderLine: {
             /** Format: uuid */

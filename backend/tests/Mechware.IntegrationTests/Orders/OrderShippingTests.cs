@@ -66,7 +66,7 @@ public class OrderShippingTests(PostgresDatabaseFixture fixture) : IClassFixture
     {
         await using var db = fixture.CreateContext();
         var quoter = new OrderShippingQuoter(new ShippingRateProvider(db), new ShippingOptions());
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, quoter));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, quoter, new Mechware.Infrastructure.Pricing.PriceListResolver(db)));
     }
 
     private async Task<SeededVariant> SeedAsync(long price = 100_000)
@@ -158,6 +158,25 @@ public class OrderShippingTests(PostgresDatabaseFixture fixture) : IClassFixture
 
         (free.GrandTotalMinor, (await OrderAsync(free.OrderId)).ShippingMinor).Should().Be((100_000, 0));
         (paid.GrandTotalMinor, (await OrderAsync(paid.OrderId)).ShippingMinor).Should().Be((106_000, 6_000));
+    }
+
+    [PostgresFact]
+    public async Task ACompanyAtTheFreeShippingThreshold_ShipsFreeLikeAGuest()
+    {
+        // 5,000.00 at 15 % VAT: a company pays 4,347.82 net + 652.17 VAT = 4,999.99 (owner decision 2, D2.5). Its goods still
+        // count as the 5,000.00 a guest pays toward free shipping, so it never pays a fee the guest does not.
+        var district = await ZoneAsync(ShippingTestKit.Card(freeFrom: 500_000));
+        var (buyer, company) = await CompanyBuyerAsync(district.NameEn);
+        var v = await SeedAsync(price: 500_000);
+        await using (var db = fixture.CreateContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE categories SET vat_rate = 0.15 WHERE id = (SELECT category_id FROM products WHERE id = {v.ProductId})");
+        var address = await AddressAsync(buyer, district.NameEn);
+
+        var guest = await With(s => s.PlaceAsync(Req(buyer, address, (v.VariantId, 1))));
+        var forCompany = await With(s => s.PlaceAsync(new PlaceOrderRequest(buyer, Key(), [new PlaceOrderLine(v.VariantId, 1)], CompanyId: company)));
+
+        (guest.GrandTotalMinor, (await OrderAsync(guest.OrderId)).ShippingMinor).Should().Be((500_000, 0));
+        (forCompany.GrandTotalMinor, (await OrderAsync(forCompany.OrderId)).ShippingMinor).Should().Be((499_999, 0));
     }
 
     [PostgresFact]
@@ -338,7 +357,7 @@ public class OrderShippingWithoutZonesTests(PostgresDatabaseFixture fixture) : I
     {
         await using var db = fixture.CreateContext();
         var quoter = new OrderShippingQuoter(new ShippingRateProvider(db), new ShippingOptions { AllowFreeWhenNoZones = allowFreeWhenNoZones });
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, quoter));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, quoter, new Mechware.Infrastructure.Pricing.PriceListResolver(db)));
     }
 
     [PostgresFact]

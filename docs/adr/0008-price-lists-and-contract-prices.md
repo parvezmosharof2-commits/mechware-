@@ -230,8 +230,12 @@ Two limits of A, on purpose: quotes are outside it (above), and it compares **un
 
 ### 7. Rounding and currency
 - Every source is a **unit price in whole poisha**. Entries are absolute amounts, so D2 itself rounds nothing.
-  The only derived unit price is a public price shown on the net basis (owner decision 2): it comes from
-  `PricingEngine` (128-bit decimal, banker's rounding, once). Candidates are compared as integer poisha after that.
+  The only derived unit price is a public price shown on the net basis (owner decision 2):
+  `PriceResolver.ToOrderBasis` = `max(1, floor(gross / (1 + VAT)))`, rounded **down** once (as built in D2.2, not
+  `PricingEngine`'s banker's rounding). Re-adding VAT per line then never exceeds the gross price, so a company never
+  pays more than a guest for a publicly priced line (at most (1 + VAT) poisha per unit plus ½ poisha per line less).
+  The one exception is a 1-poisha catalogue price, where the 1-poisha minimum applies. Candidates are compared as
+  integer poisha after that.
 - The line is unchanged: `OrderPricing` multiplies quantity × unit price (`checked`), subtracts the discount and
   rounds VAT once per line (ADR-0002). No sub-poisha unit prices; very cheap items are sold by pack (`PackSize`).
 - **BDT only.** A list's currency must be in `Pricing:AllowedCurrencies` and equal each entry's variant currency;
@@ -248,6 +252,20 @@ After placement nothing reads a price list for that order again: order pages, ap
 (E6, rule I4) use the order line. An order waiting for approval keeps the price it was placed with, also when the
 list expires or is withdrawn meanwhile. An idempotent replay returns the original order, never a re-priced one.
 `OrderItemDto` gains `PriceSource`.
+
+**As built (D2.5, 2026-11-16).** Migration `AddOrderItemPriceSnapshot` adds `price_source`, `price_basis`,
+`price_list_id`, `price_list_version`, `price_list_entry_id`, `contract_ref` and `public_unit_price_minor` (on the
+line's basis), FKs `RESTRICT`, and one CHECK (`ck_order_items_price_snapshot`: a list reference exactly for a list
+source, a contract number exactly for a contract, source ⇒ basis + public price). Deviation: lines placed before
+D2.5 keep `price_source` **NULL**, not `List`, because a list price and a sale price were never told apart; their
+`price_basis` is backfilled from the order's tax mode. `OrderItemDto` gains `priceSource` (snake_case) and
+`contractRef`. The port is `IPriceResolver.ResolveAsync(verifiedCompanyId, PriceRequestLine(variantId, quantity,
+catalogue PricingInput), mode, asOf)` returning `ResolvedPrice(PriceResolution, GuestUnitPriceMinor)`: the caller
+passes the catalogue facts it read in the same pricing pass, so price and VAT rate come from one read. §9's 409
+`PRICE_CHANGED` carries the new total in its message, not the lines; the client re-asks the shipping quote. A company
+order's free-shipping basis counts each line at the guest's VAT-inclusive value less its own discount with VAT
+(`OrderPricing.FreeShippingBasisMinor`), so rounding to net or a contract price never costs a company free shipping a
+guest would get.
 
 ### 9. A list expires between cart and checkout
 - Cart and product pages show an **estimate**. The order is priced once, at one server instant (`asOf` = the clock

@@ -8,6 +8,11 @@ public sealed record PlaceOrderLine(Guid VariantId, int Quantity);
 /// <see cref="ShipToSiteId"/> a delivery site of <see cref="CompanyId"/>. With neither, a company order goes to the company's
 /// default delivery site and a personal order to the buyer's default shipping address. The server copies the address
 /// into the order, so later edits to the address book never change where a placed order was sent.
+/// <para>
+/// <see cref="ExpectedGrandTotalMinor"/> is the total the buyer was shown (ADR-0008 §9). It can only stop an order: when the
+/// server's own total is higher, nothing is placed (409 <c>PRICE_CHANGED</c>); a lower or equal server total goes through at
+/// the server's price. It is not part of the idempotency hash: a replay returns the order already placed.
+/// </para>
 /// </summary>
 public sealed record PlaceOrderRequest(
     Guid UserId,
@@ -19,7 +24,8 @@ public sealed record PlaceOrderRequest(
     IReadOnlyList<string>? CouponCodes = null,
     Guid? ShipToSiteId = null,
     Guid? CostCentreId = null,
-    string? PurchaseOrderNumber = null)
+    string? PurchaseOrderNumber = null,
+    long? ExpectedGrandTotalMinor = null)
 {
     public const int MaxCoupons = 3;
     public const int MaxLines = 50;
@@ -38,7 +44,13 @@ public sealed record PlaceOrderRequest(
 public sealed record PlacedOrder(
     Guid OrderId, string OrderNumber, string Status, long GrandTotalMinor, DateTime ReservationExpiresAtUtc, bool Replayed);
 
-public sealed record OrderItemDto(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor);
+/// <param name="PriceSource">
+/// Where the unit price came from (ADR-0008 §8): <c>list</c>, <c>sale</c>, <c>quantity_break</c>, <c>group_list</c>,
+/// <c>contract</c> or <c>quote</c>; null for lines placed before price sources were recorded. No cost, floor or margin.
+/// </param>
+/// <param name="ContractRef">The buyer's contract number when the price is a contract price.</param>
+public sealed record OrderItemDto(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor,
+    string? PriceSource = null, string? ContractRef = null);
 
 public sealed record SubOrderDto(Guid Id, string SubOrderNumber, Guid SellerId, string Status, long ShippingMinor, long TotalMinor, IReadOnlyList<OrderItemDto> Items);
 

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Mechware.Domain.Identity;
 using Mechware.Domain.Orders;
 using Mechware.Domain.Payments;
+using Mechware.Domain.Pricing.PriceLists;
 
 namespace Mechware.Infrastructure.Persistence.Configurations;
 
@@ -90,6 +91,16 @@ internal sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderIte
         {
             t.HasCheckConstraint("ck_order_items_qty", "quantity > 0");
             t.HasCheckConstraint("ck_order_items_money", "unit_price >= 0 AND gross >= 0 AND discount >= 0 AND discount <= gross AND net >= 0 AND tax >= 0 AND total = net + tax");
+            // Price snapshot (ADR-0008 §8). Lines placed before it have no source; every line placed since has source, basis
+            // and public price, a list reference exactly when the source is a list, and a contract number only for a contract.
+            t.HasCheckConstraint("ck_order_items_price_snapshot",
+                "(price_basis IS NULL OR price_basis IN ('GrossInclVat', 'NetOfVat')) " +
+                "AND (price_source IS NULL OR (price_source IN ('List', 'Sale', 'QuantityBreak', 'GroupList', 'Contract', 'Quote') " +
+                "AND price_basis IS NOT NULL AND COALESCE(public_unit_price_minor, 0) > 0)) " +
+                "AND (price_list_id IS NULL) = (price_list_version IS NULL) AND (price_list_id IS NULL) = (price_list_entry_id IS NULL) " +
+                "AND (price_list_id IS NULL) = (price_source IS NULL OR price_source NOT IN ('QuantityBreak', 'GroupList', 'Contract')) " +
+                "AND (contract_ref IS NULL) = (price_source IS DISTINCT FROM 'Contract') " +
+                "AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL)");
         });
         b.MapAudit(updated: false);
         b.Property(i => i.SubOrderId).HasColumnName("sub_order_id");
@@ -104,7 +115,19 @@ internal sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderIte
         b.Property(i => i.NetMinor).HasColumnName("net");
         b.Property(i => i.TaxMinor).HasColumnName("tax");
         b.Property(i => i.TotalMinor).HasColumnName("total");
+        b.Property(i => i.PriceSource).HasColumnName("price_source").HasConversion<string>().HasMaxLength(20);
+        b.Property(i => i.PriceBasis).HasColumnName("price_basis").HasConversion<string>().HasMaxLength(20);
+        b.Property(i => i.PriceListId).HasColumnName("price_list_id");
+        b.Property(i => i.PriceListVersion).HasColumnName("price_list_version");
+        b.Property(i => i.PriceListEntryId).HasColumnName("price_list_entry_id");
+        b.Property(i => i.ContractRef).HasColumnName("contract_ref").HasMaxLength(PriceList.MaxContractRefLength);
+        b.Property(i => i.PublicUnitPriceMinor).HasColumnName("public_unit_price_minor");
+        // Approved and withdrawn lists are never deleted; an order line keeps pointing at the version it was priced from.
+        b.HasOne<PriceList>().WithMany().HasForeignKey(i => i.PriceListId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<PriceListEntry>().WithMany().HasForeignKey(i => i.PriceListEntryId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(i => i.VariantId).HasDatabaseName("ix_order_items_variant");
+        b.HasIndex(i => i.PriceListId).HasDatabaseName("ix_order_items_price_list");
+        b.HasIndex(i => i.PriceListEntryId).HasDatabaseName("ix_order_items_price_list_entry");
     }
 }
 

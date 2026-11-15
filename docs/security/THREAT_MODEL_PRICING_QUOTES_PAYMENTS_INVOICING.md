@@ -392,6 +392,7 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
 > **অবস্থা:** ডিজাইন ইউনিট D2.1-এর অংশ, AI সহকারীর লেখা। কোনো মানুষ রিভিউ করেননি, আর এখনো কোনো কোড নেই।
 > নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md)। এই অংশ R3-এর ছয়টা নিয়মকে বিস্তারিত করে।
 > নিচের টেস্টগুলো এখনো লেখা হয়নি। যে ইউনিট কোড বানাবে, এই নামগুলোই তার exit test (`docs/modules/D2.md`)।
+> **২০২৬-১১-১৬:** D2.2–D2.6-এর টেস্ট লেখা হয়েছে ও পাস করে (D2.6-এর গার্ডগুলো D2.5-এর সাথেই বানানো হয়েছে)। D2.5 নতুন তিনটা ঘটনা যোগ করেছে: PL22–PL24। বাকি টেস্ট D2.7 থেকে।
 
 **R3-এর তিনটা টেস্টের নাম এখন:**
 - `TheAuthorCannotApproveTheirOwnPriceList` → `Approve_BySameUserWhoSubmitted_IsRefused` + `Approve_ByAUserWhoEditedTheDraft_IsRefused`
@@ -428,10 +429,15 @@ TEST: `ABurstOfWebhooks_IsNotThrottledByTheBrowserLimit_AndBrowsersAreNotStarved
 | PL19 | কে কোন দাম অনুমোদন করলেন তা অস্বীকার করা | প্রতিটা ধাপ audit-এ (actor, IP, `contentHash`)। Approval-এর মুহূর্তের cost ও floor entry-তে লেখা থাকে | `EveryPriceListTransition_IsAudited_WithActorAndContentHash` | D2.8 |
 | PL20 | Resolver ভুল উৎস বেছে নেয় (বেশি বা কম দাম) | Pure function, property test। নিয়ম A (ADR-0008 §5.1, মালিকের সিদ্ধান্ত ১): সবচেয়ে কম বৈধ দাম; সমান হলে বেশি নির্দিষ্ট উৎস | `Resolver_AlwaysReturnsTheLowestValidCandidate`, `Resolver_TieGoesToTheMoreSpecificSource`, `Resolver_PicksTheBreakWithTheLargestMinQtyNotAboveTheQuantity`, `Resolver_IsDeterministic_InputOrderDoesNotMatter` | D2.2 |
 | PL21 | (পরে, group list) একজন স্টাফ পরিচিত কোম্পানিকে সস্তা group-এ বসান | `Company.DefaultPriceListId` বদলাতে দ্বিতীয় অনুমোদনকারী লাগবে। আজ কোনো কোড এই column লেখে না [CODE] | `AssigningAGroupList_NeedsASecondApprover` | D2.14 ⏭ |
+| PL22 | **ফ্রি শিপিং-এর সীমায় কোম্পানি guest-এর চেয়ে বেশি দেয়:** public দাম net-এ নামানোর rounding (বা contract দাম) কোম্পানির পণ্যের মোটকে সীমার এক-দুই পয়সা নিচে নামায়; guest ফ্রি শিপিং পান, কোম্পানি ফি দেয় (যেমন ৫,০০০.০০ টাকা, ১৫ % VAT: কোম্পানি ৪,৯৯৯.৯৯) | কোম্পানির অর্ডারে free-shipping basis = একই লাইন guest-এর জন্য যত ধরা হতো: পরিমাণ × guest-এর VAT-সহ দাম, লাইনের নিজের ছাড় (VAT-সহ) বাদ (`OrderPricing.FreeShippingBasisMinor`) [CODE] | `ACompanyAtTheFreeShippingThreshold_ShipsFreeLikeAGuest`, `RandomOrdersWithContractPrices_AlwaysReconcileToThePoisha` (property: basis সমান, কোম্পানির মোট ≤ guest-এর মোট) | D2.5 |
+| PL23 | **Snapshot আর আসল দাম আলাদা:** order line-এ এমন উৎস বা list লেখা থাকে যার দাম ধরা হয়নি; অডিট ভুল ব্যাখ্যা দেয় | লাইনের দাম বা variant snapshot-এর সাথে না মিললে `OrderPricing` অর্ডার ফেরায়। DB CHECK `ck_order_items_price_snapshot`: list-উৎস হলেই list id + version + entry, contract হলেই শুধু contract নম্বর, উৎস থাকলে basis ও public দাম [CODE] | `ASnapshotThatDoesNotMatchItsLine_IsRefused`, `AnOrderKeepsThePriceListVersionItWasPlacedWith` | D2.5 |
+| PL24 | **Adapter পুরোনো সস্তা version ফিরিয়ে আনে:** list SQL-এ সময় দিয়ে ছাঁকা হলে বা Withdrawn version বাদ পড়লে, শুরু হয়ে যাওয়া পরের version (withdrawn বা মেয়াদ শেষ) আর পুরোনোটাকে ঢাকে না | Adapter প্রতিটা series-এর সব Approved ও Withdrawn version এক query-তে পড়ে, SQL-এ সময় দিয়ে ছাঁকে না; সময় ধরে সিদ্ধান্ত নেয় শুধু resolver [CODE] | `AWithdrawnOrExpiredLaterVersion_NeverBringsBackTheOlderCheaperOne` | D2.5 |
 
 **যে ঝুঁকি থেকে যায়:**
 - দুজন স্টাফের যোগসাজশ, বা একজনের হাতে দুটো স্টাফ অ্যাকাউন্ট: 4-eyes এটা ঠেকায় না। নিয়ন্ত্রণ: স্টাফের বাধ্যতামূলক 2FA, আলাদা `users.manage`, audit, floor-এর নিচের জন্য আলাদা permission।
 - Sale price আর promotion আজ margin floor-এর সাথে মেলানো হয় না। নিয়ম A-তে একটা ভুল sale price contract ক্রেতারাও পাবেন।
+- ১ পয়সার catalogue দাম: net দামের ন্যূনতম ১ পয়সা নিয়মে কোম্পানি guest-এর চেয়ে কয়েক পয়সা বেশি দিতে পারে (বাস্তবে এমন দাম নেই; D2.5)।
+- কুপন: কোম্পানির অর্ডারে ছাড় net দামের ওপর, guest-এর অর্ডারে VAT-সহ দামের ওপর (আগের মতোই, D2-এর বাইরে)। নির্দিষ্ট অঙ্কের কুপনে (যেমন ১০০ টাকা ছাড়) কোম্পানি তাই ছাড়ের VAT-ও বাঁচায়, কিন্তু তার free-shipping basis guest-এর চেয়ে ঠিক ততটা (যেমন ৫ টাকা) কম হয়; সীমার একদম কাছে কোম্পানি তখন শিপিং ফি দিতে পারে যেখানে guest দেন না। শতাংশের কুপনে পার্থক্য rounding-এর এক-দুই পয়সা।
 - Audit log এখনো tamper-evident নয় (v1 H3)।
 - Cost ফাঁকা থাকলে fail closed; কিন্তু cost ভুল থাকলে floor-ও ভুল হয়, আর সেটা ধরা পড়ে না।
 - **আজকের কোডে পাওয়া (D2-এর আগে থেকেই আছে) [CODE + TEST]:** একই catalogue দাম guest-এর জন্য VAT-সহ আর কোম্পানির জন্য VAT ছাড়া ধরা হয়, তারপর কোম্পানির ওপর VAT যোগ হয় (`OrderService.cs`-এ `CompanyId` দেখে `TaxMode` ঠিক হয়; `OrderServiceTests`: ১,০০০.০০ দামে ১০৫,০০০ পয়সা)। ফলে একই পণ্যে কোম্পানি guest-এর চেয়ে VAT-এর হার পরিমাণ বেশি দেয়। এটা ঠিক না হলে "সবচেয়ে কম দাম" আর "আপনার contract দাম" অর্থহীন। ADR-0008 §2 ও §12, মালিকের সিদ্ধান্ত ২।

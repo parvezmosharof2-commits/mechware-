@@ -63,7 +63,7 @@ public class NotificationOutboxPublisherTests(PostgresDatabaseFixture fixture) :
     {
         await using var db = fixture.CreateContext();
         var variant = (await CatalogTestData.SeedVariantAsync(db, 20, priceMinor: 100_000)).VariantId;
-        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, Mechware.IntegrationTests.Orders.ShippingTestKit.DevelopmentQuoter(db));
+        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), TimeProvider.System, Mechware.IntegrationTests.Orders.ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db));
         return await orders.PlaceAsync(new PlaceOrderRequest(t.Buyer, "key-" + Guid.NewGuid().ToString("N"), [new PlaceOrderLine(variant, qty)], null, t.Company, false, null, null, null));
     }
 
@@ -132,7 +132,7 @@ public class NotificationOutboxPublisherTests(PostgresDatabaseFixture fixture) :
         mail.GetProperty("Subject").GetString().Should().Contain(placed.OrderNumber);
         mail.GetProperty("Text").GetString().Should()
             .Contain($"{BaseUrl}/en/account/orders/{placed.OrderNumber}")
-            .And.Contain("BDT 1,050.00");
+            .And.Contain("BDT 1,000.00");   // D2.5: the catalogue price is VAT-inclusive for everyone, so a company pays what a guest pays
     }
 
     [PostgresMailpitFact]

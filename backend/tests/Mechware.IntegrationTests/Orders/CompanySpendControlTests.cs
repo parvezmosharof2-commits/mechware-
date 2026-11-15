@@ -15,7 +15,7 @@ namespace Mechware.IntegrationTests.Orders;
 /// <summary>Threat model v1, M3: cost-centre assignment, member spend limits and monthly budgets are enforced on orders.</summary>
 public class CompanySpendControlTests(PostgresDatabaseFixture fixture) : IClassFixture<PostgresDatabaseFixture>
 {
-    private const long Price = 100_000;   // 105,000 per unit with 5 % VAT on company orders
+    private const long Price = 105_000;   // VAT-inclusive (owner decision 2): a company pays 1,000.00 net + 50.00 VAT = 105,000 per unit
     private static long _binSeq = 8_000_000_000;
     private static string NextBin() => (Interlocked.Increment(ref _binSeq) + 2_000_000_000_000L).ToString("D13");
     private static string Key() => "key-" + Guid.NewGuid().ToString("N");
@@ -31,7 +31,7 @@ public class CompanySpendControlTests(PostgresDatabaseFixture fixture) : IClassF
     {
         await using var db = fixture.CreateContext();
         return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System),
-            now is null ? TimeProvider.System : new FixedClock(now.Value), ShippingTestKit.DevelopmentQuoter(db)));
+            now is null ? TimeProvider.System : new FixedClock(now.Value), ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)));
     }
 
     private async Task<Team> TeamAsync(long? budget)

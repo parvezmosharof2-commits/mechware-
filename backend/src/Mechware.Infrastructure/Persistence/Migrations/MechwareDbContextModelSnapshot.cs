@@ -2341,6 +2341,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ContractRef")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("contract_ref");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2356,6 +2361,32 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Property<long>("NetMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("net");
+
+                    b.Property<string>("PriceBasis")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("price_basis");
+
+                    b.Property<Guid?>("PriceListEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_entry_id");
+
+                    b.Property<Guid?>("PriceListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_id");
+
+                    b.Property<int?>("PriceListVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("price_list_version");
+
+                    b.Property<string>("PriceSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("price_source");
+
+                    b.Property<long?>("PublicUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("public_unit_price_minor");
 
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")
@@ -2400,6 +2431,12 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("PriceListEntryId")
+                        .HasDatabaseName("ix_order_items_price_list_entry");
+
+                    b.HasIndex("PriceListId")
+                        .HasDatabaseName("ix_order_items_price_list");
+
                     b.HasIndex("SubOrderId");
 
                     b.HasIndex("VariantId")
@@ -2408,6 +2445,8 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("order_items", null, t =>
                         {
                             t.HasCheckConstraint("ck_order_items_money", "unit_price >= 0 AND gross >= 0 AND discount >= 0 AND discount <= gross AND net >= 0 AND tax >= 0 AND total = net + tax");
+
+                            t.HasCheckConstraint("ck_order_items_price_snapshot", "(price_basis IS NULL OR price_basis IN ('GrossInclVat', 'NetOfVat')) AND (price_source IS NULL OR (price_source IN ('List', 'Sale', 'QuantityBreak', 'GroupList', 'Contract', 'Quote') AND price_basis IS NOT NULL AND COALESCE(public_unit_price_minor, 0) > 0)) AND (price_list_id IS NULL) = (price_list_version IS NULL) AND (price_list_id IS NULL) = (price_list_entry_id IS NULL) AND (price_list_id IS NULL) = (price_source IS NULL OR price_source NOT IN ('QuantityBreak', 'GroupList', 'Contract')) AND (contract_ref IS NULL) = (price_source IS DISTINCT FROM 'Contract') AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_order_items_qty", "quantity > 0");
                         });
@@ -3978,6 +4017,16 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Mechware.Domain.Orders.OrderItem", b =>
                 {
+                    b.HasOne("Mechware.Domain.Pricing.PriceLists.PriceListEntry", null)
+                        .WithMany()
+                        .HasForeignKey("PriceListEntryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Pricing.PriceLists.PriceList", null)
+                        .WithMany()
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Mechware.Domain.Orders.SubOrder", null)
                         .WithMany("Items")
                         .HasForeignKey("SubOrderId")

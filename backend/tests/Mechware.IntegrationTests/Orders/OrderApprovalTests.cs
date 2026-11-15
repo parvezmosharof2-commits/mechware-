@@ -19,7 +19,7 @@ namespace Mechware.IntegrationTests.Orders;
 /// <summary>Threat model v1, H1: a company order that an approval rule covers cannot go ahead until it is approved.</summary>
 public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture<PostgresDatabaseFixture>
 {
-    private const long Price = 100_000;          // per unit, VAT 5 % added for company orders
+    private const long Price = 105_000;          // per unit, VAT-inclusive (owner decision 2): a company pays 1,000.00 net + 50.00 VAT
     private const long RuleFrom = 200_000;        // orders from 2,000.00 need approval
 
     private static long _binSeq = 7_000_000_000;
@@ -37,7 +37,7 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
     {
         await using var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
-        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db)));
+        return await action(new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db)));
     }
 
     /// <summary>Approvals wired to orders as in the running API: a decision moves the order on at once.</summary>
@@ -45,7 +45,7 @@ public class OrderApprovalTests(PostgresDatabaseFixture fixture) : IClassFixture
     {
         await using var db = fixture.CreateContext();
         var clock = now is null ? TimeProvider.System : new FixedClock(now.Value);
-        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db));
+        var orders = new OrderService(db, new InventoryService(db, new NoopLockProvider(), TimeProvider.System), clock, ShippingTestKit.DevelopmentQuoter(db), new Mechware.Infrastructure.Pricing.PriceListResolver(db));
         return await action(new ApprovalService(db, clock, wiredToOrders ? orders : null));
     }
 

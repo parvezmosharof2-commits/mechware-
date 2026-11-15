@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Mechware.Application.Inventory;
 using Mechware.Application.Orders;
+using Mechware.Application.Pricing;
 using Mechware.Application.Shipping;
 using Mechware.Domain.Approvals;
 using Mechware.Domain.Catalog;
@@ -13,12 +14,13 @@ using Mechware.Domain.Companies;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Orders;
 using Mechware.Domain.Pricing;
+using Mechware.Domain.Pricing.PriceLists;
 using Mechware.Infrastructure.Persistence;
 
 namespace Mechware.Infrastructure.Orders;
 
 public sealed partial class OrderService(
-    MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter,
+    MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter, IPriceResolver prices,
     Func<DateTime, string>? orderNumbers = null) : IOrderService
 {
     private readonly Func<DateTime, string> _nextOrderNumber = orderNumbers ?? (now => OrderNumber.Generate(now));
@@ -84,8 +86,15 @@ public sealed partial class OrderService(
         var (shipTo, districtId) = await ResolveShipToAsync(request, ct);
 
         var now = clock.GetUtcNow().UtcDateTime;
-        var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, applied, categories, _) = await PriceAsync(request, lines, mode, now, districtId, ct);
+        // Negotiated prices only for the company whose membership was just checked (B1), never for the id in the body.
+        var verifiedCompanyId = member?.CompanyId;
+        var mode = verifiedCompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
+        var (priced, applied, categories, _) = await PriceAsync(request, lines, verifiedCompanyId, mode, now, districtId, ct);
+
+        // The total the buyer was shown can only stop the order, never set a price (ADR-0008 §9).
+        if (request.ExpectedGrandTotalMinor is { } shown && priced.GrandTotalMinor > shown)
+            throw new ConflictException("PRICE_CHANGED",
+                $"The total is now {priced.GrandTotalMinor} poisha, more than the {shown} you were shown. Review the order and confirm again.");
 
         // A company order that one of the company's approval rules covers waits for that approval before it can be paid or
         // charged to credit (threat model v1, H1). The amount is the server's own total, never a number from the client.
@@ -475,7 +484,7 @@ public sealed partial class OrderService(
             order.SubOrders.OrderBy(s => s.SubOrderNumber).Select(s => new SubOrderDto(s.Id, s.SubOrderNumber, s.SellerId, ToWire(s.Status),
                 s.ShippingMinor, s.TotalMinor,
                 s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
-                    i.DiscountMinor, i.TaxMinor, i.TotalMinor)).ToList())).ToList(),
+                    i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList())).ToList(),
             order.PurchaseOrderNumber);
     }
 
@@ -485,10 +494,11 @@ public sealed partial class OrderService(
         var asOrder = new PlaceOrderRequest(request.UserId, string.Empty, request.Lines, request.ShippingAddressId, request.CompanyId,
             CouponCodes: request.CouponCodes, ShipToSiteId: request.ShipToSiteId);
         var lines = Normalise(asOrder);
-        if (request.CompanyId is { } companyId) await RequireCompanyMayBuyAsync(request.UserId, companyId, ct);
+        var member = request.CompanyId is { } companyId ? await RequireCompanyMayBuyAsync(request.UserId, companyId, ct) : null;
         var (_, districtId) = await ResolveShipToAsync(asOrder, ct);
-        var mode = request.CompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, _, _, shipping) = await PriceAsync(asOrder, lines, mode, clock.GetUtcNow().UtcDateTime, districtId, ct);
+        var verifiedCompanyId = member?.CompanyId;
+        var mode = verifiedCompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
+        var (priced, _, _, shipping) = await PriceAsync(asOrder, lines, verifiedCompanyId, mode, clock.GetUtcNow().UtcDateTime, districtId, ct);
         var sellerIds = shipping.PerSeller.Select(s => s.SellerId).ToList();
         var names = await db.Sellers.AsNoTracking().Where(s => sellerIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StoreName, ct);
         return new ShippingQuoteDto(shipping.PerSeller.Select(s => new SellerShippingDto(s.SellerId, s.ShippingMinor, names.GetValueOrDefault(s.SellerId, string.Empty))).ToList(),
@@ -510,9 +520,9 @@ public sealed partial class OrderService(
             page, pageSize, total);
     }
 
-    /// <summary>The snake_case name the API and the database use for a state.</summary>
-    private static string ToWire(OrderStatus status) =>
-        string.Concat(status.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
+    /// <summary>The snake_case name the API uses for a state or a price source.</summary>
+    private static string ToWire<T>(T value) where T : struct, Enum =>
+        string.Concat(value.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
 
     private static List<string> NormalisedCodes(PlaceOrderRequest r) =>
         (r.CouponCodes ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim().ToUpperInvariant()).Distinct().ToList();
@@ -560,8 +570,12 @@ public sealed partial class OrderService(
     }
 
 
+    /// <summary>
+    /// Prices the lines at one instant: unit prices from <see cref="IPriceResolver"/> (ADR-0008 §5; negotiated prices only for
+    /// <paramref name="verifiedCompanyId"/>), promotions on publicly priced lines only (§6), then shipping and the order math.
+    /// </summary>
     private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, IReadOnlyList<Guid> Categories, OrderShipping Shipping)> PriceAsync(
-        PlaceOrderRequest request, List<PlaceOrderLine> lines, TaxMode mode, DateTime now, Guid? districtId, CancellationToken ct)
+        PlaceOrderRequest request, List<PlaceOrderLine> lines, Guid? verifiedCompanyId, TaxMode mode, DateTime now, Guid? districtId, CancellationToken ct)
     {
         var ids = lines.Select(l => l.VariantId).ToList();
         var rows = await (from v in db.ProductVariants.AsNoTracking()
@@ -586,31 +600,42 @@ public sealed partial class OrderService(
             .OfType<string>().Select(m => new ValidationError("quantity", m)).ToList();
         if (quantityErrors.Count > 0) throw new ValidationException(quantityErrors);
 
+        // One resolver call for all lines, from the catalogue facts just read and the order's single instant. Lines are already
+        // merged per variant, so the quantity is all units of that variant (§5).
+        var resolved = (await prices.ResolveAsync(verifiedCompanyId,
+                lines.Select(l => new PriceRequestLine(l.VariantId, l.Quantity, PricingInput.From(byId[l.VariantId].Variant, byId[l.VariantId].Category.VatRate))).ToList(),
+                mode, now, ct))
+            .ToDictionary(p => p.Price.VariantId);
+
         var drafts = new List<OrderLineDraft>();
         var categoryOf = new Dictionary<Guid, Guid>();
+        var guestUnitPrice = new Dictionary<Guid, long>();
         var commission = new Dictionary<Guid, decimal>();
         var shippingLines = new List<ShippingQuoteLine>();
         foreach (var line in lines)
         {
             var r = byId[line.VariantId];
-            var quote = PricingEngine.Quote(PricingInput.From(r.Variant, r.Category.VatRate), now, mode);
+            var price = resolved[line.VariantId];
             var lineId = Guid.NewGuid();
             categoryOf[lineId] = r.Product.CategoryId;
+            guestUnitPrice[lineId] = price.GuestUnitPriceMinor;
             drafts.Add(new OrderLineDraft(lineId, r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
-                line.Quantity, quote.Display.ToMinorUnits(), r.Category.VatRate, 0));
+                line.Quantity, price.Price.UnitPriceMinor, r.Category.VatRate, 0, price.Price));
             commission.TryAdd(r.Seller.Id, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate);
             shippingLines.Add(new ShippingQuoteLine(r.Variant.Id, r.Variant.Sku, r.Seller.Id, line.Quantity, r.Variant.WeightKg,
                 r.Product.LengthCm, r.Product.WidthCm, r.Product.HeightCm));
         }
 
         var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
-        var discounted = applied.Lines.Select((d, i) => drafts[i] with { DiscountMinor = d.DiscountMinor }).ToList();
+        var discountOf = applied.Lines.ToDictionary(d => d.LineId, d => d.DiscountMinor);
+        var discounted = drafts.Select(d => d with { DiscountMinor = discountOf.GetValueOrDefault(d.LineId) }).ToList();
 
         // Shipping (E8.2) comes only from the database: the destination's zone and the variants' weights; the client sends no
-        // money and nothing it sends is read. Free-shipping basis: the goods as the buyer pays for them (after discounts, VAT
-        // included, shipping excluded), i.e. this order's total before shipping, the same in VAT-inclusive and -exclusive orders.
+        // money and nothing it sends is read. Free-shipping basis: the goods after discounts, VAT included, shipping excluded;
+        // a company order counts its lines at the guest's VAT-inclusive value (OrderPricing.FreeShippingBasisMinor), so a
+        // company never misses free shipping a guest gets for the same cart.
         // TODO(E8, owner + tax adviser): VAT on shipping. Today the fee is a final amount with no VAT split (OrderPricing).
-        var goodsTotal = OrderPricing.Price(discounted, commission.Select(c => new SellerTerms(c.Key, 0, c.Value)).ToList(), mode).GrandTotalMinor;
+        var goodsTotal = OrderPricing.FreeShippingBasisMinor(discounted, guestUnitPrice, mode);
         var shipping = await shippingQuoter.QuoteAsync(districtId, shippingLines, goodsTotal, ct);
         var fees = shipping.PerSeller.ToDictionary(s => s.SellerId, s => s.ShippingMinor);
         var terms = commission.Select(c => new SellerTerms(c.Key,
@@ -640,7 +665,10 @@ public sealed partial class OrderService(
             .ToDictionaryAsync(u => u.PromotionId, u => u.Uses, ct);
         var usage = candidates.ToDictionary(p => p.Id, p => new PromotionUsage(p.RedeemedCount, userUses.GetValueOrDefault(p.Id)));
 
-        var cart = drafts.Select(d => new CartLine(d.LineId, d.VariantId, d.SellerId, categoryOf[d.LineId], d.Quantity, d.UnitPriceMinor)).ToList();
+        // Promotions never stack on a negotiated price (ADR-0008 §6): a contract, group or quote line is not handed to the engine,
+        // so it gets no discount and does not count toward a minimum spend. A coupon with only such lines is NO_ELIGIBLE_LINES.
+        var cart = drafts.Where(d => d.Price is not { Source: PriceSource.Contract or PriceSource.GroupList or PriceSource.Quote })
+            .Select(d => new CartLine(d.LineId, d.VariantId, d.SellerId, categoryOf[d.LineId], d.Quantity, d.UnitPriceMinor)).ToList();
         var result = PromotionEngine.Apply(cart, candidates.Select(p => p.ToPromotion()).ToList(), now, usage);
 
         // A code that does not exist, is outside its dates or is used up gets one shared answer, decided over every entered code
@@ -695,13 +723,26 @@ public sealed partial class OrderService(
     }
 
     /// <summary>
-    /// Saves the order in one transaction: for a credit order the company's credit is checked and held first; every promotion
-    /// the order uses is claimed with an atomic conditional update, so two orders can never both take the last use.
+    /// Saves the order in one transaction: the price lists its prices came from are re-read first; for a credit order the
+    /// company's credit is checked and held; every promotion the order uses is claimed with an atomic conditional update, so
+    /// two orders can never both take the last use.
     /// </summary>
     private async Task SaveAsync(Order order, PlaceOrderRequest request, IReadOnlyList<AppliedPromotion> applied,
         ApprovalRule? approvalRule, IReadOnlyList<Guid> categories, DateTime now, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // ADR-0008 §10: the lists the prices came from are read again FOR SHARE in this transaction. A withdrawal updates the
+        // row, so it either waits until this order has committed, or this read waits for the withdrawal and then no longer
+        // finds the list Approved: no order that commits after a withdrawal carries the withdrawn price.
+        var listIds = order.SubOrders.SelectMany(s => s.Items).Select(i => i.PriceListId).OfType<Guid>().Distinct().Order().ToArray();
+        if (listIds.Length > 0)
+        {
+            var approved = await db.Database.SqlQuery<Guid>(
+                $"SELECT id AS \"Value\" FROM price_lists WHERE id = ANY({listIds}) AND status = 'Approved' ORDER BY id FOR SHARE").ToListAsync(ct);
+            if (approved.Count != listIds.Length)
+                throw new ConflictException("PRICE_CHANGED", "A price this order used was withdrawn a moment ago. Review the new prices and confirm again.");
+        }
 
         if (approvalRule is not null)
         {

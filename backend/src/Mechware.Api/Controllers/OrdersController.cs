@@ -10,8 +10,10 @@ namespace Mechware.Api.Controllers;
 /// <summary>
 /// What the buyer asks for: items and quantities, and which saved address or company site to deliver to. Every price,
 /// tax, discount, total and the address text itself are the server's own; other JSON members are not bound and are ignored.
+/// <c>ExpectedGrandTotalMinor</c>, the total the buyer was shown, can only refuse the order (409 <c>PRICE_CHANGED</c> when the
+/// server's total is higher); it never sets a price.
 /// </summary>
-public sealed record PlaceOrderBody(IReadOnlyList<PlaceOrderLine> Lines, Guid? ShippingAddressId = null, Guid? CompanyId = null, bool PayOnCredit = false, IReadOnlyList<string>? CouponCodes = null, Guid? ShipToSiteId = null, Guid? CostCentreId = null, string? PurchaseOrderNumber = null);
+public sealed record PlaceOrderBody(IReadOnlyList<PlaceOrderLine> Lines, Guid? ShippingAddressId = null, Guid? CompanyId = null, bool PayOnCredit = false, IReadOnlyList<string>? CouponCodes = null, Guid? ShipToSiteId = null, Guid? CostCentreId = null, string? PurchaseOrderNumber = null, long? ExpectedGrandTotalMinor = null);
 
 /// <summary>The lines and destination to price delivery for. Like an order, it carries no money: shipping is the server's own.</summary>
 public sealed record ShippingQuoteBody(IReadOnlyList<PlaceOrderLine> Lines, Guid? ShippingAddressId = null, Guid? CompanyId = null, IReadOnlyList<string>? CouponCodes = null, Guid? ShipToSiteId = null);
@@ -34,7 +36,7 @@ public sealed class OrdersController(IOrderService orders, ICurrentUserService c
         if (string.IsNullOrWhiteSpace(idempotencyKey))
             throw new ValidationException("Idempotency-Key", "The Idempotency-Key header is required.");
 
-        var placed = await orders.PlaceAsync(new PlaceOrderRequest(Actor, idempotencyKey, body.Lines ?? [], body.ShippingAddressId, body.CompanyId, body.PayOnCredit, body.CouponCodes, body.ShipToSiteId, body.CostCentreId, body.PurchaseOrderNumber), ct);
+        var placed = await orders.PlaceAsync(new PlaceOrderRequest(Actor, idempotencyKey, body.Lines ?? [], body.ShippingAddressId, body.CompanyId, body.PayOnCredit, body.CouponCodes, body.ShipToSiteId, body.CostCentreId, body.PurchaseOrderNumber, body.ExpectedGrandTotalMinor), ct);
 
         // The order is committed; the ordered lines now leave the buyer's server cart. A cart store that is down must never undo
         // or fail an order that exists, so this only logs. A replay cleans too: the first response may have been lost before it did.

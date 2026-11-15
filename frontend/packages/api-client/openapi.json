@@ -3353,10 +3353,15 @@
           "purchaseOrderNumber": {
             "type": "string",
             "nullable": true
+          },
+          "expectedGrandTotalMinor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
           }
         },
         "additionalProperties": false,
-        "description": "What the buyer asks for: items and quantities, and which saved address or company site to deliver to. Every price,\r\ntax, discount, total and the address text itself are the server's own; other JSON members are not bound and are ignored."
+        "description": "What the buyer asks for: items and quantities, and which saved address or company site to deliver to. Every price,\r\ntax, discount, total and the address text itself are the server's own; other JSON members are not bound and are ignored.\r\n`ExpectedGrandTotalMinor`, the total the buyer was shown, can only refuse the order (409 `PRICE_CHANGED` when the\r\nserver's total is higher); it never sets a price."
       },
       "PlaceOrderLine": {
         "type": "object",
