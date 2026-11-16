@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Pricing.IPriceResolver, Pricing.PriceListResolver>();
         services.TryAddScoped<Mechware.Application.Pricing.IPriceListService, Pricing.PriceListService>();
         services.TryAddScoped<Mechware.Application.Pricing.IMarginFloorService, Pricing.MarginFloorService>();
+        services.TryAddScoped<Mechware.Application.Pricing.ICompanyPriceService, Pricing.CompanyPriceService>();
         services.TryAddScoped<IPaymentService, PaymentService>();
         services.TryAddScoped<IRefundService, RefundService>();
 

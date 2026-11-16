@@ -104,7 +104,11 @@ public static class OrderPricing
         return basis;
     }
 
-    private static PricedLine PriceLine(OrderLineDraft l, TaxMode mode)
+    /// <summary>
+    /// One line's money exactly as <see cref="Price"/> computes it (VAT rounded once per line). The buyer price endpoint
+    /// (D2.10) shows this, so the line it shows is the line an order for the same quantity would carry before promotions.
+    /// </summary>
+    public static PricedLine PriceLine(OrderLineDraft l, TaxMode mode)
     {
         if (l.Quantity <= 0) throw new ValidationException("quantity", "Quantity must be positive.");
         if (l.UnitPriceMinor < 0) throw new ValidationException("unitPrice", "Unit price cannot be negative.");
