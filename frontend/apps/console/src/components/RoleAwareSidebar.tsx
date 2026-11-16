@@ -48,6 +48,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Pricing'
   },
   {
+    id: 'margin-floors',
+    label: 'Margin floors',
+    requiredPermission: 'pricing.view_cost',
+    href: '/pricing/margin-floors',
+    group: 'Pricing'
+  },
+  {
     id: 'shipping-zones',
     label: 'Shipping zones',
     requiredPermission: 'shipping.view',

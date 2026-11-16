@@ -1,6 +1,6 @@
 import {
-  MechWareApiClient, createAdminLookupsApi, createCatalogImportApi, createCompaniesApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
-  decisionErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
+  MechWareApiClient, createAdminLookupsApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
+  decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
@@ -11,6 +11,7 @@ export const staffApi = createStaffApi(api);
 export const catalogImportApi = createCatalogImportApi(api);
 export const lookupsApi = createAdminLookupsApi(api);
 export const priceListsApi = createPriceListsApi(api);
+export const marginFloorsApi = createMarginFloorsApi(api);
 export const shippingZonesApi = createShippingZonesApi(api);
 export const storefrontApi = createStorefrontApi(api);
 
@@ -30,6 +31,13 @@ export function decisionError(err: unknown): { text: string; code: string | null
   const code = problemCode(err);
   const text = decisionErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) });
   return { text, code, status, reload: shouldReloadAfter(code), retry: status === null || status >= 500 };
+}
+
+/** Plain words for a failed margin-floors call; `code` tells the screen whether the code dialog stays open (STEP_UP_*). */
+export function floorError(err: unknown): { text: string; code: string | null; status: number | null; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  return { text: floorErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) }), code, status, retry: status === null || status >= 500 };
 }
 
 /** Plain-words text for a failed shipping-zone call, the server's field errors (by form key) and whether a retry makes sense. */
