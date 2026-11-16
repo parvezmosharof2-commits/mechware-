@@ -2,56 +2,19 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Badge, Button, Input, Skeleton } from '@mechware/ui';
+import { Button, Input, Skeleton } from '@mechware/ui';
 import {
-  MAX_ALTERNATIVES, MAX_PART_NUMBER, SUPPLY_STATUSES, addAlternative, formatTaka, groupVariantsByProduct, moveItem, normaliseStatus, productStatusLabel,
-  supplyBody, supplyToForm, validateOrderUnits, validatePartNumber,
-  type FieldErrors, type ProductPim, type SupplyForm, type SupplyStatus
+  MAX_ALTERNATIVES, MAX_PART_NUMBER, SUPPLY_STATUSES, addAlternative, groupVariantsByProduct, moveItem, supplyBody, supplyToForm, validateOrderUnits, validatePartNumber,
+  type FieldErrors, type AdminProductDetail, type ProductPim, type SupplyForm, type SupplyStatus
 } from '@mechware/api-client';
 import { catalogAdminApi, catalogError, lookupsApi } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
+import { BasicsPanel, FieldError, LifecyclePanel, SECTION, SaveBar, VariantCommercial, useSaver } from './ProductPanels';
 import { NoAccess } from './ShippingZonesView';
 
 const SELECT = 'block w-full rounded-md border border-surface-border bg-surface p-2 text-sm';
-const SECTION = 'space-y-4 rounded-xl border border-surface-border bg-surface p-4';
-const FieldError = ({ text }: { text?: string }) => (text ? <p role="alert" className="mt-1 text-xs font-medium text-fault">{text}</p> : null);
-
-interface SaveState { busy: boolean; failure: string | null; conflict: boolean; fields: FieldErrors; saved: boolean }
-const IDLE: SaveState = { busy: false, failure: null, conflict: false, fields: {}, saved: false };
-
-/** Runs one save: no optimistic update; the server's answer replaces the data, a failure leaves the form as typed. */
-function useSaver() {
-  const [state, setState] = React.useState<SaveState>(IDLE);
-  const run = async (call: () => Promise<ProductPim>, onDone: (p: ProductPim) => void) => {
-    setState({ ...IDLE, busy: true });
-    try {
-      const pim = await call();
-      onDone(pim);
-      setState({ ...IDLE, saved: true });
-    } catch (err) {
-      const f = catalogError(err);
-      setState({ busy: false, failure: f.text, conflict: f.conflict, fields: f.fields, saved: false });
-    }
-  };
-  return { state, run, fail: (fields: FieldErrors) => setState({ ...IDLE, failure: 'Fix the highlighted fields.', fields }), clear: () => setState(IDLE) };
-}
-
-function SaveBar({ state, label, onReload, testId }: { state: SaveState; label: string; onReload: () => void; testId: string }) {
-  return (
-    <div className="space-y-2">
-      {state.failure && (
-        <div role="alert" data-testid={`${testId}-failure`} className="flex flex-wrap items-center gap-3 rounded-md border border-fault bg-bg-subtle p-3 text-sm font-medium text-fault">
-          <span>{state.failure}</span>
-          {state.conflict && <Button type="button" variant="outline" size="sm" onClick={onReload}>Reload</Button>}
-        </div>
-      )}
-      {state.saved && <p role="status" data-testid={`${testId}-saved`} className="text-sm font-medium text-success">Saved.</p>}
-      <Button type="submit" isLoading={state.busy} disabled={state.busy}>{label}</Button>
-    </div>
-  );
-}
 
 /** Finds products by title, SKU or part number through the SKU lookup; one result per product. */
 function ProductPicker({ label, excludeId, onPick, testId }: { label: string; excludeId: string; onPick: (id: string, title: string) => void; testId: string }) {
@@ -92,22 +55,6 @@ function ProductPicker({ label, excludeId, onPick, testId }: { label: string; ex
         </ul>
       )}
     </div>
-  );
-}
-
-function Basics({ pim }: { pim: ProductPim }) {
-  return (
-    <section aria-labelledby="basics" className={SECTION}>
-      <h2 id="basics" className="font-display text-lg font-bold">Basics</h2>
-      <dl className="grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
-        <dt className="text-text-muted">Title (English)</dt><dd data-testid="product-title" className="font-semibold">{pim.titleEn}</dd>
-        <dt className="text-text-muted">Slug</dt><dd className="font-mono text-xs">{pim.slug}</dd>
-        <dt className="text-text-muted">Lifecycle status</dt><dd><Badge variant={normaliseStatus(pim.status) === 'active' ? 'success' : 'outline'} data-testid="product-status">{productStatusLabel(pim.status)}</Badge></dd>
-      </dl>
-      <p className="text-xs text-text-muted">
-        Titles (English and Bangla), the description and attributes, publish, unpublish and archive are not editable here yet: the admin API has no endpoints for them (backend follow-up). Imports and sellers change them for now.
-      </p>
-    </section>
   );
 }
 
@@ -195,7 +142,7 @@ function AlternativesSection({ pim, onSaved, onReload }: { pim: ProductPim; onSa
   );
 }
 
-function VariantRow({ pim, variant, extra, onSaved, onReload }: { pim: ProductPim; variant: ProductPim['variants'][number]; extra?: { priceMinor: number; active: boolean }; onSaved: (p: ProductPim) => void; onReload: () => void }) {
+function VariantRow({ pim, variant, onSaved, onReload }: { pim: ProductPim; variant: ProductPim['variants'][number]; onSaved: (p: ProductPim) => void; onReload: () => void }) {
   const [min, setMin] = React.useState(String(variant.minOrderQty));
   const [pack, setPack] = React.useState(String(variant.packSize));
   const [pn, setPn] = React.useState(variant.manufacturerPartNumber ?? '');
@@ -226,51 +173,46 @@ function VariantRow({ pim, variant, extra, onSaved, onReload }: { pim: ProductPi
   };
   return (
     <form onSubmit={submit} className="space-y-3 rounded-md border border-surface-border p-3" data-testid="variant-row" aria-label={`SKU ${variant.sku}`} noValidate>
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="font-mono text-sm font-semibold" data-testid="variant-sku">{variant.sku}</span>
-        {extra && <span className="text-sm">List price {formatTaka(extra.priceMinor)} <span className="text-text-muted">(VAT included, set in price lists)</span></span>}
-        {extra && <Badge variant={extra.active ? 'success' : 'outline'}>{extra.active ? 'SKU active' : 'SKU inactive'}</Badge>}
-      </div>
+      <p className="text-sm font-medium">Order units and part number of {variant.sku}</p>
       <div className="grid gap-3 sm:grid-cols-3">
         <Input label="Minimum order quantity" inputMode="numeric" value={min} disabled={saver.state.busy} onChange={(e) => setMin(e.target.value)} error={errors.minOrderQty} />
         <Input label="Pack size" inputMode="numeric" value={pack} disabled={saver.state.busy} onChange={(e) => setPack(e.target.value)} error={errors.packSize} />
         <Input label="Manufacturer part number" value={pn} maxLength={MAX_PART_NUMBER} disabled={saver.state.busy} onChange={(e) => setPn(e.target.value)} error={errors.manufacturerPartNumber} helperText="Blank clears it." />
       </div>
-      <p className="text-xs text-text-muted" data-testid="weight-note">
-        Weight (kg): needed for shipping prices; orders are refused without it. It cannot be changed here yet because the admin API has no weight endpoint (backend follow-up).
-      </p>
       <SaveBar state={saver.state} label={`Save ${variant.sku}`} onReload={onReload} testId={`variant-${variant.sku}`} />
     </form>
   );
 }
 
-function Variants({ pim, onSaved, onReload }: { pim: ProductPim; onSaved: (p: ProductPim) => void; onReload: () => void }) {
-  const skus = pim.variants.map((v) => v.sku).join('|');
-  const extras = useResource(async () => {
-    const out = new Map<string, { priceMinor: number; active: boolean }>();
-    await Promise.all(pim.variants.map(async (v) => {
-      const hit = (await lookupsApi.variants({ sku: v.sku, pageSize: 5 })).data.items.find((x) => x.variantId === v.variantId);
-      if (hit) out.set(v.variantId, { priceMinor: hit.priceMinor, active: hit.active });
-    }));
-    return out;
-  }, skus);
+function Variants({ detail, pim, onDetail, onPim, onReload }: { detail: AdminProductDetail; pim: ProductPim; onDetail: (d: AdminProductDetail) => void; onPim: (p: ProductPim) => void; onReload: () => void }) {
   return (
     <section aria-labelledby="variants" className={SECTION}>
-      <h2 id="variants" className="font-display text-lg font-bold">Variants ({pim.variants.length})</h2>
-      <p className="text-xs text-text-muted">Order units: the minimum must be a whole number of packs. The server checks every value again.</p>
-      <div className="space-y-3">
-        {pim.variants.map((v) => <VariantRow key={v.variantId} pim={pim} variant={v} extra={extras.data?.get(v.variantId)} onSaved={onSaved} onReload={onReload} />)}
+      <h2 id="variants" className="font-display text-lg font-bold">Variants ({detail.variants.length})</h2>
+      <p className="text-xs text-text-muted">Weight, price and status save with the product version. Order units: the minimum must be a whole number of packs. The server checks every value again.</p>
+      <div className="space-y-5">
+        {detail.variants.map((v) => {
+          const units = pim.variants.find((x) => x.variantId === v.id);
+          return (
+            <div key={v.id} className="space-y-2" data-testid="sku-card">
+              <VariantCommercial detail={detail} variant={v} onDetail={onDetail} onReload={onReload} />
+              {units && <VariantRow pim={pim} variant={units} onSaved={onPim} onReload={onReload} />}
+            </div>
+          );
+        })}
       </div>
     </section>
   );
 }
 
 function Editor({ id }: { id: string }) {
-  const res = useResource(() => catalogAdminApi.pim(id), id);
+  const res = useResource(async () => { const [d, p] = await Promise.all([catalogAdminApi.productGet(id), catalogAdminApi.pim(id)]); return { detail: d.data, pim: p.data }; }, id);
+  const [detail, setDetail] = React.useState<AdminProductDetail | null>(null);
   const [pim, setPim] = React.useState<ProductPim | null>(null);
   const [epoch, setEpoch] = React.useState(0);
-  React.useEffect(() => { if (res.data) { setPim(res.data.data); setEpoch((n) => n + 1); } }, [res.data]);
+  React.useEffect(() => { if (res.data) { setDetail(res.data.detail); setPim(res.data.pim); setEpoch((n) => n + 1); } }, [res.data]);
   const reload = () => res.reload();
+  /** The supply, alternatives and order-unit saves touch the product row too: pick up its new version without touching the forms. */
+  const afterPim = (p: ProductPim) => { setPim(p); void catalogAdminApi.productGet(id).then((d) => setDetail(d.data), () => undefined); };
   const failure = res.error ? catalogError(res.error) : null;
   return (
     <div className="space-y-5">
@@ -281,13 +223,16 @@ function Editor({ id }: { id: string }) {
           {failure.retry && <Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button>}
         </div>
       )}
-      {res.loading && !pim && !failure && <div role="status"><span className="sr-only">Loading</span><Skeleton className="h-48 w-full" /></div>}
-      {pim && (
+      {res.loading && !detail && !failure && <div role="status"><span className="sr-only">Loading</span><Skeleton className="h-48 w-full" /></div>}
+      {detail && pim && (
         <div key={epoch} className="space-y-5">
-          <Basics pim={pim} />
-          <SupplySection pim={pim} onSaved={setPim} onReload={reload} />
-          <AlternativesSection pim={pim} onSaved={setPim} onReload={reload} />
-          <Variants pim={pim} onSaved={setPim} onReload={reload} />
+          <h2 className="sr-only">Product</h2>
+          <p className="font-display text-xl font-bold" data-testid="product-title">{detail.titleEn}</p>
+          <LifecyclePanel detail={detail} onDetail={setDetail} onReload={reload} />
+          <BasicsPanel detail={detail} onDetail={setDetail} onReload={reload} />
+          <SupplySection pim={pim} onSaved={afterPim} onReload={reload} />
+          <AlternativesSection pim={pim} onSaved={afterPim} onReload={reload} />
+          <Variants detail={detail} pim={pim} onDetail={setDetail} onPim={afterPim} onReload={reload} />
         </div>
       )}
     </div>
