@@ -422,6 +422,139 @@
         }
       }
     },
+    "/api/v1/admin/companies/{companyId}/credit/payments": {
+      "post": {
+        "tags": [
+          "AdminCreditPayments"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCreditPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCreditPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordCreditPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/credit/payments/{paymentId}/verify": {
+      "post": {
+        "tags": [
+          "AdminCreditPayments"
+        ],
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyCreditPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyCreditPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyCreditPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/credit/payments/{paymentId}/reject": {
+      "post": {
+        "tags": [
+          "AdminCreditPayments"
+        ],
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCreditPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCreditPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectCreditPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/margin-floors": {
       "get": {
         "tags": [
@@ -4611,6 +4744,20 @@
         },
         "additionalProperties": false
       },
+      "CreditAllocationInput": {
+        "type": "object",
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amountMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreditTerms": {
         "enum": [
           0,
@@ -5019,6 +5166,57 @@
         "additionalProperties": false,
         "description": "The only thing read from the client: the pasted text. No prices, ids or company are bound."
       },
+      "RecordCreditPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "nullable": true
+          },
+          "amountMinor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "receivedOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "drawerBank": {
+            "type": "string",
+            "nullable": true
+          },
+          "chequeDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "lateEntryReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditAllocationInput"
+            },
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterCompanyRequest": {
         "type": "object",
         "properties": {
@@ -5072,6 +5270,16 @@
         "additionalProperties": false
       },
       "RejectCompanyRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RejectCreditPaymentRequest": {
         "type": "object",
         "properties": {
           "reason": {
@@ -5931,6 +6139,17 @@
         },
         "additionalProperties": false
       },
+      "VerifyCreditPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "clearedOn": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "VerifyOtpRequestDto": {
         "type": "object",
         "properties": {
@@ -5980,6 +6199,9 @@
     },
     {
       "name": "AdminCompanies"
+    },
+    {
+      "name": "AdminCreditPayments"
     },
     {
       "name": "AdminMarginFloors"

@@ -463,6 +463,131 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/companies/{companyId}/credit/payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RecordCreditPaymentRequest"];
+                    "text/json": components["schemas"]["RecordCreditPaymentRequest"];
+                    "application/*+json": components["schemas"]["RecordCreditPaymentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/payments/{paymentId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["VerifyCreditPaymentRequest"];
+                    "text/json": components["schemas"]["VerifyCreditPaymentRequest"];
+                    "application/*+json": components["schemas"]["VerifyCreditPaymentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/payments/{paymentId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RejectCreditPaymentRequest"];
+                    "text/json": components["schemas"]["RejectCreditPaymentRequest"];
+                    "application/*+json": components["schemas"]["RejectCreditPaymentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/margin-floors": {
         parameters: {
             query?: never;
@@ -4871,6 +4996,12 @@ export interface components {
             /** Format: date-time */
             validToUtc?: string;
         };
+        CreditAllocationInput: {
+            /** Format: uuid */
+            orderId?: string;
+            /** Format: int64 */
+            amountMinor?: number;
+        };
         /**
          * Format: int32
          * @enum {integer}
@@ -5008,6 +5139,21 @@ export interface components {
         QuickOrderValidateBody: {
             text?: string | null;
         };
+        RecordCreditPaymentRequest: {
+            method?: string | null;
+            /** Format: int64 */
+            amountMinor?: number;
+            /** Format: date */
+            receivedOn?: string | null;
+            reference?: string | null;
+            drawerBank?: string | null;
+            /** Format: date */
+            chequeDate?: string | null;
+            lateEntryReason?: string | null;
+            allocations?: components["schemas"]["CreditAllocationInput"][] | null;
+            note?: string | null;
+            currency?: string | null;
+        };
         RegisterCompanyRequest: {
             legalName?: string | null;
             tradeLicenceNo?: string | null;
@@ -5023,6 +5169,9 @@ export interface components {
             locale?: string | null;
         };
         RejectCompanyRequest: {
+            reason?: string | null;
+        };
+        RejectCreditPaymentRequest: {
             reason?: string | null;
         };
         RejectRefund: {
@@ -5303,6 +5452,10 @@ export interface components {
             saleActive?: boolean;
             taxIncluded?: boolean;
             tax?: components["schemas"]["MoneyDto"];
+        };
+        VerifyCreditPaymentRequest: {
+            /** Format: date */
+            clearedOn?: string | null;
         };
         VerifyOtpRequestDto: {
             recipient?: string | null;

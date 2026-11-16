@@ -46,6 +46,12 @@ public static class Permissions
     /// <summary>Create, change and delete zones and rate cards (money-affecting configuration: Admin only).</summary>
     public const string ShippingManage = "shipping.manage";
 
+    // Credit settlement (ADR-0010 §5). Finance holds both, like refunds: four-eyes is per payment (verifier ≠ recorder), not per role.
+    /// <summary>Record a customer's payment against its credit; recording releases nothing.</summary>
+    public const string CreditRecordPayment = "credit.record_payment";
+    /// <summary>Verify or reject a payment someone else recorded (verify with step-up); only a verification releases credit.</summary>
+    public const string CreditVerifyPayment = "credit.verify_payment";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -74,7 +80,7 @@ public static class Permissions
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
-                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView
+                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment
             ],
             Roles.Admin =>
             [
@@ -101,7 +107,9 @@ public static class Permissions
                 PricingViewCost,
                 PricingManageFloors,
                 ShippingView,
-                ShippingManage
+                ShippingManage,
+                CreditRecordPayment,
+                CreditVerifyPayment
             ],
             _ => []
         };
