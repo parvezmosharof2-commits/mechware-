@@ -82,6 +82,53 @@ public class InventoryItemTests
     }
 
     [Fact]
+    public void Restock_RaisesOnHandOnly_AndKeepsHolds()
+    {
+        var i = Item(4, threshold: 5);
+        i.TryReserve(3);
+        i.ClearDomainEvents();
+
+        i.Restock(6);
+
+        (i.OnHand, i.Reserved, i.Available).Should().Be((10, 3, 7));
+        i.DomainEvents.Should().BeEmpty("stock going up never raises a low-stock event");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public void Restock_OfNothingOrANegativeQuantity_IsRefused(int quantity)
+    {
+        var i = Item(4);
+        var act = () => i.Restock(quantity);
+        act.Should().Throw<ValidationException>();
+        i.OnHand.Should().Be(4);
+    }
+
+    [Fact]
+    public void Restock_ThatWouldOverflow_IsRefused()
+    {
+        var i = Item(int.MaxValue - 1);
+        var act = () => i.Restock(2);
+        act.Should().Throw<ValidationException>();
+        i.OnHand.Should().Be(int.MaxValue - 1);
+    }
+
+    [Fact]
+    public void StockMovement_RequiresAReasonAReferenceAndAQuantity()
+    {
+        var now = DateTime.UtcNow;
+        var ok = () => new StockMovement(Guid.NewGuid(), Guid.NewGuid(), 1, RestockReason.Correction, "stock_count", Guid.NewGuid(), null, now);
+        ok.Should().NotThrow();
+
+        var noReason = () => new StockMovement(Guid.NewGuid(), Guid.NewGuid(), 1, default, "stock_count", Guid.NewGuid(), null, now);
+        var noReference = () => new StockMovement(Guid.NewGuid(), Guid.NewGuid(), 1, RestockReason.Correction, " ", Guid.NewGuid(), null, now);
+        var noReferenceId = () => new StockMovement(Guid.NewGuid(), Guid.NewGuid(), 1, RestockReason.Correction, "stock_count", Guid.Empty, null, now);
+        var nothing = () => new StockMovement(Guid.NewGuid(), Guid.NewGuid(), 0, RestockReason.Correction, "stock_count", Guid.NewGuid(), null, now);
+        foreach (var bad in new[] { noReason, noReference, noReferenceId, nothing }) bad.Should().Throw<ValidationException>();
+    }
+
+    [Fact]
     public void Reservation_ExpiresFifteenMinutesAfterCreation_ByDefault()
     {
         var now = new DateTime(2026, 11, 1, 10, 0, 0, DateTimeKind.Utc);

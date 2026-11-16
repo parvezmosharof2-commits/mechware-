@@ -1,12 +1,15 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Mechware.Application.Catalog;
 using Mechware.Application.Common;
+using Mechware.Application.Identity;
 using Mechware.Application.Inventory;
 using Mechware.Application.Search;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Identity;
 using Mechware.Domain.Pricing;
 using Mechware.Domain.Inventory;
 using Mechware.Infrastructure.Persistence;
@@ -30,12 +33,14 @@ public sealed class InventoryService : IInventoryService
     private readonly IStorefrontCacheInvalidator? _cache;
     private readonly TimeProvider _clock;
     private readonly ISearchReindexQueue? _reindex;
+    private readonly ICurrentUserService? _user;
 
     public InventoryService(
         MechwareDbContext db, IDistributedLockProvider locks, TimeProvider clock, IStorefrontCacheInvalidator? cache = null,
-        ISearchReindexQueue? reindex = null)
+        ISearchReindexQueue? reindex = null, ICurrentUserService? user = null)
     {
         _reindex = reindex;
+        _user = user;
         _db = db;
         _locks = locks;
         _clock = clock;
@@ -334,13 +339,139 @@ public sealed class InventoryService : IInventoryService
         }
     }
 
+    public async Task<RestockResult> RestockAsync(RestockRequest request, CancellationToken ct = default)
+    {
+        ValidateRestock(request);
+        if (!await _db.ProductVariants.AsNoTracking().AnyAsync(v => v.Id == request.VariantId, ct))
+            throw new KeyNotFoundException("Variant not found.");
+        var now = _clock.GetUtcNow().UtcDateTime;
+
+        List<RestockedLine> lines;
+        await using (var tx = await _db.Database.BeginTransactionAsync(ct))
+        {
+            // The lock discipline of reserve/commit/cancel: every balance of the variant FOR UPDATE in (variant, warehouse)
+            // order. Inactive warehouses are included (stock can go back to a warehouse closed for sale); the order is the same.
+            // No Redis lock, like commit/cancel: tier 1 only reduces contention, and a restock must not fail as "busy".
+            var items = await LockInventoryAsync([request.VariantId], ct, includeInactive: true);
+            var itemIds = items.Select(i => i.Id).ToArray();
+
+            // Idempotent replay, checked under the locks so two copies of one restock cannot both pass.
+            var replay = await _db.StockMovements.AsNoTracking()
+                .Where(m => m.ReferenceType == request.ReferenceType && m.ReferenceId == request.ReferenceId
+                    && m.Reason == request.Reason && itemIds.Contains(m.InventoryItemId))
+                .ToListAsync(ct);
+            if (replay.Count > 0)
+            {
+                _db.ChangeTracker.Clear();
+                if (replay.Sum(m => m.Delta) != request.Quantity)
+                    throw new ConflictException("RESTOCK_CONFLICT", "This reference already restocked a different quantity of this item.");
+                var byId = items.ToDictionary(i => i.Id);
+                return new RestockResult(true, replay
+                    .Select(m => new RestockedLine(byId[m.InventoryItemId].WarehouseId, m.Delta, byId[m.InventoryItemId].OnHand)).ToList());
+            }
+
+            lines = [];
+            foreach (var (item, quantity) in await PlanRestockAsync(request, items, ct))
+            {
+                item.Restock(quantity);
+                _db.StockMovements.Add(new StockMovement(Guid.NewGuid(), item.Id, quantity, request.Reason, request.ReferenceType,
+                    request.ReferenceId, request.ActorUserId, now));
+                lines.Add(new RestockedLine(item.WarehouseId, quantity, item.OnHand));
+            }
+
+            _db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), request.ActorUserId, _user?.IpAddress, "inventory.restocked", "product_variants",
+                request.VariantId.ToString(), null, JsonSerializer.Serialize(new
+                {
+                    request.VariantId,
+                    request.Quantity,
+                    Reason = request.Reason.ToString(),
+                    request.ReferenceType,
+                    request.ReferenceId,
+                    Actor = request.ActorUserId?.ToString() ?? "system",
+                    Lines = lines
+                }), _user?.CorrelationId, now));
+            await _db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            _db.ChangeTracker.Clear();
+        }
+
+        // Same freshness path as reserve/commit: storefront stock cache and the search index (out of stock → in stock).
+        await InvalidateStockAsync([request.VariantId], ct);
+        return new RestockResult(false, lines);
+    }
+
+    private static void ValidateRestock(RestockRequest r)
+    {
+        if (r.VariantId == Guid.Empty) throw new ValidationException("variantId", "A variant is required.");
+        if (r.Quantity <= 0 || r.Quantity > RestockRequest.MaxQuantity)
+            throw new ValidationException("quantity", $"Quantity must be between 1 and {RestockRequest.MaxQuantity}.");
+        if (!Enum.IsDefined(r.Reason))
+            throw new ValidationException("reason", "Choose a reason: OrderCancelled, ReturnRestocked, Correction or StockReceived.");
+        if (string.IsNullOrEmpty(r.ReferenceType) || r.ReferenceType.Length > RestockRequest.MaxReferenceTypeLength
+            || !r.ReferenceType.All(c => c is (>= 'a' and <= 'z') or '_'))
+            throw new ValidationException("referenceType", $"A reference type of 1 to {RestockRequest.MaxReferenceTypeLength} lowercase letters or underscores is required.");
+        if (r.ReferenceId == Guid.Empty) throw new ValidationException("referenceId", "A reference id is required.");
+        if (r.Reason == RestockReason.OrderCancelled && r.ReferenceType != RestockRequest.OrderReference)
+            throw new ValidationException("referenceType", "Stock of a cancelled order is put back against that order.");
+        if (r.WarehouseId == Guid.Empty) throw new ValidationException("warehouseId", "Leave the warehouse out or name a real one.");
+    }
+
+    /// <summary>Which balances receive the stock; see the warehouse rule on <see cref="RestockRequest"/>.</summary>
+    private async Task<List<(InventoryItem Item, int Quantity)>> PlanRestockAsync(RestockRequest request, List<InventoryItem> items, CancellationToken ct)
+    {
+        if (request.WarehouseId is { } warehouse) items = items.Where(i => i.WarehouseId == warehouse).ToList();
+        if (items.Count == 0) throw new KeyNotFoundException("This variant has no stock record in that warehouse.");
+
+        if (request.ReferenceType != RestockRequest.OrderReference)
+        {
+            if (items.Count == 1) return [(items[0], request.Quantity)];
+            var ids = items.Select(i => i.WarehouseId).ToArray();
+            var active = await _db.Warehouses.AsNoTracking().Where(w => ids.Contains(w.Id) && w.IsActive).Select(w => w.Id).ToListAsync(ct);
+            var candidates = items.Where(i => active.Contains(i.WarehouseId)).ToList();
+            if (candidates.Count != 1)
+                throw new ValidationException("warehouseId", "This variant is stocked in several warehouses (or none is active); choose one.");
+            return [(candidates[0], request.Quantity)];
+        }
+
+        // An order's stock goes back where its committed holds took it from, and never more than they took minus what was
+        // already put back for this order (any reason). Reservations are never deleted, so they are the deduction record.
+        var deducted = await _db.StockReservations.AsNoTracking()
+            .Where(r => r.ReferenceId == request.ReferenceId && r.VariantId == request.VariantId && r.Status == ReservationStatus.Fulfilled)
+            .GroupBy(r => r.WarehouseId).Select(g => new { g.Key, Quantity = g.Sum(r => r.Quantity) })
+            .ToDictionaryAsync(x => x.Key, x => x.Quantity, ct);
+        var itemIds = items.Select(i => i.Id).ToArray();
+        var returned = await _db.StockMovements.AsNoTracking()
+            .Where(m => m.ReferenceType == RestockRequest.OrderReference && m.ReferenceId == request.ReferenceId && itemIds.Contains(m.InventoryItemId))
+            .GroupBy(m => m.InventoryItemId).Select(g => new { g.Key, Delta = g.Sum(m => m.Delta) })
+            .ToDictionaryAsync(x => x.Key, x => x.Delta, ct);
+
+        var open = items
+            .Select(i => (Item: i, Left: deducted.GetValueOrDefault(i.WarehouseId) - returned.GetValueOrDefault(i.Id)))
+            .Where(x => x.Left > 0).OrderByDescending(x => x.Left).ThenBy(x => x.Item.WarehouseId).ToList();
+        var left = open.Sum(x => x.Left);
+        if (left < request.Quantity)
+            throw new ConflictException("RESTOCK_EXCEEDS_DEDUCTED", $"Only {left} of this item were taken from stock for this order and not yet put back.");
+
+        var plan = new List<(InventoryItem Item, int Quantity)>();
+        var remaining = request.Quantity;
+        foreach (var (item, quantity) in open)
+        {
+            var take = Math.Min(quantity, remaining);
+            plan.Add((item, take));
+            remaining -= take;
+            if (remaining == 0) break;
+        }
+
+        return plan;
+    }
+
     /// <summary>Row-locks all warehouse balances of the given variants in deterministic order.</summary>
-    private Task<List<InventoryItem>> LockInventoryAsync(Guid[] variantIds, CancellationToken ct) =>
+    private Task<List<InventoryItem>> LockInventoryAsync(Guid[] variantIds, CancellationToken ct, bool includeInactive = false) =>
         _db.InventoryItems
             .FromSql($"""
                 SELECT i.* FROM inventory_items i
                 JOIN warehouses w ON w.id = i.warehouse_id
-                WHERE i.variant_id = ANY({variantIds}) AND w.is_active
+                WHERE i.variant_id = ANY({variantIds}) AND (w.is_active OR {includeInactive})
                 ORDER BY i.variant_id ASC, i.warehouse_id ASC
                 FOR UPDATE OF i
                 """)

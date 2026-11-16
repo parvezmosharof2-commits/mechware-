@@ -85,6 +85,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         // Database objects migrations add with raw SQL (the audit hash chain); EnsureCreated knows only the model.
         await db.Database.ExecuteSqlRawAsync(AuditChainSql.Install);
         await db.Database.ExecuteSqlRawAsync(PriceListSql.Install);
+        await db.Database.ExecuteSqlRawAsync(StockMovementSql.Install);
     }
 
     public MechwareDbContext CreateContext()

@@ -527,6 +527,25 @@ merge-এর পরে cookie না মোছা (৪), logout-এ cookie ন�
 
 ---
 
+## ১১. E7.1 — Stock ফেরত (restock): অপব্যবহারের ঘটনা ও টেস্ট (২০২৬-১১-১৬) [TEST]
+
+> **অবস্থা:** ইউনিট E7.1-এর অংশ, AI সহকারীর লেখা; কোনো মানুষ রিভিউ করেননি। Inventory এই ডকের মূল বিষয় নয়, কিন্তু confirmed অর্ডার বাতিল/ফেরত (E7.2, F2) টাকার সাথে জড়িত, তাই এখানে। কোড: `InventoryService.RestockAsync` (`backend/src/Mechware.Infrastructure/Inventory/InventoryService.cs`), `InventoryItem.Restock`, `StockMovement`, `StockMovementSql`। টেস্ট: `backend/tests/Mechware.IntegrationTests/Catalog/InventoryRestockTests.cs`, `backend/tests/Mechware.UnitTests/Catalog/InventoryItemTests.cs`। এখনো কোনো endpoint নেই (E7.2/G5)।
+
+| ID | অপব্যবহার | প্রতিকার | যে টেস্ট প্রমাণ করে |
+|---|---|---|---|
+| RS1 | **দুবার restock** (retry, replay, একই বাতিল দুবার) | Idempotency key = (reference type, reference id, reason, variant); inventory row-lock-এর ভেতরে যাচাই; একই পরিমাণ = কিছু বদলায় না (`AlreadyApplied`), অন্য পরিমাণ = 409 `RESTOCK_CONFLICT`; DB-তে unique index `ux_stock_movements_reference` backstop | `Replay_OfTheSameReference_AddsStockOnce_AndAnotherReferenceAddsAgain` |
+| RS2 | **অর্ডার যা নিয়েছিল তার বেশি ফেরত** (বা যে অর্ডার stock কাটেইনি তার নামে stock বানানো) | `order` reference-এ শুধু ওই অর্ডারের committed (fulfilled) hold যতটা নিয়েছিল, তার থেকে আগে ফেরত দেওয়াটা (যেকোনো reason) বাদ দিয়ে; বেশি = 409 `RESTOCK_EXCEEDS_DEDUCTED`; stock যে warehouse থেকে গিয়েছিল সেখানেই ফেরে | `CancelledOrder_GoesBackToTheWarehousesItCameFrom_AndNeverMoreThanWasTaken`, `AnOrderThatNeverDeductedStock_CannotRestock_ItsHoldIsReleasedInstead` |
+| RS3 | **Negative / শূন্য / বিশাল পরিমাণ**, overflow | ১ থেকে ১০,০০০ (নইলে validation, কিছুই বদলায় না); domain-এ overflow guard; DB-তে `ck_inventory_available` ও `ck_stock_movements_delta` | `Quantity_OutsideOneToMax_IsRefused`, `Restock_OfNothingOrANegativeQuantity_IsRefused`, `Restock_ThatWouldOverflow_IsRefused` |
+| RS4 | **কারণ বা reference ছাড়া restock** (হিসাবহীন stock) | Reason enum ১ থেকে শুরু (০ = অবৈধ), অচেনা মান refused; reference type ছোট হাতের অক্ষর/`_`, ১-৪০; reference id খালি নয়; `OrderCancelled` শুধু `order` reference-এ | `Restock_WithoutAReasonOrReference_IsRefused`, `StockMovement_RequiresAReasonAReferenceAndAQuantity` |
+| RS5 | **Restock-এ hold কমে যাওয়া** (reserved স্পর্শ করা) বা race-এ negative stock | শুধু `on_hand` বাড়ে; reserve/commit/cancel-এর মতো একই `FOR UPDATE` lock, একই (variant, warehouse) ক্রমে | `Restock_RaisesOnHand_NeverTouchesReserved`, `ConcurrentRestockAndReserve_NeverNegative_AndTheBalanceAddsUp` (৫০ ক্রেতা + ২০ restock) |
+| RS6 | **ইতিহাস মুছে ফেলা / বদলানো** | `stock_movements` append-only (UPDATE/DELETE/TRUNCATE trigger); প্রতিটা restock-এ `inventory.restocked` audit row (actor বা `system`) | `Restock_WritesAMovementAndAnAuditRow_AndTheLedgerIsAppendOnly` |
+
+**Mutation check (২০২৬-১১-১৬):** হাতে করা, প্রতিটা আলাদা, তারপর ফাইল ফেরত। ৪টার ৪টাই ধরা পড়েছে: restock-এ reserved কমানো (৩টা টেস্ট), idempotency check বাদ (replay টেস্ট), restock-এ row lock বাদ (concurrency টেস্ট ৬ বারে ৬ বার fail, lost update), reindex request বাদ (search টেস্ট)।
+
+**যে ঝুঁকি থেকে যায়:** staff-এর হাতে restock endpoint এখনো নেই (E7.2/G5 permission + step-up দেবে); `Correction`/`StockReceived` এক warehouse-এ যায় (কয়েকটা থাকলে বেছে নিতে হয়), পরিমাণ শুধু ১০,০০০ দিয়ে সীমিত; stock কমানোর (negative correction) পথ এখনো নেই।
+
+---
+
 ## সম্পর্কিত ডক
 - D2 নকশা: [`docs/adr/0008-price-lists-and-contract-prices.md`](../adr/0008-price-lists-and-contract-prices.md) (§৮ এর ভিত্তি)
 - কার্ট: [`docs/modules/E1.md`](../modules/E1.md) (§৯-এর ইউনিট ও handoff)

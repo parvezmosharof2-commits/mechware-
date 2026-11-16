@@ -63,6 +63,7 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Warehouse> Warehouses => Set<Warehouse>();
     public DbSet<InventoryItem> InventoryItems => Set<InventoryItem>();
     public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ReviewMedia> ReviewMedia => Set<ReviewMedia>();
     public DbSet<Question> Questions => Set<Question>();

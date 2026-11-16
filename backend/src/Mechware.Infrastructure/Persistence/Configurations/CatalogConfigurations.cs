@@ -415,6 +415,31 @@ internal sealed class StockReservationConfiguration : IEntityTypeConfiguration<S
     }
 }
 
+/// <summary>Append-only stock ledger (E7.1); <see cref="StockMovementSql"/> installs the trigger that forbids changes.</summary>
+internal sealed class StockMovementConfiguration : IEntityTypeConfiguration<StockMovement>
+{
+    public void Configure(EntityTypeBuilder<StockMovement> b)
+    {
+        b.ToTable("stock_movements", t =>
+        {
+            t.HasCheckConstraint("ck_stock_movements_delta", "delta <> 0");
+            t.HasCheckConstraint("ck_stock_movements_reference", "length(reference_type) > 0");
+        });
+        b.MapAudit(updated: false);
+        b.Property(m => m.InventoryItemId).HasColumnName("inventory_item_id");
+        b.Property(m => m.Delta).HasColumnName("delta");
+        b.Property(m => m.Reason).HasColumnName("reason").HasMaxLength(30).HasConversion(new SnakeCaseEnumConverter<RestockReason>());
+        b.Property(m => m.ReferenceType).HasColumnName("reference_type").HasMaxLength(40).IsRequired();
+        b.Property(m => m.ReferenceId).HasColumnName("reference_id");
+        b.Property(m => m.ActorId).HasColumnName("actor_id");
+        // The idempotency backstop: one movement per balance for one (reference, reason).
+        b.HasIndex(m => new { m.ReferenceType, m.ReferenceId, m.Reason, m.InventoryItemId }).IsUnique()
+            .HasDatabaseName("ux_stock_movements_reference");
+        b.HasIndex(m => new { m.InventoryItemId, m.CreatedAtUtc }).HasDatabaseName("ix_stock_movements_item");
+        b.HasOne<InventoryItem>().WithMany().HasForeignKey(m => m.InventoryItemId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class ReviewConfiguration : IEntityTypeConfiguration<Review>
 {
     public void Configure(EntityTypeBuilder<Review> b)

@@ -1992,6 +1992,61 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Inventory.StockMovement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Delta")
+                        .HasColumnType("integer")
+                        .HasColumnName("delta");
+
+                    b.Property<Guid>("InventoryItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inventory_item_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("ReferenceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reference_id");
+
+                    b.Property<string>("ReferenceType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InventoryItemId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_stock_movements_item");
+
+                    b.HasIndex("ReferenceType", "ReferenceId", "Reason", "InventoryItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_stock_movements_reference");
+
+                    b.ToTable("stock_movements", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_stock_movements_delta", "delta <> 0");
+
+                            t.HasCheckConstraint("ck_stock_movements_reference", "length(reference_type) > 0");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Inventory.StockReservation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3981,6 +4036,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasOne("Mechware.Domain.Inventory.Warehouse", null)
                         .WithMany()
                         .HasForeignKey("WarehouseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Inventory.StockMovement", b =>
+                {
+                    b.HasOne("Mechware.Domain.Inventory.InventoryItem", null)
+                        .WithMany()
+                        .HasForeignKey("InventoryItemId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

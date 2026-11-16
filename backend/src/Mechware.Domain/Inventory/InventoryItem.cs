@@ -66,6 +66,18 @@ public sealed class InventoryItem : AggregateRoot<Guid>
         RaiseLowStockIfCrossed(before);
     }
 
+    /// <summary>
+    /// Puts stock back on the shelf (E7.1): only <see cref="OnHand"/> grows, holds are never touched, so
+    /// <c>OnHand ≥ Reserved ≥ 0</c> keeps holding. Raises no low-stock event (stock only goes up).
+    /// </summary>
+    public void Restock(int quantity)
+    {
+        if (quantity <= 0) throw new ValidationException("quantity", "Quantity must be positive.");
+        if (OnHand > int.MaxValue - quantity) throw new ValidationException("quantity", "On-hand stock would overflow.");
+        OnHand += quantity;
+        Touch();
+    }
+
     /// <summary>Applies a physical stock correction (receipt, cycle count). Never below the reserved quantity.</summary>
     public void AdjustOnHand(int newOnHand)
     {

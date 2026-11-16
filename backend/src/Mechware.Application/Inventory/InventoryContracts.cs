@@ -1,3 +1,5 @@
+using Mechware.Domain.Inventory;
+
 namespace Mechware.Application.Inventory;
 
 /// <summary>
@@ -35,8 +37,38 @@ public sealed record ReserveStockResult(
     public static ReserveStockResult Unavailable(IReadOnlyList<Guid> variants) => new(false, [], null, [], variants);
 }
 
+/// <summary>
+/// Puts <paramref name="Quantity"/> units of one variant back on the shelf (E7.1). The idempotency key is
+/// (<paramref name="ReferenceType"/>, <paramref name="ReferenceId"/>, <paramref name="Reason"/>, variant): a replay with the same
+/// quantity changes nothing and returns the first result; a replay with another quantity is a conflict.
+/// <para>Warehouse rule: with <see cref="OrderReference"/> the stock goes back to the warehouses the order's committed holds
+/// took it from, and never more than they took minus what was already put back for that order; otherwise to
+/// <paramref name="WarehouseId"/>, or to the variant's only active warehouse when none is given.</para>
+/// </summary>
+public sealed record RestockRequest(
+    Guid VariantId, int Quantity, RestockReason Reason, string ReferenceType, Guid ReferenceId,
+    Guid? WarehouseId = null, Guid? ActorUserId = null)
+{
+    public const int MaxQuantity = ReserveStockRequest.MaxQuantityPerLine;
+    public const int MaxReferenceTypeLength = 40;
+    /// <summary>The reference type of an order (its id is the reservation reference). Required for <see cref="RestockReason.OrderCancelled"/>.</summary>
+    public const string OrderReference = "order";
+}
+
+public sealed record RestockedLine(Guid WarehouseId, int Quantity, int OnHandAfter);
+
+/// <summary><paramref name="AlreadyApplied"/> is true for a replay; then <c>OnHandAfter</c> is the balance now.</summary>
+public sealed record RestockResult(bool AlreadyApplied, IReadOnlyList<RestockedLine> Lines);
+
 public interface IInventoryService
 {
+    /// <summary>
+    /// Raises on-hand stock atomically with an append-only movement row and an <c>inventory.restocked</c> audit row; never
+    /// changes reserved stock. Validation errors for bad input, <see cref="KeyNotFoundException"/> for an unknown variant or
+    /// a missing stock record, a conflict for a different replay or for more than an order deducted. See <see cref="RestockRequest"/>.
+    /// </summary>
+    Task<RestockResult> RestockAsync(RestockRequest request, CancellationToken ct = default);
+
     /// <summary>Atomically reserves every line (15 minute TTL by default) or none.</summary>
     Task<ReserveStockResult> ReserveAsync(ReserveStockRequest request, CancellationToken ct = default);
 
