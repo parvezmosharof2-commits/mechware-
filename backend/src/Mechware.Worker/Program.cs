@@ -46,6 +46,9 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 
 // The shared service setup registers staff-facing services that audit "who did it"; in this host nobody is signed in.
 builder.Services.AddScoped<Mechware.Application.Identity.ICurrentUserService, Mechware.Worker.SystemCurrentUserService>();
+// The approval sweep confirms credit orders here too, so it reads the same Delivery:* legal periods as the API (E8.3):
+// otherwise those confirmations would silently use the built-in defaults whatever the configuration says.
+builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.From(builder.Configuration));
 // The approval sweep confirms credit orders here, so it reads the same Credit:* settings as the API (ADR-0010 §13).
 builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validated(
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
