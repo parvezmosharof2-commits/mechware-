@@ -22,10 +22,16 @@ import {
   type CartNotice,
   type CartView
 } from '@mechware/api-client';
+import type { PriceDisplay } from '@mechware/api-client/src/company-prices-model';
 import { useAuth } from '../../lib/auth';
 import { announceCart } from '../../lib/cart-events';
 import { actionErrorKey } from '../../lib/cart-ui';
+import dynamic from 'next/dynamic';
+import type { CartCompanyPricesResult } from './CartCompanyPrices';
 import { CartSkeleton } from './CartSkeleton';
+
+// Company prices are private and only for signed-in users: the code is a separate chunk that guests never load.
+const CartCompanyPrices = dynamic(() => import('./CartCompanyPrices'), { ssr: false });
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -52,6 +58,8 @@ interface LineProps {
   notices: CartNotice[];
   currency: string;
   locale: string;
+  /** The signed-in company buyer's own price for this line (contract / break / sale), when the API has one. */
+  company?: PriceDisplay;
   disabled: boolean;
   t: Translate;
   onDraft: (line: CartLine, text: string) => void;
@@ -60,7 +68,8 @@ interface LineProps {
   onRemove: (line: CartLine) => void;
 }
 
-function CartLineRow({ line, draft, notices, currency, locale, disabled, t, onDraft, onStep, onCommit, onRemove }: LineProps) {
+function CartLineRow({ line, draft, notices, currency, locale, company, disabled, t, onDraft, onStep, onCommit, onRemove }: LineProps) {
+  const tc = useTranslations('CompanyPrice');
   const min = minCartQuantity(line);
   const shown = draft ?? String(line.quantity);
   const current = Number(shown);
@@ -130,6 +139,12 @@ function CartLineRow({ line, draft, notices, currency, locale, disabled, t, onDr
         </Button>
       </div>
 
+      {company && (
+        <p className="text-sm text-text md:col-span-5" data-testid="cart-company-price">
+          {tc(company.kind === 'contract' ? 'cartContract' : 'cartYour', { price: formatPriceMinor(company.unitNetMinor, currency, locale) })}
+        </p>
+      )}
+
       {notices.length > 0 && (
         <div className="space-y-2 md:col-span-5">
           {notices.map((n, i) => (
@@ -160,6 +175,10 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
   const queue = React.useRef<Promise<unknown>>(Promise.resolve());
   const mounted = React.useRef(true);
   const headingRef = React.useRef<HTMLDivElement>(null);
+  // Private company prices: fetched in the browser for a signed-in company buyer; nothing happens for anyone else.
+  const tc = useTranslations('CompanyPrice');
+  const askLines = React.useMemo(() => (cart?.lines ?? []).map((l) => ({ variantId: l.variantId, quantity: l.quantity })), [cart]);
+  const [companyPrices, setCompanyPrices] = React.useState<CartCompanyPricesResult | null>(null);
 
   React.useEffect(() => {
     mounted.current = true;
@@ -328,10 +347,12 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
   const { byVariant, orphans } = groupNotices(cart);
   const canCheckout = canProceedToCheckout(cart);
   const blocked = blockedVariantIds(cart).size > 0;
+  const anyCompany = companyPrices !== null && cart.lines.some((l) => companyPrices.lines.has(l.variantId.toLowerCase()));
 
   return (
     <>
       {live}
+      {status === 'authenticated' && <CartCompanyPrices asks={askLines} onResult={setCompanyPrices} />}
       <div ref={headingRef} tabIndex={-1} className="outline-none" />
       {actionError && <ActionError kind={actionError} t={t} />}
       {orphans.length > 0 && (
@@ -359,6 +380,7 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
                 notices={byVariant.get(line.variantId) ?? []}
                 currency={cart.currency}
                 locale={locale}
+                company={companyPrices?.lines.get(line.variantId.toLowerCase())}
                 disabled={busy}
                 t={t}
                 onDraft={schedule}
@@ -380,6 +402,11 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
             <span className="text-2xl font-bold text-text">{formatPriceMinor(cart.subtotalMinor, cart.currency, locale)}</span>
           </p>
           <p className="mt-1 text-xs text-text-muted">{t('subtotalNote')}</p>
+          {companyPrices && anyCompany && (
+            <p className="mt-2 text-xs text-text-muted" data-testid="cart-company-note">
+              {tc('forCompany', { company: companyPrices.company })}. {tc('cartNote')}
+            </p>
+          )}
           {canCheckout && !busy ? (
             <Link
               prefetch={false}

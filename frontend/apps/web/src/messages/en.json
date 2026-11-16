@@ -942,5 +942,23 @@
         ]
       }
     ]
+  },
+  "CompanyPrice": {
+    "forCompany": "Prices for {company}",
+    "yourPrice": "Your price",
+    "yourContractPrice": "Your contract price",
+    "ref": "ref {ref}",
+    "exclVat": "excl. VAT",
+    "vatLine": "VAT {percent}%: {vat} · Total for {countText} {count, plural, one {unit} other {units}}: {total}",
+    "publicPrice": "Public price {price} incl. VAT",
+    "validUntil": "Valid until {date}",
+    "tiersCaption": "Your quantity prices (excl. VAT)",
+    "tierQty": "Quantity",
+    "tierPrice": "Unit price excl. VAT",
+    "tierFrom": "{min}+",
+    "currentTier": "Applies to your quantity",
+    "cartContract": "Contract price {price} each, excl. VAT",
+    "cartYour": "Your price {price} each, excl. VAT",
+    "cartNote": "Final prices are confirmed at checkout."
   }
 }

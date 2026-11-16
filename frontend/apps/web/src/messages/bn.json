@@ -942,5 +942,23 @@
         ]
       }
     ]
+  },
+  "CompanyPrice": {
+    "forCompany": "{company}-এর জন্য মূল্য",
+    "yourPrice": "আপনার মূল্য",
+    "yourContractPrice": "আপনার চুক্তির মূল্য",
+    "ref": "রেফ. {ref}",
+    "exclVat": "ভ্যাট ছাড়া",
+    "vatLine": "ভ্যাট {percent}%: {vat} · {countText}টির মোট: {total}",
+    "publicPrice": "সাধারণ মূল্য {price}, ভ্যাটসহ",
+    "validUntil": "{date} পর্যন্ত বৈধ",
+    "tiersCaption": "আপনার পরিমাণভিত্তিক মূল্য (ভ্যাট ছাড়া)",
+    "tierQty": "পরিমাণ",
+    "tierPrice": "একক মূল্য, ভ্যাট ছাড়া",
+    "tierFrom": "{min}+",
+    "currentTier": "আপনার পরিমাণে প্রযোজ্য",
+    "cartContract": "চুক্তির মূল্য {price} প্রতিটি, ভ্যাট ছাড়া",
+    "cartYour": "আপনার মূল্য {price} প্রতিটি, ভ্যাট ছাড়া",
+    "cartNote": "চূড়ান্ত মূল্য চেকআউটে নিশ্চিত করা হবে।"
   }
 }

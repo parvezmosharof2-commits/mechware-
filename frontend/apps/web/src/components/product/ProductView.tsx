@@ -10,6 +10,7 @@ import { classifyCartError, formatPriceMinor, type MediaDto, type ProductDetail,
 import { addErrorKey } from '../../lib/cart-ui';
 import { Availability } from '../search/hit-parts';
 import { CopyPartNumber } from '../search/CopyPartNumber';
+import { CompanyPriceGate } from './CompanyPriceGate';
 import {
   absoluteMediaUrl,
   clampQuantity,
@@ -231,6 +232,8 @@ export function ProductView({ product, initialSku, mediaBase, banner, sections }
               <p className="mt-1 text-xs text-text-muted">{pricing.taxIncluded ? t('vatIncluded') : t('vatExcluded')}</p>
             </>
           )}
+          {/* Private: fetched in the browser for a signed-in company buyer only; renders nothing otherwise. */}
+          {variant && !onRequest && <CompanyPriceGate variantId={variant.id} quantity={clampQuantity(Number(qtyText), variant)} currency={currency} />}
         </div>
 
         <div className="mt-5">
