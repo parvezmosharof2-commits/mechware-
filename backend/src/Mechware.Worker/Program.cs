@@ -44,6 +44,8 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     return ConnectionMultiplexer.Connect(options);
 });
 
+// The shared service setup registers staff-facing services that audit "who did it"; in this host nobody is signed in.
+builder.Services.AddScoped<Mechware.Application.Identity.ICurrentUserService, Mechware.Worker.SystemCurrentUserService>();
 builder.Services.AddCatalogServices();
 builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 {
