@@ -180,7 +180,7 @@ public sealed class CreditAdjustmentService(MechwareDbContext db, ICurrentUserSe
 
     private static string Wire<T>(T value) where T : struct, Enum => SnakeCaseEnumConverter<T>.ToSnake(value.ToString());
 
-    private static CreditAdjustmentDto ToDto(CreditAdjustment a) => new(a.Id, a.CompanyId, Wire(a.Kind), a.AmountMinor, a.Currency, a.OrderId, a.PaymentId,
+    internal static CreditAdjustmentDto ToDto(CreditAdjustment a) => new(a.Id, a.CompanyId, Wire(a.Kind), a.AmountMinor, a.Currency, a.OrderId, a.PaymentId,
         a.CreditNoteId, a.PayoutReference, a.Reason, Wire(a.Status), a.RequestedBy, a.CreatedAtUtc, a.ApprovedBy, a.ApprovedAtUtc, a.RejectedBy,
         a.RejectedAtUtc, a.DecisionReason);
 }

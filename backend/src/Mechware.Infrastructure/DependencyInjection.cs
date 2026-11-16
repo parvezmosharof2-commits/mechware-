@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Credit.ICreditLedger, Credit.CreditLedgerService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditAdjustmentService, Credit.CreditAdjustmentService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditHoldService, Credit.CreditHoldService>();
+        services.TryAddScoped<Mechware.Application.Credit.ICreditReadService, Credit.CreditReadService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();

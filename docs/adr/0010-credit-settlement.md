@@ -489,6 +489,34 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
 5. **Lock order (§7, CS16):** placement price_lists → companies → promotions; approval orders → companies; override and sweep: companies
    only; the hold reads ledger lines without locks under the company lock. No new cycle.
 
+## Implementation notes: B3.8 staff reads (2026-11-17, AI assistant, not reviewed)
+`credit.view` (Finance, Admin; Support and the rest 403), `ICreditReadService` / `CreditReadService`, `AdminCreditReadsController`, pure `CreditAging` +
+`CreditCsv` in Domain. No migration. READ-ONLY: no ledger line, no row lock (not even FOR SHARE), every answer inside one REPEATABLE READ transaction
+(a snapshot, MVCC: it never queues behind a verification, bounce, cancel or placement). The only write is the audit row of a CSV export.
+1. **Endpoints (§10):** `GET admin/credit/payments?status=&companyId=&page&pageSize` (default `recorded`, oldest first = the verification queue; other
+   statuses and `all` newest first; flags `lateEntry`, `postDated`), `GET admin/credit/payments/{id}` (payment + the ledger lines written in its name:
+   the 201 `Location` of B3.4 now works), `GET admin/credit/adjustments[?status=requested|approved|rejected|all]` and `/{id}` (the `Location` of B3.6),
+   `GET admin/credit/aging?companyId&q&overdueOnly&page&pageSize`, `GET admin/credit/aging.csv`, `GET admin/companies/{id}/credit/statement?from&to&page&pageSize`
+   and `.csv`. Page size is clamped to 1..200. An unknown status is 400, an unknown payment/adjustment 404, a company that is not Active/Suspended 404.
+2. **Aging rule:** per ORDER (open = Σ receivable deltas > 0), days past due = today(Dhaka) − the charge's `due_on` (the rule of the hold, §9):
+   ≤ 0 current (due today is still current), 1-30, 31-60, 61-90, ≥ 91 "90+". An order's whole REMAINING receivable (not its charge) goes into one bucket.
+   `onHold` = oldest open due date before `CreditOptions.HoldDueBefore(now)` and no Admin lift running; shown with `holdOverrideUntilUtc`. Companies are sorted
+   by overdue amount, then receivable, then name; `totals`, `receivableMinor`, `overdueMinor` cover every match, not just the page. Aggregation is in
+   memory over one grouped query (one row per open order): fine for B2B volumes, H4 can move it to SQL.
+3. **Statement:** every ledger line of the company in posting order (`seq`), filtered by the Dhaka day the line is about (`occurredOn`), with order number
+   and the payment's method and FULL reference (staff only), both deltas and both running totals from the chain, plus the company's current totals from the
+   SAME snapshot (with no filter, the last line's running totals equal them). There is no "opening balance" because `occurredOn` is not monotone in `seq`
+   (a payment's lines carry its clearing day), so a date-filtered range has no single opening line.
+4. **CSV (CS27):** UTF-8 with BOM, CRLF, every cell quoted including the header, a TEXT cell starting with `= + - @`, tab or CR gets a leading `'`; amounts are
+   written twice (poisha, BDT with 2 decimals) and are NOT prefixed, so a negative stays a number (deviation from "a cell that starts with -", documented
+   here: amounts are formatted by us from a `long`, never from user text). The statement CSV needs `credit.view`; the all-company aging CSV also a fresh
+   authenticator code (`credit.export_all`, target in the step-up audit). Both are rate-limited per signed-in person (`CreditExport`, default 6 a minute,
+   `RateLimiting:CreditExportPermitPerMinute`), send `Cache-Control: private, no-store` and write one audit row (`credit.statement_exported` entity `companies`,
+   `credit.aging_exported` entity `credit_aging`; filters and row count, no data). A statement over `CreditReadService.MaxCsvRows` (20,000) lines is a 400
+   "narrow the dates" (never a silent cut).
+5. **Not built:** a payment `note` is staff-only and appears in the JSON payment, never in a CSV; a CSV of the payment queue; per-method queue filter;
+   the buyer reads (B3.9).
+
 ## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
 1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →
    `credit_payments` | `credit_adjustments` → `companies` → `promotions`. The payment webhook already locks payment → order, so the

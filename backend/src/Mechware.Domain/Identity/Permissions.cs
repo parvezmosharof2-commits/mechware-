@@ -60,6 +60,8 @@ public static class Permissions
     public const string CreditAdjustApprove = "credit.adjust_approve";
     /// <summary>Lift the overdue credit hold for at most <c>Credit:HoldOverrideMaxDays</c>, with step-up and a reason (Admin only, ADR-0010 §5, §9).</summary>
     public const string CreditHoldOverride = "credit.hold_override";
+    /// <summary>Read the payment and adjustment queues, aging, and company statements, and export them as CSV (Finance, Admin; ADR-0010 §5, §10). The all-company CSV also needs step-up.</summary>
+    public const string CreditView = "credit.view";
 
     public static class Roles
     {
@@ -89,7 +91,7 @@ public static class Permissions
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
-                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust
+                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView
             ],
             Roles.Admin =>
             [
@@ -122,7 +124,8 @@ public static class Permissions
                 CreditVerifyPayment,
                 CreditAdjust,
                 CreditAdjustApprove,
-                CreditHoldOverride
+                CreditHoldOverride,
+                CreditView
             ],
             _ => []
         };

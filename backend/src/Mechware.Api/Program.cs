@@ -325,6 +325,21 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1)
             }));
 
+    // Credit CSV exports (threat model CS27): a few a minute per signed-in staff member, on top of the general budget.
+    // A request without a verified identity is not counted here (it gets 401 from the endpoint, and the general anonymous budget still applies).
+    options.AddPolicy("CreditExport", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "credit-export:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:CreditExportPermitPerMinute") ?? 6,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("credit-export-anonymous"));
+
     // Payment-provider webhooks get their own bucket per IP (threat model v2, P6): a provider delivers bursts from a few
     // addresses, and a 429 makes it retry later, which delays confirming paid orders. They never share the budget that
     // throttles browsers, and a flood of forged webhooks only exhausts its own bucket (each is refused on the signature).

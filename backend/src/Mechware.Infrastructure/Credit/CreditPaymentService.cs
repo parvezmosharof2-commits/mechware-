@@ -267,7 +267,7 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
 
     private static string Wire<T>(T value) where T : struct, Enum => SnakeCaseEnumConverter<T>.ToSnake(value.ToString());
 
-    private static CreditPaymentDto ToDto(CreditPayment p) => new(p.Id, p.CompanyId, Wire(p.Method), p.AmountMinor, p.Currency, p.Reference,
+    internal static CreditPaymentDto ToDto(CreditPayment p) => new(p.Id, p.CompanyId, Wire(p.Method), p.AmountMinor, p.Currency, p.Reference,
         p.DrawerBank, p.ReceivedOn, p.ChequeDate, p.LateEntryReason, p.Allocations, p.Note, Wire(p.Status), p.RecordedBy, p.CreatedAtUtc,
         p.VerifiedBy, p.VerifiedAtUtc, p.ClearedOn, p.RejectedBy, p.RejectedAtUtc, p.DecisionReason, p.BouncedBy, p.BouncedAtUtc);
 }
