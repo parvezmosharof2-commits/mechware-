@@ -22,17 +22,24 @@ public sealed record VerifyCreditPaymentRequest(DateOnly? ClearedOn);
 
 public sealed record RejectCreditPaymentRequest(string? Reason);
 
+/// <summary>Why the bank returned the money (5-500 characters).</summary>
+public sealed record BounceCreditPaymentRequest(string? Reason);
+
 /// <summary>Staff view of one payment. Never sent to a buyer (it carries staff ids and the internal note).</summary>
 public sealed record CreditPaymentDto(Guid Id, Guid CompanyId, string Method, long AmountMinor, string Currency, string Reference,
     string? DrawerBank, DateOnly ReceivedOn, DateOnly? ChequeDate, string? LateEntryReason, IReadOnlyList<CreditAllocationRequest> Allocations,
     string? Note, string Status, Guid RecordedBy, DateTime RecordedAtUtc, Guid? VerifiedBy, DateTime? VerifiedAtUtc, DateOnly? ClearedOn,
-    Guid? RejectedBy, DateTime? RejectedAtUtc, string? DecisionReason);
+    Guid? RejectedBy, DateTime? RejectedAtUtc, string? DecisionReason, Guid? BouncedBy, DateTime? BouncedAtUtc);
 
 /// <summary><paramref name="Replayed"/>: the same recorder sent the same Idempotency-Key and body again; nothing new was stored.</summary>
 public sealed record RecordedCreditPayment(CreditPaymentDto Payment, bool Replayed);
 
 /// <summary>What one verification released (§7): the orders paid, the rest on account, the company's totals afterwards.</summary>
 public sealed record VerifiedCreditPayment(CreditPaymentDto Payment, Guid EventId, IReadOnlyList<CreditAllocation> Applied, long OnAccountMinor,
+    long CreditUsedMinor, long CreditOnAccountMinor);
+
+/// <summary>What one bounce put back (§8.1): the debt per order, the on-account money taken away, the company's totals afterwards.</summary>
+public sealed record BouncedCreditPayment(CreditPaymentDto Payment, Guid EventId, IReadOnlyList<CreditAllocation> Reversed, long OnAccountReversedMinor,
     long CreditUsedMinor, long CreditOnAccountMinor);
 
 /// <summary>
@@ -50,4 +57,11 @@ public interface ICreditPaymentService
     Task<VerifiedCreditPayment> VerifyAsync(Guid paymentId, VerifyCreditPaymentRequest request, CancellationToken ct = default);
 
     Task<CreditPaymentDto> RejectAsync(Guid paymentId, RejectCreditPaymentRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The bank returned a verified payment (§8.1): any verifier (no four eyes: it frees nothing), reason 5-500; 409
+    /// <c>CREDIT_PAYMENT_NOT_VERIFIED</c> (also for a second bounce), <c>CREDIT_PAYMENT_CASH_CANNOT_BOUNCE</c>. Credit used may end
+    /// above the limit; new credit orders are then refused as usual.
+    /// </summary>
+    Task<BouncedCreditPayment> BounceAsync(Guid paymentId, BounceCreditPaymentRequest request, CancellationToken ct = default);
 }

@@ -57,6 +57,7 @@ public static class DependencyInjection
         // Credit settlement defaults pending owner confirmation, unless the host registered options read from Credit:* first.
         services.TryAddSingleton(new Mechware.Application.Credit.CreditOptions());
         services.TryAddScoped<Mechware.Application.Credit.ICreditPaymentService, Credit.CreditPaymentService>();
+        services.TryAddScoped<Mechware.Application.Credit.ICreditLedger, Credit.CreditLedgerService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();
         services.TryAddScoped<Mechware.Application.Shipping.IShippingRateProvider, Shipping.ShippingRateProvider>();

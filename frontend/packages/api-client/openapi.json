@@ -555,6 +555,49 @@
         }
       }
     },
+    "/api/v1/admin/credit/payments/{paymentId}/bounce": {
+      "post": {
+        "tags": [
+          "AdminCreditPayments"
+        ],
+        "summary": "The bank returned a verified payment (§8.1, CS12): the debt goes back on the orders it paid. Always an authenticator code.",
+        "parameters": [
+          {
+            "name": "paymentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceCreditPaymentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceCreditPaymentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/BounceCreditPaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/margin-floors": {
       "get": {
         "tags": [
@@ -4629,6 +4672,16 @@
               "type": "string",
               "format": "uuid"
             },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "BounceCreditPaymentRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
             "nullable": true
           }
         },

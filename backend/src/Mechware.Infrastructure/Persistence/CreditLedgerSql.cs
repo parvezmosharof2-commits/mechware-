@@ -143,6 +143,48 @@ public static class CreditLedgerSql
         """;
 
     /// <summary>
+    /// B3.5, ADR-0010 §1/§8.1: replaces the CHECK <c>credit_used &lt;= credit_limit</c>, which a bounce must be able to break (the
+    /// debt comes back whatever the limit). What the CHECK protected stays protected where it matters: a <c>charge</c> line (the
+    /// only way an order uses credit) may not take the running total above the company's limit, and the limit may not be lowered
+    /// below the credit used. Any other path that raises <c>credit_used</c> needs a ledger line (the deferred check of
+    /// <see cref="Install"/>), and only a <c>payment_reversed</c> line can raise it without a charge. Idempotent.
+    /// </summary>
+    public const string InstallLimitGuard = """
+        CREATE OR REPLACE FUNCTION credit_limit_guard() RETURNS trigger
+        LANGUAGE plpgsql AS $fn$
+        DECLARE
+            lim bigint;
+        BEGIN
+            IF TG_TABLE_NAME = 'credit_ledger_entries' THEN
+                SELECT credit_limit INTO lim FROM companies WHERE id = NEW.company_id;
+                IF NEW.receivable_after_minor > lim THEN
+                    RAISE EXCEPTION 'credit_ledger_entries: a charge would take the credit used of company % to %, above its limit %',
+                        NEW.company_id, NEW.receivable_after_minor, lim USING ERRCODE = 'check_violation';
+                END IF;
+            ELSIF NEW.credit_limit < OLD.credit_limit AND NEW.credit_limit < NEW.credit_used THEN
+                RAISE EXCEPTION 'companies: the credit limit of company % cannot be lowered below its credit used', NEW.id
+                    USING ERRCODE = 'check_violation';
+            END IF;
+            RETURN NEW;
+        END
+        $fn$;
+
+        DROP TRIGGER IF EXISTS trg_credit_ledger_entries_charge_limit ON credit_ledger_entries;
+        CREATE TRIGGER trg_credit_ledger_entries_charge_limit BEFORE INSERT ON credit_ledger_entries
+            FOR EACH ROW WHEN (NEW.kind = 'charge') EXECUTE FUNCTION credit_limit_guard();
+        DROP TRIGGER IF EXISTS trg_companies_credit_limit ON companies;
+        CREATE TRIGGER trg_companies_credit_limit BEFORE UPDATE OF credit_limit ON companies
+            FOR EACH ROW EXECUTE FUNCTION credit_limit_guard();
+        """;
+
+    /// <summary>The Down of <see cref="InstallLimitGuard"/> (the migration then adds the CHECK back).</summary>
+    public const string DropLimitGuard = """
+        DROP TRIGGER IF EXISTS trg_credit_ledger_entries_charge_limit ON credit_ledger_entries;
+        DROP TRIGGER IF EXISTS trg_companies_credit_limit ON companies;
+        DROP FUNCTION IF EXISTS credit_limit_guard();
+        """;
+
+    /// <summary>
     /// ADR-0010 §3: one <c>charge</c> per credit order confirmed before the ledger existed (actor system, due = confirmation
     /// Dhaka date + the company's terms days), for companies that have no line yet. A company whose <c>credit_used</c> is not
     /// the sum of those orders stops it with the company ids: it never invents an opening balance. Runs the deferred checks

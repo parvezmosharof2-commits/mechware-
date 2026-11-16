@@ -185,6 +185,36 @@ public sealed class CreditPaymentEndpointsTests(DefaultApiFactory factory) : ICl
             .GetProperty("status").GetString().Should().Be("rejected");
     }
 
+    // ---- CS12 (B3.5) ---------------------------------------------------------------------------------------------------
+
+    [PostgresFact]
+    public async Task Bounce_NeedsStepUpAndReason()
+    {
+        // A bounce puts debt back, so it always needs a fresh code (action credit.payment.bounce) and a reason; Support cannot;
+        // any verifier may record it, the one who verified included (it frees nothing).
+        var company = await CompanyAsync();
+        var checker = await StaffAsync(Permissions.Roles.Finance);
+        var payment = await RecordedAsync(await StaffAsync(Permissions.Roles.Finance), company);
+        await DataAsync(await VerifyAsync(checker.Client, payment, await CodeAsync(checker)), HttpStatusCode.OK);
+        var support = await StaffAsync(Permissions.Roles.Support);
+        object reason = new { reason = "cheque returned unpaid" };
+
+        (await DecideAsync(support.Client, payment, "bounce", reason, await CodeAsync(support))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ErrorCodeAsync(await DecideAsync(checker.Client, payment, "bounce", reason, null), HttpStatusCode.Forbidden)).Should().Be("STEP_UP_REQUIRED");
+        (await ErrorCodeAsync(await DecideAsync(checker.Client, payment, "bounce", reason, "000000"), HttpStatusCode.Forbidden)).Should().Be("STEP_UP_FAILED");
+        (await DecideAsync(checker.Client, payment, "bounce", new { reason = "no" }, await CodeAsync(checker))).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await StatusOf(payment)).Should().Be(CreditPaymentStatus.Verified);
+
+        var bounced = await DataAsync(await DecideAsync(checker.Client, payment, "bounce", reason, await CodeAsync(checker)), HttpStatusCode.OK);
+        (bounced.GetProperty("payment").GetProperty("status").GetString(), bounced.GetProperty("creditUsedMinor").GetInt64()).Should().Be(("bounced", 50_000));
+        bounced.GetProperty("payment").GetProperty("bouncedBy").GetGuid().Should().Be(checker.UserId);
+        (await ErrorCodeAsync(await DecideAsync(checker.Client, payment, "bounce", reason, await CodeAsync(checker)), HttpStatusCode.Conflict))
+            .Should().Be("CREDIT_PAYMENT_NOT_VERIFIED");
+        await using var db = Db();
+        (await db.AuditLogs.Where(a => a.Action == "user.step_up_passed" && a.ActorId == checker.UserId).Select(a => a.NewValuesJson).ToListAsync())
+            .Should().Contain(json => json!.Contains("credit.payment.bounce") && json.Contains($"paymentId={payment}"));
+    }
+
     // ---- CS2 -----------------------------------------------------------------------------------------------------------
 
     [PostgresFact]

@@ -19,10 +19,12 @@ namespace Mechware.Infrastructure.Credit;
 /// locks an order). The verification reads the company's open receivables under the company lock, plans with the pure
 /// <see cref="CreditAllocationPlanner"/>, posts through <see cref="CreditLedger"/> (the only way <c>credit_used</c> moves) and
 /// commits the payment, the lines, the cached totals, one audit row and one outbox event together, with no outside call inside.
+/// A bounce (§8.1, B3.5) takes the same locks and writes new <c>payment_reversed</c> lines (<see cref="CreditReversals.Bounce"/>).
 /// </summary>
 public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserService user, CreditOptions options, TimeProvider clock) : ICreditPaymentService
 {
     public const string VerifiedEvent = "credit.payment_verified";
+    public const string BouncedEvent = "credit.payment_bounced";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Dictionary<string, CreditPaymentMethod> Methods =
         Enum.GetValues<CreditPaymentMethod>().ToDictionary(m => Wire(m), StringComparer.Ordinal);
@@ -76,8 +78,7 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
         // A second verifier waits on this lock, then finds the payment verified: 409, never a second release (CS1).
         var payment = await LockPaymentAsync(paymentId, ct);
         payment.Verify(actor, clearedOn, now);   // status, four eyes (CS2), cheque and clearing dates (CS11)
-        var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {payment.CompanyId} FOR UPDATE")
-            .ToListAsync(ct)).Single();
+        var company = await LockCompanyAsync(payment.CompanyId, ct);
 
         // Every line of every order that still owes something (the per-order caps need all of an order's lines), read under the lock.
         var open = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && l.OrderId != null)
@@ -103,18 +104,51 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
             company.CreditUsedMinor,
             company.CreditOnAccountMinor
         }, now));
-        db.OutboxMessages.Add(new OutboxMessage
-        {
-            Id = eventId,
-            EventType = VerifiedEvent,
-            AggregateType = nameof(CreditPayment),
-            AggregateId = payment.Id,
-            OccurredAtUtc = now,
-            Payload = JsonSerializer.Serialize(new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor, plan.OnAccountMinor }, Json)
-        });
+        db.OutboxMessages.Add(Outbox(VerifiedEvent, payment, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor, plan.OnAccountMinor }));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return new VerifiedCreditPayment(ToDto(payment), eventId, plan.Allocations, plan.OnAccountMinor, company.CreditUsedMinor, company.CreditOnAccountMinor);
+    }
+
+    public async Task<BouncedCreditPayment> BounceAsync(Guid paymentId, BounceCreditPaymentRequest request, CancellationToken ct = default)
+    {
+        var (actor, now) = (Actor, Now);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // Same lock order as a verification: a bounce racing the verification of the same payment waits for it (CS12, CS16).
+        var payment = await LockPaymentAsync(paymentId, ct);
+        payment.Bounce(actor, request.Reason ?? string.Empty, now);   // verified only, so a second bounce is 409; never cash
+        var company = await LockCompanyAsync(payment.CompanyId, ct);
+
+        // The lines in this payment's name, and every line of the orders it reached (the per-order caps need them all).
+        var orders = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && l.PaymentId == payment.Id && l.OrderId != null)
+            .Select(l => l.OrderId).Distinct().ToListAsync(ct);
+        var lines = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && (l.PaymentId == payment.Id || orders.Contains(l.OrderId)))
+            .ToListAsync(ct);
+        var ledger = new CreditLedger(company, lines);
+        var before = new { company.CreditUsedMinor, company.CreditOnAccountMinor };
+        var eventId = Guid.NewGuid();
+        var postings = CreditReversals.Bounce(payment.Id, lines,
+            new CreditEventInfo(CreditCalendar.DhakaDate(now), eventId, actor, user.CorrelationId, payment.DecisionReason!));
+        foreach (var posting in postings)
+            db.CreditLedgerEntries.Add(ledger.Post(posting, now).Entry);   // the old lines stay as they are: append-only
+
+        var reversed = postings.Where(p => p.OrderId is not null).Select(p => new CreditAllocation(p.OrderId!.Value, p.ReceivableDeltaMinor)).ToList();
+        var onAccount = -postings.Sum(p => p.OnAccountDeltaMinor);
+        db.AuditLogs.Add(Audit(BouncedEvent, payment, before, new
+        {
+            EventId = eventId,
+            payment.CompanyId,
+            payment.AmountMinor,
+            Reason = payment.DecisionReason,
+            Reversed = reversed,
+            OnAccountReversedMinor = onAccount,
+            company.CreditUsedMinor,
+            company.CreditOnAccountMinor
+        }, now));
+        db.OutboxMessages.Add(Outbox(BouncedEvent, payment, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor }));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return new BouncedCreditPayment(ToDto(payment), eventId, reversed, onAccount, company.CreditUsedMinor, company.CreditOnAccountMinor);
     }
 
     public async Task<CreditPaymentDto> RejectAsync(Guid paymentId, RejectCreditPaymentRequest request, CancellationToken ct = default)
@@ -133,9 +167,24 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
 
+    // NO KEY UPDATE, not UPDATE: it still queues a second verify/bounce of the payment, but lets a reduction that already holds the
+    // company lock insert ledger lines naming this payment (their foreign key takes FOR KEY SHARE); FOR UPDATE deadlocks there (CS16).
     private async Task<CreditPayment> LockPaymentAsync(Guid paymentId, CancellationToken ct) =>
-        (await db.CreditPayments.FromSqlInterpolated($"SELECT p.*, p.xmin FROM credit_payments p WHERE p.id = {paymentId} FOR UPDATE").ToListAsync(ct))
+        (await db.CreditPayments.FromSqlInterpolated($"SELECT p.*, p.xmin FROM credit_payments p WHERE p.id = {paymentId} FOR NO KEY UPDATE").ToListAsync(ct))
         .SingleOrDefault() ?? throw new KeyNotFoundException("Payment not found.");
+
+    private async Task<Company> LockCompanyAsync(Guid companyId, CancellationToken ct) =>
+        (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {companyId} FOR UPDATE").ToListAsync(ct)).Single();
+
+    private static OutboxMessage Outbox(string type, CreditPayment p, Guid eventId, DateTime now, object payload) => new()
+    {
+        Id = eventId,
+        EventType = type,
+        AggregateType = nameof(CreditPayment),
+        AggregateId = p.Id,
+        OccurredAtUtc = now,
+        Payload = JsonSerializer.Serialize(payload, Json)
+    };
 
     private async Task<RecordedCreditPayment?> ReplayAsync(Guid actor, string key, string hash, CancellationToken ct)
     {
@@ -154,5 +203,5 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
 
     private static CreditPaymentDto ToDto(CreditPayment p) => new(p.Id, p.CompanyId, Wire(p.Method), p.AmountMinor, p.Currency, p.Reference,
         p.DrawerBank, p.ReceivedOn, p.ChequeDate, p.LateEntryReason, p.Allocations, p.Note, Wire(p.Status), p.RecordedBy, p.CreatedAtUtc,
-        p.VerifiedBy, p.VerifiedAtUtc, p.ClearedOn, p.RejectedBy, p.RejectedAtUtc, p.DecisionReason);
+        p.VerifiedBy, p.VerifiedAtUtc, p.ClearedOn, p.RejectedBy, p.RejectedAtUtc, p.DecisionReason, p.BouncedBy, p.BouncedAtUtc);
 }

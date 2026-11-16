@@ -588,6 +588,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/credit/payments/{paymentId}/bounce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The bank returned a verified payment (§8.1, CS12): the debt goes back on the orders it paid. Always an authenticator code. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    paymentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["BounceCreditPaymentRequest"];
+                    "text/json": components["schemas"]["BounceCreditPaymentRequest"];
+                    "application/*+json": components["schemas"]["BounceCreditPaymentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/margin-floors": {
         parameters: {
             query?: never;
@@ -4959,6 +5001,9 @@ export interface components {
         ApprovePriceListRequest: {
             expectedContentHash?: string | null;
             acknowledgedBelowFloorEntryIds?: string[] | null;
+        };
+        BounceCreditPaymentRequest: {
+            reason?: string | null;
         };
         BrandDto: {
             name?: string | null;

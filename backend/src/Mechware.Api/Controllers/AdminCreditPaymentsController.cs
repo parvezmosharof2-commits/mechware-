@@ -17,6 +17,7 @@ namespace Mechware.Api.Controllers;
 public sealed class AdminCreditPaymentsController(ICreditPaymentService payments, IIdentityService identity, ICurrentUserService currentUser) : ControllerBase
 {
     public const string VerifyStepUpAction = "credit.payment.verify";
+    public const string BounceStepUpAction = "credit.payment.bounce";
 
     [HttpPost("companies/{companyId:guid}/credit/payments")]
     [RequirePermission(Permissions.CreditRecordPayment)]
@@ -45,4 +46,11 @@ public sealed class AdminCreditPaymentsController(ICreditPaymentService payments
     [RequirePermission(Permissions.CreditVerifyPayment)]
     public async Task<IActionResult> Reject(Guid paymentId, [FromBody] RejectCreditPaymentRequest body, CancellationToken ct) =>
         Ok(new { data = await payments.RejectAsync(paymentId, body, ct) });
+
+    /// <summary>The bank returned a verified payment (§8.1, CS12): the debt goes back on the orders it paid. Always an authenticator code.</summary>
+    [HttpPost("credit/payments/{paymentId:guid}/bounce")]
+    [RequirePermission(Permissions.CreditVerifyPayment)]
+    [RequireStepUp(BounceStepUpAction)]
+    public async Task<IActionResult> Bounce(Guid paymentId, [FromBody] BounceCreditPaymentRequest body, CancellationToken ct) =>
+        Ok(new { data = await payments.BounceAsync(paymentId, body, ct) });
 }

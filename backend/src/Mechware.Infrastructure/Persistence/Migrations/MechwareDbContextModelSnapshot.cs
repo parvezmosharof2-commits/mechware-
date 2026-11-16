@@ -1130,8 +1130,6 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_companies_credit_non_negative", "credit_limit >= 0 AND credit_used >= 0");
 
-                            t.HasCheckConstraint("ck_companies_credit_within_limit", "credit_used <= credit_limit");
-
                             t.HasCheckConstraint("ck_companies_terms_limit", "credit_terms <> 0 OR credit_limit = 0");
                         });
                 });

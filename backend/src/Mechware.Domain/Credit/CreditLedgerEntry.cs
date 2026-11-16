@@ -26,6 +26,10 @@ public static class CreditLedgerKeys
     public static string Charge(Guid orderId) => $"charge:{orderId:N}";
     public static string Verify(Guid paymentId, Guid orderId) => $"verify:{paymentId:N}:{orderId:N}";
     public static string VerifyOnAccount(Guid paymentId) => $"verify:{paymentId:N}:on_account";
+    public static string Bounce(Guid paymentId, Guid orderId) => $"bounce:{paymentId:N}:{orderId:N}";
+    public static string BounceOnAccount(Guid paymentId) => $"bounce:{paymentId:N}:on_account";
+    /// <summary>The prefix of every line of one reduction (§8.2): <c>reduce:{sourceKey}:receivable</c> and <c>reduce:{sourceKey}:{paymentOrNoteId}</c>.</summary>
+    public static string Reduce(string sourceKey) => $"reduce:{sourceKey}:";
 }
 
 /// <summary>Credit dates are Bangladesh calendar dates: a fixed +06:00 (no daylight saving), as for E8.3.</summary>

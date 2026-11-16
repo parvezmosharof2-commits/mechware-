@@ -334,8 +334,7 @@ order (E5 later; it would post `payment_applied` from E4 confirmation), seller p
 5. **Additions:** the ledger has FKs to `companies` and `orders` (RESTRICT) and CHECKs that a receivable moves only with an
    order and never rises with an adjustment id; options section `Credit` holds all six owner defaults (§13).
 6. **Not yet in the schema** (one migration per unit): `companies.credit_hold_override_until` (B3.7).
-   `ck_companies_credit_within_limit` still exists and must be dropped by B3.5 before a bounce can take used credit above
-   the limit (§1). (`credit_payments` and `credit_adjustments` came with B3.3b, below.)
+   `ck_companies_credit_within_limit` was dropped by B3.5 (see the B3.5 notes). (`credit_payments` and `credit_adjustments` came with B3.3b, below.)
 
 ## Implementation notes: where B3.3b deviates from this design (2026-11-16, AI assistant, not reviewed)
 Migration `AddCreditPayments`; domain `CreditPayment`, `CreditAdjustment`, `CreditAllocationPlanner`. Each point below is a
@@ -375,3 +374,30 @@ deviation from, or a decision the text above left open:
    source (`payment_id` or `credit_note_id`), so a payout of money from several sources is one adjustment per source (B3.6
    may revisit); `Approve` must be given the source payment and refuses its recorder and verifier. The reason is 10–500
    characters as §8.3 says (the B3.3b brief said 5–500; the design was followed).
+
+## Implementation notes: where B3.5 deviates from this design (2026-11-16, AI assistant, not reviewed)
+Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger.ReduceChargeAsync` (`CreditLedgerService`); bounce API.
+1. **§7 lock MODES (found by the CS16 test, a real 40P01):** every ledger line has foreign keys to the order and the payment it
+   names, so its INSERT takes `FOR KEY SHARE` on those rows, which `FOR UPDATE` blocks. Two cycles followed: a bounce holding
+   its payment `FOR UPDATE` waits for the company while a reduction holding the company writes an on-account line naming that
+   payment; a cancel holding its order `FOR UPDATE` waits for the company while a verification holding the company writes a line
+   naming that order. Fix: verify/reject/bounce lock the payment `FOR NO KEY UPDATE` (still one decision at a time), and the
+   `ReduceChargeAsync` caller (E7.2, E6.5) must lock the order `FOR NO KEY UPDATE`. The ORDER of locks is unchanged.
+   "Settlement never locks an order" stays true only in this sense: it takes `FOR KEY SHARE` through foreign keys.
+2. **§1 the CHECK `credit_used <= credit_limit` is replaced** by triggers (`CreditLedgerSql.InstallLimitGuard`): a `charge`
+   line may not take the running total above the company's limit, and the limit may not be LOWERED below the credit used
+   (raising it while still below is allowed in the database; `Company.SetCredit` still refuses any limit below used). Only a
+   `payment_reversed` line can take used above the limit. Down puts the CHECK back and fails while a company is above its limit.
+3. **§8.1 bounce:** what a payment still pays on an order = its `payment_applied` and `on_account_applied` lines, less its
+   `payment_reversed` lines and the `charge_reduced` on-account lines in its name; its on-account money = the sum of the
+   on-account deltas naming it. So a payment whose order was cancelled meanwhile only loses its on-account money. A second bounce
+   is 409 `CREDIT_PAYMENT_NOT_VERIFIED` (the status), the keys `bounce:{p}:{order|on_account}` are the backstop.
+   `occurred_on` = the Dhaka date of the bounce; the lines carry the bounce reason. Audit + outbox `credit.payment_bounced`.
+4. **§8.2 reduction:** keys `reduce:{SourceKey}:receivable` and `reduce:{SourceKey}:{paymentOrCreditNoteId}` (SourceKey 1–60
+   printable ASCII); a cancellation may give an amount (partial cancel); a credit note must give its id and amount. The
+   receivable line of a credit note carries `credit_note_id`; its on-account lines name the PAYING source only (so the source of
+   on-account money is never ambiguous); the event id ties them. "Newest first" = the source whose latest paying line is newest.
+   One audit row `credit.charge_reduced` (entity `orders`), no outbox event (E7.2/E6.5 emit their own). It calls
+   `SaveChanges` inside the caller's transaction, so the caller's pending changes in that context are saved with it.
+5. **Apply on-account (§6) is not in B3.5:** split into B3.5b (its idempotency needs its own design: Idempotency-Key + body
+   hash without a table of its own).

@@ -13,7 +13,8 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         b.ToTable("companies", t =>
         {
             t.HasCheckConstraint("ck_companies_credit_non_negative", "credit_limit >= 0 AND credit_used >= 0");
-            t.HasCheckConstraint("ck_companies_credit_within_limit", "credit_used <= credit_limit");
+            // No "credit_used <= credit_limit" CHECK since B3.5: a bounce may take used above the limit (ADR-0010 §1, §8.1);
+            // CreditLedgerSql.InstallLimitGuard keeps charges within the limit and the limit from being lowered below used.
             t.HasCheckConstraint("ck_companies_terms_limit", "credit_terms <> 0 OR credit_limit = 0");
             t.HasCheckConstraint("ck_companies_credit_ledger", "credit_on_account >= 0 AND credit_ledger_seq >= 0");
         });
