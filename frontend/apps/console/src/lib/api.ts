@@ -1,6 +1,6 @@
 import {
   MechWareApiClient, createAdminLookupsApi, createCatalogImportApi, createCompaniesApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
-  mapServerFields, priceListErrorText, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
+  decisionErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
@@ -22,6 +22,14 @@ export function priceListError(err: unknown): { text: string; retry: boolean; st
   const fields = problemFieldErrors(err);
   const text = priceListErrorText({ status, code: problemCode(err), message: problemMessage(err, ''), fields });
   return { text, retry: status === null || status >= 500, status, fields };
+}
+
+/** Plain words for a failed approve, reject or withdraw; `code` drives what the screen does next (keep the code dialog open, or reload). */
+export function decisionError(err: unknown): { text: string; code: string | null; status: number | null; reload: boolean; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  const text = decisionErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) });
+  return { text, code, status, reload: shouldReloadAfter(code), retry: status === null || status >= 500 };
 }
 
 /** Plain-words text for a failed shipping-zone call, the server's field errors (by form key) and whether a retry makes sense. */

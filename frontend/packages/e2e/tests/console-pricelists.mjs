@@ -243,7 +243,8 @@ const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10
   r.check('submitted: status Pending approval, read-only banner', (await p.getByTestId('status-badge').innerText()) === 'Pending approval' && (await p.getByTestId('readonly-banner').innerText()).includes('waiting for approval'));
   r.check('pending: no inputs, no Save/Remove/Submit/Delete/Revise', (await p.getByTestId('entries-table').locator('input').count()) === 0
     && (await p.getByRole('button', { name: /^(Save|Remove|Submit for approval|Delete draft|Revise)/ }).count()) === 0 && (await p.getByRole('button', { name: 'Add lines' }).count()) === 0);
-  r.check('pending: no approve/reject/withdraw buttons (D2.12)', (await p.getByRole('button', { name: /Approve|Reject|Withdraw/ }).count()) === 0);
+  // D2.12a: the author (admin) sees Approve DISABLED with the four-eyes reason; the decision flow itself is console-approvals.mjs
+  r.check('pending: Approve is disabled for the author (four eyes), nothing editable', (await p.getByRole('button', { name: 'Approve', exact: true }).isDisabled()) && (await p.getByTestId('approve-hint').innerText()) === 'You prepared this list; someone else must approve it.');
   await axeCheck(p, 'price-list editor (pending, read-only)');
   await p.screenshot({ path: `${SHOTS}/d2-11-editor-pending-1280.png`, fullPage: true });
 

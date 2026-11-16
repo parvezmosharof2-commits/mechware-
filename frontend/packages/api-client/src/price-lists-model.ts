@@ -62,10 +62,25 @@ export interface PriceListDetail extends PriceListSummary {
   effectiveFromUtc: string | null;
   approvedBy: string | null;
   approvedAtUtc: string | null;
+  /** Added by D2.8. */
+  rejectedBy?: string | null;
+  rejectedAtUtc?: string | null;
+  withdrawnBy?: string | null;
+  withdrawnAtUtc?: string | null;
   rejectionReason: string | null;
   withdrawReason: string | null;
   contributors: string[];
+  /** Entries below the margin floor: ids only, for every reader (no amounts). */
+  belowFloorEntryIds?: string[];
+  /** User id to full name for the creator, submitter, contributors, approver, rejecter and withdrawer. */
+  actorNames?: Record<string, string>;
   entries: PriceListEntry[];
+}
+
+export interface ApproveBody {
+  /** The content hash of the detail that was on screen when the person confirmed. */
+  expectedContentHash: string;
+  acknowledgedBelowFloorEntryIds: string[];
 }
 
 export interface CreatePriceListBody {
@@ -369,3 +384,108 @@ export function entryFieldErrors(fields: Record<string, string>): Record<string,
   }
   return out;
 }
+
+// ---------- decisions: approve, reject, withdraw (D2.8 API, D2.12a screens) ----------
+
+export const PRICE_LIST_PERMISSIONS = {
+  approve: 'pricelists.approve',
+  approveBelowFloor: 'pricelists.approve_below_floor',
+  viewCost: 'pricing.view_cost'
+} as const;
+
+/** Server codes of the three decisions in plain words. The server stays the authority; these only explain. */
+export const DECISION_ERROR_TEXT: Record<string, string> = {
+  PRICE_LIST_NOT_PENDING: 'Someone else already decided this list. The page was reloaded.',
+  PRICE_LIST_NOT_APPROVED: 'Only an approved list can be withdrawn. The page was reloaded.',
+  PRICE_LIST_FOUR_EYES: 'You prepared this list, so someone else must approve it.',
+  PRICE_LIST_CHANGED: 'This list changed after you opened it. The page was reloaded; check it again before approving.',
+  PRICE_LIST_WINDOW_PASSED: 'The validity period of this list has already started to run out or ended. Send it back so a new period can be set.',
+  PRICE_BELOW_COST: 'An entry is priced below its cost, which is never allowed. Send the list back to be corrected.',
+  BELOW_FLOOR_REASON_REQUIRED: 'An entry is below the margin floor and has no reason. Send the list back so the author can add one.',
+  BELOW_FLOOR_PERMISSION_REQUIRED: 'An administrator with below-floor permission must approve this list.',
+  BELOW_FLOOR_NOT_ACKNOWLEDGED: 'The below-floor entries changed since you opened the list. The page was reloaded; acknowledge the current ones.',
+  STEP_UP_REQUIRED: 'This action needs the 6-digit code from your authenticator app.',
+  STEP_UP_FAILED: 'The code was not accepted. Wait for the next code in your authenticator app (each code works once) and try again.'
+};
+
+/** Codes after which the screen should reload the list because what the person saw is out of date. */
+export const DECISION_RELOAD_CODES: ReadonlySet<string> = new Set([
+  'PRICE_LIST_NOT_PENDING', 'PRICE_LIST_NOT_APPROVED', 'PRICE_LIST_CHANGED', 'BELOW_FLOOR_NOT_ACKNOWLEDGED', 'BELOW_FLOOR_REASON_REQUIRED', 'PRICE_BELOW_COST', 'PRICE_LIST_WINDOW_PASSED'
+]);
+
+/** Plain words for a failed decision call; unknown codes fall back to the general price-list text. */
+export function decisionErrorText(e: ErrorLike): string {
+  if (e.code && DECISION_ERROR_TEXT[e.code]) return DECISION_ERROR_TEXT[e.code];
+  return priceListErrorText(e);
+}
+
+export const isStepUpFailure = (code: string | null | undefined): boolean => code === 'STEP_UP_FAILED' || code === 'STEP_UP_REQUIRED';
+export const shouldReloadAfter = (code: string | null | undefined): boolean => !!code && DECISION_RELOAD_CODES.has(code);
+
+/** Reason for reject and withdraw: required, 5 to 500 characters after trimming. Check this BEFORE asking for a step-up code. */
+export function decisionReasonProblem(reason: string | null | undefined): string | null {
+  const r = (reason ?? '').trim();
+  if (r.length === 0) return 'Enter a reason.';
+  return reasonProblem(r);
+}
+
+/** A step-up code is the 6 digits an authenticator shows. */
+export const isStepUpCodeShape = (code: string): boolean => /^\d{6}$/.test(code.trim());
+
+export interface ApproverIdentity {
+  id: string;
+  permissions: readonly string[];
+}
+
+export interface ApprovalHint {
+  /** UI hint only: the server decides. */
+  allowed: boolean;
+  reason: string | null;
+}
+
+/** People who prepared the list: creator, submitter and every contributor (four eyes). */
+export function preparers(detail: Pick<PriceListDetail, 'createdBy' | 'submittedBy' | 'contributors'>): string[] {
+  return [...new Set([detail.createdBy, detail.submittedBy, ...detail.contributors].filter((x): x is string => !!x))];
+}
+
+/** Whether to offer Approve. A hint for the screen; never the authority. */
+export function canApprove(detail: PriceListDetail, me: ApproverIdentity): ApprovalHint {
+  const held = new Set(me.permissions.map((p) => p.toLowerCase()));
+  if (detail.status !== 'PendingApproval') return { allowed: false, reason: 'Only a list that is waiting for approval can be approved.' };
+  if (!held.has(PRICE_LIST_PERMISSIONS.approve)) return { allowed: false, reason: 'Your role may not approve price lists.' };
+  if (preparers(detail).some((u) => u.toLowerCase() === me.id.toLowerCase())) return { allowed: false, reason: 'You prepared this list; someone else must approve it.' };
+  if ((detail.belowFloorEntryIds ?? []).length > 0 && !held.has(PRICE_LIST_PERMISSIONS.approveBelowFloor)) {
+    return { allowed: false, reason: 'An administrator with below-floor permission must approve this list.' };
+  }
+  return { allowed: true, reason: null };
+}
+
+export const canReject = (detail: Pick<PriceListDetail, 'status'>, me: ApproverIdentity): boolean =>
+  detail.status === 'PendingApproval' && me.permissions.some((p) => p.toLowerCase() === PRICE_LIST_PERMISSIONS.approve);
+export const canWithdraw = (detail: Pick<PriceListDetail, 'status'>, me: ApproverIdentity): boolean =>
+  detail.status === 'Approved' && me.permissions.some((p) => p.toLowerCase() === PRICE_LIST_PERMISSIONS.approve);
+
+export interface BelowFloorSummary {
+  count: number;
+  ids: string[];
+  /** The below-floor entries that are in the detail, with their reason (may be empty text). */
+  entries: Array<{ id: string; sku: string; minQty: number; reason: string }>;
+  /** One sentence, no amounts. */
+  text: string;
+}
+
+/** Below-floor entries from the ids the server sent for every reader; never reads cost or floor amounts. */
+export function belowFloorSummary(detail: Pick<PriceListDetail, 'belowFloorEntryIds' | 'entries'>): BelowFloorSummary {
+  const ids = [...new Set(detail.belowFloorEntryIds ?? [])];
+  const wanted = new Set(ids);
+  const entries = detail.entries.filter((e) => wanted.has(e.id)).map((e) => ({ id: e.id, sku: e.sku, minQty: e.minQty, reason: (e.belowFloorReason ?? '').trim() }));
+  const text = ids.length === 0 ? 'No entry is below the margin floor.' : `${ids.length} ${ids.length === 1 ? 'entry is' : 'entries are'} below the margin floor.`;
+  return { count: ids.length, ids, entries, text };
+}
+
+/** Short form of a content hash for headings ("abcd1234…"). */
+export const shortHash = (hash: string | null | undefined, n = 8): string => (hash ? `${hash.slice(0, n)}…` : 'none');
+
+/** A user id to a name from `actorNames`, falling back to a short id. */
+export const actorName = (detail: Pick<PriceListDetail, 'actorNames'>, id: string | null | undefined): string =>
+  !id ? '' : detail.actorNames?.[id] ?? `user ${id.slice(0, 8)}`;

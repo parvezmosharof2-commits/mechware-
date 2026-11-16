@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { usePendingApprovals } from '../lib/usePendingApprovals';
 
 export interface ConsoleNavItem {
   id: string;
@@ -37,6 +38,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     label: 'Price lists',
     requiredPermission: 'pricelists.view',
     href: '/pricing/price-lists',
+    group: 'Pricing'
+  },
+  {
+    id: 'price-list-approvals',
+    label: 'Pending approval',
+    requiredPermission: 'pricelists.approve',
+    href: '/pricing/price-lists/approvals',
     group: 'Pricing'
   },
   {
@@ -89,6 +97,7 @@ export interface RoleAwareSidebarProps {
 
 export function RoleAwareSidebar({ roles, permissions, activeItemId }: RoleAwareSidebarProps) {
   const visibleItems = getVisibleConsoleNavItems(permissions);
+  const pendingCount = usePendingApprovals(permissions.some((p) => p.toLowerCase() === 'pricelists.approve'));
   const requires2Fa = roles.some((r) => r === 'admin' || r === 'finance');
 
   return (
@@ -117,6 +126,11 @@ export function RoleAwareSidebar({ roles, permissions, activeItemId }: RoleAware
               <>
                 <div className="flex items-center justify-between gap-2">
                   <span>{item.label}</span>
+                  {item.id === 'price-list-approvals' && pendingCount !== null && pendingCount > 0 && (
+                    <span data-testid="pending-count" aria-label={`${pendingCount} waiting`} className="rounded-sm bg-bg-surface px-1.5 py-0.5 font-mono text-xs font-bold text-brand-accent">
+                      {pendingCount}
+                    </span>
+                  )}
                   {item.badge && (
                     <span className="rounded-sm bg-bg-surface px-1.5 py-0.5 font-mono text-xs text-brand-accent">
                       {item.badge}

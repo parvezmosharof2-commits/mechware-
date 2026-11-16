@@ -127,3 +127,83 @@ test('state labels and capabilities', () => {
   assert.equal(canRevise('Withdrawn'), true);
   assert.equal(canRevise('PendingApproval'), false);
 });
+
+// ---------- D2.12a decisions ----------
+import {
+  DECISION_ERROR_TEXT, belowFloorSummary, canApprove, canReject, canWithdraw, decisionErrorText, decisionReasonProblem, isStepUpCodeShape,
+  shortHash, shouldReloadAfter, actorName, type PriceListDetail
+} from '../src/price-lists-model.ts';
+
+const detail = (over: Partial<PriceListDetail> = {}): PriceListDetail => ({
+  id: 'l1', seriesId: 's1', version: 2, name: 'N', scope: 'Company', companyId: 'c1', contractRef: 'CT-1', status: 'PendingApproval', displayState: 'PendingApproval',
+  validFromUtc: '2026-12-01T00:00:00Z', validToUtc: '2027-01-01T00:00:00Z', entryCount: 2, createdBy: 'author', createdAtUtc: '2026-11-01T00:00:00Z',
+  submittedBy: 'submitter', submittedAtUtc: '2026-11-02T00:00:00Z', contentHash: 'abcdef0123456789', effectiveFromUtc: null, approvedBy: null, approvedAtUtc: null,
+  rejectionReason: null, withdrawReason: null, contributors: ['editor'], belowFloorEntryIds: [], actorNames: { author: 'Ann Author' },
+  entries: [
+    { id: 'e1', variantId: 'v1', sku: 'SKU-1', title: 'One', minQty: 1, unitPriceMinor: 1000, belowFloorReason: ' contract deal ' },
+    { id: 'e2', variantId: 'v2', sku: 'SKU-2', title: 'Two', minQty: 5, unitPriceMinor: 900, belowFloorReason: null }
+  ],
+  ...over
+});
+const finance = { id: 'fin', permissions: ['pricelists.approve', 'pricing.view_cost'] };
+const admin = { id: 'adm', permissions: ['pricelists.approve', 'pricelists.approve_below_floor', 'pricing.view_cost'] };
+
+test('every decision error code has plain words and the reload set is right', () => {
+  for (const code of ['PRICE_LIST_NOT_PENDING', 'PRICE_LIST_FOUR_EYES', 'PRICE_LIST_CHANGED', 'PRICE_LIST_WINDOW_PASSED', 'PRICE_BELOW_COST', 'BELOW_FLOOR_REASON_REQUIRED',
+    'BELOW_FLOOR_PERMISSION_REQUIRED', 'BELOW_FLOOR_NOT_ACKNOWLEDGED', 'STEP_UP_REQUIRED', 'STEP_UP_FAILED']) {
+    assert.ok(DECISION_ERROR_TEXT[code], code);
+    assert.equal(decisionErrorText({ status: 409, code, message: 'server text', fields: {} }), DECISION_ERROR_TEXT[code]);
+  }
+  assert.match(decisionErrorText({ status: 403, code: 'STEP_UP_FAILED', message: '', fields: {} }), /The code was not accepted/);
+  assert.match(decisionErrorText({ status: 409, code: 'PRICE_LIST_NOT_PENDING', message: '', fields: {} }), /Someone else already decided/);
+  assert.match(decisionErrorText({ status: 409, code: 'PRICE_LIST_CHANGED', message: '', fields: {} }), /changed after you opened it/);
+  assert.equal(decisionErrorText({ status: 500, code: null, message: '', fields: {} }), priceListErrorText({ status: 500, code: null, message: '', fields: {} }));
+  assert.ok(shouldReloadAfter('PRICE_LIST_CHANGED') && shouldReloadAfter('PRICE_LIST_NOT_PENDING'));
+  assert.ok(!shouldReloadAfter('STEP_UP_FAILED') && !shouldReloadAfter(null));
+});
+
+test('reason is checked before a step-up code is asked for', () => {
+  assert.equal(decisionReasonProblem(''), 'Enter a reason.');
+  assert.equal(decisionReasonProblem('    '), 'Enter a reason.');
+  assert.match(decisionReasonProblem('abcd')!, /at least 5/);
+  assert.equal(decisionReasonProblem('abcde'), null);
+  assert.equal(decisionReasonProblem('  abcde  '), null);
+  assert.match(decisionReasonProblem('x'.repeat(501))!, /at most 500/);
+  assert.equal(decisionReasonProblem('x'.repeat(500)), null);
+  assert.ok(isStepUpCodeShape('123456') && isStepUpCodeShape(' 123456 ') && !isStepUpCodeShape('12345') && !isStepUpCodeShape('12345a'));
+});
+
+test('canApprove is a hint: four eyes, permission, below-floor permission, state', () => {
+  assert.deepEqual(canApprove(detail(), finance), { allowed: true, reason: null });
+  for (const who of ['author', 'submitter', 'editor']) {
+    const h = canApprove(detail(), { ...finance, id: who });
+    assert.equal(h.allowed, false);
+    assert.equal(h.reason, 'You prepared this list; someone else must approve it.');
+  }
+  assert.equal(canApprove(detail(), { id: 'x', permissions: ['pricelists.view'] }).allowed, false);
+  const below = detail({ belowFloorEntryIds: ['e1'] });
+  assert.equal(canApprove(below, finance).reason, 'An administrator with below-floor permission must approve this list.');
+  assert.equal(canApprove(below, admin).allowed, true);
+  assert.equal(canApprove(detail({ status: 'Approved' }), admin).allowed, false);
+  assert.ok(canReject(detail(), finance) && !canReject(detail({ status: 'Approved' }), finance));
+  assert.ok(canWithdraw(detail({ status: 'Approved' }), finance) && !canWithdraw(detail(), finance));
+});
+
+test('below-floor summary uses ids and reasons only, never amounts', () => {
+  const s = belowFloorSummary(detail({ belowFloorEntryIds: ['e1', 'e1', 'e2', 'gone'] }));
+  assert.equal(s.count, 3);
+  assert.deepEqual(s.entries.map((e) => [e.id, e.reason]), [['e1', 'contract deal'], ['e2', '']]);
+  assert.equal(s.text, '3 entries are below the margin floor.');
+  assert.equal(belowFloorSummary(detail({ belowFloorEntryIds: ['e2'] })).text, '1 entry is below the margin floor.');
+  assert.equal(belowFloorSummary(detail()).count, 0);
+  assert.equal(belowFloorSummary(detail({ belowFloorEntryIds: undefined })).count, 0);
+  assert.ok(!JSON.stringify(s).includes('1000'));
+});
+
+test('names and hashes read well', () => {
+  assert.equal(shortHash('abcdef0123456789'), 'abcdef01…');
+  assert.equal(shortHash(null), 'none');
+  assert.equal(actorName(detail(), 'author'), 'Ann Author');
+  assert.equal(actorName(detail(), 'zzzzzzzzzzzz'), 'user zzzzzzzz');
+  assert.equal(actorName(detail(), null), '');
+});

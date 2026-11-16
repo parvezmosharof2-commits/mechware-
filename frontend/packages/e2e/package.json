@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node tests/web.mjs && node tests/console.mjs",
     "test:console-import": "node tests/console-import.mjs",
+    "test:console-approvals": "node tests/console-approvals.mjs",
     "test:console-pricelists": "node tests/console-pricelists.mjs",
     "test:console-shipping": "node tests/console-shipping.mjs",
     "test:storefront": "node tests/storefront.mjs",

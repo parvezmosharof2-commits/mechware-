@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Skeleton } from '@mechware/ui';
 import {
-  PRICE_TEXT, breaksOutOfOrder, canRevise, chunkEntries, dateToUtcIso, entriesNeedingReason, entryFieldErrors, formatTaka, isEditable,
+  PRICE_TEXT, actorName, breaksOutOfOrder, canRevise, chunkEntries, dateToUtcIso, entriesNeedingReason, entryFieldErrors, formatTaka, isEditable,
   isoToDateInput, minQtyProblem, parsePaste, priceProblem, reasonProblem, takaToMinor, validateHeader,
   type PriceListDetail, type PriceListEntry, type UpsertEntryItem
 } from '@mechware/api-client';
@@ -14,6 +14,7 @@ import { useAuth } from '../lib/auth';
 import { resolveSkus } from '../lib/skuLookup';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
+import { PriceListDecisionPanel } from './PriceListDecisionPanel';
 import { StateBadges, fmtDate } from './PriceListsView';
 
 interface Notice { text: string; retry: boolean }
@@ -21,7 +22,7 @@ interface Notice { text: string; retry: boolean }
 const CELL_INPUT = 'w-full min-w-[5rem] rounded-md border border-surface-border bg-surface px-2 py-1 text-sm font-mono';
 
 function EntryRow(props: {
-  entry: PriceListEntry; scope: string; editable: boolean; showCost: boolean; busy: boolean; serverError?: string;
+  entry: PriceListEntry; scope: string; editable: boolean; showCost: boolean; flagged?: boolean; busy: boolean; serverError?: string;
   others: PriceListEntry[]; onSave: (next: UpsertEntryItem, replaceId: string | null) => Promise<boolean>; onRemove: (id: string) => void;
 }) {
   const { entry, editable, showCost, busy, serverError, scope } = props;
@@ -59,7 +60,7 @@ function EntryRow(props: {
   );
 
   return (
-    <tr className="border-t border-surface-border align-top" data-testid="entry-row" data-sku={entry.sku} data-belowfloor={entry.belowFloor === true ? 'true' : undefined}>
+    <tr data-testid="entry-row" data-sku={entry.sku} data-belowfloor={entry.belowFloor === true || props.flagged ? 'true' : undefined} className={'border-t border-surface-border align-top' + (props.flagged ? ' bg-bg-subtle' : '')}>
       <td className="px-3 py-2"><div className="font-mono text-xs font-semibold">{entry.sku}</div><div className="max-w-[16rem] text-xs text-text-muted">{entry.title}</div></td>
       <td className="px-3 py-2">
         {editable ? <input aria-label={`Minimum quantity for ${entry.sku}`} className={CELL_INPUT} inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} disabled={busy} /> : <span className="font-mono">{entry.minQty}</span>}
@@ -86,6 +87,7 @@ function EntryRow(props: {
             placeholder={entry.belowFloor === true ? 'Required' : 'Optional'}
           />
         ) : <span className="text-xs">{entry.belowFloorReason}</span>}
+        {!editable && props.flagged && !showCost && <div className="mt-1"><Badge variant="low-stock">Below floor</Badge></div>}
         {editable && needsReason && <p className="mt-1 text-xs font-medium text-fault">This entry is below the margin floor: a reason is required before submitting.</p>}
         {(error || serverError) && <p role="alert" className="mt-1 text-xs font-medium text-fault">{error ?? serverError}</p>}
       </td>
@@ -206,6 +208,7 @@ function HeaderForm({ detail, busy, onSave }: { detail: PriceListDetail; busy: b
 
 function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
   const router = useRouter();
+  const { user } = useAuth();
   const res = useResource(() => priceListsApi.get(id), id);
   const [detail, setDetail] = React.useState<PriceListDetail | null>(null);
   const [notice, setNotice] = React.useState<Notice | null>(null);
@@ -252,6 +255,7 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
   const showCost = entries.some((e) => e.costMinor !== undefined || e.floorMinor !== undefined || e.belowFloor !== undefined);
   const companyName = detail.companyId ? detail.companyName ?? detail.companyId : null;
 
+  const flaggedIds = new Set(detail.belowFloorEntryIds ?? []);
   const apply = (d: PriceListDetail) => { setDetail(d); setRowErrors({}); };
 
   const saveRow = async (item: UpsertEntryItem, replaceId: string | null) => {
@@ -364,13 +368,21 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
           {detail.contractRef && <div><dt className="inline text-text-muted">Contract: </dt><dd className="inline font-mono">{detail.contractRef}</dd></div>}
           <div><dt className="inline text-text-muted">Valid (UTC): </dt><dd className="inline font-mono">{fmtDate(detail.validFromUtc)} to {fmtDate(detail.validToUtc)}</dd></div>
           {detail.effectiveFromUtc && <div><dt className="inline text-text-muted">Effective from: </dt><dd className="inline font-mono" data-testid="effective-from">{detail.effectiveFromUtc.replace('T', ' ').slice(0, 19)} UTC</dd></div>}
-          <div><dt className="inline text-text-muted">Contributors: </dt><dd className="inline font-mono text-xs" data-testid="contributors">{detail.contributors.length === 0 ? 'none' : detail.contributors.map((c) => c.slice(0, 8)).join(', ')}</dd></div>
+          <div><dt className="inline text-text-muted">Contributors: </dt><dd className="inline text-xs" data-testid="contributors">{detail.contributors.length === 0 ? 'none' : detail.contributors.map((c) => actorName(detail, c)).join(', ')}</dd></div>
         </dl>
         {detail.contentHash && <p className="text-xs text-text-muted">Content hash (SHA-256, fixed at submit): <span data-testid="content-hash" className="select-all break-all font-mono">{detail.contentHash}</span></p>}
         {detail.rejectionReason && <p className="text-sm text-fault">Sent back: {detail.rejectionReason}</p>}
         {detail.withdrawReason && <p className="text-sm text-fault">Withdrawn: {detail.withdrawReason}</p>}
       </section>
 
+      {user && detail.status !== 'Draft' && (
+        <PriceListDecisionPanel
+          detail={detail}
+          me={{ id: user.id, permissions: user.permissions }}
+          onDecided={(d, message) => { apply(d); setOkText(message); }}
+          onReload={res.reload}
+        />
+      )}
       {banner && <div role="status" data-testid="readonly-banner" className="rounded-md border border-surface-border bg-bg-subtle p-3 text-sm font-medium">{banner}</div>}
       {notice && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-fault bg-bg-subtle p-3 text-sm font-medium text-fault">
@@ -408,7 +420,7 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
               </thead>
               <tbody>
                 {entries.map((e) => (
-                  <EntryRow key={`${e.id}|${e.unitPriceMinor}|${e.minQty}|${e.belowFloorReason ?? ''}`} entry={e} scope={detail.scope} editable={editable} showCost={showCost} busy={busy} serverError={rowErrors[e.id]} others={entries} onSave={saveRow} onRemove={removeRow} />
+                  <EntryRow key={`${e.id}|${e.unitPriceMinor}|${e.minQty}|${e.belowFloorReason ?? ''}`} entry={e} scope={detail.scope} editable={editable} showCost={showCost} flagged={flaggedIds.has(e.id)} busy={busy} serverError={rowErrors[e.id]} others={entries} onSave={saveRow} onRemove={removeRow} />
                 ))}
               </tbody>
             </table>

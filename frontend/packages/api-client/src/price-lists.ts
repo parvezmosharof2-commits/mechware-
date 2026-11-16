@@ -1,5 +1,6 @@
 import type { MechWareApiClient } from './index';
 import type {
+  ApproveBody,
   CreatePriceListBody,
   PriceListDetail,
   PriceListFilters,
@@ -11,7 +12,7 @@ import { PRICE_LIST_MAX_BATCH, priceListQuery } from './price-lists-model';
 
 type Data<T> = { data: T };
 
-/** Staff price lists (`/api/v1/admin/price-lists`, D2.7). Approve, reject and withdraw are D2.12. */
+/** Staff price lists (`/api/v1/admin/price-lists`, D2.7). Decisions: D2.8 API, D2.12a screens. */
 export function createPriceListsApi(client: MechWareApiClient) {
   const base = '/api/v1/admin/price-lists';
   const id = (v: string) => encodeURIComponent(v);
@@ -29,6 +30,14 @@ export function createPriceListsApi(client: MechWareApiClient) {
     deleteEntry: (listId: string, entryId: string) => client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/entries/${id(entryId)}`, json('DELETE')),
     submit: (listId: string) => client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/submit`, json('POST')),
     revise: (listId: string) => client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/revise`, json('POST')),
+    /** Needs a fresh authenticator code (`X-Step-Up-Code`, purpose `pricelist.approve`); it is spent even when the approval is then refused. */
+    approve: (listId: string, body: ApproveBody, stepUpCode: string) =>
+      client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/approve`, { ...json('POST', body), headers: { 'X-Step-Up-Code': stepUpCode.trim() } }),
+    /** No step-up: a rejection never makes a price apply. */
+    reject: (listId: string, reason: string) => client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/reject`, json('POST', { reason: reason.trim() })),
+    /** Purpose `pricelist.withdraw`. */
+    withdraw: (listId: string, reason: string, stepUpCode: string) =>
+      client.fetch<Data<PriceListDetail>>(`${base}/${id(listId)}/withdraw`, { ...json('POST', { reason: reason.trim() }), headers: { 'X-Step-Up-Code': stepUpCode.trim() } }),
     deleteDraft: (listId: string) => client.fetch<unknown>(`${base}/${id(listId)}`, json('DELETE'))
   };
 }
