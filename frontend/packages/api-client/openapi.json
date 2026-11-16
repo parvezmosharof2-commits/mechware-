@@ -598,6 +598,56 @@
         }
       }
     },
+    "/api/v1/admin/companies/{companyId}/credit/apply-on-account": {
+      "post": {
+        "tags": [
+          "AdminCreditPayments"
+        ],
+        "summary": "Applies the company's on-account money to its open orders (§6, CS9; B3.5b): oldest money first, named orders first, then the\r\noldest due. No second person and no code: the money was verified by four eyes and stays the company's. Idempotency-Key required.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyOnAccountRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyOnAccountRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyOnAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/margin-floors": {
       "get": {
         "tags": [
@@ -4659,6 +4709,24 @@
           },
           "brandName": {
             "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApplyOnAccountRequest": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "allocations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreditAllocationInput"
+            },
             "nullable": true
           }
         },

@@ -30,6 +30,10 @@ public static class CreditLedgerKeys
     public static string BounceOnAccount(Guid paymentId) => $"bounce:{paymentId:N}:on_account";
     /// <summary>The prefix of every line of one reduction (§8.2): <c>reduce:{sourceKey}:receivable</c> and <c>reduce:{sourceKey}:{paymentOrNoteId}</c>.</summary>
     public static string Reduce(string sourceKey) => $"reduce:{sourceKey}:";
+    /// <summary>Apply on-account (§6, B3.5b): <c>apply:{requestId}:{bodyHash}:{orderId}:{sourceId}</c>; <paramref name="requestKey"/> = <c>{requestId}:{bodyHash}</c>.</summary>
+    public static string ApplyOnAccount(string requestKey, Guid orderId, Guid sourceId) => $"apply:{requestKey}:{orderId:N}:{sourceId:N}";
+    /// <summary>The prefix of every line of one apply request, whatever its body: a replay finds them.</summary>
+    public static string ApplyOnAccountRequest(string requestId) => $"apply:{requestId}:";
 }
 
 /// <summary>Credit dates are Bangladesh calendar dates: a fixed +06:00 (no daylight saving), as for E8.3.</summary>

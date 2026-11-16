@@ -400,7 +400,34 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
    One audit row `credit.charge_reduced` (entity `orders`), no outbox event (E7.2/E6.5 emit their own). It calls
    `SaveChanges` inside the caller's transaction, so the caller's pending changes in that context are saved with it.
 5. **Apply on-account (§6) is not in B3.5:** split into B3.5b (its idempotency needs its own design: Idempotency-Key + body
-   hash without a table of its own).
+   hash without a table of its own; built, see the B3.5b notes below).
+
+## Implementation notes: B3.5b apply on-account (2026-11-16, AI assistant, not reviewed)
+`CreditOnAccount` (domain, pure), `CreditPaymentService.ApplyOnAccountAsync`, `POST admin/companies/{companyId}/credit/apply-on-account`. No migration.
+1. **§5/§6 as written:** `credit.record_payment`, no four eyes and no step-up (the money was verified by two people and stays the
+   company's). Body `{amountMinor?, allocations?[{orderId, amountMinor}]}`, strict JSON integers. No amount: the named amounts, or with
+   no names everything that fits (the smaller of held and owed). Never clamped: 409 `CREDIT_NOTHING_TO_APPLY`,
+   `CREDIT_ON_ACCOUNT_INSUFFICIENT` (more than held), `CREDIT_ON_ACCOUNT_EXCEEDS_OPEN` (more than the open orders owe), and the
+   planner's `ALLOCATION_ORDER_NOT_OPEN` / `ALLOCATION_EXCEEDS_OUTSTANDING`. 404 unless the company is Active or Suspended. Always 200
+   (nothing is created that has its own URL): `{eventId, applied[{orderId, paymentId, creditNoteId, amountMinor}], appliedMinor,
+   creditUsedMinor, creditOnAccountMinor, replayed}`.
+2. **Sources:** a source is a `(payment_id, credit_note_id)` pair; it holds Σ `on_account_delta_minor` of the lines naming it (the
+   attribution of the B3.5 notes §3). "Oldest source first" = lowest seq of its FIRST ON-ACCOUNT line, i.e. the money that came on
+   account first (a payment whose order was cancelled counts from the cancellation, not from its verification). Orders: the §6
+   planner (named first, then oldest `due_on`). One `on_account_applied` line per (order, source), R = A = −x, reason
+   "On-account money applied to open orders".
+3. **Idempotency without a table of its own:** request id = first 24 hex of SHA-256(`actor|companyId|Idempotency-Key`) (so the key is
+   per person AND company; payments use per person only, since the company is in their body hash); body hash = first 16 hex of
+   SHA-256 of the JSON `{companyId, request}`; line keys `apply:{requestId}:{bodyHash}:{orderId:N}:{sourceId:N}` (113 ≤ 120). Under
+   the company lock, lines with the prefix `apply:{requestId}:` mean a replay: the same body hash answers the first result (`replayed:
+   true`, company totals as of now), another one 409 `IDEMPOTENCY_KEY_REUSED`. The ledger is never pruned, so this memory is permanent;
+   a refused request writes nothing, so its key can be used again once the cause is fixed.
+4. **Locks (§7, CS16):** only `companies FOR UPDATE`, taken first. The lines take `FOR KEY SHARE` on the orders and source payments
+   they name, which a cancel or bounce holding those rows `FOR NO KEY UPDATE` does not block. Source payments are NOT locked: the
+   company lock serialises every ledger writer, and a bounce that waits for it reverses the application afterwards (§8.1).
+5. **Audit + outbox (CS29):** one `audit_logs` row `credit.on_account_applied` (entity `companies`/company id; old = totals before;
+   new = event id, request id, lines, total, totals after; actor, IP, correlation id) and one outbox event of the same name
+   (aggregate `Company`, `Id` = event id), in the same transaction.
 
 ## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
 1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →

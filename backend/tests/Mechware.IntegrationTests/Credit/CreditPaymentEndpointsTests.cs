@@ -215,6 +215,53 @@ public sealed class CreditPaymentEndpointsTests(DefaultApiFactory factory) : ICl
             .Should().Contain(json => json!.Contains("credit.payment.bounce") && json.Contains($"paymentId={payment}"));
     }
 
+    // ---- CS9 apply on-account (B3.5b) -----------------------------------------------------------------------------------
+
+    private static Task<HttpResponseMessage> ApplyAsync(Staff who, Guid company, HttpContent body, string? key)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/admin/companies/{company}/credit/apply-on-account") { Content = body };
+        if (key is not null) request.Headers.Add("Idempotency-Key", key);
+        return who.Client.SendAsync(request);
+    }
+
+    [PostgresFact]
+    public async Task ApplyOnAccount_NeedsRecordPermission_AndAnIdempotencyKey_ButNoSecondPerson()
+    {
+        // 70,000 verified against the 50,000 order leaves 20,000 on account; a later 30,000 order is applied 20,000 of it. The
+        // recorder may apply (the money was verified by someone else; it stays the company's), with no authenticator code.
+        var company = await CompanyAsync();
+        var (maker, checker) = (await StaffAsync(Permissions.Roles.Finance), await StaffAsync(Permissions.Roles.Finance));
+        var payment = await RecordedAsync(maker, company, 70_000);
+        await DataAsync(await VerifyAsync(checker.Client, payment, await CodeAsync(checker)), HttpStatusCode.OK);
+        Guid order;
+        await using (var db = Db())
+        {
+            order = await CreditTestData.InsertOrderAsync(db, maker.UserId, company, 30_000);
+            var c = await db.Companies.SingleAsync(x => x.Id == company);
+            var lines = await db.CreditLedgerEntries.Where(l => l.CompanyId == company).ToListAsync();
+            db.CreditLedgerEntries.Add(new CreditLedger(c, lines).Charge(order, 30_000, DateTime.UtcNow, DateTime.UtcNow).Entry);
+            await db.SaveChangesAsync();
+        }
+        static HttpContent Json(string json) => new StringContent(json, Encoding.UTF8, "application/json");
+
+        // Support only: this class logs in ~24 times and the test host allows 25 logins a minute (Seller and Moderator get the same
+        // 403 from the same permission in RecordPayment_BySupportOrSeller_Is403).
+        (await ApplyAsync(await StaffAsync(Permissions.Roles.Support), company, Json("{}"), "apply-api-0001")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await ApplyAsync(maker, company, Json("{}"), null)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        foreach (var amount in new[] { "\"100\"", "1.5" })
+            (await ApplyAsync(maker, company, Json($$"""{"amountMinor":{{amount}}}"""), "apply-api-0002")).StatusCode.Should().Be(HttpStatusCode.BadRequest, amount);
+
+        var applied = await DataAsync(await ApplyAsync(maker, company, Json("{}"), "apply-api-0003"), HttpStatusCode.OK);
+        (applied.GetProperty("appliedMinor").GetInt64(), applied.GetProperty("creditUsedMinor").GetInt64(), applied.GetProperty("replayed").GetBoolean())
+            .Should().Be((20_000, 10_000, false));
+        var line = applied.GetProperty("applied")[0];
+        (line.GetProperty("orderId").GetGuid(), line.GetProperty("paymentId").GetGuid(), line.GetProperty("amountMinor").GetInt64()).Should().Be((order, payment, 20_000));
+        (await DataAsync(await ApplyAsync(maker, company, Json("{}"), "apply-api-0003"), HttpStatusCode.OK)).GetProperty("replayed").GetBoolean().Should().BeTrue();
+        (await ErrorCodeAsync(await ApplyAsync(maker, company, Json("""{"amountMinor":1}"""), "apply-api-0003"), HttpStatusCode.Conflict)).Should().Be("IDEMPOTENCY_KEY_REUSED");
+        (await ErrorCodeAsync(await ApplyAsync(checker, company, Json("{}"), "apply-api-0004"), HttpStatusCode.Conflict)).Should().Be("CREDIT_NOTHING_TO_APPLY");
+        (await ApplyAsync(maker, await CompanyAsync(activate: false), Json("{}"), "apply-api-0005")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
     // ---- CS2 -----------------------------------------------------------------------------------------------------------
 
     [PostgresFact]

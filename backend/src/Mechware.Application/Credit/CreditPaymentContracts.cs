@@ -43,6 +43,17 @@ public sealed record BouncedCreditPayment(CreditPaymentDto Payment, Guid EventId
     long CreditUsedMinor, long CreditOnAccountMinor);
 
 /// <summary>
+/// <c>POST admin/companies/{companyId}/credit/apply-on-account</c> (ADR-0010 §6, B3.5b): <c>amountMinor</c> to apply (left out: the
+/// named amounts, or with no names all that fits) and optional <c>allocations</c> served first (at most 50, each order once).
+/// </summary>
+[JsonNumberHandling(JsonNumberHandling.Strict)]
+public sealed record ApplyOnAccountRequest(long? AmountMinor = null, IReadOnlyList<CreditAllocationInput>? Allocations = null);
+
+/// <summary>What one apply moved: one line per (order, source), the total, the company's totals now. <paramref name="Replayed"/>: nothing new.</summary>
+public sealed record AppliedOnAccount(Guid EventId, IReadOnlyList<CreditOnAccountApplication> Applied, long AppliedMinor, long CreditUsedMinor,
+    long CreditOnAccountMinor, bool Replayed);
+
+/// <summary>
 /// Customer payments on credit (ADR-0010 §4-§7; B3.4). The actor is the signed-in staff member. Recording changes no credit;
 /// verification by someone other than the recorder releases it, in one transaction with its ledger lines, audit row and outbox event.
 /// </summary>
@@ -64,4 +75,11 @@ public interface ICreditPaymentService
     /// above the limit; new credit orders are then refused as usual.
     /// </summary>
     Task<BouncedCreditPayment> BounceAsync(Guid paymentId, BounceCreditPaymentRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Moves verified on-account money to open orders (§6): no four eyes, no step-up (the money was verified, it stays the company's).
+    /// Idempotency-Key 8-100 per (staff member, company): a replay returns the first result; another body 409 <c>IDEMPOTENCY_KEY_REUSED</c>.
+    /// 404 unless the company is Active or Suspended.
+    /// </summary>
+    Task<AppliedOnAccount> ApplyOnAccountAsync(Guid companyId, ApplyOnAccountRequest request, string? idempotencyKey, CancellationToken ct = default);
 }

@@ -630,6 +630,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/companies/{companyId}/credit/apply-on-account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Applies the company's on-account money to its open orders (§6, CS9; B3.5b): oldest money first, named orders first, then the
+         *     oldest due. No second person and no code: the money was verified by four eyes and stays the company's. Idempotency-Key required.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApplyOnAccountRequest"];
+                    "text/json": components["schemas"]["ApplyOnAccountRequest"];
+                    "application/*+json": components["schemas"]["ApplyOnAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/margin-floors": {
         parameters: {
             query?: never;
@@ -5033,6 +5080,11 @@ export interface components {
             titleEn?: string | null;
             titleBn?: string | null;
             brandName?: string | null;
+        };
+        ApplyOnAccountRequest: {
+            /** Format: int64 */
+            amountMinor?: number | null;
+            allocations?: components["schemas"]["CreditAllocationInput"][] | null;
         };
         ApprovalRuleRequest: {
             name?: string | null;

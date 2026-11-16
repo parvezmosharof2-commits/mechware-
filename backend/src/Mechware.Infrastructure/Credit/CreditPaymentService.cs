@@ -20,11 +20,13 @@ namespace Mechware.Infrastructure.Credit;
 /// <see cref="CreditAllocationPlanner"/>, posts through <see cref="CreditLedger"/> (the only way <c>credit_used</c> moves) and
 /// commits the payment, the lines, the cached totals, one audit row and one outbox event together, with no outside call inside.
 /// A bounce (§8.1, B3.5) takes the same locks and writes new <c>payment_reversed</c> lines (<see cref="CreditReversals.Bounce"/>).
+/// Apply on-account (§6, B3.5b) locks only the company and writes <c>on_account_applied</c> lines (<see cref="CreditOnAccount.Apply"/>).
 /// </summary>
 public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserService user, CreditOptions options, TimeProvider clock) : ICreditPaymentService
 {
     public const string VerifiedEvent = "credit.payment_verified";
     public const string BouncedEvent = "credit.payment_bounced";
+    public const string OnAccountAppliedEvent = "credit.on_account_applied";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private static readonly Dictionary<string, CreditPaymentMethod> Methods =
         Enum.GetValues<CreditPaymentMethod>().ToDictionary(m => Wire(m), StringComparer.Ordinal);
@@ -79,14 +81,7 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
         var payment = await LockPaymentAsync(paymentId, ct);
         payment.Verify(actor, clearedOn, now);   // status, four eyes (CS2), cheque and clearing dates (CS11)
         var company = await LockCompanyAsync(payment.CompanyId, ct);
-
-        // Every line of every order that still owes something (the per-order caps need all of an order's lines), read under the lock.
-        var open = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && l.OrderId != null)
-            .GroupBy(l => l.OrderId).Where(g => g.Sum(l => l.ReceivableDeltaMinor) > 0).Select(g => g.Key).ToListAsync(ct);
-        var lines = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && open.Contains(l.OrderId)).ToListAsync(ct);
-        var ledger = new CreditLedger(company, lines);
-        var charges = lines.Where(l => l.Kind == CreditLedgerKind.Charge)
-            .Select(l => new CreditOpenCharge(l.OrderId!.Value, ledger.BalanceOf(l.OrderId.Value).ReceivableMinor, l.DueOn!.Value, l.CreatedAtUtc));
+        var (ledger, charges) = await OpenReceivablesAsync(company, ct);
         var plan = CreditAllocationPlanner.Plan(payment.AmountMinor, charges, payment.Allocations);   // CS6-CS8
 
         var before = new { company.CreditUsedMinor, company.CreditOnAccountMinor };
@@ -104,7 +99,7 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
             company.CreditUsedMinor,
             company.CreditOnAccountMinor
         }, now));
-        db.OutboxMessages.Add(Outbox(VerifiedEvent, payment, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor, plan.OnAccountMinor }));
+        db.OutboxMessages.Add(Outbox(VerifiedEvent, nameof(CreditPayment), payment.Id, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor, plan.OnAccountMinor }));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return new VerifiedCreditPayment(ToDto(payment), eventId, plan.Allocations, plan.OnAccountMinor, company.CreditUsedMinor, company.CreditOnAccountMinor);
@@ -145,7 +140,7 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
             company.CreditUsedMinor,
             company.CreditOnAccountMinor
         }, now));
-        db.OutboxMessages.Add(Outbox(BouncedEvent, payment, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor }));
+        db.OutboxMessages.Add(Outbox(BouncedEvent, nameof(CreditPayment), payment.Id, eventId, now, new { EventId = eventId, PaymentId = payment.Id, payment.CompanyId, payment.AmountMinor }));
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return new BouncedCreditPayment(ToDto(payment), eventId, reversed, onAccount, company.CreditUsedMinor, company.CreditOnAccountMinor);
@@ -163,6 +158,77 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
         return ToDto(payment);
     }
 
+    public async Task<AppliedOnAccount> ApplyOnAccountAsync(Guid companyId, ApplyOnAccountRequest request, string? idempotencyKey, CancellationToken ct = default)
+    {
+        var (actor, now) = (Actor, Now);
+        if (idempotencyKey is not { Length: >= 8 and <= CreditPayment.MaxIdempotencyKeyLength } || idempotencyKey.Any(c => c is <= ' ' or > '~'))
+            throw new ValidationException("Idempotency-Key", $"The Idempotency-Key header is 8 to {CreditPayment.MaxIdempotencyKeyLength} printable ASCII characters.");
+        // A request is (person, company, key). Its lines carry that id and the body's hash in their keys, so the ledger itself (never
+        // pruned) recognises a replay and another body under the same key, with no table of its own (ADR-0010, B3.5b notes).
+        var requestId = Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{actor:N}|{companyId:N}|{idempotencyKey}")))[..24];
+        var bodyHash = Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { companyId, request }, Json)))[..16];
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        // The company row is the only lock (nothing comes before it in §7). The lines take FOR KEY SHARE on the orders and source
+        // payments they name, which a cancel or a bounce holding those rows FOR NO KEY UPDATE does not block (CS16).
+        var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {companyId} FOR UPDATE")
+            .ToListAsync(ct)).SingleOrDefault();
+        if (company is not { Status: CompanyStatus.Active or CompanyStatus.Suspended }) throw new KeyNotFoundException("Company not found.");
+        var prefix = CreditLedgerKeys.ApplyOnAccountRequest(requestId);
+        var done = await db.CreditLedgerEntries.AsNoTracking().Where(l => l.CompanyId == company.Id && l.IdempotencyKey.StartsWith(prefix))
+            .OrderBy(l => l.Seq).ToListAsync(ct);   // read under the lock: a parallel replay waits for the first, then finds its lines
+        if (done.Count > 0)
+            return done[0].IdempotencyKey.StartsWith($"{prefix}{bodyHash}:", StringComparison.Ordinal)
+                ? Applied(done[0].EventId, done, company, true)
+                : throw new ConflictException("IDEMPOTENCY_KEY_REUSED", "This Idempotency-Key was already used to apply other amounts.");
+
+        var sources = CreditOnAccount.Sources(await db.CreditLedgerEntries.AsNoTracking()
+            .Where(l => l.CompanyId == company.Id && l.OnAccountDeltaMinor != 0).ToListAsync(ct));
+        if (sources.Sum(s => s.OnAccountMinor) != company.CreditOnAccountMinor)
+            throw new InvalidOperationException($"The on-account money of company {company.Id} does not add up per source.");
+        var (ledger, charges) = await OpenReceivablesAsync(company, ct);
+        var before = new { company.CreditUsedMinor, company.CreditOnAccountMinor };
+        var eventId = Guid.NewGuid();
+        var postings = CreditOnAccount.Apply(sources, charges, request.AmountMinor,
+            request.Allocations?.Select(a => new CreditAllocationRequest(a.OrderId, a.AmountMinor)).ToList(), $"{requestId}:{bodyHash}",
+            new CreditEventInfo(CreditCalendar.DhakaDate(now), eventId, actor, user.CorrelationId, CreditOnAccount.Reason));
+        var lines = postings.Select(p => ledger.Post(p, now).Entry).ToList();
+        db.CreditLedgerEntries.AddRange(lines);
+
+        var result = Applied(eventId, lines, company, false);
+        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), actor, user.IpAddress, OnAccountAppliedEvent, "companies", company.Id.ToString(),
+            JsonSerializer.Serialize(before, Json), JsonSerializer.Serialize(new
+            {
+                EventId = eventId,
+                RequestId = requestId,
+                result.Applied,
+                result.AppliedMinor,
+                company.CreditUsedMinor,
+                company.CreditOnAccountMinor
+            }, Json), user.CorrelationId, now));
+        db.OutboxMessages.Add(Outbox(OnAccountAppliedEvent, nameof(Company), company.Id, eventId, now, new { EventId = eventId, CompanyId = company.Id, result.AppliedMinor }));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return result;
+    }
+
+    private static AppliedOnAccount Applied(Guid eventId, IReadOnlyList<CreditLedgerEntry> lines, Company company, bool replayed)
+    {
+        var applied = lines.Select(l => new CreditOnAccountApplication(l.OrderId!.Value, l.PaymentId, l.CreditNoteId, -l.ReceivableDeltaMinor)).ToList();
+        return new AppliedOnAccount(eventId, applied, applied.Sum(a => a.AmountMinor), company.CreditUsedMinor, company.CreditOnAccountMinor, replayed);
+    }
+
+    /// <summary>Every line of every order that still owes something (the per-order caps need all of an order's lines), read under the company lock.</summary>
+    private async Task<(CreditLedger Ledger, List<CreditOpenCharge> Charges)> OpenReceivablesAsync(Company company, CancellationToken ct)
+    {
+        var open = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && l.OrderId != null)
+            .GroupBy(l => l.OrderId).Where(g => g.Sum(l => l.ReceivableDeltaMinor) > 0).Select(g => g.Key).ToListAsync(ct);
+        var lines = await db.CreditLedgerEntries.Where(l => l.CompanyId == company.Id && open.Contains(l.OrderId)).ToListAsync(ct);
+        var ledger = new CreditLedger(company, lines);
+        return (ledger, lines.Where(l => l.Kind == CreditLedgerKind.Charge)
+            .Select(l => new CreditOpenCharge(l.OrderId!.Value, ledger.BalanceOf(l.OrderId.Value).ReceivableMinor, l.DueOn!.Value, l.CreatedAtUtc)).ToList());
+    }
+
     private Guid Actor => user.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;
@@ -176,12 +242,12 @@ public sealed class CreditPaymentService(MechwareDbContext db, ICurrentUserServi
     private async Task<Company> LockCompanyAsync(Guid companyId, CancellationToken ct) =>
         (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {companyId} FOR UPDATE").ToListAsync(ct)).Single();
 
-    private static OutboxMessage Outbox(string type, CreditPayment p, Guid eventId, DateTime now, object payload) => new()
+    private static OutboxMessage Outbox(string type, string aggregateType, Guid aggregateId, Guid eventId, DateTime now, object payload) => new()
     {
         Id = eventId,
         EventType = type,
-        AggregateType = nameof(CreditPayment),
-        AggregateId = p.Id,
+        AggregateType = aggregateType,
+        AggregateId = aggregateId,
         OccurredAtUtc = now,
         Payload = JsonSerializer.Serialize(payload, Json)
     };

@@ -53,4 +53,14 @@ public sealed class AdminCreditPaymentsController(ICreditPaymentService payments
     [RequireStepUp(BounceStepUpAction)]
     public async Task<IActionResult> Bounce(Guid paymentId, [FromBody] BounceCreditPaymentRequest body, CancellationToken ct) =>
         Ok(new { data = await payments.BounceAsync(paymentId, body, ct) });
+
+    /// <summary>
+    /// Applies the company's on-account money to its open orders (§6, CS9; B3.5b): oldest money first, named orders first, then the
+    /// oldest due. No second person and no code: the money was verified by four eyes and stays the company's. Idempotency-Key required.
+    /// </summary>
+    [HttpPost("companies/{companyId:guid}/credit/apply-on-account")]
+    [RequirePermission(Permissions.CreditRecordPayment)]
+    public async Task<IActionResult> ApplyOnAccount(Guid companyId, [FromBody] ApplyOnAccountRequest body,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey, CancellationToken ct) =>
+        Ok(new { data = await payments.ApplyOnAccountAsync(companyId, body, idempotencyKey, ct) });
 }
