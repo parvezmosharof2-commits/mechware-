@@ -44,6 +44,9 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         b.Property(c => c.CreditUsedMinor).HasColumnName("credit_used");
         b.Property(c => c.CreditOnAccountMinor).HasColumnName("credit_on_account");
         b.Property(c => c.CreditLedgerSeq).HasColumnName("credit_ledger_seq");
+        // The overdue hold (ADR-0010 §9, B3.7): an Admin's lift, and when the sweep noted the hold (events only).
+        b.Property(c => c.CreditHoldOverrideUntilUtc).HasColumnName("credit_hold_override_until");
+        b.Property(c => c.CreditHoldSinceUtc).HasColumnName("credit_hold_since");
         b.Property(c => c.DefaultPriceListId).HasColumnName("default_price_list_id");
         b.Property(c => c.AccountManagerId).HasColumnName("account_manager_id");
 

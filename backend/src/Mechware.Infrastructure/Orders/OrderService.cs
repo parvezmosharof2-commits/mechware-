@@ -105,6 +105,11 @@ public sealed partial class OrderService(
             : null;
         var initialStatus = approvalRule is null ? OrderStatus.PendingPayment : OrderStatus.PendingApproval;
 
+        // ADR-0010 §9 (CS25): an early answer for a company on overdue hold, before any stock is held, also for an order that would
+        // wait for an approval. Read without the lock: the charge decides again under the company lock (placement and approval).
+        if (request.PayOnCredit && verifiedCompanyId is { } creditCompany)
+            await RequireNoCreditHoldAsync(await db.Companies.AsNoTracking().SingleAsync(c => c.Id == creditCompany, ct), now, ct);
+
         // Spend limits and budgets (threat model v1, M3): going over one is allowed only through an approval. With no rule to
         // route it to an approver, the order is refused rather than slipping past the limit.
         if (member is not null && approvalRule is null)
@@ -390,11 +395,14 @@ public sealed partial class OrderService(
             {
                 var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {order.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
                 try { await ChargeCreditAsync(company, order, null, now, ct); }
-                catch (ConflictException)
+                catch (ConflictException ex)
                 {
-                    // The credit was used up while the order waited: it cannot go ahead on credit.
+                    // The credit was used up, or the company fell on overdue hold (ADR-0010 §9), while the order waited: it cannot go
+                    // ahead on credit, and nothing is charged.
                     await tx.RollbackAsync(ct);
-                    return await CancelOneAsync(orderId, null, "Approved, but the company's credit no longer covers this order", now, WaitingForApproval, ct);
+                    return await CancelOneAsync(orderId, null, ex.Code == Company.CreditHoldCode
+                        ? "Approved, but credit on hold: overdue invoices"
+                        : "Approved, but the company's credit no longer covers this order", now, WaitingForApproval, ct);
                 }
                 order.Confirm(await ConfirmationDeadlinesAsync(order, now, ct), null, "Placed on credit terms after approval", now);
                 confirmed = true;
@@ -841,15 +849,22 @@ public sealed partial class OrderService(
     /// <summary>
     /// ADR-0010 §3: the one charge of a credit order at its confirmation, in the caller's transaction and under the company row
     /// lock the caller took (lock order: price lists or the order, then the company, then promotions). The due date starts as
-    /// <c>Credit:DueDateStart</c> says. A charge already on the ledger for this order is not posted again.
+    /// <c>Credit:DueDateStart</c> says. A charge already on the ledger for this order is not posted again. The overdue hold (§9) is
+    /// decided here too, under the same lock, which every writer of the company's ledger lines also holds.
     /// </summary>
     private async Task ChargeCreditAsync(Company company, Order order, Guid? actorId, DateTime now, CancellationToken ct)
     {
+        await RequireNoCreditHoldAsync(company, now, ct);
         var lines = await db.CreditLedgerEntries.Where(e => e.CompanyId == company.Id && e.OrderId == order.Id).ToListAsync(ct);
         var posted = new Domain.Credit.CreditLedger(company, lines)
             .Charge(order.Id, order.GrandTotalMinor, now, creditOptions.TermsStartUtc(now), actorId);
         if (!posted.AlreadyApplied) db.CreditLedgerEntries.Add(posted.Entry);
     }
+
+    /// <summary>409 <c>CREDIT_HOLD_OVERDUE</c> while a charge of the company is more than <c>Credit:HoldAfterDaysPastDue</c> days past due
+    /// and no Admin lifted the hold (ADR-0010 §9, owner decision 2).</summary>
+    private async Task RequireNoCreditHoldAsync(Company company, DateTime now, CancellationToken ct) =>
+        company.EnsureNoCreditHold(await CreditLedgerSql.OverdueSinceAsync(db, company.Id, creditOptions.HoldDueBefore(now), ct), now);
 
     private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, TimeSpan holdFor, CancellationToken ct)
     {

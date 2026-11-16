@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace Mechware.Infrastructure.Persistence;
 
 /// <summary>
@@ -241,4 +243,22 @@ public static class CreditLedgerSql
         $backfill$;
         SET CONSTRAINTS ALL IMMEDIATE;
         """;
+
+    /// <summary>
+    /// The overdue hold (ADR-0010 §9, B3.7): the oldest due date of a charge of the company whose order still owes something and that is
+    /// due before <paramref name="dueBefore"/> (<c>CreditOptions.HoldDueBefore</c>); null = none, or no hold configured. Shared by the
+    /// placement (Orders) and the hold service (Credit). Call it under the company row lock when the answer decides a charge: every writer
+    /// of the company's lines holds that lock.
+    /// </summary>
+    public static async Task<DateOnly?> OverdueSinceAsync(MechwareDbContext db, Guid companyId, DateOnly? dueBefore, CancellationToken ct)
+    {
+        if (dueBefore is not { } before) return null;
+        var due = await db.Database.SqlQuery<DateOnly>($"""
+            SELECT c.due_on AS "Value" FROM credit_ledger_entries c
+             WHERE c.company_id = {companyId} AND c.kind = 'charge' AND c.due_on < {before}
+               AND (SELECT sum(e.receivable_delta_minor) FROM credit_ledger_entries e WHERE e.company_id = c.company_id AND e.order_id = c.order_id) > 0
+             ORDER BY c.due_on LIMIT 1
+            """).ToListAsync(ct);
+        return due.Count == 0 ? null : due[0];
+    }
 }

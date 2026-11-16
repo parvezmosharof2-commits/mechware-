@@ -1041,6 +1041,14 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("CreditHoldOverrideUntilUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credit_hold_override_until");
+
+                    b.Property<DateTime?>("CreditHoldSinceUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("credit_hold_since");
+
                     b.Property<long>("CreditLedgerSeq")
                         .HasColumnType("bigint")
                         .HasColumnName("credit_ledger_seq");

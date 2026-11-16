@@ -536,6 +536,48 @@
         }
       }
     },
+    "/api/v1/admin/companies/{companyId}/credit/hold-override": {
+      "put": {
+        "tags": [
+          "AdminCreditHold"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideCreditHoldRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideCreditHoldRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideCreditHoldRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/companies/{companyId}/credit/payments": {
       "post": {
         "tags": [
@@ -5167,6 +5209,21 @@
         },
         "additionalProperties": false
       },
+      "OverrideCreditHoldRequest": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "PlaceOrderBody": {
         "type": "object",
         "properties": {
@@ -6541,6 +6598,9 @@
     },
     {
       "name": "AdminCreditAdjustments"
+    },
+    {
+      "name": "AdminCreditHold"
     },
     {
       "name": "AdminCreditPayments"

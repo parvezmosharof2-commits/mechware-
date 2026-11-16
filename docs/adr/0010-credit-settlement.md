@@ -333,7 +333,7 @@ order (E5 later; it would post `payment_applied` from E4 confirmation), seller p
    pending trigger events.
 5. **Additions:** the ledger has FKs to `companies` and `orders` (RESTRICT) and CHECKs that a receivable moves only with an
    order and never rises with an adjustment id; options section `Credit` holds all six owner defaults (§13).
-6. **Not yet in the schema** (one migration per unit): `companies.credit_hold_override_until` (B3.7).
+6. **Not yet in the schema** (one migration per unit): `companies.credit_hold_override_until` (added by B3.7, see its notes).
    `ck_companies_credit_within_limit` was dropped by B3.5 (see the B3.5 notes). (`credit_payments` and `credit_adjustments` came with B3.3b, below.)
 
 ## Implementation notes: where B3.3b deviates from this design (2026-11-16, AI assistant, not reviewed)
@@ -463,6 +463,31 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
 8. **Audit + outbox (CS29):** `credit.adjustment_requested` / `_approved` (old = totals before; new = event id, kind, amount, deltas, totals
    after; actor, IP, correlation id) / `_rejected`, entity `credit_adjustments`; outbox `credit.adjustment_approved` (aggregate
    `CreditAdjustment`, `Id` = event id) in the approval transaction. No outbox event for a request (as for a recorded payment).
+
+## Implementation notes: B3.7 overdue hold (2026-11-17, AI assistant, not reviewed)
+`Company.EnsureNoCreditHold` / `LiftCreditHold` / `NoteCreditHold`, `CreditOptions.HoldDueBefore`, `CreditHoldService`, `CreditHoldWorker`,
+`PUT admin/companies/{companyId}/credit/hold-override`. Migration `AddCreditHold` (two nullable `companies` columns).
+1. **§9 as written:** held = a `charge` line of the company whose order still owes (Σ receivable deltas > 0) and whose `due_on` is before
+   `today(Dhaka) − Credit:HoldAfterDaysPastDue` (days past due = today − due_on > 15; exactly 15 is not held); `0` = flag only, never held.
+   The hold is derived from the ledger on every check (never cached), so a verification ends it and a bounce starts it at once.
+2. **Where it is checked:** inside `OrderService.ChargeCreditAsync`, i.e. under the company row lock (FOR UPDATE) at placement and at
+   approval-confirmation, right before the charge: 409 `CREDIT_HOLD_OVERDUE`; an approved order is cancelled with "Approved, but credit on hold:
+   overdue invoices" and nothing is charged. **Addition:** an early, unlocked check at placement for every credit order (also one that would
+   wait for an approval), before stock is held, so a held company is told at once instead of after its approver decided. Gateway-paid
+   orders, payments (record, verify, reject, bounce), adjustments and applies never look at the hold.
+3. **Override (§5, §9):** `credit.hold_override` (Admin only) + step-up `credit.hold.override` (always, target `companyId=…`); body
+   `{days, reason}`: `days` a required JSON integer 1..`Credit:HoldOverrideMaxDays` (7), `0` ends a lift; reason 5-500. Stored as an instant,
+   `companies.credit_hold_override_until = now + days` (so "≤ 7 days" is exact, not 7 calendar dates); a new lift replaces the old one; a lift
+   may be set while not (yet) held. No four eyes (the design names none). 404 unless Active/Suspended. Locks `companies` FOR UPDATE only.
+   Audit `credit.hold_overridden` (entity `companies`; old = previous until; new = event id, days, until, reason, overdue since; actor, IP,
+   correlation id) + outbox `credit.hold_overridden` (aggregate `Company`, `Id` = event id).
+4. **Worker sweep (`CreditHoldWorker`, every 15 min, Worker host only):** notes in `companies.credit_hold_since` when a company's hold
+   STARTS (null → the pass's instant) or ENDS (→ null), each with one audit row (actor null) and one outbox event `credit.hold_started` |
+   `credit.hold_ended` (for the F3 reminder "at hold"). It enforces nothing (point 2 does), ignores lifts (a lift is its own event), never
+   locks anything but the company row, and is idempotent: candidates are read without locks, each is decided again under its own row lock,
+   so a second or parallel pass changes nothing. `credit_hold_since` is NOT a cache the placement reads.
+5. **Lock order (§7, CS16):** placement price_lists → companies → promotions; approval orders → companies; override and sweep: companies
+   only; the hold reads ledger lines without locks under the company lock. No new cycle.
 
 ## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
 1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →

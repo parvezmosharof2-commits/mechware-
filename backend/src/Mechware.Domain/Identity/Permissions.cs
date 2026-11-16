@@ -58,6 +58,8 @@ public static class Permissions
     public const string CreditAdjust = "credit.adjust";
     /// <summary>Approve someone else's adjustment, with step-up (Admin only, ADR-0010 §5): only the approval writes the ledger line.</summary>
     public const string CreditAdjustApprove = "credit.adjust_approve";
+    /// <summary>Lift the overdue credit hold for at most <c>Credit:HoldOverrideMaxDays</c>, with step-up and a reason (Admin only, ADR-0010 §5, §9).</summary>
+    public const string CreditHoldOverride = "credit.hold_override";
 
     public static class Roles
     {
@@ -119,7 +121,8 @@ public static class Permissions
                 CreditRecordPayment,
                 CreditVerifyPayment,
                 CreditAdjust,
-                CreditAdjustApprove
+                CreditAdjustApprove,
+                CreditHoldOverride
             ],
             _ => []
         };

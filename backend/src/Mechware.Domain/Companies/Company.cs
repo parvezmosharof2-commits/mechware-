@@ -29,6 +29,11 @@ public sealed class Company : AggregateRoot<Guid>
     public long CreditOnAccountMinor { get; private set; }
     /// <summary>The number of the company's last credit ledger line (0 = none).</summary>
     public long CreditLedgerSeq { get; private set; }
+    /// <summary>ADR-0010 §9 (B3.7): an Admin lifted the overdue hold until this instant (null or past = not lifted).</summary>
+    public DateTime? CreditHoldOverrideUntilUtc { get; private set; }
+    /// <summary>When the hold sweep first found the company overdue beyond the hold days (null = not, at its last pass). For events
+    /// and reads only: placement and approval ask the ledger itself, under the company lock.</summary>
+    public DateTime? CreditHoldSinceUtc { get; private set; }
     public Guid? DefaultPriceListId { get; private set; }
     public Guid? AccountManagerId { get; private set; }
 
@@ -145,6 +150,45 @@ public sealed class Company : AggregateRoot<Guid>
         return PostCredit(new CreditPosting(CreditLedgerKind.Charge, amountMinor, 0, CreditLedgerKeys.Charge(orderId),
             CreditCalendar.DhakaDate(confirmedAtUtc), OrderId: orderId, DueOn: dueOn, ActorUserId: actorUserId, CorrelationId: correlationId),
             confirmedAtUtc);
+    }
+
+    public const string CreditHoldCode = "CREDIT_HOLD_OVERDUE";
+
+    public bool CreditHoldLifted(DateTime nowUtc) => CreditHoldOverrideUntilUtc > nowUtc;
+
+    /// <summary>
+    /// ADR-0010 §9 (owner decision 2): no new credit order while a charge that still owes is more than the hold days past due,
+    /// unless an Admin lifted the hold. <paramref name="overdueSince"/> = the oldest such due date (null = none), read under the
+    /// company row lock by the caller, right before the charge.
+    /// </summary>
+    public void EnsureNoCreditHold(DateOnly? overdueSince, DateTime nowUtc)
+    {
+        if (overdueSince is not null && !CreditHoldLifted(nowUtc))
+            throw new ConflictException(CreditHoldCode,
+                "New credit orders are on hold because an invoice is overdue. Pay the overdue invoices, or pay this order another way.");
+    }
+
+    /// <summary>
+    /// An Admin lifts the hold for 1 to <paramref name="maxDays"/> days from now (owner decision 2: at most 7), or ends a lift with 0.
+    /// A new lift replaces the old one. Returns the trimmed reason (5-500), which goes to the audit row.
+    /// </summary>
+    public string LiftCreditHold(int days, int maxDays, string? reason, DateTime nowUtc)
+    {
+        var trimmed = (reason ?? string.Empty).Trim();
+        if (days < 0 || days > maxDays) throw new ValidationException("days", $"Lift the hold for 1 to {maxDays} days, or 0 to end a lift.");
+        if (trimmed.Length is < 5 or > 500) throw new ValidationException("reason", "Give a reason of 5 to 500 characters.");
+        CreditHoldOverrideUntilUtc = days == 0 ? null : nowUtc.AddDays(days);
+        Touch();
+        return trimmed;
+    }
+
+    /// <summary>The hold sweep notes whether the company is overdue beyond the hold days; true only when that changed.</summary>
+    public bool NoteCreditHold(bool overdue, DateTime nowUtc)
+    {
+        if (overdue == (CreditHoldSinceUtc is not null)) return false;
+        CreditHoldSinceUtc = overdue ? nowUtc : null;
+        Touch();
+        return true;
     }
 
     /// <summary>

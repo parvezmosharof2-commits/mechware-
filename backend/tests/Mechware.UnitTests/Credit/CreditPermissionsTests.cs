@@ -20,8 +20,19 @@ public class CreditPermissionsTests
 
     [Fact]
     public void ThePermissionNames_AreTheOnesTheDesignNames() =>
-        CreditPermissions.Concat([Permissions.CreditAdjust, Permissions.CreditAdjustApprove]).Should()
-            .Equal("credit.record_payment", "credit.verify_payment", "credit.adjust", "credit.adjust_approve");
+        CreditPermissions.Concat([Permissions.CreditAdjust, Permissions.CreditAdjustApprove, Permissions.CreditHoldOverride]).Should()
+            .Equal("credit.record_payment", "credit.verify_payment", "credit.adjust", "credit.adjust_approve", "credit.hold_override");
+
+    /// <summary>§5, §9 (CS25): only an Admin lifts the overdue hold (with step-up and a reason).</summary>
+    [Theory]
+    [InlineData(Permissions.Roles.Admin, true)]
+    [InlineData(Permissions.Roles.Finance, false)]
+    [InlineData(Permissions.Roles.Support, false)]
+    [InlineData(Permissions.Roles.Seller, false)]
+    [InlineData(Permissions.Roles.Moderator, false)]
+    [InlineData(Permissions.Roles.Buyer, false)]
+    public void OnlyAdmin_LiftsTheHold(string role, bool granted) =>
+        Permissions.GetDefaultPermissionsForRole(role).Contains(Permissions.CreditHoldOverride).Should().Be(granted);
 
     /// <summary>§5 (CS20): Finance and Admin ask for adjustments; only an Admin approves one (someone else's, with step-up).</summary>
     [Theory]

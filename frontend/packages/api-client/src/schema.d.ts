@@ -582,6 +582,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/companies/{companyId}/credit/hold-override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OverrideCreditHoldRequest"];
+                    "text/json": components["schemas"]["OverrideCreditHoldRequest"];
+                    "application/*+json": components["schemas"]["OverrideCreditHoldRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/companies/{companyId}/credit/payments": {
         parameters: {
             query?: never;
@@ -5306,6 +5347,11 @@ export interface components {
             amountMinor?: number;
             currency?: string | null;
             formatted?: string | null;
+        };
+        OverrideCreditHoldRequest: {
+            /** Format: int32 */
+            days?: number | null;
+            reason?: string | null;
         };
         /**
          * @description What the buyer asks for: items and quantities, and which saved address or company site to deliver to. Every price,

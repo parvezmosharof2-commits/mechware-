@@ -20,7 +20,7 @@ public sealed class CreditOptions
     public CreditDueDateStart DueDateStart { get; set; } = CreditDueDateStart.Confirmation;
     /// <summary>Owner 2 (B3.7): new credit orders are refused once a charge is this many days past due; 0 = flag only, no hold.</summary>
     public int HoldAfterDaysPastDue { get; set; } = 15;
-    /// <summary>Owner 2 (B3.7): the longest an Admin may lift the hold, 1-7 days.</summary>
+    /// <summary>Owner 2 (B3.7): the longest an Admin may lift the hold at once, 1-7 days.</summary>
     public int HoldOverrideMaxDays { get; set; } = 7;
     /// <summary>Owner 3 (B3.4): an authenticator code on every verification; when false, only at or above <see cref="VerifyStepUpFromMinor"/>.</summary>
     public bool StepUpOnEveryVerification { get; set; } = true;
@@ -50,6 +50,13 @@ public sealed class CreditOptions
     public DateTime TermsStartUtc(DateTime confirmedAtUtc) => DueDateStart == CreditDueDateStart.Confirmation
         ? confirmedAtUtc
         : throw new InvalidOperationException("Credit:DueDateStart=Delivery is not built yet.");
+
+    /// <summary>
+    /// Owner 2 (B3.7): a charge due BEFORE this Dhaka date that still owes something is more than <see cref="HoldAfterDaysPastDue"/>
+    /// days past due (days past due = today − due_on) and holds new credit orders; null = flag only, no hold.
+    /// </summary>
+    public DateOnly? HoldDueBefore(DateTime nowUtc) =>
+        HoldAfterDaysPastDue <= 0 ? null : CreditCalendar.DhakaDate(nowUtc).AddDays(-HoldAfterDaysPastDue);
 
     /// <summary>The options as read from configuration, or the startup error naming the setting.</summary>
     public static CreditOptions Validated(CreditOptions? o)
