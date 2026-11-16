@@ -28,10 +28,18 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     requiredPermission: 'orders.refund'
   },
   {
+    id: 'catalog-products',
+    label: 'Products',
+    requiredPermission: 'catalog.manage',
+    href: '/catalog/products',
+    group: 'Catalogue'
+  },
+  {
     id: 'catalog-import',
     label: 'Bulk catalogue import',
     requiredPermission: 'catalog.manage',
-    href: '/catalog/import'
+    href: '/catalog/import',
+    group: 'Catalogue'
   },
   {
     id: 'price-lists',

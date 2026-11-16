@@ -1,5 +1,5 @@
 import {
-  MechWareApiClient, createAdminLookupsApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
+  MechWareApiClient, catalogAdminErrorText, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
@@ -9,6 +9,7 @@ export const api = new MechWareApiClient({ baseUrl: API_BASE_URL });
 export const companiesApi = createCompaniesApi(api);
 export const staffApi = createStaffApi(api);
 export const catalogImportApi = createCatalogImportApi(api);
+export const catalogAdminApi = createCatalogAdminApi(api);
 export const lookupsApi = createAdminLookupsApi(api);
 export const priceListsApi = createPriceListsApi(api);
 export const marginFloorsApi = createMarginFloorsApi(api);
@@ -53,4 +54,13 @@ export const STAFF_ROLES = ['admin', 'finance', 'support', 'moderator', 'seller'
 
 export function isStaff(roles: readonly string[]): boolean {
   return roles.some((r) => (STAFF_ROLES as readonly string[]).includes(r.toLowerCase()));
+}
+
+/** Plain-words text for a failed product-information call, the server's field errors (by field name) and whether a retry makes sense. */
+export function catalogError(err: unknown): { text: string; retry: boolean; status: number | null; code: string | null; conflict: boolean; fields: Record<string, string> } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  const fields = problemFieldErrors(err);
+  const message = problemMessage(err, '');
+  return { text: catalogAdminErrorText({ status, code, message, fields }), retry: status === null || status >= 500, status, code, conflict: status === 409, fields };
 }
