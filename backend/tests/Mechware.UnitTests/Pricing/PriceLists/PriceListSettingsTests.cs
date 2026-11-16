@@ -78,4 +78,19 @@ public class PriceListSettingsTests
         MarginFloor.Create(Guid.NewGuid(), MarginFloorScope.Brand, brand, null, 12.5m, Guid.NewGuid(), DateTime.UtcNow).ToRow()
             .Should().Be(new MarginFloorRow(MarginFloorScope.Brand, brand, null, 12.5m));
     }
+
+    [Theory]
+    [InlineData(10.001)]
+    [InlineData(1000.01)]
+    [InlineData(-0.01)]
+    public void MarginFloor_ChangeMarkup_RefusesWhatCreateRefuses_AndKeepsTheOldValue(double markup)
+    {
+        var floor = MarginFloor.Create(Guid.NewGuid(), MarginFloorScope.Global, null, null, 10m, Guid.NewGuid(), DateTime.UtcNow);
+        FluentActions.Invoking(() => floor.ChangeMarkup((decimal)markup, Guid.NewGuid(), DateTime.UtcNow)).Should().Throw<ValidationException>();
+        floor.MinMarkupPercent.Should().Be(10m);
+
+        var editor = Guid.NewGuid();
+        floor.ChangeMarkup(1000m, editor, DateTime.UtcNow);
+        (floor.MinMarkupPercent, floor.UpdatedBy, floor.Scope).Should().Be((1000m, (Guid?)editor, MarginFloorScope.Global));
+    }
 }

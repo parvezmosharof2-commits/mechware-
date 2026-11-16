@@ -342,6 +342,111 @@
         }
       }
     },
+    "/api/v1/admin/margin-floors": {
+      "get": {
+        "tags": [
+          "AdminMarginFloors"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "AdminMarginFloors"
+        ],
+        "summary": "Create the row for (scope, brandId, categoryId) or change its markup (0–1,000 %, at most two decimals).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMarginFloorRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMarginFloorRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMarginFloorRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/margin-floors/effective": {
+      "get": {
+        "tags": [
+          "AdminMarginFloors"
+        ],
+        "summary": "The row that applies to a variant, or to a brand and/or category, by the policy's precedence, and its markup.",
+        "parameters": [
+          {
+            "name": "variantId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "brandId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "categoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/margin-floors/{marginFloorId}": {
+      "delete": {
+        "tags": [
+          "AdminMarginFloors"
+        ],
+        "summary": "Delete a brand or category row; the global row cannot be deleted (409 `GLOBAL_FLOOR_REQUIRED`).",
+        "parameters": [
+          {
+            "name": "marginFloorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/orders/overdue": {
       "get": {
         "tags": [
@@ -5139,6 +5244,31 @@
         },
         "additionalProperties": false
       },
+      "UpsertMarginFloorRequest": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "nullable": true
+          },
+          "brandId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "categoryId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "minMarkupPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpsertPriceListEntriesRequest": {
         "type": "object",
         "properties": {
@@ -5287,6 +5417,9 @@
     },
     {
       "name": "AdminCompanies"
+    },
+    {
+      "name": "AdminMarginFloors"
     },
     {
       "name": "AdminOrders"

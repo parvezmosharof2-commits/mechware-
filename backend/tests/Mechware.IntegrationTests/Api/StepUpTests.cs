@@ -148,6 +148,8 @@ public sealed class StepUpTests : IDisposable
         actions.Should().Contain("AdminPriceListsController.Approve", "pricelist.approve");
         actions.Should().Contain("AdminPriceListsController.Withdraw", "pricelist.withdraw");
         actions.Should().NotContainKey("AdminPriceListsController.Reject", "a rejection never makes a price apply (D2.8 decision)");
+        actions.Should().Contain("AdminMarginFloorsController.Upsert", "margin-floor.change");
+        actions.Should().Contain("AdminMarginFloorsController.Delete", "margin-floor.delete");
     }
 
     [PostgresFact]

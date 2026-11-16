@@ -5,7 +5,7 @@ namespace Mechware.Domain.Pricing.PriceLists;
 
 /// <summary>
 /// A stored margin floor row (table <c>margin_floors</c>, ADR-0008 §4). The migration seeds the one global row
-/// (<see cref="MarginFloorPolicy.DefaultGlobalMinMarkupPercent"/>); changing or adding rows is D2.9. The policy works on
+/// (<see cref="MarginFloorPolicy.DefaultGlobalMinMarkupPercent"/>); staff change and add rows through D2.9. The policy works on
 /// <see cref="ToRow"/>, so the same shape and markup rules apply here and in the database CHECKs.
 /// </summary>
 public sealed class MarginFloor : Entity<Guid>
@@ -36,6 +36,14 @@ public sealed class MarginFloor : Entity<Guid>
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc,
         };
+    }
+
+    /// <summary>A new markup for this row (D2.9); the scope, brand and category never change. Same range and decimals rule as <see cref="Create"/>.</summary>
+    public void ChangeMarkup(decimal minMarkupPercent, Guid updatedBy, DateTime nowUtc)
+    {
+        if (updatedBy == Guid.Empty) throw new ValidationException("updatedBy", "The author is required.");
+        MarginFloorPolicy.Validate(new MarginFloorRow(Scope, BrandId, CategoryId, minMarkupPercent));
+        (MinMarkupPercent, UpdatedBy, UpdatedAtUtc) = (minMarkupPercent, updatedBy, nowUtc);
     }
 
     public MarginFloorRow ToRow() => new(Scope, BrandId, CategoryId, MinMarkupPercent);

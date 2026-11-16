@@ -387,6 +387,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/margin-floors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** Create the row for (scope, brandId, categoryId) or change its markup (0–1,000 %, at most two decimals). */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpsertMarginFloorRequest"];
+                    "text/json": components["schemas"]["UpsertMarginFloorRequest"];
+                    "application/*+json": components["schemas"]["UpsertMarginFloorRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/margin-floors/effective": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The row that applies to a variant, or to a brand and/or category, by the policy's precedence, and its markup. */
+        get: {
+            parameters: {
+                query?: {
+                    variantId?: string;
+                    brandId?: string;
+                    categoryId?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/margin-floors/{marginFloorId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a brand or category row; the global row cannot be deleted (409 `GLOBAL_FLOOR_REQUIRED`). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    marginFloorId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/orders/overdue": {
         parameters: {
             query?: never;
@@ -4691,6 +4822,15 @@ export interface components {
             latitude?: number | null;
             /** Format: double */
             longitude?: number | null;
+        };
+        UpsertMarginFloorRequest: {
+            scope?: string | null;
+            /** Format: uuid */
+            brandId?: string | null;
+            /** Format: uuid */
+            categoryId?: string | null;
+            /** Format: double */
+            minMarkupPercent?: number | null;
         };
         UpsertPriceListEntriesRequest: {
             entries?: components["schemas"]["UpsertPriceListEntryItem"][] | null;
