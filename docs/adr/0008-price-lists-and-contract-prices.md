@@ -290,7 +290,7 @@ guest would get.
 ### 11. Reading prices: API and caches
 - Staff: `api/v1/admin/price-lists` (list, create, change, submit, revise, approve, reject, withdraw) and
   `api/v1/admin/margin-floors`, each with the permission of §1.
-- Buyer: `GET api/v1/companies/{companyId}/prices?variantIds=…` (at most 100 ids), members of that company only,
+- Buyer: `GET api/v1/companies/{companyId}/prices?items=variantId[:qty],…` (at most 100 items), members of that company only,
   any other company → 404. Response header `Cache-Control: private, no-store`.
 - **Public caches never hold company prices.** The public storefront and search endpoints (`Cache-Control: public`),
   the Redis keys `sf:*` and the search index carry only public prices (list, sale, `General` breaks) and answer the

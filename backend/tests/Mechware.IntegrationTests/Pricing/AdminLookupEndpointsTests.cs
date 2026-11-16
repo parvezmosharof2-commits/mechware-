@@ -169,6 +169,116 @@ public sealed class AdminLookupEndpointsTests : IDisposable
         second.GetProperty("totalCount").GetInt32().Should().BeGreaterThan(1);
     }
 
+    // ---- brands and categories ----------------------------------------------------------------------------------------
+
+    private async Task<(Guid Id, string Name, string Slug)> BrandAsync(string name)
+    {
+        await using var db = Db();
+        var brand = new Brand(Guid.NewGuid(), name, "br-" + Guid.NewGuid().ToString("N")[..10], null, false);
+        db.Brands.Add(brand);
+        await db.SaveChangesAsync();
+        return (brand.Id, name, brand.Slug);
+    }
+
+    [PostgresFact]
+    public async Task BrandAndCategoryLookups_Anonymous401_BuyerAndModerator403_SupportFinanceAdmin200()
+    {
+        using var anonymous = _factory.CreateClient();
+        using var buyer = await BuyerAsync();
+        using var moderator = await StaffAsync(Permissions.Roles.Moderator);
+        using var support = await StaffAsync(Permissions.Roles.Support);
+        using var finance = await StaffAsync(Permissions.Roles.Finance);
+        using var admin = await StaffAsync(Permissions.Roles.Admin);
+        foreach (var url in new[] { "/api/v1/admin/brands", "/api/v1/admin/categories" })
+        {
+            (await anonymous.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.Unauthorized, url);
+            (await buyer.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.Forbidden, url);
+            (await moderator.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{url}: moderator holds none of the three permissions");
+            (await support.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.OK, $"{url}: pricelists.edit");
+            (await finance.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.OK, $"{url}: pricing.view_cost");
+            (await admin.GetAsync(url)).StatusCode.Should().Be(HttpStatusCode.OK, url);
+        }
+    }
+
+    [PostgresFact]
+    public async Task BrandLookup_FiltersByNameAndSlugCaseInsensitively_PercentIsLiteral_SortedByName_PageSizeCapped()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var b = await BrandAsync($"Zeta {tag} Drives");
+        var a = await BrandAsync($"Alpha {tag} Drives");
+        var pct = await BrandAsync($"Pct 100% {tag}");
+        using var support = await StaffAsync(Permissions.Roles.Support);
+
+        var (raw, byTag) = await GetAsync(support, $"/api/v1/admin/brands?q={tag.ToUpperInvariant()}");
+        byTag.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("nameEn").GetString())
+            .Should().Equal(a.Name, pct.Name, b.Name);
+
+        var (_, bySlug) = await GetAsync(support, $"/api/v1/admin/brands?q={Uri.EscapeDataString(a.Slug.ToUpperInvariant())}");
+        var item = bySlug.GetProperty("items").EnumerateArray().Should().ContainSingle().Subject;
+        item.GetProperty("id").GetGuid().Should().Be(a.Id);
+        item.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["id", "nameEn", "nameBn", "slug", "isActive"]);
+        item.GetProperty("isActive").GetBoolean().Should().BeTrue();
+
+        var (_, literal) = await GetAsync(support, $"/api/v1/admin/brands?q={Uri.EscapeDataString("100% " + tag)}");
+        literal.GetProperty("items").EnumerateArray().Should().ContainSingle().Which.GetProperty("id").GetGuid().Should().Be(pct.Id);
+        var (_, wildcard) = await GetAsync(support, "/api/v1/admin/brands?q=" + Uri.EscapeDataString("%"));
+        wildcard.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("nameEn").GetString())
+            .Should().OnlyContain(n => n!.Contains('%'), "a percent sign is not a wildcard");
+        var (_, underscore) = await GetAsync(support, "/api/v1/admin/brands?q=" + Uri.EscapeDataString("_"));
+        underscore.GetProperty("items").EnumerateArray().Select(i => i.GetProperty("nameEn").GetString() + "|" + i.GetProperty("slug").GetString())
+            .Should().OnlyContain(n => n.Contains('_'), "an underscore is not a one-character wildcard");
+
+        var (_, capped) = await GetAsync(support, "/api/v1/admin/brands?pageSize=5000");
+        capped.GetProperty("pageSize").GetInt32().Should().Be(50);
+        capped.GetProperty("items").GetArrayLength().Should().BeLessThanOrEqualTo(50);
+        var (_, second) = await GetAsync(support, "/api/v1/admin/brands?pageSize=1&page=2");
+        second.GetProperty("items").GetArrayLength().Should().Be(1);
+        raw.ToLowerInvariant().Should().NotContain("cost");
+    }
+
+    [PostgresFact]
+    public async Task CategoryLookup_CarriesTheEnglishPathRootToNode_AndFiltersByEnglishBanglaNameAndSlug()
+    {
+        var tag = Guid.NewGuid().ToString("N")[..8];
+        var root = Category.CreateRoot(Guid.NewGuid(), $"Root {tag}", $"মূল {tag}", $"lk-root-{tag}");
+        var mid = Category.CreateChild(root, Guid.NewGuid(), $"Middle {tag}", $"মধ্য {tag}", $"lk-mid-{tag}");
+        var leaf = Category.CreateChild(mid, Guid.NewGuid(), $"Leaf {tag}", $"পাতা {tag}", $"lk-leaf-{tag}");
+        await using (var db = Db())
+        {
+            db.Categories.AddRange(root, mid, leaf);
+            await db.SaveChangesAsync();
+        }
+
+        using var support = await StaffAsync(Permissions.Roles.Support);
+        var (raw, all) = await GetAsync(support, $"/api/v1/admin/categories?q={tag}&pageSize=50");
+        var items = all.GetProperty("items").EnumerateArray().ToList();
+        items.Select(i => i.GetProperty("nameEn").GetString()).Should().Equal($"Leaf {tag}", $"Middle {tag}", $"Root {tag}");
+        var leafItem = items[0];
+        leafItem.GetProperty("path").EnumerateArray().Select(p => p.GetString()).Should().Equal($"Root {tag}", $"Middle {tag}", $"Leaf {tag}");
+        leafItem.GetProperty("parentId").GetGuid().Should().Be(mid.Id);
+        leafItem.GetProperty("nameBn").GetString().Should().Be($"পাতা {tag}");
+        leafItem.GetProperty("isActive").GetBoolean().Should().BeTrue();
+        leafItem.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["id", "nameEn", "nameBn", "slug", "parentId", "path", "isActive"]);
+        items[1].GetProperty("path").EnumerateArray().Select(p => p.GetString()).Should().Equal($"Root {tag}", $"Middle {tag}");
+        items[2].GetProperty("path").GetArrayLength().Should().Be(1);
+        items[2].GetProperty("parentId").ValueKind.Should().Be(JsonValueKind.Null);
+        raw.ToLowerInvariant().Should().NotContain("cost").And.NotContain("commission");
+
+        var (_, byBn) = await GetAsync(support, $"/api/v1/admin/categories?q={Uri.EscapeDataString("মধ্য " + tag)}");
+        byBn.GetProperty("items").EnumerateArray().Should().ContainSingle().Which.GetProperty("id").GetGuid().Should().Be(mid.Id);
+        var (_, bySlug) = await GetAsync(support, $"/api/v1/admin/categories?q=LK-LEAF-{tag}");
+        bySlug.GetProperty("items").EnumerateArray().Should().ContainSingle().Which.GetProperty("id").GetGuid().Should().Be(leaf.Id);
+        var (_, byEn) = await GetAsync(support, $"/api/v1/admin/categories?q={Uri.EscapeDataString("middle " + tag.ToUpperInvariant())}");
+        byEn.GetProperty("items").GetArrayLength().Should().Be(1);
+        var (_, wildcard) = await GetAsync(support, "/api/v1/admin/categories?q=" + Uri.EscapeDataString("%"));
+        wildcard.GetProperty("items").GetArrayLength().Should().Be(0, "a percent sign is not a wildcard");
+
+        var (_, capped) = await GetAsync(support, "/api/v1/admin/categories?pageSize=999");
+        capped.GetProperty("pageSize").GetInt32().Should().Be(50);
+        var (_, second) = await GetAsync(support, "/api/v1/admin/categories?pageSize=1&page=2");
+        second.GetProperty("items").GetArrayLength().Should().Be(1);
+    }
+
     // ---- companies ---------------------------------------------------------------------------------------------------
 
     private async Task<(Guid Id, string Name, string Bin)> CompanyAsync(string name, bool active)

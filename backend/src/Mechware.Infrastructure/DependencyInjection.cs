@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.TryAddScoped<IStorefrontCatalogReader, StorefrontCatalogReader>();
         services.TryAddScoped<ICatalogAdminService, CatalogAdminService>();
         services.TryAddScoped<IAdminVariantLookup, AdminVariantLookup>();
+        services.TryAddScoped<IAdminCatalogLookup, AdminCatalogLookup>();
         services.TryAddSingleton(new Mechware.Application.Catalog.CatalogImportOptions());
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportLookup, CatalogImportLookup>();
         services.TryAddScoped<Mechware.Application.Catalog.ICatalogImportValidator, CatalogImportValidator>();
