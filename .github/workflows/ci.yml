@@ -43,7 +43,7 @@ jobs:
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      MECHWARE_TEST_PG: Host=localhost;Port=5432;Database=postgres;Username=mechware;Password=mechware_secret;Maximum Pool Size=150
+      MECHWARE_TEST_PG: Host=localhost;Port=5432;Database=postgres;Username=mechware;Password=mechware_secret;Maximum Pool Size=60
       MECHWARE_TEST_REDIS: localhost:6379,abortConnect=false,connectTimeout=2000
 
     steps:

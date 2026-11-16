@@ -21,6 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- At most 4 test classes at once: every class has its own database and the concurrency tests open 50-70 connections each. -->
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Mechware.Api\Mechware.Api.csproj" />
     <ProjectReference Include="..\..\src\Mechware.Infrastructure\Mechware.Infrastructure.csproj" />
   </ItemGroup>
