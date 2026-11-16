@@ -74,7 +74,14 @@ public sealed record OrderPaymentDto(string Status, string? Method, long AmountM
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
     long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null,
-    DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null);
+    DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null, OrderCreditDto? Credit = null);
+
+/// <summary>
+/// Where a credit order stands in the ledger (ADR-0010 §10, B3.9): <paramref name="Status"/> = <c>open</c>, <c>partially_paid</c>, <c>paid</c>,
+/// <c>overdue</c> or <c>cancelled</c>, the due date (Dhaka) fixed at the charge and what is still owed. Only on a credit order that was charged,
+/// and only for a person who may see the company's credit now (a role in <c>Credit:BalanceVisibleTo</c>); derived from the ledger, never stored.
+/// </summary>
+public sealed record OrderCreditDto(string Status, DateOnly DueOn, long OutstandingMinor);
 
 /// <summary>What the checkout would charge for delivery, without placing anything (E8.2; the checkout page is E3.4).</summary>
 public sealed record ShippingQuoteRequest(

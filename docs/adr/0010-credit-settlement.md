@@ -517,6 +517,15 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
 5. **Not built:** a payment `note` is staff-only and appears in the JSON payment, never in a CSV; a CSV of the payment queue; per-method queue filter;
    the buyer reads (B3.9).
 
+## Implementation notes: B3.9 buyer reads (2026-11-17, AI assistant, not reviewed)
+`GET companies/{id}/credit`, `/credit/open-items`, `/credit/statement` (`CompanyCreditController`), `OrderDto.credit`, narrowed credit fields of `GET /companies` and `/companies/{id}`.
+No migration. READ-ONLY and lock-free (the B3.8 snapshot helper). Threat model CS22, CS23, CS24.
+1. **One access rule** (`BuyerCreditAccess.MayViewAsync`, in Persistence so Credit and Orders share it without breaking the module-boundary test): an effective member (active, invitation accepted) of the company in the URL, holding a role in `Credit:BalanceVisibleTo` (default Admin | Buyer, OWNER 6), of a company that is Active or Suspended. Read from the database on every call. Every other case (unknown company, another company's member, no company, Requester/Approver, deactivated or uninvited member, Pending/Rejected company, any platform staff role) is the same `KeyNotFoundException("Company not found.")`. The company is checked before the query dates.
+2. **Fields:** DTOs are built field by field and never reuse the staff `CreditLedgerLineDto`. A statement line = seq, day, kind, order number, payment method, reference tail (`****` + at most 4 characters, never more than half), both deltas, both running totals, due date. A pending payment = day, method, amount, tail. No ids of staff, payments, adjustments or events, no IP/correlation id, no reason (a write-off line shows its kind and amount only), no note, no hold-override date (`onHold` only). A unit test pins the field lists.
+3. **`/credit`:** available = limit - used, never below 0; overdue and aging by the B3.8 rule; `onHold` = the B3.7 rule including an Admin lift; `pendingPayments` = status `recorded` only (a rejected payment moved no money and has no line), at most 50.
+4. **`OrderDto.credit`** (`open | partially_paid | paid | overdue | cancelled`, `dueOn`, `outstandingMinor`): only on a charged `pays_on_credit` order; null without a charge (pending approval) and null when the order's owner no longer passes rule 1 (stricter than "the order owner rule": a buyer who left the company must not keep reading its receivables). Overdue wins over partially paid; paid wins over a past due date; cancelled wins over all.
+5. **Company view:** `CompanyDto.creditLimit/creditUsed/creditAvailable` are null for a member without a `BalanceVisibleTo` role; terms stay; staff endpoints and the registrant keep the amounts. The credit fields are no longer guaranteed non-null for the web client (follow-up in B3.13).
+
 ## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
 1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →
    `credit_payments` | `credit_adjustments` → `companies` → `promotions`. The payment webhook already locks payment → order, so the

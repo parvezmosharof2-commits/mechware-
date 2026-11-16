@@ -4,9 +4,13 @@ namespace Mechware.Application.Companies;
 
 public sealed record MoneyDto(long MinorUnits, string Currency);
 
+/// <summary>
+/// <c>CreditLimit</c>, <c>CreditUsed</c> and <c>CreditAvailable</c> are null for a member whose company roles are not in <c>Credit:BalanceVisibleTo</c>
+/// (ADR-0010 §10, B3.9); staff endpoints always fill them. The terms are not money and stay.
+/// </summary>
 public sealed record CompanyDto(
     Guid Id, string LegalName, string TradeLicenceNo, string Bin, string? Tin, string? Industry,
-    string Status, string CreditTerms, MoneyDto CreditLimit, MoneyDto CreditUsed, MoneyDto CreditAvailable,
+    string Status, string CreditTerms, MoneyDto? CreditLimit, MoneyDto? CreditUsed, MoneyDto? CreditAvailable,
     DateTime CreatedAtUtc, string? RejectionReason = null);
 
 /// <summary>A company as seen by one of its members, with that member's own roles.</summary>

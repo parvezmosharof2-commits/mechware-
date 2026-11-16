@@ -50,6 +50,9 @@ test('credit usage percent is clamped and safe without a limit', () => {
   assert.equal(creditUsagePercent(c(1000, 1000)), 100);
   assert.equal(creditUsagePercent(c(1000, 5000)), 100);
   assert.equal(creditUsagePercent(c(1000, -5)), 0);
+  // A member whose role may not see the balance gets null from the API (B3.9): no crash, no bar.
+  assert.equal(creditUsagePercent({ creditLimit: null, creditUsed: null }), 0);
+  assert.equal(creditUsagePercent({ creditLimit: { minorUnits: 1000, currency: 'BDT' }, creditUsed: null }), 0);
 });
 
 test('credit terms map to the API day values', () => {

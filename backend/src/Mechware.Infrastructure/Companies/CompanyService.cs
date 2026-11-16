@@ -8,9 +8,10 @@ using Mechware.Infrastructure.Persistence;
 
 namespace Mechware.Infrastructure.Companies;
 
-public sealed class CompanyService(MechwareDbContext db) : ICompanyService
+public sealed class CompanyService(MechwareDbContext db, Mechware.Application.Credit.CreditOptions? credit = null) : ICompanyService
 {
     private const int MaxPageSize = 100;
+    private readonly CompanyRoles balanceVisibleTo = (credit ?? new Mechware.Application.Credit.CreditOptions()).BalanceVisibleTo;
 
     // ---------- registration & reads ----------
 
@@ -53,7 +54,7 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
             throw new ConflictException("COMPANY_BIN_EXISTS", "A company with this BIN is already registered.");
         }
 
-        return ToDto(company);
+        return ToDto(company, CompanyRoles.Admin);   // the registrant is the first Company Admin
     }
 
     public async Task<IReadOnlyList<MyCompanyDto>> ListMineAsync(Guid actorUserId, CancellationToken ct = default)
@@ -63,13 +64,13 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
                           where m.UserId == actorUserId
                           orderby c.LegalName
                           select new { Company = c, m.Roles }).ToListAsync(ct);
-        return rows.Select(r => new MyCompanyDto(ToDto(r.Company), r.Roles)).ToList();
+        return rows.Select(r => new MyCompanyDto(ToDto(r.Company, r.Roles), r.Roles)).ToList();
     }
 
     public async Task<CompanyDto> GetAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default)
     {
-        await RequireMemberAsync(actorUserId, companyId, null, ct);
-        return ToDto(await LoadCompanyAsync(companyId, ct));
+        var member = await RequireMemberAsync(actorUserId, companyId, null, ct);
+        return ToDto(await LoadCompanyAsync(companyId, ct), member.Roles);
     }
 
     // ---------- sites ----------
@@ -305,7 +306,7 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
             // The admin withdrew or changed the invitation at the same moment: what was accepted no longer exists as offered.
             throw new KeyNotFoundException("Invitation not found.");
         }
-        return new MyCompanyDto(ToDto(company), member.Roles);
+        return new MyCompanyDto(ToDto(company, member.Roles), member.Roles);
     }
 
     public async Task DeclineInvitationAsync(Guid actorUserId, Guid companyId, CancellationToken ct = default)
@@ -358,7 +359,7 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
         var query = FilterForStaff(db.Companies.AsNoTracking(), status, q);
         int total = await query.CountAsync(ct);
         var rows = await query.OrderByDescending(c => c.CreatedAtUtc).ThenBy(c => c.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
-        return new PagedResult<CompanyDto>(rows.Select(ToDto).ToList(), page, pageSize, total);
+        return new PagedResult<CompanyDto>(rows.Select(c => ToDto(c)).ToList(), page, pageSize, total);
     }
 
     /// <summary>Status filter and a literal, case-insensitive "contains" on the legal name. The BIN is never searched.</summary>
@@ -440,10 +441,14 @@ public sealed class CompanyService(MechwareDbContext db) : ICompanyService
 
     // ---------- mapping ----------
 
-    private static CompanyDto ToDto(Company c) => new(
-        c.Id, c.LegalName, c.TradeLicenceNo, c.Bin, c.Tin, c.Industry,
-        c.Status.ToString().ToLowerInvariant(), c.CreditTerms.ToString().ToLowerInvariant(),
-        ToDto(c.CreditLimit), ToDto(c.CreditUsed), ToDto(c.CreditAvailable), c.CreatedAtUtc, c.RejectionReason);
+    /// <summary>The credit amounts only for staff (<paramref name="viewerRoles"/> null) and for members with a role in <c>Credit:BalanceVisibleTo</c> (B3.9).</summary>
+    private CompanyDto ToDto(Company c, CompanyRoles? viewerRoles = null)
+    {
+        var showCredit = viewerRoles is not { } roles || (roles & balanceVisibleTo) != 0;
+        return new(c.Id, c.LegalName, c.TradeLicenceNo, c.Bin, c.Tin, c.Industry,
+            c.Status.ToString().ToLowerInvariant(), c.CreditTerms.ToString().ToLowerInvariant(),
+            showCredit ? ToDto(c.CreditLimit) : null, showCredit ? ToDto(c.CreditUsed) : null, showCredit ? ToDto(c.CreditAvailable) : null, c.CreatedAtUtc, c.RejectionReason);
+    }
 
     private static MoneyDto ToDto(Money m) => new(m.ToMinorUnits(), m.Currency.ToString());
 

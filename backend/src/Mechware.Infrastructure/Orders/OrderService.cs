@@ -12,6 +12,7 @@ using Mechware.Domain.Approvals;
 using Mechware.Domain.Catalog;
 using Mechware.Domain.Companies;
 using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Credit;
 using Mechware.Domain.Orders;
 using Mechware.Domain.Pricing;
 using Mechware.Domain.Pricing.PriceLists;
@@ -515,7 +516,25 @@ public sealed partial class OrderService(
                 s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
                     i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList(),
                 storeNames.GetValueOrDefault(s.SellerId))).ToList(),
-            order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments));
+            order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments),
+            await CreditForBuyerAsync(order, ct));
+    }
+
+    /// <summary>
+    /// B3.9: the ledger standing of a charged credit order, for a person who may see the company's credit RIGHT NOW (same rule as the credit
+    /// reads: member, role in <c>Credit:BalanceVisibleTo</c>, company Active or Suspended). Someone who placed the order and has since left the
+    /// company, or never held such a role, gets null. Lines are read by order AND company.
+    /// </summary>
+    private async Task<OrderCreditDto?> CreditForBuyerAsync(Order order, CancellationToken ct)
+    {
+        if (!order.PaysOnCredit || order.CompanyId is not { } companyId) return null;
+        if (!await BuyerCreditAccess.MayViewAsync(db, order.UserId, companyId, creditOptions, ct)) return null;
+        var lines = await db.CreditLedgerEntries.AsNoTracking().Where(l => l.OrderId == order.Id && l.CompanyId == companyId).ToListAsync(ct);
+        var charge = lines.Where(l => l.Kind == CreditLedgerKind.Charge).ToList();
+        if (charge.Count == 0 || charge[0].DueOn is not { } dueOn) return null;
+        var receivable = lines.Sum(l => l.ReceivableDeltaMinor);
+        var status = CreditBuyerView.OrderStatus(order.Status == OrderStatus.Cancelled, charge.Sum(l => l.ReceivableDeltaMinor), receivable, dueOn, CreditCalendar.DhakaDate(clock.GetUtcNow().UtcDateTime));
+        return new OrderCreditDto(status, dueOn, Math.Max(0, receivable));
     }
 
     /// <summary>Only the display members of the stored snapshot; its ids and district link never leave the server.</summary>

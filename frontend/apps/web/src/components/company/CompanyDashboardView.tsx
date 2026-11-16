@@ -76,7 +76,8 @@ function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: D
         <h2 id="credit-heading" className="text-sm font-semibold">
           {t('credit.title')}: {t(`credit.terms.${c.creditTerms}`)}
         </h2>
-        {c.creditTerms === 'none' ? (
+        {c.creditTerms === 'none' || !c.creditLimit || !c.creditUsed || !c.creditAvailable ? (
+          // Also the case for a member whose role may not see the balance: the API sends null, so show nothing numeric.
           <p className="mt-2 text-xs text-fg-muted">{t('credit.managedByMechware')}</p>
         ) : (
           <>

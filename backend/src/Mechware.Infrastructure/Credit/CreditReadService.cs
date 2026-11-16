@@ -206,7 +206,10 @@ public sealed class CreditReadService(MechwareDbContext db, ICurrentUserService 
     }
 
     /// <summary>One consistent moment for several queries, without a single lock (MVCC): the totals and the lines they add up never differ.</summary>
-    private async Task<T> SnapshotAsync<T>(Func<Task<T>> read, CancellationToken ct)
+    private Task<T> SnapshotAsync<T>(Func<Task<T>> read, CancellationToken ct) => SnapshotAsync(db, read, ct);
+
+    /// <summary>Shared with the buyer reads (B3.9): the same snapshot, the same absence of locks.</summary>
+    internal static async Task<T> SnapshotAsync<T>(MechwareDbContext db, Func<Task<T>> read, CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is not null) return await read();
         await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);

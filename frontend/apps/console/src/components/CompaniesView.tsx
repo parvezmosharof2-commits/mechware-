@@ -103,7 +103,9 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
     setStepUpCode('');
     setCodeError(null);
     setTerms(creditTermsValue(company.creditTerms));
-    setLimit(company.creditLimit.minorUnits === 0 ? '' : String(company.creditLimit.minorUnits / 100));
+    // The staff endpoint always sends the balance; null only appears for buyer roles that may not see it.
+    const limitMinor = company.creditLimit?.minorUnits ?? 0;
+    setLimit(limitMinor === 0 ? '' : String(limitMinor / 100));
     setFieldError(null);
     setError(null);
   }, [company]);
@@ -144,7 +146,7 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
         <DialogHeader>
           <DialogTitle>Credit terms</DialogTitle>
           <DialogDescription>
-            {company?.legalName}. Used so far: {company ? money(company.creditUsed.minorUnits, company.creditUsed.currency) : ''}. The limit cannot go below the amount already used.
+            {company?.legalName}. Used so far: {company?.creditUsed ? money(company.creditUsed.minorUnits, company.creditUsed.currency) : ''}. The limit cannot go below the amount already used.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={save} noValidate className="space-y-3">
@@ -258,7 +260,7 @@ function CompaniesTable() {
                       {c.creditTerms !== 'none' && (
                         <div className="mt-1 w-40 space-y-1">
                           <Progress value={usage} aria-label={`Credit used: ${usage}%`} variant={usage >= 90 ? 'fault' : usage >= 80 ? 'warning' : 'accent'} />
-                          <div className="text-xs tabular-nums text-text-muted">{money(c.creditUsed.minorUnits, c.creditUsed.currency)} of {money(c.creditLimit.minorUnits, c.creditLimit.currency)}</div>
+                          <div className="text-xs tabular-nums text-text-muted">{c.creditUsed && c.creditLimit ? `${money(c.creditUsed.minorUnits, c.creditUsed.currency)} of ${money(c.creditLimit.minorUnits, c.creditLimit.currency)}` : '-'}</div>
                         </div>
                       )}
                     </td>

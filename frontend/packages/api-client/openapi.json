@@ -4153,6 +4153,129 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/credit": {
+      "get": {
+        "tags": [
+          "CompanyCredit"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/credit/open-items": {
+      "get": {
+        "tags": [
+          "CompanyCredit"
+        ],
+        "summary": "Orders that still owe something, oldest due date first; `page`, `pageSize` (at most 100).",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/credit/statement": {
+      "get": {
+        "tags": [
+          "CompanyCredit"
+        ],
+        "summary": "Ledger lines in posting order, optionally between two Dhaka days (`from`, `to`, yyyy-MM-dd); `page`, `pageSize` (at most 100).",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/prices": {
       "get": {
         "tags": [
@@ -6967,6 +7090,9 @@
     },
     {
       "name": "Companies"
+    },
+    {
+      "name": "CompanyCredit"
     },
     {
       "name": "CompanyPrices"

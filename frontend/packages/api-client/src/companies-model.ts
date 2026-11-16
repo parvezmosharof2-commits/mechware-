@@ -22,9 +22,10 @@ export interface CompanyDto {
   industry: string | null;
   status: CompanyStatus;
   creditTerms: CreditTermsName;
-  creditLimit: MoneyDto;
-  creditUsed: MoneyDto;
-  creditAvailable: MoneyDto;
+  /** Null for a member whose role may not see the balance (Credit:BalanceVisibleTo). */
+  creditLimit: MoneyDto | null;
+  creditUsed: MoneyDto | null;
+  creditAvailable: MoneyDto | null;
   createdAtUtc: string;
 }
 
@@ -152,8 +153,8 @@ export function amountToMinor(amount: number): number {
 
 /** Share of the credit limit already used, 0-100. Zero when no limit is set. */
 export function creditUsagePercent(company: Pick<CompanyDto, 'creditLimit' | 'creditUsed'>): number {
-  const limit = company.creditLimit.minorUnits;
-  if (limit <= 0) return 0;
+  const limit = company.creditLimit?.minorUnits ?? 0;
+  if (limit <= 0 || !company.creditUsed) return 0;
   return Math.min(100, Math.max(0, Math.round((company.creditUsed.minorUnits / limit) * 100)));
 }
 
