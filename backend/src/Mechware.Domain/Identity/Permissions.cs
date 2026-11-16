@@ -54,6 +54,10 @@ public static class Permissions
     public const string CreditRecordPayment = "credit.record_payment";
     /// <summary>Verify or reject a payment someone else recorded (verify with step-up); only a verification releases credit.</summary>
     public const string CreditVerifyPayment = "credit.verify_payment";
+    /// <summary>Request (or withdraw, or reject) a write-off, an on-account correction or a payout; a request moves no money.</summary>
+    public const string CreditAdjust = "credit.adjust";
+    /// <summary>Approve someone else's adjustment, with step-up (Admin only, ADR-0010 §5): only the approval writes the ledger line.</summary>
+    public const string CreditAdjustApprove = "credit.adjust_approve";
 
     public static class Roles
     {
@@ -83,7 +87,7 @@ public static class Permissions
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
-                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment
+                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust
             ],
             Roles.Admin =>
             [
@@ -113,7 +117,9 @@ public static class Permissions
                 ShippingView,
                 ShippingManage,
                 CreditRecordPayment,
-                CreditVerifyPayment
+                CreditVerifyPayment,
+                CreditAdjust,
+                CreditAdjustApprove
             ],
             _ => []
         };

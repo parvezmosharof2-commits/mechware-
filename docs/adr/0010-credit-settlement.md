@@ -429,6 +429,41 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
    new = event id, request id, lines, total, totals after; actor, IP, correlation id) and one outbox event of the same name
    (aggregate `Company`, `Id` = event id), in the same transaction.
 
+## Implementation notes: B3.6 adjustments (2026-11-17, AI assistant, not reviewed)
+`CreditAdjustment.Posting` (domain, pure), `CreditAdjustmentService`, `AdminCreditAdjustmentsController`. No migration.
+1. **§5 as written:** request `POST admin/companies/{companyId}/credit/adjustments` (`credit.adjust`: Finance, Admin; Idempotency-Key
+   8-100; 201, replay 200); approve `POST admin/credit/adjustments/{id}/approve` (`credit.adjust_approve`: Admin only; step-up
+   `credit.adjustment.approve` always, target `adjustmentId=…`); reject `POST …/{id}/reject` body `{reason}` 5-500 (`credit.adjust`, no
+   step-up: nothing moves; the requester may withdraw). Body `{kind, amountMinor, reason, orderId?, paymentId?, creditNoteId?,
+   payoutReference?, currency?}`, strict JSON integers, kind snake_case. 404 unless the company is Active or Suspended.
+2. **Four eyes (CS20, CS21):** the approver is not the requester (domain + CHECK) and not the recorder or verifier of the source payment
+   (domain). A write-off touches no payment, so only the requester rule applies to it.
+3. **Caps, never clamped, checked at the request (an early answer) and again at the approval under the locks** (409): write-off ≤ what
+   the order still owes (`CREDIT_EXCEEDS_RECEIVABLE`; an order without a charge in this company `CREDIT_ADJUSTMENT_TARGET_NOT_FOUND`);
+   payout and negative correction ≤ the source's on-account money (`CREDIT_ON_ACCOUNT_INSUFFICIENT`; source = Σ on-account deltas naming
+   it, as in §6); a payment of another company `CREDIT_ADJUSTMENT_TARGET_NOT_FOUND`; a payment source must be `verified`
+   (`CREDIT_ADJUSTMENT_SOURCE_NOT_VERIFIED`: a bounced payment's money cannot be paid out or "given back").
+4. **New rule (design was silent): a positive correction only gives back what earlier corrections took from that source**
+   (`CREDIT_CORRECTION_EXCEEDS_TAKEN`). So no adjustment creates money; an under-recorded payment is fixed by recording the difference as a
+   new payment (four eyes), not by a correction. Reviewer/owner may relax this (open question in the card).
+5. **Payout vs a later bounce (B3.5 watch item):** a payout cannot be recovered by a bounce (the money left MECHWARE's bank; no ledger kind
+   may create a debt without an order). Default (safest, OWNER 7 new): money of a payment that can still bounce (any method but cash) is paid
+   out only `Credit:PayoutAfterClearingDays` (default **30**, 0-365) after its `cleared_on` (`CREDIT_PAYOUT_TOO_EARLY`); cash and credit-note
+   money need no wait; the setting is read again at the approval. A bounce after a payout reverses only what is left (test
+   `ABounce_AfterAPayoutOrACorrection_ReversesOnlyWhatIsLeft`); the paid-out part becomes a collection matter outside the ledger.
+6. **Locks (§7, extended):** `credit_adjustments` (NO KEY UPDATE) → its source `credit_payments` (NO KEY UPDATE) → `companies` (FOR UPDATE).
+   No other path locks an adjustment, so the middle tier is adjustment then payment. A payout therefore waits for a bounce or verification
+   holding its payment and then sees its result. A write-off never locks its order (its line takes FOR KEY SHARE, compatible with a cancel's
+   NO KEY UPDATE).
+7. **Ledger and idempotency:** one line per approval, key `adjust:{adjustmentId:N}`, `occurred_on` = Dhaka date of the approval, actor =
+   approver, reason = the adjustment's reason. A second approval is 409 `CREDIT_ADJUSTMENT_NOT_REQUESTED` (status; the key is the backstop).
+   Request idempotency without a new column: the adjustment id is a UUIDv8 from SHA-256(`credit-adjustment|{actor}|{key}`); a replay finds
+   the row (same fields → 200 with it; others, including another company → 409 `IDEMPOTENCY_KEY_REUSED`); a parallel replay's 23505 on
+   the primary key answers the same way. A refused request stores nothing, so its key can be used again.
+8. **Audit + outbox (CS29):** `credit.adjustment_requested` / `_approved` (old = totals before; new = event id, kind, amount, deltas, totals
+   after; actor, IP, correlation id) / `_rejected`, entity `credit_adjustments`; outbox `credit.adjustment_approved` (aggregate
+   `CreditAdjustment`, `Id` = event id) in the approval transaction. No outbox event for a request (as for a recorded payment).
+
 ## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
 1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →
    `credit_payments` | `credit_adjustments` → `companies` → `promotions`. The payment webhook already locks payment → order, so the

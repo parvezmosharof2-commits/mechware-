@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.TryAddSingleton(new Mechware.Application.Credit.CreditOptions());
         services.TryAddScoped<Mechware.Application.Credit.ICreditPaymentService, Credit.CreditPaymentService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditLedger, Credit.CreditLedgerService>();
+        services.TryAddScoped<Mechware.Application.Credit.ICreditAdjustmentService, Credit.CreditAdjustmentService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();

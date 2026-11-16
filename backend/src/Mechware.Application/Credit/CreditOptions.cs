@@ -32,6 +32,11 @@ public sealed class CreditOptions
     public long MaxCashPaymentMinor { get; set; } = 20_000_000;               // BDT 2,00,000 (the accountant to confirm)
     /// <summary>Owner 5 (B3.6): over-payments stay on account for the next orders (true); paying back at once is not built.</summary>
     public bool KeepOverPaymentsOnAccount { get; set; } = true;
+    /// <summary>
+    /// Owner 7 (B3.6, new): on-account money of a payment that can still bounce (any method but cash) is paid back only this many
+    /// days after it cleared, because a bounce after a payout cannot take the paid-out money back (ADR-0010 B3.6 notes). 0-365.
+    /// </summary>
+    public int PayoutAfterClearingDays { get; set; } = 30;
     /// <summary>Owner 6 (B3.9): the company roles that see the balance and the statement.</summary>
     public CompanyRoles BalanceVisibleTo { get; set; } = CompanyRoles.Admin | CompanyRoles.Buyer;
 
@@ -65,6 +70,7 @@ public sealed class CreditOptions
         Require(o.MaxPaymentMinor is >= 1 and <= 1_000_000_000_000, "MaxPaymentMinor must be 1 to 1,000,000,000,000 poisha.");
         Require(o.MaxCashPaymentMinor >= 0 && o.MaxCashPaymentMinor <= o.MaxPaymentMinor, "MaxCashPaymentMinor must be 0 to MaxPaymentMinor.");
         Require(o.KeepOverPaymentsOnAccount, "KeepOverPaymentsOnAccount=false (pay back at once) is not built yet.");
+        Require(o.PayoutAfterClearingDays is >= 0 and <= 365, "PayoutAfterClearingDays must be 0 to 365.");
         Require(o.BalanceVisibleTo.IsValid(), "BalanceVisibleTo must name company roles (Admin, Buyer, Approver, Requester).");
         return o;
     }

@@ -34,6 +34,8 @@ public static class CreditLedgerKeys
     public static string ApplyOnAccount(string requestKey, Guid orderId, Guid sourceId) => $"apply:{requestKey}:{orderId:N}:{sourceId:N}";
     /// <summary>The prefix of every line of one apply request, whatever its body: a replay finds them.</summary>
     public static string ApplyOnAccountRequest(string requestId) => $"apply:{requestId}:";
+    /// <summary>The one line of an approved adjustment (§8.3, B3.6).</summary>
+    public static string Adjust(Guid adjustmentId) => $"adjust:{adjustmentId:N}";
 }
 
 /// <summary>Credit dates are Bangladesh calendar dates: a fixed +06:00 (no daylight saving), as for E8.3.</summary>

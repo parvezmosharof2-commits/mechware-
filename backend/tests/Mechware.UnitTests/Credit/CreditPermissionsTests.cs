@@ -20,5 +20,20 @@ public class CreditPermissionsTests
 
     [Fact]
     public void ThePermissionNames_AreTheOnesTheDesignNames() =>
-        CreditPermissions.Should().Equal("credit.record_payment", "credit.verify_payment");
+        CreditPermissions.Concat([Permissions.CreditAdjust, Permissions.CreditAdjustApprove]).Should()
+            .Equal("credit.record_payment", "credit.verify_payment", "credit.adjust", "credit.adjust_approve");
+
+    /// <summary>§5 (CS20): Finance and Admin ask for adjustments; only an Admin approves one (someone else's, with step-up).</summary>
+    [Theory]
+    [InlineData(Permissions.Roles.Finance, true, false)]
+    [InlineData(Permissions.Roles.Admin, true, true)]
+    [InlineData(Permissions.Roles.Support, false, false)]
+    [InlineData(Permissions.Roles.Seller, false, false)]
+    [InlineData(Permissions.Roles.Moderator, false, false)]
+    [InlineData(Permissions.Roles.Buyer, false, false)]
+    public void OnlyFinanceAndAdmin_RequestAdjustments_AndOnlyAdmin_ApprovesThem(string role, bool request, bool approve)
+    {
+        var granted = Permissions.GetDefaultPermissionsForRole(role);
+        (granted.Contains(Permissions.CreditAdjust), granted.Contains(Permissions.CreditAdjustApprove)).Should().Be((request, approve));
+    }
 }

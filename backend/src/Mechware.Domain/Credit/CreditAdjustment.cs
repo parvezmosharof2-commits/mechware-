@@ -105,6 +105,50 @@ public sealed class CreditAdjustment : Entity<Guid>
         (Status, RejectedBy, RejectedAtUtc, DecisionReason, UpdatedAtUtc) = (CreditAdjustmentStatus.Rejected, userId, nowUtc, trimmed, nowUtc);
     }
 
+    /// <summary>
+    /// The one ledger line this adjustment posts (§8.3, B3.6), checked against <paramref name="lines"/> (the company's lines of its
+    /// order, or of its source). Never clamped, always 409: a write-off at most what the order still owes
+    /// (<c>CREDIT_EXCEEDS_RECEIVABLE</c>); a payout or a negative correction at most what the source holds on account
+    /// (<c>CREDIT_ON_ACCOUNT_INSUFFICIENT</c>); a positive correction only gives back what earlier corrections took from that source
+    /// (<c>CREDIT_CORRECTION_EXCEEDS_TAKEN</c>: no adjustment creates money); a payment source must still be verified, and the money
+    /// of a payment that can still bounce (not cash) is paid out only <paramref name="payoutWaitDays"/> after it cleared
+    /// (<c>CREDIT_PAYOUT_TOO_EARLY</c>: a later bounce cannot take back money already paid out). Run at the request (an early
+    /// answer) and again at the approval under the locks. Pure.
+    /// </summary>
+    public CreditPosting Posting(IEnumerable<CreditLedgerEntry> lines, CreditPayment? source, int payoutWaitDays, CreditEventInfo e)
+    {
+        if (source?.Id != PaymentId) throw new InvalidOperationException("Pass the adjustment's own source payment, and only that.");
+        const string notFound = "CREDIT_ADJUSTMENT_TARGET_NOT_FOUND";
+        var mine = lines.Where(l => l.CompanyId == CompanyId).ToList();
+        if (Kind == CreditAdjustmentKind.WriteOff)
+        {
+            var order = mine.Where(l => l.OrderId == OrderId).ToList();
+            if (!order.Any(l => l.Kind == CreditLedgerKind.Charge)) throw new ConflictException(notFound, "This order has no charge on the company's credit.");
+            var owed = order.Sum(l => l.ReceivableDeltaMinor);
+            if (AmountMinor > owed) throw new ConflictException("CREDIT_EXCEEDS_RECEIVABLE", $"The order still owes {owed} poisha, less than {AmountMinor}.");
+            return Line(CreditLedgerKind.WriteOff, -AmountMinor, 0, e);
+        }
+
+        if (source is not null && source.CompanyId != CompanyId) throw new ConflictException(notFound, "This payment is not the company's.");
+        if (source is not null && source.Status != CreditPaymentStatus.Verified)
+            throw new ConflictException("CREDIT_ADJUSTMENT_SOURCE_NOT_VERIFIED", "Only the money of a verified payment can be corrected or paid out.");
+        var held = mine.Where(l => l.PaymentId == PaymentId && l.CreditNoteId == CreditNoteId).ToList();
+        var payout = Kind == CreditAdjustmentKind.OnAccountPayout;
+        if (payout && source is { Method: not CreditPaymentMethod.Cash, ClearedOn: { } cleared } && cleared.AddDays(payoutWaitDays) > e.OccurredOn)
+            throw new ConflictException("CREDIT_PAYOUT_TOO_EARLY", $"This money can still bounce: pay it out from {cleared.AddDays(payoutWaitDays):yyyy-MM-dd}.");
+        var onAccount = held.Sum(l => l.OnAccountDeltaMinor);
+        if ((payout || AmountMinor < 0) && Math.Abs(AmountMinor) > onAccount)
+            throw new ConflictException("CREDIT_ON_ACCOUNT_INSUFFICIENT", $"This source holds {onAccount} poisha on account, less than {Math.Abs(AmountMinor)}.");
+        var taken = -held.Where(l => l.Kind == CreditLedgerKind.OnAccountCorrection).Sum(l => l.OnAccountDeltaMinor);
+        if (!payout && AmountMinor > taken)
+            throw new ConflictException("CREDIT_CORRECTION_EXCEEDS_TAKEN", $"A correction only gives back what corrections took from this source ({taken} poisha).");
+        return payout ? Line(CreditLedgerKind.OnAccountPayout, 0, -AmountMinor, e) : Line(CreditLedgerKind.OnAccountCorrection, 0, AmountMinor, e);
+    }
+
+    private CreditPosting Line(CreditLedgerKind kind, long r, long a, CreditEventInfo e) =>
+        new(kind, r, a, CreditLedgerKeys.Adjust(Id), e.OccurredOn, OrderId, PaymentId, Id, CreditNoteId, EventId: e.EventId,
+            ActorUserId: e.ActorUserId, CorrelationId: e.CorrelationId, Reason: e.Reason);
+
     private void Expect(CreditAdjustmentStatus status)
     {
         if (Status != status) throw new ConflictException("CREDIT_ADJUSTMENT_NOT_REQUESTED", $"A {Status} adjustment cannot be decided again.");

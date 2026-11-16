@@ -463,6 +463,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/companies/{companyId}/credit/adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RequestCreditAdjustmentRequest"];
+                    "text/json": components["schemas"]["RequestCreditAdjustmentRequest"];
+                    "application/*+json": components["schemas"]["RequestCreditAdjustmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/adjustments/{adjustmentId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    adjustmentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/credit/adjustments/{adjustmentId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    adjustmentId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RejectCreditAdjustmentRequest"];
+                    "text/json": components["schemas"]["RejectCreditAdjustmentRequest"];
+                    "application/*+json": components["schemas"]["RejectCreditAdjustmentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/companies/{companyId}/credit/payments": {
         parameters: {
             query?: never;
@@ -5317,11 +5436,28 @@ export interface components {
         RejectCompanyRequest: {
             reason?: string | null;
         };
+        RejectCreditAdjustmentRequest: {
+            reason?: string | null;
+        };
         RejectCreditPaymentRequest: {
             reason?: string | null;
         };
         RejectRefund: {
             reason?: string | null;
+        };
+        RequestCreditAdjustmentRequest: {
+            kind?: string | null;
+            /** Format: int64 */
+            amountMinor?: number;
+            reason?: string | null;
+            /** Format: uuid */
+            orderId?: string | null;
+            /** Format: uuid */
+            paymentId?: string | null;
+            /** Format: uuid */
+            creditNoteId?: string | null;
+            payoutReference?: string | null;
+            currency?: string | null;
         };
         RequestRefund: {
             /** Format: int64 */
