@@ -89,6 +89,60 @@ public static class CreditLedgerSql
         """;
 
     /// <summary>
+    /// B3.3b, threat model CS2/CS20 backstop: <c>credit_payments</c> and <c>credit_adjustments</c> are created in their first
+    /// status and change only by their next step (recorded → verified | rejected, verified → bounced; requested → approved |
+    /// rejected), each step writing only its own columns; anything else, and every DELETE or TRUNCATE, is refused. So a
+    /// verified payment's amount, method, reference or allocations can never be edited. Idempotent, like <see cref="Install"/>.
+    /// </summary>
+    public const string InstallSettlement = """
+        CREATE OR REPLACE FUNCTION credit_settlement_guard() RETURNS trigger
+        LANGUAGE plpgsql AS $fn$
+        DECLARE
+            first_status text := CASE TG_TABLE_NAME WHEN 'credit_payments' THEN 'recorded' ELSE 'requested' END;
+            allowed text[];
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                IF NEW.status <> first_status THEN
+                    RAISE EXCEPTION '%: a row is created as %', TG_TABLE_NAME, first_status USING ERRCODE = 'integrity_constraint_violation';
+                END IF;
+                RETURN NEW;
+            END IF;
+            IF TG_OP <> 'UPDATE' THEN
+                RAISE EXCEPTION '%: money records are never deleted', TG_TABLE_NAME USING ERRCODE = 'insufficient_privilege';
+            END IF;
+            allowed := CASE
+                WHEN NEW.status = OLD.status THEN ARRAY['updated_at']
+                WHEN OLD.status = 'recorded' AND NEW.status = 'verified' THEN ARRAY['updated_at', 'status', 'verified_by', 'verified_at', 'cleared_on']
+                WHEN OLD.status IN ('recorded', 'requested') AND NEW.status = 'rejected'
+                    THEN ARRAY['updated_at', 'status', 'rejected_by', 'rejected_at', 'decision_reason']
+                WHEN OLD.status = 'verified' AND NEW.status = 'bounced' THEN ARRAY['updated_at', 'status', 'bounced_by', 'bounced_at', 'decision_reason']
+                WHEN OLD.status = 'requested' AND NEW.status = 'approved' THEN ARRAY['updated_at', 'status', 'approved_by', 'approved_at']
+            END;
+            IF allowed IS NULL THEN
+                RAISE EXCEPTION '%: % cannot become %', TG_TABLE_NAME, OLD.status, NEW.status USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            IF (to_jsonb(NEW) - allowed) IS DISTINCT FROM (to_jsonb(OLD) - allowed) THEN
+                RAISE EXCEPTION '%: a % row changes only by its next step', TG_TABLE_NAME, OLD.status USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            RETURN NEW;
+        END
+        $fn$;
+
+        DROP TRIGGER IF EXISTS trg_credit_payments_guard ON credit_payments;
+        CREATE TRIGGER trg_credit_payments_guard BEFORE INSERT OR UPDATE OR DELETE ON credit_payments
+            FOR EACH ROW EXECUTE FUNCTION credit_settlement_guard();
+        DROP TRIGGER IF EXISTS trg_credit_payments_no_truncate ON credit_payments;
+        CREATE TRIGGER trg_credit_payments_no_truncate BEFORE TRUNCATE ON credit_payments
+            FOR EACH STATEMENT EXECUTE FUNCTION credit_settlement_guard();
+        DROP TRIGGER IF EXISTS trg_credit_adjustments_guard ON credit_adjustments;
+        CREATE TRIGGER trg_credit_adjustments_guard BEFORE INSERT OR UPDATE OR DELETE ON credit_adjustments
+            FOR EACH ROW EXECUTE FUNCTION credit_settlement_guard();
+        DROP TRIGGER IF EXISTS trg_credit_adjustments_no_truncate ON credit_adjustments;
+        CREATE TRIGGER trg_credit_adjustments_no_truncate BEFORE TRUNCATE ON credit_adjustments
+            FOR EACH STATEMENT EXECUTE FUNCTION credit_settlement_guard();
+        """;
+
+    /// <summary>
     /// ADR-0010 §3: one <c>charge</c> per credit order confirmed before the ledger existed (actor system, due = confirmation
     /// Dhaka date + the company's terms days), for companies that have no line yet. A company whose <c>credit_used</c> is not
     /// the sum of those orders stops it with the company ids: it never invents an opening balance. Runs the deferred checks

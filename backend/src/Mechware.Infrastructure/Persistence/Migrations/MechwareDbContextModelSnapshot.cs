@@ -1353,6 +1353,129 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount_minor");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreditNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credit_note_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid?>("PaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_id");
+
+                    b.Property<string>("PayoutReference")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("payout_reference");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rejected_by");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedBy");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("PaymentId");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("CompanyId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_credit_adjustments_company");
+
+                    b.HasIndex("Status", "CreatedAtUtc")
+                        .HasDatabaseName("ix_credit_adjustments_status");
+
+                    b.ToTable("credit_adjustments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_credit_adjustments_amount", "amount_minor BETWEEN -1000000000000 AND 1000000000000 AND currency = 'BDT' AND length(reason) >= 10");
+
+                            t.HasCheckConstraint("ck_credit_adjustments_four_eyes", "approved_by IS NULL OR approved_by <> requested_by");
+
+                            t.HasCheckConstraint("ck_credit_adjustments_kind", "CASE kind\nWHEN 'write_off' THEN amount_minor > 0 AND order_id IS NOT NULL AND num_nonnulls(payment_id, credit_note_id, payout_reference) = 0\nWHEN 'on_account_correction' THEN amount_minor <> 0 AND order_id IS NULL AND num_nonnulls(payment_id, credit_note_id) = 1\n    AND payout_reference IS NULL\nWHEN 'on_account_payout' THEN amount_minor > 0 AND order_id IS NULL AND num_nonnulls(payment_id, credit_note_id) = 1\n    AND payout_reference ~ '^[A-Z0-9]{4,40}$'\nELSE false END");
+
+                            t.HasCheckConstraint("ck_credit_adjustments_status", "CASE status\nWHEN 'requested' THEN num_nonnulls(approved_by, approved_at, rejected_by, rejected_at, decision_reason) = 0\nWHEN 'approved' THEN num_nonnulls(approved_by, approved_at) = 2 AND num_nonnulls(rejected_by, rejected_at, decision_reason) = 0\nWHEN 'rejected' THEN num_nonnulls(rejected_by, rejected_at, decision_reason) = 3 AND num_nonnulls(approved_by, approved_at) = 0\nELSE false END");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Credit.CreditLedgerEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1450,12 +1573,16 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AdjustmentId");
+
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ux_credit_ledger_idempotency_key");
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_credit_ledger_order");
+
+                    b.HasIndex("PaymentId");
 
                     b.HasIndex("CompanyId", "OrderId")
                         .HasDatabaseName("ix_credit_ledger_company_order");
@@ -1485,6 +1612,179 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_credit_ledger_signs", "CASE kind\nWHEN 'charge' THEN receivable_delta_minor > 0 AND on_account_delta_minor = 0\nWHEN 'payment_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND payment_id IS NOT NULL\nWHEN 'payment_on_account' THEN receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND payment_id IS NOT NULL\nWHEN 'on_account_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = receivable_delta_minor\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'payment_reversed' THEN payment_id IS NOT NULL AND ((receivable_delta_minor > 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor < 0))\nWHEN 'charge_reduced' THEN order_id IS NOT NULL AND ((receivable_delta_minor < 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)))\nWHEN 'write_off' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND adjustment_id IS NOT NULL\nWHEN 'on_account_correction' THEN receivable_delta_minor = 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'on_account_payout' THEN receivable_delta_minor = 0 AND on_account_delta_minor < 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nELSE false END");
 
                             t.HasCheckConstraint("ck_credit_ledger_totals", "receivable_after_minor >= 0 AND on_account_after_minor >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditPayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Allocations")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("allocations");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount_minor");
+
+                    b.Property<DateTime?>("BouncedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bounced_at");
+
+                    b.Property<Guid?>("BouncedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("bounced_by");
+
+                    b.Property<DateOnly?>("ChequeDate")
+                        .HasColumnType("date")
+                        .HasColumnName("cheque_date");
+
+                    b.Property<DateOnly?>("ClearedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("cleared_on");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("DrawerBank")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("drawer_bank");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("LateEntryReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("late_entry_reason");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("method");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<DateOnly>("ReceivedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("received_on");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reference");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rejected_by");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("request_hash")
+                        .IsFixedLength();
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<Guid?>("VerifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verified_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_payments_transfer_reference")
+                        .HasFilter("status <> 'rejected' AND method IN ('beftn','rtgs','npsb','bkash','nagad')");
+
+                    b.HasIndex("VerifiedBy");
+
+                    b.HasIndex("CompanyId", "ReceivedOn")
+                        .HasDatabaseName("ix_credit_payments_company");
+
+                    b.HasIndex("RecordedBy", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_payments_idempotency");
+
+                    b.HasIndex("Status", "CreatedAtUtc")
+                        .HasDatabaseName("ix_credit_payments_status");
+
+                    b.HasIndex("CompanyId", "DrawerBank", "Reference")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_payments_instrument_reference")
+                        .HasFilter("status <> 'rejected' AND method IN ('cheque','pay_order','bank_deposit')");
+
+                    b.ToTable("credit_payments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_credit_payments_allocations", "jsonb_typeof(allocations) = 'array' AND jsonb_array_length(allocations) <= 50");
+
+                            t.HasCheckConstraint("ck_credit_payments_amount", "amount_minor BETWEEN 1 AND 1000000000000 AND currency = 'BDT'");
+
+                            t.HasCheckConstraint("ck_credit_payments_four_eyes", "(verified_by IS NULL OR verified_by <> recorded_by) AND (rejected_by IS NULL OR rejected_by <> recorded_by)");
+
+                            t.HasCheckConstraint("ck_credit_payments_instrument", "(method IN ('cheque','pay_order','bank_deposit')) = (drawer_bank IS NOT NULL) AND (method IN ('cheque','pay_order')) = (cheque_date IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_credit_payments_method", "method IN ('beftn','rtgs','npsb','bkash','nagad', 'cheque','pay_order','bank_deposit', 'cash')");
+
+                            t.HasCheckConstraint("ck_credit_payments_status", "CASE status\nWHEN 'recorded' THEN num_nonnulls(verified_by, verified_at, cleared_on, rejected_by, rejected_at, bounced_by, bounced_at, decision_reason) = 0\nWHEN 'verified' THEN num_nonnulls(verified_by, verified_at, cleared_on) = 3\n    AND num_nonnulls(rejected_by, rejected_at, bounced_by, bounced_at, decision_reason) = 0\nWHEN 'rejected' THEN num_nonnulls(rejected_by, rejected_at, decision_reason) = 3\n    AND num_nonnulls(verified_by, verified_at, cleared_on, bounced_by, bounced_at) = 0\nWHEN 'bounced' THEN num_nonnulls(verified_by, verified_at, cleared_on, bounced_by, bounced_at, decision_reason) = 6\n    AND num_nonnulls(rejected_by, rejected_at) = 0 AND method <> 'cash'\nELSE false END");
+
+                            t.HasCheckConstraint("ck_credit_payments_texts", "reference ~ '^[A-Z0-9]{4,40}$' AND (drawer_bank IS NULL OR drawer_bank ~ '^[A-Z0-9]{2,60}$')");
                         });
                 });
 
@@ -4152,8 +4452,13 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Mechware.Domain.Credit.CreditLedgerEntry", b =>
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditAdjustment", b =>
                 {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ApprovedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Mechware.Domain.Companies.Company", null)
                         .WithMany()
                         .HasForeignKey("CompanyId")
@@ -4163,6 +4468,61 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasOne("Mechware.Domain.Orders.Order", null)
                         .WithMany()
                         .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Credit.CreditPayment", null)
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditLedgerEntry", b =>
+                {
+                    b.HasOne("Mechware.Domain.Credit.CreditAdjustment", null)
+                        .WithMany()
+                        .HasForeignKey("AdjustmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Credit.CreditPayment", null)
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditPayment", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("VerifiedBy")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

@@ -333,6 +333,45 @@ order (E5 later; it would post `payment_applied` from E4 confirmation), seller p
    pending trigger events.
 5. **Additions:** the ledger has FKs to `companies` and `orders` (RESTRICT) and CHECKs that a receivable moves only with an
    order and never rises with an adjustment id; options section `Credit` holds all six owner defaults (§13).
-6. **Not yet in the schema** (one migration per unit): `credit_payments`, `credit_adjustments` and their CHECKs/indexes
-   (B3.3b), `companies.credit_hold_override_until` (B3.7). `ck_companies_credit_within_limit` still exists and must be
-   dropped by B3.5 before a bounce can take used credit above the limit (§1).
+6. **Not yet in the schema** (one migration per unit): `companies.credit_hold_override_until` (B3.7).
+   `ck_companies_credit_within_limit` still exists and must be dropped by B3.5 before a bounce can take used credit above
+   the limit (§1). (`credit_payments` and `credit_adjustments` came with B3.3b, below.)
+
+## Implementation notes: where B3.3b deviates from this design (2026-11-16, AI assistant, not reviewed)
+Migration `AddCreditPayments`; domain `CreditPayment`, `CreditAdjustment`, `CreditAllocationPlanner`. Each point below is a
+deviation from, or a decision the text above left open:
+1. **§4 duplicate keys are stricter: the method is not part of them.** Transfer ids: unique `reference` across `beftn, rtgs,
+   npsb, bkash, nagad` (design: `(method, reference)`). Instruments: unique `(company_id, drawer_bank, reference)` across
+   `cheque, pay_order, bank_deposit` (design: with `method`). So the same money recorded under a wrong method (a pay order
+   entered once as a cheque, a transfer once as BEFTN and once as NPSB) is still a duplicate. Cost: a cheque and a deposit
+   slip of the same number at the same bank for the same company collide. Rejected rows are still excluded.
+2. **§4 normalisation is wider:** after Unicode NFKC (full-width forms), every space, punctuation mark and symbol is dropped
+   (not only spaces and `-`), digits of any script count as 0-9 (Bengali ১২৩ = 123), letters are upper-cased, and any other
+   character (a Cyrillic look-alike, a Bengali letter) is refused, so no look-alike makes a second key. The drawer bank is
+   normalised the same way (2–60). The database CHECKs the normalised form.
+3. **§4 columns added:** `rejected_by/at` and `bounced_by/at` (the design names only `verified_by/at`); a status-shape CHECK;
+   `allocations` is a jsonb list `[{OrderId, AmountMinor}]` (≤ 50, CHECKed); the record-idempotency body hash is stored on
+   the payment (`request_hash`, SHA-256 hex) with `ux (recorded_by, idempotency_key)` over all statuses; `xmin` tokens; foreign
+   keys to `users` for `recorded_by`, `verified_by`, `requested_by`, `approved_by` (a verifier/approver must be a real user, so
+   a made-up id cannot pass four-eyes). The amount CHECK is the hard ceiling 1,000,000,000,000 poisha (the highest
+   `Credit:MaxPaymentMinor` the options accept); the configured limits are checked by the domain.
+4. **§5 rejection is four-eyes too** (domain + CHECK `rejected_by <> recorded_by`), as the permission table says ("verify /
+   reject a payment someone else recorded"). Adjustments: the requester MAY reject (withdraw) their own request, since a
+   rejection moves no money (the design is silent).
+5. **§4 dates:** a post-dated cheque is one whose `cheque_date` is after the Dhaka date of recording (`AcceptPostDatedCheques
+   = false` refuses those); `cleared_on` must be ≥ `received_on` as well as ≥ `cheque_date` (a back-dated clearing is refused,
+   CS11); `late_entry_reason` is required exactly when `received_on < today − 30` and refused otherwise.
+6. **§4 wallets:** a bKash/Nagad reference that is a Bangladeshi mobile number (`01XXXXXXXXX`, `8801XXXXXXXXX`) is refused
+   (CS31, domain half). **Cash:** receipt `CR{yyMMdd of received_on}{first 6 hex of the payment id}`, stored without dashes;
+   not in a unique index (the design lists none for cash).
+7. **New guard trigger** (`CreditLedgerSql.InstallSettlement`, like `price_lists`): rows are inserted only in their first
+   status; an update may write only the columns of the next step (recorded → verified | rejected, verified → bounced;
+   requested → approved | rejected); DELETE and TRUNCATE are refused. So even a **recorded** payment cannot be edited: a
+   mistake is rejected and recorded again.
+8. **§6 planner:** named orders get exactly their amounts and are left out of the FIFO pass ("the other open receivables");
+   the last tie-break is the order id in PostgreSQL uuid order (`Guid.CompareTo` follows it); a charge with receivable 0 is
+   not open. `plan.Postings(...)` builds the verification lines with keys `verify:{paymentId}:{orderId|on_account}`.
+9. **§8.3 adjustments:** `amount_minor` is signed (negative only for a correction); a correction or payout names exactly ONE
+   source (`payment_id` or `credit_note_id`), so a payout of money from several sources is one adjustment per source (B3.6
+   may revisit); `Approve` must be given the source payment and refuses its recorder and verifier. The reason is 10–500
+   characters as §8.3 says (the B3.3b brief said 5–500; the design was followed).

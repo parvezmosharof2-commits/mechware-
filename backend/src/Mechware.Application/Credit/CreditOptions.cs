@@ -1,4 +1,5 @@
 using Mechware.Domain.Companies;
+using Mechware.Domain.Credit;
 
 namespace Mechware.Application.Credit;
 
@@ -33,6 +34,12 @@ public sealed class CreditOptions
     public bool KeepOverPaymentsOnAccount { get; set; } = true;
     /// <summary>Owner 6 (B3.9): the company roles that see the balance and the statement.</summary>
     public CompanyRoles BalanceVisibleTo { get; set; } = CompanyRoles.Admin | CompanyRoles.Buyer;
+
+    /// <summary>Owner 4 as the domain reads it (B3.4 passes it to <see cref="CreditPayment.Record"/>); call on <see cref="Validated"/> options.</summary>
+    public CreditPaymentRules PaymentRules() => new(
+        PaymentMethods.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(m => Enum.Parse<CreditPaymentMethod>(m.Replace("_", string.Empty, StringComparison.Ordinal), ignoreCase: true)).ToHashSet(),
+        MaxPaymentMinor, MaxCashPaymentMinor, AcceptPostDatedCheques);
 
     /// <summary>When the credit days of an order confirmed at <paramref name="confirmedAtUtc"/> start.</summary>
     public DateTime TermsStartUtc(DateTime confirmedAtUtc) => DueDateStart == CreditDueDateStart.Confirmation

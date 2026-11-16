@@ -77,8 +77,10 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<CostCentre> CostCentres => Set<CostCentre>();
     public DbSet<CompanyMember> CompanyMembers => Set<CompanyMember>();
     public DbSet<CompanyInvitationDecline> CompanyInvitationDeclines => Set<CompanyInvitationDecline>();
-    // Credit ledger (B3.3): append-only; triggers in CreditLedgerSql.
+    // Credit ledger (B3.3, append-only) and its payments and adjustments (B3.3b, changed only step by step): triggers in CreditLedgerSql.
     public DbSet<Mechware.Domain.Credit.CreditLedgerEntry> CreditLedgerEntries => Set<Mechware.Domain.Credit.CreditLedgerEntry>();
+    public DbSet<Mechware.Domain.Credit.CreditPayment> CreditPayments => Set<Mechware.Domain.Credit.CreditPayment>();
+    public DbSet<Mechware.Domain.Credit.CreditAdjustment> CreditAdjustments => Set<Mechware.Domain.Credit.CreditAdjustment>();
 
     // Approvals
     public DbSet<ApprovalRule> ApprovalRules => Set<ApprovalRule>();

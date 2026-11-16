@@ -47,6 +47,7 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         db.Database.ExecuteSqlRaw(PriceListSql.Install);
         db.Database.ExecuteSqlRaw(StockMovementSql.Install);
         db.Database.ExecuteSqlRaw(CreditLedgerSql.Install);
+        db.Database.ExecuteSqlRaw(CreditLedgerSql.InstallSettlement);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

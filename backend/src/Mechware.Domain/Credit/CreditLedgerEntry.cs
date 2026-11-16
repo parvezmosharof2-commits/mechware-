@@ -24,6 +24,8 @@ public static class CreditLedgerKeys
 {
     public const int MaxLength = 120;
     public static string Charge(Guid orderId) => $"charge:{orderId:N}";
+    public static string Verify(Guid paymentId, Guid orderId) => $"verify:{paymentId:N}:{orderId:N}";
+    public static string VerifyOnAccount(Guid paymentId) => $"verify:{paymentId:N}:on_account";
 }
 
 /// <summary>Credit dates are Bangladesh calendar dates: a fixed +06:00 (no daylight saving), as for E8.3.</summary>
