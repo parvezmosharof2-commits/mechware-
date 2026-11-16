@@ -42,40 +42,45 @@ public class CompanyTests
         act.Should().Throw<ValidationException>().Which.Errors.Select(e => e.Field).Should().Contain(field);
     }
 
+    // B3.3: ReserveCredit became ChargeCredit (ADR-0010 §3): same checks, and it returns the ledger line.
+    private static Mechware.Domain.Credit.CreditLedgerEntry Charge(Company c, long taka) =>
+        c.ChargeCredit(Guid.NewGuid(), taka * 100, DateTime.UtcNow, DateTime.UtcNow);
+
     [Fact]
-    public void ReserveCredit_RequiresActiveCompanyAndTerms()
+    public void ChargeCredit_RequiresActiveCompanyAndTerms()
     {
         var pending = NewCompany(activate: false);
-        pending.Invoking(c => c.ReserveCredit(Bdt(1))).Should().Throw<ConflictException>().Which.Code.Should().Be("COMPANY_NOT_ACTIVE");
+        pending.Invoking(c => Charge(c, 1)).Should().Throw<ConflictException>().Which.Code.Should().Be("COMPANY_NOT_ACTIVE");
 
         var noTerms = NewCompany();
-        noTerms.Invoking(c => c.ReserveCredit(Bdt(1))).Should().Throw<ConflictException>().Which.Code.Should().Be("NO_CREDIT_TERMS");
+        noTerms.Invoking(c => Charge(c, 1)).Should().Throw<ConflictException>().Which.Code.Should().Be("NO_CREDIT_TERMS");
 
         var suspended = NewCompany();
         suspended.SetCredit(CreditTerms.Net30, Bdt(1000));
         suspended.Suspend();
-        suspended.Invoking(c => c.ReserveCredit(Bdt(1))).Should().Throw<ConflictException>().Which.Code.Should().Be("COMPANY_NOT_ACTIVE");
+        suspended.Invoking(c => Charge(c, 1)).Should().Throw<ConflictException>().Which.Code.Should().Be("COMPANY_NOT_ACTIVE");
     }
 
     [Fact]
-    public void ReserveCredit_AllowsExactlyUpToTheLimit()
+    public void ChargeCredit_AllowsExactlyUpToTheLimit()
     {
         var c = NewCompany();
         c.SetCredit(CreditTerms.Net15, Bdt(1000));
-        c.ReserveCredit(Bdt(600));
-        c.ReserveCredit(Bdt(400));
+        Charge(c, 600);
+        Charge(c, 400);
         c.CreditAvailable.IsZero.Should().BeTrue();
-        c.Invoking(x => x.ReserveCredit(new Money(0.01m, Currency.BDT))).Should().Throw<ConflictException>().Which.Code.Should().Be("CREDIT_LIMIT_EXCEEDED");
+        c.Invoking(x => x.ChargeCredit(Guid.NewGuid(), 1, DateTime.UtcNow, DateTime.UtcNow)).Should().Throw<ConflictException>().Which.Code.Should().Be("CREDIT_LIMIT_EXCEEDED");
     }
 
     [Fact]
-    public void ReserveCredit_RejectedOrderChangesNothing()
+    public void ChargeCredit_RejectedOrderChangesNothing()
     {
         var c = NewCompany();
         c.SetCredit(CreditTerms.Net30, Bdt(1000));
-        c.ReserveCredit(Bdt(900));
-        c.Invoking(x => x.ReserveCredit(Bdt(101))).Should().Throw<ConflictException>();
+        Charge(c, 900);
+        c.Invoking(x => Charge(x, 101)).Should().Throw<ConflictException>();
         c.CreditUsed.Should().Be(Bdt(900));
+        c.CreditLedgerSeq.Should().Be(1, "a refused charge writes no line");
     }
 
     [Fact]
@@ -83,7 +88,7 @@ public class CompanyTests
     {
         var c = NewCompany();
         c.SetCredit(CreditTerms.Net30, Bdt(1000));
-        c.ReserveCredit(Bdt(700));
+        Charge(c, 700);
 
         c.Invoking(x => x.SetCredit(CreditTerms.Net30, Bdt(699))).Should().Throw<ConflictException>().Which.Code.Should().Be("CREDIT_LIMIT_BELOW_USED");
         c.Invoking(x => x.SetCredit(CreditTerms.None, Bdt(0))).Should().Throw<ConflictException>();
@@ -94,16 +99,23 @@ public class CompanyTests
         c.Invoking(x => x.SetCredit(CreditTerms.Net30, new Money(10, Currency.USD))).Should().Throw<CurrencyMismatchException>();
     }
 
+    // B3.3: credit is released only by a ledger line now (ReleaseCredit is gone); the rule is the same.
     [Fact]
     public void ReleaseCredit_CannotGoBelowZero()
     {
         var c = NewCompany();
         c.SetCredit(CreditTerms.Net30, Bdt(1000));
-        c.ReserveCredit(Bdt(300));
-        c.ReleaseCredit(Bdt(300));
+        var ledger = new Mechware.Domain.Credit.CreditLedger(c, []);
+        var order = Guid.NewGuid();
+        ledger.Charge(order, 30_000, DateTime.UtcNow, DateTime.UtcNow);
+        ledger.Post(Paid(order, 30_000), DateTime.UtcNow);
         c.CreditUsed.IsZero.Should().BeTrue();
-        c.Invoking(x => x.ReleaseCredit(Bdt(1))).Should().Throw<ConflictException>();
+        ledger.Invoking(l => l.Post(Paid(order, 1), DateTime.UtcNow)).Should().Throw<ConflictException>();
     }
+
+    private static Mechware.Domain.Credit.CreditPosting Paid(Guid order, long minor) =>
+        new(Mechware.Domain.Credit.CreditLedgerKind.PaymentApplied, -minor, 0, $"verify:{Guid.NewGuid():N}:{order:N}",
+            DateOnly.FromDateTime(DateTime.UtcNow), OrderId: order, PaymentId: Guid.NewGuid());
 
     [Fact]
     public void RandomOperations_NeverBreakCreditInvariants()
@@ -112,6 +124,8 @@ public class CompanyTests
         {
             var rng = new Random(seed);
             var c = NewCompany();
+            var ledger = new Mechware.Domain.Credit.CreditLedger(c, []);
+            var orders = new List<Guid>();
             for (int i = 0; i < 200; i++)
             {
                 try
@@ -119,8 +133,12 @@ public class CompanyTests
                     switch (rng.Next(5))
                     {
                         case 0: c.SetCredit(rng.Next(3) == 0 ? CreditTerms.None : CreditTerms.Net30, Bdt(rng.Next(0, 5000))); break;
-                        case 1 or 2: c.ReserveCredit(new Money(rng.Next(-10, 3000) + rng.Next(100) / 100m, Currency.BDT)); break;
-                        case 3: c.ReleaseCredit(new Money(rng.Next(-10, 3000), Currency.BDT)); break;
+                        case 1 or 2:
+                            var id = Guid.NewGuid();
+                            ledger.Charge(id, rng.Next(-1000, 300_000), DateTime.UtcNow, DateTime.UtcNow);
+                            orders.Add(id);
+                            break;
+                        case 3 when orders.Count > 0: ledger.Post(Paid(orders[rng.Next(orders.Count)], rng.Next(1, 300_000)), DateTime.UtcNow); break;
                         default: if (rng.Next(2) == 0) c.Suspend(); else c.Activate(); break;
                     }
                 }

@@ -349,28 +349,38 @@ public class CompanyServiceTests(PostgresDatabaseFixture fixture) : IClassFixtur
             await seed.SaveChangesAsync();
         }
 
+        // B3.3 (ADR-0010 §3): credit moves only with a ledger line now, so each racer charges its own (bare) order and stores
+        // the line with the company, without a row lock: the xmin token and the (company, seq) key decide the race.
+        var buyer = await TestUsers.CreateAsync(fixture);
+        var orderIds = new List<Guid>();
+        await using (var seed = fixture.CreateContext())
+            for (var i = 0; i < 30; i++) orderIds.Add(await CreditTestData.InsertOrderAsync(seed, buyer, company, 10_000));
+
         // 30 racing orders of 100 BDT against a 1,000 BDT limit: at most 10 can win, and the stored total must match the winners.
         using var gate = new ManualResetEventSlim(false);
-        var tasks = Enumerable.Range(0, 30).Select(_ => Task.Run(async () =>
+        var tasks = orderIds.Select(orderId => Task.Run(async () =>
         {
             await using var db = fixture.CreateContext();
             var c = await db.Companies.SingleAsync(x => x.Id == company);
             gate.Wait();
             try
             {
-                c.ReserveCredit(new Money(100, Currency.BDT));
+                db.CreditLedgerEntries.Add(c.ChargeCredit(orderId, 10_000, DateTime.UtcNow, DateTime.UtcNow));
                 await db.SaveChangesAsync();
                 return true;
             }
-            catch (Exception ex) when (ex is ConflictException or DbUpdateConcurrencyException) { return false; }
+            catch (Exception ex) when (ex is ConflictException or DbUpdateException) { return false; }
         })).ToList();
         gate.Set();
         int winners = (await Task.WhenAll(tasks)).Count(x => x);
 
         await using var check = fixture.CreateContext();
         var final = await check.Companies.AsNoTracking().SingleAsync(x => x.Id == company);
+        var lines = await check.CreditLedgerEntries.AsNoTracking().Where(l => l.CompanyId == company).OrderBy(l => l.Seq).ToListAsync();
         winners.Should().BeInRange(1, 10);
         final.CreditUsedMinor.Should().Be(winners * 10_000L);
         final.CreditUsedMinor.Should().BeLessThanOrEqualTo(final.CreditLimitMinor);
+        lines.Select(l => l.Seq).Should().Equal(Enumerable.Range(1, winners).Select(i => (long)i));
+        lines.Sum(l => l.ReceivableDeltaMinor).Should().Be(final.CreditUsedMinor, "every unit of credit used is explained by a line");
     }
 }

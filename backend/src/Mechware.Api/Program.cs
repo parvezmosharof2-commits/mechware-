@@ -133,6 +133,9 @@ builder.Services.AddSingleton(Mechware.Infrastructure.Shipping.ShippingOptions.F
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
 // Legal delivery periods (E8.3): Delivery:SameCityDays / OtherCityDays / HandoverHours; a value that is not a whole number above 0 stops the host here.
 builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.From(builder.Configuration));
+// Credit settlement (ADR-0010 §13): defaults pending owner confirmation, changed under Credit:*; an invalid value stops the host here.
+builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validated(
+    builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
 // Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
 builder.Services.AddSingleton(Mechware.Infrastructure.Pricing.PricingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));

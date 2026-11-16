@@ -313,3 +313,26 @@ order (E5 later; it would post `payment_applied` from E4 confirmation), seller p
   table can be added later (H4).
 - Two colluding finance staff can still verify a fake payment. The defences are mandatory staff 2FA, step-up, the audit
   trail, nightly reconciliation and the PDC/clearing dates.
+
+## Implementation notes: where B3.2/B3.3 deviate from this design (2026-11-16, AI assistant, not reviewed)
+1. **§2.3 item 2, the chain check is deferred, not `BEFORE INSERT`.** It runs in the same `DEFERRABLE INITIALLY DEFERRED`
+   constraint trigger as item 3: at COMMIT each new line must have line n − 1 with `*_after` = previous `*_after` + delta
+   (line 1: = delta), and the company must equal its last line. Reason: EF Core orders the inserts of one save by key, not
+   by `seq`, so a `BEFORE INSERT` check would refuse a valid multi-line event (B3.4 verification). Still O(1) per line.
+2. **§3, `ChargeCredit` signature:** `Company.ChargeCredit(orderId, amountMinor, confirmedAtUtc, termsStartUtc, actor,
+   correlationId)`; the company computes `due_on` = Dhaka date of `termsStartUtc` + its terms days, so a caller cannot pass
+   a wrong date. `termsStartUtc` comes from `Credit:DueDateStart` (owner decision 1; only `Confirmation` is accepted until
+   F1 provides delivery dates). Services call it through the pure `CreditLedger.Charge`, which makes a replayed
+   `charge:{orderId}` a no-op.
+3. **`ReleaseCredit` is deleted, not kept.** Its rule (never below zero) is the receivable ≥ 0 rule of the single internal
+   writer `Company.PostCredit` (same code `CREDIT_RELEASE_EXCEEDS_USED`); a public method that lowers `credit_used` without
+   a line would fail at COMMIT anyway.
+4. **Backfill details (§3):** the confirmation instant is `confirmed_at`, else the first `Confirmed` order event, else
+   `placed_at`; it touches only companies with no line yet; it also stops for a company with `credit_used` > 0 and no
+   confirmed credit order; it ends with `SET CONSTRAINTS ALL IMMEDIATE` so later DDL in the same transaction meets no
+   pending trigger events.
+5. **Additions:** the ledger has FKs to `companies` and `orders` (RESTRICT) and CHECKs that a receivable moves only with an
+   order and never rises with an adjustment id; options section `Credit` holds all six owner defaults (§13).
+6. **Not yet in the schema** (one migration per unit): `credit_payments`, `credit_adjustments` and their CHECKs/indexes
+   (B3.3b), `companies.credit_hold_override_until` (B3.7). `ck_companies_credit_within_limit` still exists and must be
+   dropped by B3.5 before a bounce can take used credit above the limit (§1).

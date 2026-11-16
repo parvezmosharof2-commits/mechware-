@@ -1041,9 +1041,17 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<long>("CreditLedgerSeq")
+                        .HasColumnType("bigint")
+                        .HasColumnName("credit_ledger_seq");
+
                     b.Property<long>("CreditLimitMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("credit_limit");
+
+                    b.Property<long>("CreditOnAccountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("credit_on_account");
 
                     b.Property<int>("CreditTerms")
                         .HasColumnType("integer")
@@ -1118,6 +1126,8 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.ToTable("companies", null, t =>
                         {
+                            t.HasCheckConstraint("ck_companies_credit_ledger", "credit_on_account >= 0 AND credit_ledger_seq >= 0");
+
                             t.HasCheckConstraint("ck_companies_credit_non_negative", "credit_limit >= 0 AND credit_used >= 0");
 
                             t.HasCheckConstraint("ck_companies_credit_within_limit", "credit_used <= credit_limit");
@@ -1340,6 +1350,141 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("cost_centres", null, t =>
                         {
                             t.HasCheckConstraint("ck_cost_centres_budget", "monthly_budget IS NULL OR monthly_budget >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid?>("AdjustmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("adjustment_id");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<string>("CorrelationId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreditNoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credit_note_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
+
+                    b.Property<DateOnly?>("DueOn")
+                        .HasColumnType("date")
+                        .HasColumnName("due_on");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateOnly>("OccurredOn")
+                        .HasColumnType("date")
+                        .HasColumnName("occurred_on");
+
+                    b.Property<long>("OnAccountAfterMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("on_account_after_minor");
+
+                    b.Property<long>("OnAccountDeltaMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("on_account_delta_minor");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid?>("PaymentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("payment_id");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<long>("ReceivableAfterMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("receivable_after_minor");
+
+                    b.Property<long>("ReceivableDeltaMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("receivable_delta_minor");
+
+                    b.Property<long>("Seq")
+                        .HasColumnType("bigint")
+                        .HasColumnName("seq");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_ledger_idempotency_key");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_credit_ledger_order");
+
+                    b.HasIndex("CompanyId", "OrderId")
+                        .HasDatabaseName("ix_credit_ledger_company_order");
+
+                    b.HasIndex("CompanyId", "Seq")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_ledger_company_seq");
+
+                    b.ToTable("credit_ledger_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_credit_ledger_currency", "currency = 'BDT'");
+
+                            t.HasCheckConstraint("ck_credit_ledger_due_on", "(kind = 'charge') = (due_on IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_credit_ledger_key", "length(idempotency_key) > 0");
+
+                            t.HasCheckConstraint("ck_credit_ledger_kind", "kind IN ('charge','payment_applied','payment_on_account','on_account_applied','payment_reversed','charge_reduced','write_off','on_account_correction','on_account_payout')");
+
+                            t.HasCheckConstraint("ck_credit_ledger_moves", "receivable_delta_minor <> 0 OR on_account_delta_minor <> 0");
+
+                            t.HasCheckConstraint("ck_credit_ledger_no_adjustment_debt", "receivable_delta_minor <= 0 OR adjustment_id IS NULL");
+
+                            t.HasCheckConstraint("ck_credit_ledger_receivable_order", "receivable_delta_minor = 0 OR order_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_credit_ledger_seq", "seq >= 1");
+
+                            t.HasCheckConstraint("ck_credit_ledger_signs", "CASE kind\nWHEN 'charge' THEN receivable_delta_minor > 0 AND on_account_delta_minor = 0\nWHEN 'payment_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND payment_id IS NOT NULL\nWHEN 'payment_on_account' THEN receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND payment_id IS NOT NULL\nWHEN 'on_account_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = receivable_delta_minor\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'payment_reversed' THEN payment_id IS NOT NULL AND ((receivable_delta_minor > 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor < 0))\nWHEN 'charge_reduced' THEN order_id IS NOT NULL AND ((receivable_delta_minor < 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)))\nWHEN 'write_off' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND adjustment_id IS NOT NULL\nWHEN 'on_account_correction' THEN receivable_delta_minor = 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'on_account_payout' THEN receivable_delta_minor = 0 AND on_account_delta_minor < 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nELSE false END");
+
+                            t.HasCheckConstraint("ck_credit_ledger_totals", "receivable_after_minor >= 0 AND on_account_after_minor >= 0");
                         });
                 });
 
@@ -4005,6 +4150,20 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Credit.CreditLedgerEntry", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Mechware.Domain.Identity.Address", b =>

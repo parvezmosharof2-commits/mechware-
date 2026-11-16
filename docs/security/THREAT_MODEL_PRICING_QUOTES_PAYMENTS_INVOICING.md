@@ -548,7 +548,7 @@ merge-এর পরে cookie না মোছা (৪), logout-এ cookie ন�
 
 ## ১২. B3 — বাকিতে কেনার টাকা আদায় (credit settlement): অপব্যবহারের ঘটনা ও টেস্ট (২০২৬-১১-১৬) [RULE]
 
-> **অবস্থা:** ডিজাইন ইউনিট B3.1-এর অংশ, AI সহকারীর লেখা। কোনো মানুষ রিভিউ করেননি, আর এখনো কোনো কোড বা টেস্ট নেই।
+> **অবস্থা:** ডিজাইন ইউনিট B3.1-এর অংশ, AI সহকারীর লেখা। কোনো মানুষ রিভিউ করেননি, আর ২০২৬-১১-১৬ পর্যন্ত শুধু লেজার-কোর (B3.2, B3.3) কোড ও টেস্ট হয়েছে: append-only লেজার, commit-এ DB-এর মিল-পরীক্ষা, charge-এ idempotency; payment, adjustment, allocation ও বাকি সারির টেস্ট এখনো নেই (B3.3b থেকে)।
 > নকশা: [`docs/adr/0010-credit-settlement.md`](../adr/0010-credit-settlement.md)। নিচের নামগুলোই প্রতিটা ইউনিটের exit test (`docs/modules/B3.md`)।
 > **এখনকার অবস্থা (কোড পড়ে):** credit order confirm হলে (`OrderService.SaveAsync` বা `ApproveOrderAsync`, company row `FOR UPDATE`) `credit_used` বাড়ে; কোনো কিছু কখনো কমায় না (`ReleaseCredit`-কে শুধু unit test ডাকে)। গ্রাহকের পেমেন্টের কোনো রেকর্ড, due date, statement বা ইতিহাস নেই। কোম্পানির যেকোনো সদস্য (Requester সহ) `GET /companies/{id}`-এ limit ও used দেখেন।
 

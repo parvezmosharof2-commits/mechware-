@@ -2,6 +2,7 @@ using Mechware.Domain.Common.Enums;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Common.Primitives;
 using Mechware.Domain.Common.ValueObjects;
+using Mechware.Domain.Credit;
 
 namespace Mechware.Domain.Companies;
 
@@ -22,7 +23,12 @@ public sealed class Company : AggregateRoot<Guid>
     public CreditTerms CreditTerms { get; private set; } = CreditTerms.None;
     public Currency Currency { get; private set; } = Currency.BDT;
     public long CreditLimitMinor { get; private set; }
+    /// <summary>The sum of open receivables: the running total of the credit ledger, cached here for the limit check (ADR-0010 §1).</summary>
     public long CreditUsedMinor { get; private set; }
+    /// <summary>Money MECHWARE holds for the company that is not applied to an order; it does not raise available credit.</summary>
+    public long CreditOnAccountMinor { get; private set; }
+    /// <summary>The number of the company's last credit ledger line (0 = none).</summary>
+    public long CreditLedgerSeq { get; private set; }
     public Guid? DefaultPriceListId { get; private set; }
     public Guid? AccountManagerId { get; private set; }
 
@@ -119,31 +125,47 @@ public sealed class Company : AggregateRoot<Guid>
     }
 
     /// <summary>
-    /// Brief §8.7: allowed only if <c>used + total ≤ limit</c>. The caller must hold a row lock (or rely on the
-    /// xmin concurrency token) so two orders cannot both pass the check.
+    /// Brief §8.7, ADR-0010 §3: the charge of a credit order at its confirmation, allowed only if <c>used + total ≤ limit</c>.
+    /// Returns the ledger line, which the caller stores in the same transaction. The due date is the Dhaka date the terms
+    /// start (<paramref name="termsStartUtc"/>; the confirmation by default, owner decision 1) plus the company's terms days
+    /// now; a later terms change never moves it. The caller must hold the company row lock (or rely on the xmin concurrency
+    /// token) so two orders cannot both pass the check. Use <see cref="CreditLedger.Charge"/>, which also makes a replay a no-op.
     /// </summary>
-    public void ReserveCredit(Money amount)
+    public CreditLedgerEntry ChargeCredit(Guid orderId, long amountMinor, DateTime confirmedAtUtc, DateTime termsStartUtc,
+        Guid? actorUserId = null, string? correlationId = null)
     {
-        if (amount.Currency != Currency) throw new CurrencyMismatchException(amount.Currency, Currency);
-        if (!amount.IsPositive) throw new ValidationException("amount", "Amount must be positive.");
+        if (Currency != Currency.BDT) throw new CurrencyMismatchException(Currency.BDT, Currency);
+        if (amountMinor <= 0) throw new ValidationException("amount", "Amount must be positive.");
         if (!IsActive) throw new ConflictException("COMPANY_NOT_ACTIVE", "The company account is not active.");
         if (CreditTerms == CreditTerms.None) throw new ConflictException("NO_CREDIT_TERMS", "The company has no credit terms.");
-        if (amount.ToMinorUnits() > CreditLimitMinor - CreditUsedMinor)
+        if (amountMinor > CreditLimitMinor - CreditUsedMinor)
             throw new ConflictException("CREDIT_LIMIT_EXCEEDED", "The order exceeds the available credit limit.");
 
-        CreditUsedMinor += amount.ToMinorUnits();
-        Touch();
+        var dueOn = CreditCalendar.DhakaDate(termsStartUtc).AddDays((int)CreditTerms);
+        return PostCredit(new CreditPosting(CreditLedgerKind.Charge, amountMinor, 0, CreditLedgerKeys.Charge(orderId),
+            CreditCalendar.DhakaDate(confirmedAtUtc), OrderId: orderId, DueOn: dueOn, ActorUserId: actorUserId, CorrelationId: correlationId),
+            confirmedAtUtc);
     }
 
-    public void ReleaseCredit(Money amount)
+    /// <summary>
+    /// The only place the cached credit totals change (ADR-0010 §1): numbers the line <c>seq + 1</c>, works out both running
+    /// totals and refuses one below zero (no release beyond what is used, no on-account money spent twice). Called through
+    /// <see cref="CreditLedger"/>, which checks the order and the key first.
+    /// </summary>
+    internal CreditLedgerEntry PostCredit(CreditPosting posting, DateTime nowUtc)
     {
-        if (amount.Currency != Currency) throw new CurrencyMismatchException(amount.Currency, Currency);
-        if (!amount.IsPositive) throw new ValidationException("amount", "Amount must be positive.");
-        if (amount.ToMinorUnits() > CreditUsedMinor)
-            throw new ConflictException("CREDIT_RELEASE_EXCEEDS_USED", "Cannot release more credit than is used.");
+        CreditLedgerEntry.Validate(posting);
+        var receivable = checked(CreditUsedMinor + posting.ReceivableDeltaMinor);
+        var onAccount = checked(CreditOnAccountMinor + posting.OnAccountDeltaMinor);
+        if (receivable < 0) throw new ConflictException("CREDIT_RELEASE_EXCEEDS_USED", "Cannot release more credit than is used.");
+        if (onAccount < 0) throw new ConflictException("CREDIT_ON_ACCOUNT_EXCEEDED", "Cannot use more on-account money than the company has.");
 
-        CreditUsedMinor -= amount.ToMinorUnits();
+        var entry = new CreditLedgerEntry(Id, CreditLedgerSeq + 1, posting, receivable, onAccount, nowUtc);
+        CreditUsedMinor = receivable;
+        CreditOnAccountMinor = onAccount;
+        CreditLedgerSeq = entry.Seq;
         Touch();
+        return entry;
     }
 
     private void Touch() => UpdatedAtUtc = DateTime.UtcNow;

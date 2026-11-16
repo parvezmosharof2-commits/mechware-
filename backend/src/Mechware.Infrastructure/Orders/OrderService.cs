@@ -21,9 +21,10 @@ namespace Mechware.Infrastructure.Orders;
 
 public sealed partial class OrderService(
     MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter, IPriceResolver prices,
-    Func<DateTime, string>? orderNumbers = null, DeliveryOptions? delivery = null) : IOrderService
+    Func<DateTime, string>? orderNumbers = null, DeliveryOptions? delivery = null, Application.Credit.CreditOptions? credit = null) : IOrderService
 {
     private readonly DeliveryOptions deliveryOptions = delivery ?? new DeliveryOptions();
+    private readonly Application.Credit.CreditOptions creditOptions = credit ?? new Application.Credit.CreditOptions();
     private readonly Func<DateTime, string> _nextOrderNumber = orderNumbers ?? (now => OrderNumber.Generate(now));
 
     [GeneratedRegex("^[A-Za-z0-9_-]{8,100}$")]
@@ -388,7 +389,7 @@ public sealed partial class OrderService(
             if (order.PaysOnCredit)
             {
                 var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {order.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
-                try { company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor)); }
+                try { await ChargeCreditAsync(company, order, null, now, ct); }
                 catch (ConflictException)
                 {
                     // The credit was used up while the order waited: it cannot go ahead on credit.
@@ -807,7 +808,7 @@ public sealed partial class OrderService(
         else if (request.PayOnCredit)
         {
             var company = (await db.Companies.FromSqlInterpolated($"SELECT c.*, c.xmin FROM companies c WHERE c.id = {request.CompanyId!.Value} FOR UPDATE").ToListAsync(ct)).Single();
-            company.ReserveCredit(Domain.Common.ValueObjects.Money.FromMinorUnits(order.GrandTotalMinor));
+            await ChargeCreditAsync(company, order, order.UserId, now, ct);
             order.Confirm(await ConfirmationDeadlinesAsync(order, now, ct), order.UserId, "Placed on credit terms", now);
         }
 
@@ -830,6 +831,19 @@ public sealed partial class OrderService(
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// ADR-0010 §3: the one charge of a credit order at its confirmation, in the caller's transaction and under the company row
+    /// lock the caller took (lock order: price lists or the order, then the company, then promotions). The due date starts as
+    /// <c>Credit:DueDateStart</c> says. A charge already on the ledger for this order is not posted again.
+    /// </summary>
+    private async Task ChargeCreditAsync(Company company, Order order, Guid? actorId, DateTime now, CancellationToken ct)
+    {
+        var lines = await db.CreditLedgerEntries.Where(e => e.CompanyId == company.Id && e.OrderId == order.Id).ToListAsync(ct);
+        var posted = new Domain.Credit.CreditLedger(company, lines)
+            .Charge(order.Id, order.GrandTotalMinor, now, creditOptions.TermsStartUtc(now), actorId);
+        if (!posted.AlreadyApplied) db.CreditLedgerEntries.Add(posted.Entry);
     }
 
     private async Task<DateTime> ReserveAsync(Guid orderId, List<PlaceOrderLine> lines, TimeSpan holdFor, CancellationToken ct)

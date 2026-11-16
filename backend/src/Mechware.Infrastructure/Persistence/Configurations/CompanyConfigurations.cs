@@ -15,6 +15,7 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
             t.HasCheckConstraint("ck_companies_credit_non_negative", "credit_limit >= 0 AND credit_used >= 0");
             t.HasCheckConstraint("ck_companies_credit_within_limit", "credit_used <= credit_limit");
             t.HasCheckConstraint("ck_companies_terms_limit", "credit_terms <> 0 OR credit_limit = 0");
+            t.HasCheckConstraint("ck_companies_credit_ledger", "credit_on_account >= 0 AND credit_ledger_seq >= 0");
         });
         b.MapAudit();
         b.IgnoreEvents();
@@ -38,7 +39,10 @@ internal sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         b.Property(c => c.CreditTerms).HasColumnName("credit_terms").HasConversion<int>();
         b.Property(c => c.Currency).HasColumnName("currency").HasConversion<string>().HasMaxLength(3).IsRequired();
         b.Property(c => c.CreditLimitMinor).HasColumnName("credit_limit");
+        // Cached running totals of the credit ledger; CreditLedgerSql refuses, at commit, any value its last line does not explain.
         b.Property(c => c.CreditUsedMinor).HasColumnName("credit_used");
+        b.Property(c => c.CreditOnAccountMinor).HasColumnName("credit_on_account");
+        b.Property(c => c.CreditLedgerSeq).HasColumnName("credit_ledger_seq");
         b.Property(c => c.DefaultPriceListId).HasColumnName("default_price_list_id");
         b.Property(c => c.AccountManagerId).HasColumnName("account_manager_id");
 
