@@ -461,10 +461,7 @@ public sealed partial class OrderService(
 
             order.Transition(OrderStatus.Cancelled, ownerUserId, reason, now);
 
-            // A cancelled order gives its promotion uses back.
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotions p SET redeemed_count = p.redeemed_count - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = p.id", ct);
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotion_user_usage u SET uses = u.uses - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = u.promotion_id AND u.user_id = r.user_id", ct);
-            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM promotion_redemptions WHERE order_id = {orderId}", ct);
+            await ReturnPromotionUsesAsync(db, orderId, ct);
 
             await db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
@@ -473,6 +470,14 @@ public sealed partial class OrderService(
         // Releasing is idempotent; if the process dies right here the hold simply expires and the sweeper frees it.
         await inventory.CancelAsync(orderId, ct);
         return true;
+    }
+
+    /// <summary>A cancelled order gives its promotion uses back (inside the cancel transaction; after any <c>companies</c> lock, ADR-0010 §7).</summary>
+    internal static async Task ReturnPromotionUsesAsync(MechwareDbContext db, Guid orderId, CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotions p SET redeemed_count = p.redeemed_count - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = p.id", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE promotion_user_usage u SET uses = u.uses - 1 FROM promotion_redemptions r WHERE r.order_id = {orderId} AND r.promotion_id = u.promotion_id AND u.user_id = r.user_id", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM promotion_redemptions WHERE order_id = {orderId}", ct);
     }
 
     public async Task<OrderDto> GetAsync(Guid userId, Guid orderId, CancellationToken ct = default) =>

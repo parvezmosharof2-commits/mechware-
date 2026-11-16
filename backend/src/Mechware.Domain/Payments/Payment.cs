@@ -68,6 +68,19 @@ public sealed class Payment : Entity<Guid>
         UpdatedAtUtc = nowUtc;
     }
 
+    /// <summary>
+    /// The order this payment paid was cancelled by staff (E7.2): the captured money is now owed back, so the payment joins the refund
+    /// queue (a refund still needs four eyes). Only a captured payment; anything else holds no money of this order.
+    /// </summary>
+    public void FlagRefundForCancelledOrder(string note, DateTime nowUtc)
+    {
+        if (Status != PaymentStatus.Captured)
+            throw new ConflictException("PAYMENT_NOT_CAPTURED", $"A {Status} payment holds no money of this order to send back.");
+        Status = PaymentStatus.NeedsRefund;
+        Note = note;
+        UpdatedAtUtc = nowUtc;
+    }
+
     public void MarkNeedsRefund(string note, DateTime nowUtc)
     {
         if (Status is PaymentStatus.Captured) throw new ConflictException("PAYMENT_ALREADY_CAPTURED", "A captured payment is already settled.");

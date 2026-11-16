@@ -8,6 +8,10 @@ namespace Mechware.Domain.Orders;
 /// <summary>Published through the outbox when an order is placed; notifications, search sync and ledgers hang off it.</summary>
 public sealed record OrderPlacedEvent(Guid OrderId, string OrderNumber, Guid UserId, long GrandTotalMinor) : DomainEventBase;
 
+/// <summary>Staff cancelled an order after it was confirmed (E7.2): stock goes back, credit is released, paid money is owed back.</summary>
+public sealed record ConfirmedOrderCancelledEvent(
+    Guid OrderId, string OrderNumber, Guid UserId, Guid? CompanyId, string FromStatus, Guid ActorId, string Reason) : DomainEventBase;
+
 /// <summary>One purchased line, frozen at the moment of purchase: later catalog edits never change what was sold.</summary>
 public sealed class OrderItem : Entity<Guid>
 {
@@ -276,6 +280,33 @@ public sealed class Order : AggregateRoot<Guid>
         foreach (var sub in _subOrders) sub.SetStatus(to);
         _events.Add(new OrderEventRecord(e, ++EventSequence));
         UpdatedAtUtc = nowUtc;
+    }
+
+    public const int CancelReasonMinLength = 5;
+    public const int CancelReasonMaxLength = 500;
+
+    /// <summary>The trimmed reason for a staff cancel: 5 to 500 characters.</summary>
+    public static string NormaliseCancelReason(string? reason)
+    {
+        var trimmed = reason?.Trim() ?? string.Empty;
+        if (trimmed.Length is < CancelReasonMinLength or > CancelReasonMaxLength)
+            throw new ValidationException("reason", $"Give the reason for the cancellation ({CancelReasonMinLength} to {CancelReasonMaxLength} characters).");
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Staff cancel an order whose stock was already deducted but has not left the warehouse (Confirmed, Processing, Packed; E7.2).
+    /// Anything else is 409 <c>ORDER_NOT_CANCELLABLE</c>: a pending order is cancelled by its buyer or its expiry, a shipped one goes
+    /// through a return (F2). Raises <see cref="ConfirmedOrderCancelledEvent"/>.
+    /// </summary>
+    public void CancelAfterConfirmation(Guid actorId, string? reason, DateTime nowUtc)
+    {
+        var why = NormaliseCancelReason(reason);
+        var from = Status;
+        if (from is not (OrderStatus.Confirmed or OrderStatus.Processing or OrderStatus.Packed))
+            throw new ConflictException("ORDER_NOT_CANCELLABLE", $"Only a confirmed order that has not shipped can be cancelled here; this one is {from}.");
+        Apply(OrderStatus.Cancelled, actorId, why, nowUtc);
+        AddDomainEvent(new ConfirmedOrderCancelledEvent(Id, OrderNumber, UserId, CompanyId, from.ToString(), actorId, why));
     }
 
     /// <summary>The approval was given: the order can now be paid, and the time to pay starts now.</summary>

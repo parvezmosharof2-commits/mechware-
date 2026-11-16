@@ -401,3 +401,12 @@ Migration `DropCreditWithinLimitCheck`; domain `CreditReversals`; `ICreditLedger
    `SaveChanges` inside the caller's transaction, so the caller's pending changes in that context are saved with it.
 5. **Apply on-account (§6) is not in B3.5:** split into B3.5b (its idempotency needs its own design: Idempotency-Key + body
    hash without a table of its own).
+
+## Implementation notes: E7.2 (2026-11-16, AI assistant, not reviewed)
+1. **§7 global lock order, extended:** gateway `payments` (FOR UPDATE, id order) → `orders` (FOR NO KEY UPDATE on the cancel path) →
+   `credit_payments` | `credit_adjustments` → `companies` → `promotions`. The payment webhook already locks payment → order, so the
+   staff cancel (`OrderCancellationService`) takes the order's gateway payments before the order; the other way round deadlocks with a
+   duplicate webhook. Credit orders have no gateway payments, so for them it is the §7 order unchanged.
+2. **§8.2 as built:** `ReduceChargeAsync(OrderCancelled, AmountMinor null, SourceKey cancel:{orderId:N})` in the cancel transaction,
+   then the restock after the commit (§8.2). The service never loads the company and clears its change tracker first. A captured gateway
+   payment of a cancelled order becomes `needs_refund` (refund queue, four eyes); a credit order's paid part goes on account as §8.2 says.

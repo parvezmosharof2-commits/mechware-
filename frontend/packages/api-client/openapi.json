@@ -703,6 +703,49 @@
         }
       }
     },
+    "/api/v1/admin/orders/{orderId}/cancel": {
+      "post": {
+        "tags": [
+          "AdminOrders"
+        ],
+        "summary": "Cancels a confirmed, processing or packed order (E7.2): stock back to the warehouses it came from, a credit order's charge\r\nreduced (paid money goes on account), captured gateway payments into the refund queue. Always an authenticator code and a\r\nreason (5-500). Calling it again for a cancelled order answers 200 with `alreadyCancelled` and changes nothing else.",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelConfirmedOrderRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelConfirmedOrderRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelConfirmedOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/orders/overdue": {
       "get": {
         "tags": [
@@ -4720,6 +4763,16 @@
             "nullable": true
           },
           "slug": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "CancelConfirmedOrderRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
             "type": "string",
             "nullable": true
           }

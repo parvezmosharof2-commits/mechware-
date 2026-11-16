@@ -761,6 +761,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/orders/{orderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancels a confirmed, processing or packed order (E7.2): stock back to the warehouses it came from, a credit order's charge
+         *     reduced (paid money goes on account), captured gateway payments into the refund queue. Always an authenticator code and a
+         *     reason (5-500). Calling it again for a cancelled order answers 200 with `alreadyCancelled` and changes nothing else.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CancelConfirmedOrderRequest"];
+                    "text/json": components["schemas"]["CancelConfirmedOrderRequest"];
+                    "application/*+json": components["schemas"]["CancelConfirmedOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/orders/overdue": {
         parameters: {
             query?: never;
@@ -5015,6 +5061,9 @@ export interface components {
             nameEn?: string | null;
             nameBn?: string | null;
             slug?: string | null;
+        };
+        CancelConfirmedOrderRequest: {
+            reason?: string | null;
         };
         CancelOrderBody: {
             reason?: string | null;

@@ -54,7 +54,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 | E4 | Payments core | ✅ | [E4](modules/E4.md) |
 | E5 | Gateway adapters | ⬜ | [E5](modules/E5.md) |
 | E6 | Invoicing (Mushak-6.3/6.7/9.1) | ⬜ | [E6](modules/E6.md) |
-| E7 | Restock & confirmed-order cancel | ⬜ **new** | [E7](modules/E7.md) |
+| E7 | Restock & confirmed-order cancel | 🟨 E7.1 + E7.2 done | [E7](modules/E7.md) |
 | E8 | Shipping rates & legal deadline | 🟡 (E8.1, E8.2 ✅; tariffs are owner data) | [E8](modules/E8.md) |
 | F1 | Courier & shipments | ⬜ | [F1](modules/F1.md) |
 | F2 | RMA / returns | ⬜ | [F2](modules/F2.md) |
