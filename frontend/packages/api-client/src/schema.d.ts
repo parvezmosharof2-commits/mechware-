@@ -1154,6 +1154,274 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff product list (drafts and archived included; deleted excluded). At most 50 per page. */
+        get: {
+            parameters: {
+                query?: {
+                    q?: string;
+                    status?: string;
+                    brandId?: string;
+                    categoryId?: string;
+                    supplyStatus?: string;
+                    sellerId?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/products/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateProductRequest"];
+                    "text/json": components["schemas"]["UpdateProductRequest"];
+                    "application/*+json": components["schemas"]["UpdateProductRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/products/{productId}/variants/{variantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                    variantId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateVariantRequest"];
+                    "text/json": components["schemas"]["UpdateVariantRequest"];
+                    "application/*+json": components["schemas"]["UpdateVariantRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/products/{productId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProductLifecycleRequest"];
+                    "text/json": components["schemas"]["ProductLifecycleRequest"];
+                    "application/*+json": components["schemas"]["ProductLifecycleRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/products/{productId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProductLifecycleRequest"];
+                    "text/json": components["schemas"]["ProductLifecycleRequest"];
+                    "application/*+json": components["schemas"]["ProductLifecycleRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/products/{productId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    productId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ProductLifecycleRequest"];
+                    "text/json": components["schemas"]["ProductLifecycleRequest"];
+                    "application/*+json": components["schemas"]["ProductLifecycleRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/products/{productId}/pim": {
         parameters: {
             query?: never;
@@ -4722,6 +4990,10 @@ export interface components {
             alternatives?: components["schemas"]["AlternativeDto"][] | null;
             documents?: components["schemas"]["PublicDocumentDto"][] | null;
         };
+        ProductLifecycleRequest: {
+            /** Format: int64 */
+            expectedVersion?: number | null;
+        };
         PublicDocumentDto: {
             /** Format: uuid */
             id?: string;
@@ -4933,12 +5205,40 @@ export interface components {
             /** Format: date-time */
             validToUtc?: string;
         };
+        UpdateProductRequest: {
+            titleEn?: string | null;
+            titleBn?: string | null;
+            shortDescriptionEn?: string | null;
+            shortDescriptionBn?: string | null;
+            descriptionHtml?: string | null;
+            /** Format: uuid */
+            brandId?: string | null;
+            /** Format: uuid */
+            categoryId?: string | null;
+            /** Format: double */
+            lengthCm?: number | null;
+            /** Format: double */
+            widthCm?: number | null;
+            /** Format: double */
+            heightCm?: number | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+        };
         UpdateSellerResourceRequestDto: {
             sku?: string | null;
             /** Format: double */
             unitPriceBdt?: number;
             /** Format: int32 */
             stockQuantity?: number;
+        };
+        UpdateVariantRequest: {
+            /** Format: double */
+            weightKg?: number | null;
+            /** Format: int64 */
+            priceMinor?: number | null;
+            status?: string | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
         };
         UpsertAddressRequestDto: {
             label?: string | null;

@@ -171,6 +171,17 @@ public sealed class ProductVariant : Entity<Guid>
         or System.Globalization.UnicodeCategory.Format or System.Globalization.UnicodeCategory.LineSeparator
         or System.Globalization.UnicodeCategory.ParagraphSeparator;
 
+    /// <summary>Weight for shipping: above zero, at most <see cref="MaxWeightKg"/>, at most three decimals (the column's precision).</summary>
+    public const decimal MaxWeightKg = 1000m;
+
+    public void SetWeight(decimal weightKg)
+    {
+        if (weightKg <= 0 || weightKg > MaxWeightKg || decimal.Round(weightKg, 3) != weightKg)
+            throw new ValidationException("weightKg", $"Weight must be above 0 and at most {MaxWeightKg:0} kg, with at most 3 decimals.");
+        WeightKg = weightKg;
+        UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public void Deactivate() => Status = VariantStatus.Inactive;
     public void Activate() => Status = VariantStatus.Active;
 

@@ -29,5 +29,25 @@ public static class RichTextSanitizer
         return s;
     }
 
+    /// <summary>
+    /// What the sanitizer would strip from <paramref name="html"/> (unknown tags, scripts, event handlers, disallowed link schemes,
+    /// comments), one short text per problem; empty when the markup is entirely inside the allow-list. Used to refuse an edit
+    /// outright instead of silently saving something other than what the editor sent.
+    /// </summary>
+    public static IReadOnlyList<string> FindProblems(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html)) return [];
+        var problems = new List<string>();
+        var checker = Build();   // own instance: the shared one must not carry per-call handlers
+        checker.RemovingTag += (_, e) => problems.Add($"The tag <{e.Tag.LocalName}> is not allowed.");
+        checker.RemovingAttribute += (_, e) => problems.Add($"The attribute '{e.Attribute.Name}' is not allowed.");
+        checker.RemovingStyle += (_, e) => problems.Add($"The style '{e.Style.Name}' is not allowed.");
+        checker.RemovingAtRule += (_, _) => problems.Add("CSS at-rules are not allowed.");
+        checker.RemovingComment += (_, _) => problems.Add("HTML comments are not allowed.");
+        checker.RemovingCssClass += (_, e) => problems.Add($"The CSS class '{e.CssClass}' is not allowed.");
+        checker.Sanitize(html);
+        return [.. problems.Distinct().Take(10)];
+    }
+
     public static string Sanitize(string? html) => string.IsNullOrWhiteSpace(html) ? string.Empty : Sanitizer.Sanitize(html);
 }

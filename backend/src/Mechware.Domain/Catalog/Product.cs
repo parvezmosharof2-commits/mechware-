@@ -221,6 +221,23 @@ public sealed class Product : AggregateRoot<Guid>
         MarkUpdated();
     }
 
+    /// <summary>
+    /// Staff edit of one SKU: any of weight, regular price (the compare-at price is kept) and status; null leaves a field as it is.
+    /// Changing the price raises the product's update event like every other edit, so the page and the search index follow.
+    /// </summary>
+    public void UpdateVariant(Guid variantId, decimal? weightKg, Money? price, VariantStatus? status)
+    {
+        EnsureEditable();
+        var variant = _variants.FirstOrDefault(v => v.Id == variantId)
+                      ?? throw new ValidationException("variantId", "No such SKU on this product.");
+        if (status is { } s && !Enum.IsDefined(s)) throw new ValidationException("status", "Unknown variant status.");
+        if (weightKg is { } w) variant.SetWeight(w);
+        if (price is { } p) variant.ChangePrice(p, variant.CompareAtPrice);
+        if (status == VariantStatus.Active) variant.Activate();
+        else if (status == VariantStatus.Inactive) variant.Deactivate();
+        MarkUpdated();
+    }
+
     /// <summary>Replaces both titles (bulk import update); the slug is untouched.</summary>
     public void SetTitles(string titleEn, string titleBn)
     {
@@ -458,6 +475,16 @@ public sealed class Product : AggregateRoot<Guid>
     #endregion
 
     #region Lifecycle
+
+    /// <summary>
+    /// Staff publish: a draft goes through review and approval in one step (the same checks as <see cref="SubmitForReview"/>), a
+    /// product already under review is approved. Rejected and archived products must first <see cref="ReturnToDraft"/>.
+    /// </summary>
+    public void Publish()
+    {
+        if (Status == ProductStatus.Draft) SubmitForReview();
+        Approve();
+    }
 
     public void SubmitForReview()
     {
