@@ -4,25 +4,24 @@ import * as React from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { AlertBanner } from '@mechware/ui/src/components/AlertBanner';
-import { Progress } from '@mechware/ui/src/components/Progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@mechware/ui/src/components/Tabs';
-import { CompanyRoles, creditUsagePercent, hasRole, roleNames } from '@mechware/api-client';
+import { CompanyRoles, hasRole, roleNames } from '@mechware/api-client';
 import { companiesApi } from '../../lib/api';
 import type { DashboardTab } from '../../lib/dashboard-tab';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
-import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath, useMoney } from './shared';
+import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath } from './shared';
 
 // Every panel loads on demand (the dashboard header renders first), so the route's first-load JS stays under budget.
 const panelLoading = () => <ListSkeleton rows={2} />;
 const SitesPanel = dynamic(() => import('./SitesPanel').then((m) => m.SitesPanel), { loading: panelLoading });
 const CostCentresPanel = dynamic(() => import('./CostCentresPanel').then((m) => m.CostCentresPanel), { loading: panelLoading });
 const ApprovalsPanel = dynamic(() => import('./ApprovalsPanel').then((m) => m.ApprovalsPanel), { loading: panelLoading });
+const CompanyCreditCard = dynamic(() => import('./CompanyCreditCard').then((m) => m.CompanyCreditCard), { loading: panelLoading });
 const MembersPanel = dynamic(() => import('./MembersPanel').then((m) => m.MembersPanel), { loading: panelLoading });
 
 function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: DashboardTab }) {
   const t = useTranslations('Company');
-  const money = useMoney();
   const company = useResource(async () => (await companiesApi.get(companyId)).data, companyId);
   const mine = useResource(async () => (await companiesApi.listMine()).data, `mine:${companyId}`);
 
@@ -34,7 +33,6 @@ function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: D
   const isAdmin = hasRole(roles, CompanyRoles.Admin);
   const suspended = c.status === 'suspended';
   const canWrite = isAdmin && !suspended;
-  const usage = creditUsagePercent(c);
 
   return (
     <div className="space-y-6">
@@ -72,35 +70,7 @@ function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: D
         )}
       </section>
 
-      <section className="rounded-lg border border-border-subtle bg-bg-surface p-5" aria-labelledby="credit-heading">
-        <h2 id="credit-heading" className="text-sm font-semibold">
-          {t('credit.title')}: {t(`credit.terms.${c.creditTerms}`)}
-        </h2>
-        {c.creditTerms === 'none' || !c.creditLimit || !c.creditUsed || !c.creditAvailable ? (
-          // Also the case for a member whose role may not see the balance: the API sends null, so show nothing numeric.
-          <p className="mt-2 text-xs text-fg-muted">{t('credit.managedByMechware')}</p>
-        ) : (
-          <>
-            <div className="mt-3">
-              <Progress value={usage} aria-label={t('credit.used')} variant={usage >= 90 ? 'fault' : usage >= 80 ? 'warning' : 'accent'} />
-            </div>
-            <dl className="mt-3 grid grid-cols-3 gap-3 text-sm">
-              <div>
-                <dt className="text-xs text-fg-muted">{t('credit.limit')}</dt>
-                <dd className="font-semibold tabular-nums">{money(c.creditLimit)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-fg-muted">{t('credit.used')}</dt>
-                <dd className="font-semibold tabular-nums">{money(c.creditUsed)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-fg-muted">{t('credit.available')}</dt>
-                <dd className="font-semibold tabular-nums">{money(c.creditAvailable)}</dd>
-              </div>
-            </dl>
-          </>
-        )}
-      </section>
+      <CompanyCreditCard company={c} />
 
       <Tabs defaultValue={initialTab === 'members' && !isAdmin ? 'sites' : initialTab}>
         <TabsList>

@@ -20,7 +20,7 @@ import { useAuth } from '../../lib/auth';
 import { ordersApi } from '../../lib/checkout-client';
 import { classifyOrderError, formatOrderDate } from '../../lib/orders-ui';
 import { useResource } from '../../lib/useResource';
-import { OrderStatusChip, OrderTotals } from './OrderParts';
+import { OrderCreditNote, OrderStatusChip, OrderTotals } from './OrderParts';
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -153,6 +153,7 @@ export function OrderDetailView({ locale, orderNumber }: { locale: 'en' | 'bn'; 
         <Shipment key={sub.id} sub={sub} currency={o.currency} locale={locale} t={t} />
       ))}
       <OrderTotals order={o} locale={locale} />
+      <OrderCreditNote order={o} locale={locale} />
       {backLink}
     </div>
   );

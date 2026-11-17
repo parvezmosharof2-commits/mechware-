@@ -103,7 +103,9 @@
       "limit": "Credit limit",
       "used": "Used",
       "available": "Available",
-      "managedByMechware": "Credit terms and limits are set by MECHWARE finance after verification."
+      "managedByMechware": "Credit terms and limits are set by MECHWARE finance after verification.",
+      "managedByAdmin": "Your company admin manages the credit account. Ask them if you need the balance.",
+      "openPanel": "Open credit account"
     },
     "tabs": {
       "sites": "Sites",
@@ -689,7 +691,17 @@
     "paymentTodo": "Online payment for this order is being added. Nothing is charged yet.",
     "viewOrder": "View order",
     "continueShopping": "Continue shopping",
-    "viewOrders": "All my orders"
+    "viewOrders": "All my orders",
+    "credit": {
+      "title": "Credit account",
+      "open": "Open",
+      "partially_paid": "Partly paid",
+      "paid": "Paid",
+      "overdue": "Overdue",
+      "cancelled": "Cancelled",
+      "due": "Due {date}",
+      "outstanding": "Still owed: {amount}"
+    }
   },
   "QuickOrder": {
     "metaTitle": "Quick order",
@@ -960,5 +972,119 @@
     "cartContract": "Contract price {price} each, excl. VAT",
     "cartYour": "Your price {price} each, excl. VAT",
     "cartNote": "Final prices are confirmed at checkout."
+  },
+  "CompanyCredit": {
+    "metaTitle": "Credit account",
+    "title": "Credit account",
+    "back": "Back to company",
+    "retry": "Try again",
+    "loading": "Loading your credit account",
+    "loadError": "We could not load your credit account. Please try again.",
+    "notFoundTitle": "We could not find this company",
+    "notFoundBody": "This company was not found, or you are not a member of it.",
+    "hiddenTitle": "Credit details are managed by your company admin",
+    "hiddenBody": "Your role does not include the credit balance. Ask your company admin if you need the balance or a statement.",
+    "balance": {
+      "heading": "Balance",
+      "terms": "Credit terms",
+      "limit": "Credit limit",
+      "used": "Used",
+      "available": "Available",
+      "onAccount": "Paid in advance (on account)",
+      "overdue": "Overdue",
+      "oldestDue": "Oldest due date",
+      "asOf": "As of {date}",
+      "usedBar": "Share of the credit limit in use",
+      "usedPercent": "{percent}% of your limit is in use"
+    },
+    "hold": {
+      "title": "New credit orders are paused",
+      "body": "Some orders are past their due date. New credit orders open again once the overdue amount is paid. If you think this is wrong, contact your MECHWARE account manager."
+    },
+    "aging": {
+      "heading": "Overdue by age",
+      "current": "Not yet due",
+      "days1To30": "1 to 30 days late",
+      "days31To60": "31 to 60 days late",
+      "days61To90": "61 to 90 days late",
+      "days90Plus": "More than 90 days late"
+    },
+    "pending": {
+      "heading": "Payments waiting for confirmation",
+      "note": "We have these payments but MECHWARE finance has not confirmed them yet. They are counted only after confirmation.",
+      "item": "{method}, received {date}",
+      "reference": "Ref {tail}"
+    },
+    "open": {
+      "heading": "Orders waiting for payment",
+      "empty": "Nothing is waiting for payment.",
+      "listLabel": "Orders waiting for payment",
+      "orderAmount": "Order amount",
+      "stillOwed": "Still owed",
+      "due": "Due {date}",
+      "daysPastDue": "{count, plural, one {# day overdue} other {# days overdue}}",
+      "pagesLabel": "Pages of orders waiting for payment"
+    },
+    "status": {
+      "open": "Open",
+      "partially_paid": "Partly paid",
+      "overdue": "Overdue",
+      "other": "Open"
+    },
+    "statement": {
+      "heading": "Statement",
+      "filterLabel": "Choose dates for the statement",
+      "from": "From (year-month-day)",
+      "to": "To (year-month-day)",
+      "apply": "Show",
+      "clear": "Clear dates",
+      "fromFormat": "Enter the From date as year-month-day, for example 2026-11-01.",
+      "toFormat": "Enter the To date as year-month-day, for example 2026-11-30.",
+      "order": "The From date must not be after the To date.",
+      "error": "We could not load the statement. Please try again.",
+      "empty": "No entries for these dates.",
+      "currentOwed": "Owed now",
+      "currentOnAccount": "On account now",
+      "listLabel": "Statement entries",
+      "pagesLabel": "Statement pages",
+      "owedChange": "Owed",
+      "onAccountChange": "On account",
+      "owedAfter": "Owed after",
+      "onAccountAfter": "On account after",
+      "forOrder": "Order {number}",
+      "dueOn": "Due {date}",
+      "range": "Showing {from} to {to}",
+      "rangeFrom": "Showing from {from}",
+      "rangeTo": "Showing up to {to}"
+    },
+    "kind": {
+      "charge": "Order charged to credit",
+      "payment_applied": "Payment applied to an order",
+      "payment_on_account": "Payment received, kept on account",
+      "on_account_applied": "Account balance applied to an order",
+      "payment_reversed": "Payment did not clear and was reversed",
+      "charge_reduced": "Order amount reduced",
+      "write_off": "Amount written off",
+      "on_account_correction": "Account correction",
+      "on_account_payout": "Money paid back to you",
+      "other": "Other entry"
+    },
+    "method": {
+      "cheque": "Cheque",
+      "pay_order": "Pay order",
+      "beftn": "BEFTN transfer",
+      "rtgs": "RTGS transfer",
+      "npsb": "NPSB transfer",
+      "bank_deposit": "Bank deposit",
+      "cash": "Cash",
+      "bkash": "bKash",
+      "nagad": "Nagad",
+      "other": "Payment"
+    },
+    "pager": {
+      "prev": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {total}"
+    }
   }
 }
