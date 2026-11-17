@@ -62,6 +62,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Credit.ICreditHoldService, Credit.CreditHoldService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditReadService, Credit.CreditReadService>();
         services.TryAddScoped<Mechware.Application.Credit.IBuyerCreditService, Credit.BuyerCreditService>();
+        services.TryAddScoped<Mechware.Application.Credit.ICreditReconciliationService, Credit.CreditReconciliationService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();
@@ -208,6 +209,7 @@ public static class DependencyInjection
         services.AddHostedService<UnpaidOrderExpiryWorker>();
         services.AddHostedService<OutboxRelayWorker>();
         services.AddHostedService<CreditHoldWorker>();
+        services.AddHostedService<CreditReconciliationWorker>();
         return services;
     }
 }
