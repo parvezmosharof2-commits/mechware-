@@ -317,13 +317,27 @@ export const CREDIT_ERROR_TEXT: Record<string, string> = {
   CREDIT_PAYMENT_CHEQUE_NOT_DUE: 'This is a post-dated cheque. It cannot be verified before the date written on it.',
   CREDIT_PAYMENT_CASH_CANNOT_BOUNCE: 'Cash does not bounce. Correct a mistaken cash entry with an adjustment.',
   CREDIT_PAYMENT_DUPLICATE_REFERENCE: 'This reference was already recorded (for this or another company). Check the cheque or transfer number; a rejected payment frees its reference.',
-  IDEMPOTENCY_KEY_REUSED: 'This form was already sent with different details. Reload the page and enter the payment again.',
+  IDEMPOTENCY_KEY_REUSED: 'This form was already sent with different details. Reload the page and enter it again.',
+  // B3.12: apply on-account, adjustments, hold override
+  CREDIT_NOTHING_TO_APPLY: 'There is nothing to apply: the company has no on-account money, or no order that still owes.',
+  CREDIT_ON_ACCOUNT_INSUFFICIENT: 'The company does not have that much on-account money (for that payment or credit note).',
+  CREDIT_ON_ACCOUNT_EXCEEDS_OPEN: 'That is more than the open orders owe. Lower the amount or name fewer orders; nothing was applied.',
+  ALLOCATION_ORDER_NOT_OPEN: 'One of the named orders owes nothing on this company credit. Remove it and try again.',
+  ALLOCATION_EXCEEDS_OUTSTANDING: 'One of the named orders owes less than the amount given for it. Lower that amount.',
+  CREDIT_ADJUSTMENT_FOUR_EYES: 'Someone else must approve this: not the person who requested it, and not whoever recorded or verified the payment it changes.',
+  CREDIT_ADJUSTMENT_NOT_REQUESTED: 'This adjustment was already decided. The page was reloaded.',
+  CREDIT_ADJUSTMENT_TARGET_NOT_FOUND: 'The order or payment chosen does not belong to this company.',
+  CREDIT_EXCEEDS_RECEIVABLE: 'A write-off cannot be more than the order still owes.',
+  CREDIT_CORRECTION_EXCEEDS_TAKEN: 'A plus correction can only give back what earlier corrections took from that payment.',
+  CREDIT_ADJUSTMENT_SOURCE_NOT_VERIFIED: 'The payment must be verified before its on-account money can be changed or paid out.',
+  CREDIT_PAYOUT_TOO_EARLY: 'Cheque and transfer money can be paid out only some days after it cleared (30 by default). Try again later.',
+  CREDIT_HOLD_OVERDUE: 'The company is on hold for overdue invoices.',
   STEP_UP_REQUIRED: 'This action needs the 6-digit code from your authenticator app.',
   STEP_UP_FAILED: 'The code was not accepted. Codes work once: wait for the next code (up to 30 seconds) and enter that one.'
 };
 
 /** Codes after which what the person saw is out of date, so the screen reloads. */
-export const CREDIT_RELOAD_CODES: ReadonlySet<string> = new Set(['CREDIT_PAYMENT_NOT_RECORDED', 'CREDIT_PAYMENT_NOT_VERIFIED']);
+export const CREDIT_RELOAD_CODES: ReadonlySet<string> = new Set(['CREDIT_PAYMENT_NOT_RECORDED', 'CREDIT_PAYMENT_NOT_VERIFIED', 'CREDIT_ADJUSTMENT_NOT_REQUESTED']);
 
 export const isCreditStepUpFailure = (code: string | null | undefined): boolean => code === 'STEP_UP_FAILED' || code === 'STEP_UP_REQUIRED';
 export const shouldReloadCredit = (code: string | null | undefined): boolean => !!code && CREDIT_RELOAD_CODES.has(code);
@@ -335,7 +349,7 @@ export function creditErrorText(e: CreditErrorLike): string {
   if (e.status === null) return 'The server cannot be reached. Check your connection and try again.';
   if (e.status === 401) return 'Your session ended. Sign in again.';
   if (e.status === 403) return 'You do not have permission for this action.';
-  if (e.status === 404) return 'This payment or company was not found. It may have been removed, or it is not Active.';
+  if (e.status === 404) return 'This payment, adjustment or company was not found. It may have been removed, or the company is not Active.';
   if (e.status === 429) return 'Too many requests. Wait a moment and try again.';
   if (e.status >= 500) return 'The server had a problem. Try again in a moment; if it keeps happening, tell the technical team.';
   return e.message || 'The request was refused.';

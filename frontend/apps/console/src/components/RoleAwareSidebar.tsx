@@ -84,6 +84,27 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Credit'
   },
   {
+    id: 'credit-aging',
+    label: 'Credit aging',
+    requiredPermission: 'credit.view',
+    href: '/credit/aging',
+    group: 'Credit'
+  },
+  {
+    id: 'credit-statement',
+    label: 'Company credit books',
+    requiredPermission: 'credit.view',
+    href: '/credit/companies',
+    group: 'Credit'
+  },
+  {
+    id: 'credit-adjustments',
+    label: 'Credit adjustments',
+    requiredPermission: 'credit.view',
+    href: '/credit/adjustments',
+    group: 'Credit'
+  },
+  {
     id: 'catalog-moderate',
     label: 'Machinery Spec Moderation',
     requiredPermission: 'catalog.moderate'

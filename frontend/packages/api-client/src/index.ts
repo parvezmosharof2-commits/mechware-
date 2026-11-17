@@ -178,7 +178,7 @@ export class MechWareApiClient {
     this.autoRefreshOn401 = config.autoRefreshOn401 ?? true;
   }
 
-  public async fetch<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
+  public async fetch<T>(path: string, options: RequestInit = {}, isRetry = false, asBytes = false): Promise<T> {
     const cleanPath = path.replace(/^\//, '');
     const url = `${this.baseUrl}/${cleanPath}`;
     const headers = new Headers(options.headers);
@@ -212,7 +212,7 @@ export class MechWareApiClient {
       if (refreshedToken) {
         const retryHeaders = new Headers(options.headers);
         retryHeaders.set('Authorization', `Bearer ${refreshedToken}`);
-        return this.fetch<T>(path, { ...options, headers: retryHeaders }, true);
+        return this.fetch<T>(path, { ...options, headers: retryHeaders }, true, asBytes);
       }
       defaultTokenVault.clear();
       if (this.onUnauthorized) {
@@ -246,7 +246,15 @@ export class MechWareApiClient {
       return {} as T;
     }
 
-    return response.json() as Promise<T>;
+    return (asBytes ? response.arrayBuffer() : response.json()) as Promise<T>;
+  }
+
+  /**
+   * A file download (a CSV): the same sign-in, refresh and error handling as `fetch`, but a 200 returns the raw bytes. Bytes, not text:
+   * `Response.text()` drops the UTF-8 byte-order mark that Excel needs to read the file.
+   */
+  public fetchBytes(path: string, options: RequestInit = {}): Promise<ArrayBuffer> {
+    return this.fetch<ArrayBuffer>(path, options, false, true);
   }
 
   private async tryRefreshAccessToken(): Promise<string | null> {
@@ -476,3 +484,7 @@ export * from "./catalog-admin-model";
 export * from "./catalog-admin";
 export * from "./credit-payments-model";
 export * from "./credit-payments";
+export * from "./credit-books-model";
+export * from "./credit-books";
+export * from "./credit-buyer-model";
+export * from "./credit-buyer";
