@@ -19,6 +19,7 @@
     "test:checkout": "node tests/checkout.mjs",
     "test:company-prices": "node tests/company-prices.mjs",
     "test:orders": "node tests/orders.mjs",
+    "test:reorder": "node tests/reorder.mjs",
     "test:quick-order": "node tests/quick-order.mjs"
   },
   "devDependencies": {

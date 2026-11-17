@@ -1,3 +1,5 @@
+import type { OrderDetail } from './orders-model';
+
 // Quick-order view types and pure helpers (D5.3). The server (POST /api/v1/quick-order/validate, D5.2) is the only authority for
 // part matching, prices and stock; everything here maps, groups and rewrites TEXT. Nothing computes money.
 
@@ -273,4 +275,133 @@ export type AddOutcome = { item: CartBatchItem; ok: true } | { item: CartBatchIt
 export function addSummary(outcomes: readonly AddOutcome[]): { added: number; failed: number } {
   const added = outcomes.filter((o) => o.ok).length;
   return { added, failed: outcomes.length - added };
+}
+
+// ---- "Buy again" (F5.2): a past order checked through the quick-order validate call. Pure; the server stays the authority for price, stock, status, MOQ and pack size; old prices are for comparison only and never sent. ----
+
+export interface ReorderWanted {
+  variantId: string;
+  sku: string;
+  title: string;
+  quantity: number;
+  /** What the buyer paid per unit last time (minor units), for the "was / now" note only. */
+  previousUnitPriceMinor: number;
+}
+
+/** Why a line of the old order is not added. The page shows a plain sentence per reason. */
+export type ReorderSkipReason =
+  | 'notFound'
+  | 'obsolete'
+  | 'outOfStock'
+  | 'insufficientStock'
+  | 'qtyExceeds'
+  | 'ambiguous'
+  | 'changed'
+  | 'unreadable'
+  | 'tooMany'
+  | 'other';
+
+export interface ReorderAdd {
+  wanted: ReorderWanted;
+  /** What goes into the cart: the server's quantity (minimum order and pack size applied). */
+  quantity: number;
+  adjusted: boolean;
+  /** Current unit price from the server, or null if it did not send one. */
+  unitPriceMinor: number | null;
+  priceChanged: boolean;
+}
+
+export interface ReorderSkip {
+  wanted: ReorderWanted;
+  reason: ReorderSkipReason;
+  /** For `insufficientStock`: how many are available now. */
+  available: number | null;
+}
+
+export interface ReorderPlan {
+  add: ReorderAdd[];
+  skip: ReorderSkip[];
+}
+
+/** The lines of an order, one per variant (the same variant in several shipments is summed), in the order they appear. */
+export function reorderWanted(order: Pick<OrderDetail, 'subOrders'>): ReorderWanted[] {
+  const byVariant = new Map<string, ReorderWanted>();
+  for (const sub of order.subOrders) {
+    for (const l of sub.items) {
+      if (!l.variantId || !l.sku || !(l.quantity >= 1)) continue;
+      const known = byVariant.get(l.variantId);
+      if (known) known.quantity += Math.trunc(l.quantity);
+      else byVariant.set(l.variantId, { variantId: l.variantId, sku: l.sku, title: l.title, quantity: Math.trunc(l.quantity), previousUnitPriceMinor: l.unitPriceMinor });
+    }
+  }
+  return [...byVariant.values()];
+}
+
+/** The text the quick-order check reads: line N is `wanted[N - 1]`, so results map back by line number. Lines past the cap are not checked. */
+export function reorderText(wanted: readonly ReorderWanted[]): string {
+  return wanted.slice(0, QUICK_ORDER_MAX_LINES).map((w) => formatLine(w.sku, w.quantity)).join('\n');
+}
+
+function skipReason(line: QuickOrderLine): ReorderSkipReason {
+  switch (line.status) {
+    case 'PART_NOT_FOUND': return 'notFound';
+    case 'PART_OBSOLETE': return 'obsolete';
+    case 'OUT_OF_STOCK': return 'outOfStock';
+    case 'INSUFFICIENT_STOCK': return 'insufficientStock';
+    case 'QTY_EXCEEDS_LIMIT': return 'qtyExceeds';
+    case 'PART_AMBIGUOUS': return 'ambiguous';
+    default: return 'other';
+  }
+}
+
+/**
+ * Splits the old order into what can go into the cart now and what cannot (with a reason), from the quick-order result for
+ * `reorderText(wanted)`. A line is added only if the server resolved it to the SAME variant as the old order (a successor or a
+ * look-alike is never swapped in silently) and marked it valid. Every wanted line ends up in exactly one list.
+ */
+export function planReorder(wanted: readonly ReorderWanted[], result: Pick<QuickOrderResult, 'lines' | 'errors'>): ReorderPlan {
+  const plan: ReorderPlan = { add: [], skip: [] };
+  wanted.forEach((w, i) => {
+    if (i >= QUICK_ORDER_MAX_LINES) {
+      plan.skip.push({ wanted: w, reason: 'tooMany', available: null });
+      return;
+    }
+    const lineNo = i + 1;
+    const line = result.lines.find((l) => l.lineNumbers.includes(lineNo));
+    if (!line) {
+      const failedToRead = result.errors.some((e) => e.lineNumber === lineNo);
+      plan.skip.push({ wanted: w, reason: failedToRead ? 'unreadable' : 'other', available: null });
+      return;
+    }
+    if (line.valid && line.variant && line.variant.id !== w.variantId) {
+      plan.skip.push({ wanted: w, reason: 'changed', available: null });
+      return;
+    }
+    if (!line.valid || !line.variant || !line.quantity || line.quantity < 1) {
+      plan.skip.push({ wanted: w, reason: skipReason(line), available: line.status === 'INSUFFICIENT_STOCK' ? line.stock?.available ?? null : null });
+      return;
+    }
+    const price = line.unitPriceMinor;
+    plan.add.push({
+      wanted: w,
+      quantity: line.quantity,
+      adjusted: line.quantity !== w.quantity,
+      unitPriceMinor: price,
+      priceChanged: price !== null && price !== w.previousUnitPriceMinor
+    });
+  });
+  return plan;
+}
+
+export type ReorderCartOutcome = { add: ReorderAdd; ok: true } | { add: ReorderAdd; ok: false; reason: string };
+
+/** What the buyer sees after the cart calls: lines now in the cart, lines the cart refused (with its reason), lines not offered. */
+export function reorderReport(plan: ReorderPlan, outcomes: readonly ReorderCartOutcome[]): { added: ReorderAdd[]; refused: { add: ReorderAdd; reason: string }[]; skipped: ReorderSkip[] } {
+  const added: ReorderAdd[] = [];
+  const refused: { add: ReorderAdd; reason: string }[] = [];
+  for (const o of outcomes) {
+    if (o.ok) added.push(o.add);
+    else refused.push({ add: o.add, reason: o.reason });
+  }
+  return { added, refused, skipped: plan.skip };
 }

@@ -21,6 +21,7 @@ import { ordersApi } from '../../lib/checkout-client';
 import { classifyOrderError, formatOrderDate } from '../../lib/orders-ui';
 import { useResource } from '../../lib/useResource';
 import { OrderCreditNote, OrderStatusChip, OrderTotals } from './OrderParts';
+import { ReorderPanel } from './ReorderPanel';
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -154,6 +155,7 @@ export function OrderDetailView({ locale, orderNumber }: { locale: 'en' | 'bn'; 
       ))}
       <OrderTotals order={o} locale={locale} />
       <OrderCreditNote order={o} locale={locale} />
+      <ReorderPanel order={o} locale={locale} />
       {backLink}
     </div>
   );
