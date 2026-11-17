@@ -84,7 +84,7 @@ Console screens are **inside** each feature module (no separate "console phase")
 2. AI at launch? Brief §3.1 item 16 says yes; MASTER_PLAN/ARCH say after launch.
 3. Load target: 2,000 users / 100 orders/min (brief §11) or 5,000 / 200 (MASTER_PLAN §1 #10)?
 4. Read-deny rules for the never-open list in `.claude/settings.json` (permission change; owner must approve).
-5. Quote validity (15 vs 30+ days), approval stock hold (24 vs 48–72 h), S3 vs volume, login rate limit behind NAT.
+5. Quote validity: DECIDED 2026-11-17 under the owner's delegation (15 days default, 1-90, >30 needs a second person; ADR-0011 §15). Still open: approval stock hold (24 vs 48–72 h), S3 vs volume, login rate limit behind NAT.
 6. Staff role names: brief §9 vs code (`admin`, `finance`…) — settle in G5.
 7. ~~D2 price lists~~ decided 2026-11-13 by the main session on the owner's delegation: rule A (lowest valid price), VAT-inclusive catalogue price for everyone, 10 % global minimum markup on cost (changeable data), no group lists at launch ([ADR-0008](adr/0008-price-lists-and-contract-prices.md) §12).
 
