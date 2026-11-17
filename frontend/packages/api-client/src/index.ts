@@ -474,3 +474,5 @@ export * from "./margin-floors-model";
 export * from "./margin-floors";
 export * from "./catalog-admin-model";
 export * from "./catalog-admin";
+export * from "./credit-payments-model";
+export * from "./credit-payments";

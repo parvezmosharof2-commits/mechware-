@@ -1,5 +1,5 @@
 import {
-  MechWareApiClient, catalogAdminErrorText, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
+  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, creditErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
@@ -15,6 +15,7 @@ export const priceListsApi = createPriceListsApi(api);
 export const marginFloorsApi = createMarginFloorsApi(api);
 export const shippingZonesApi = createShippingZonesApi(api);
 export const storefrontApi = createStorefrontApi(api);
+export const creditPaymentsApi = createCreditPaymentsApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus };
 
@@ -63,4 +64,12 @@ export function catalogError(err: unknown): { text: string; retry: boolean; stat
   const fields = problemFieldErrors(err);
   const message = problemMessage(err, '');
   return { text: catalogAdminErrorText({ status, code, message, fields }), retry: status === null || status >= 500, status, code, conflict: status === 409, fields };
+}
+
+/** Plain words for a failed credit-payment call, the server's field messages, and what the screen does next (keep the code dialog, reload, retry). */
+export function creditError(err: unknown): { text: string; code: string | null; status: number | null; fields: Record<string, string>; reload: boolean; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  const fields = problemFieldErrors(err);
+  return { text: creditErrorText({ status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadCredit(code), retry: status === null || status >= 500 };
 }

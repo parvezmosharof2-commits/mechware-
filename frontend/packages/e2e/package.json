@@ -11,6 +11,7 @@
     "test:console-approvals": "node tests/console-approvals.mjs",
     "test:console-pricelists": "node tests/console-pricelists.mjs",
     "test:console-shipping": "node tests/console-shipping.mjs",
+    "test:console-credit": "node tests/console-credit.mjs",
     "test:console-products": "node tests/console-products.mjs",
     "test:storefront": "node tests/storefront.mjs",
     "test:checkout": "node tests/checkout.mjs",

@@ -70,6 +70,20 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Shipping'
   },
   {
+    id: 'credit-payments',
+    label: 'Credit payments',
+    requiredPermission: 'credit.view',
+    href: '/credit/payments',
+    group: 'Credit'
+  },
+  {
+    id: 'credit-record',
+    label: 'Record a payment',
+    requiredPermission: 'credit.record_payment',
+    href: '/credit/payments/new',
+    group: 'Credit'
+  },
+  {
     id: 'catalog-moderate',
     label: 'Machinery Spec Moderation',
     requiredPermission: 'catalog.moderate'
