@@ -488,3 +488,5 @@ export * from "./credit-books-model";
 export * from "./credit-books";
 export * from "./credit-buyer-model";
 export * from "./credit-buyer";
+export * from "./audit-model";
+export * from "./audit";

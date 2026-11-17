@@ -128,8 +128,9 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
   },
   {
     id: 'audit-logs',
-    label: 'EF Core Immutable Audit Trail',
-    requiredPermission: 'audit.view'
+    label: 'Audit log integrity',
+    requiredPermission: 'audit.view',
+    href: '/audit'
   }
 ];
 

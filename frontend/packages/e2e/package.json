@@ -13,6 +13,7 @@
     "test:console-shipping": "node tests/console-shipping.mjs",
     "test:console-credit": "node tests/console-credit.mjs",
     "test:console-credit-2": "node tests/console-credit-2.mjs",
+    "test:console-audit": "node tests/console-audit.mjs",
     "test:console-products": "node tests/console-products.mjs",
     "test:credit": "node tests/credit.mjs",
     "test:storefront": "node tests/storefront.mjs",
