@@ -80,7 +80,7 @@ public static class OrderStateMachine
 public static class OrderNumber
 {
     // RFC 4648 base32 without padding. Ambiguous look-alikes are kept: the number is read from screens, not handwriting.
-    private const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    internal const string Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"; // also quote and RFQ numbers
 
     public static string Generate(DateTime nowUtc, Func<int, int>? randomIndex = null)
     {

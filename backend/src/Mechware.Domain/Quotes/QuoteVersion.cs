@@ -1,0 +1,343 @@
+using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Common.Primitives;
+using Mechware.Domain.Pricing.PriceLists;
+using S = Mechware.Domain.Quotes.QuoteVersionStatus;
+
+namespace Mechware.Domain.Quotes;
+
+/// <summary>
+/// One version of a <see cref="Quote"/> (ADR-0011 §3, §4, §6). Only a Draft changes, and every editor becomes a contributor.
+/// Leaving Draft freezes the content (fresh line facts, company snapshot, preparer, content hash); from then on only the next
+/// step's columns are written. Status moves only along <see cref="CanMove"/>; the <see cref="Quote"/> drives every move.
+/// </summary>
+public sealed class QuoteVersion : Entity<Guid>
+{
+    private static readonly HashSet<(S, S)> Allowed =
+    [
+        (S.Draft, S.Sent), (S.Draft, S.PendingApproval), (S.PendingApproval, S.Sent), (S.PendingApproval, S.Draft),
+        (S.Sent, S.Accepted), (S.Sent, S.Rejected), (S.Sent, S.Withdrawn), (S.Sent, S.Superseded), (S.Accepted, S.Superseded),
+    ];
+
+    private readonly List<QuoteLine> _lines = [];
+    private readonly List<QuoteVersionContributor> _contributors = [];
+
+    public Guid QuoteId { get; private set; }
+    public int VersionNo { get; private set; }
+    public S Status { get; private set; } = S.Draft;
+    public int ValidityDays { get; private set; }
+    public QuotePaymentTerms PaymentTerms { get; private set; } = QuotePaymentTerms.AsAccount;
+    public QuoteShippingMode ShippingMode { get; private set; } = QuoteShippingMode.Calculated;
+    public Guid? ShipToSiteId { get; private set; }
+    public IReadOnlyList<QuoteShippingFee>? ShippingFees { get; private set; }
+    public string? TermsText { get; private set; }
+    public string? BuyerNote { get; private set; }
+
+    /// <summary>Staff only: never shown to the buyer and not in the content hash.</summary>
+    public string? InternalNote { get; private set; }
+
+    public QuoteCompanySnapshot? CompanySnapshot { get; private set; }
+    public string? PreparerName { get; private set; }
+    public string? ContentHash { get; private set; }
+
+    /// <summary>Staff only: the approval flags found when the version left Draft.</summary>
+    public QuoteFlags? Flags { get; private set; }
+
+    public Guid CreatedBy { get; private set; }
+    public Guid? SubmittedBy { get; private set; }
+    public DateTime? SubmittedAtUtc { get; private set; }
+    public Guid? ApprovedBy { get; private set; }
+    public DateTime? ApprovedAtUtc { get; private set; }
+    public string? ApprovalComment { get; private set; }
+    public Guid? ApprovalRejectedBy { get; private set; }
+    public DateTime? ApprovalRejectedAtUtc { get; private set; }
+    public Guid? SentBy { get; private set; }
+    public DateTime? SentAtUtc { get; private set; }
+
+    /// <summary><see cref="QuoteValidity.ValidUntilUtc"/> of the send instant; exclusive.</summary>
+    public DateTime? ValidUntilUtc { get; private set; }
+
+    public Guid? AcceptedOrderId { get; private set; }
+    public Guid? AcceptedBy { get; private set; }
+    public DateTime? AcceptedAtUtc { get; private set; }
+    public Guid? RejectedBy { get; private set; }
+    public DateTime? RejectedAtUtc { get; private set; }
+    public string? RejectReason { get; private set; }
+    public Guid? WithdrawnBy { get; private set; }
+    public DateTime? WithdrawnAtUtc { get; private set; }
+    public string? WithdrawReason { get; private set; }
+    public DateTime? SupersededAtUtc { get; private set; }
+    public IReadOnlyCollection<QuoteLine> Lines => _lines.AsReadOnly();
+    public IReadOnlyCollection<QuoteVersionContributor> Contributors => _contributors.AsReadOnly();
+
+    private QuoteVersion() { }
+
+    internal QuoteVersion(Guid id, Guid quoteId, int versionNo, int validityDays, Guid createdBy, DateTime nowUtc) : base(id)
+    {
+        if (id == Guid.Empty) throw new ValidationException("id", "A version needs an id.");
+        if (createdBy == Guid.Empty) throw new ValidationException("createdBy", "The author is required.");
+        (QuoteId, VersionNo, ValidityDays, CreatedBy, CreatedAtUtc) = (quoteId, versionNo, validityDays, createdBy, nowUtc);
+        Contribute(createdBy, nowUtc);
+    }
+
+    public static bool CanMove(S from, S to) => Allowed.Contains((from, to));
+
+    public static bool IsHash(string? value) => value is { Length: 64 } && value.AsSpan().IndexOfAnyExcept("0123456789abcdef") < 0;
+
+    /// <summary>Sent and the clock has reached <see cref="ValidUntilUtc"/>. Computed, never stored (§7).</summary>
+    public bool IsExpired(DateTime nowUtc) => Status == S.Sent && ValidUntilUtc is { } until && !QuoteValidity.IsValidAt(until, nowUtc);
+
+    // ---- Draft ---------------------------------------------------------------------------------------------------------
+
+    internal void Edit(QuoteDraft draft, Guid editorId, QuoteOptions options, DateTime nowUtc)
+    {
+        EnsureDraft();
+        ArgumentNullException.ThrowIfNull(draft);
+        ValidateValidity(draft.ValidityDays, options);
+        if (!Enum.IsDefined(draft.PaymentTerms)) throw new ValidationException("paymentTerms", "Unknown payment terms.");
+        var fees = ValidShipping(draft);
+        var terms = Text.Optional(draft.TermsText, QuoteLimits.MaxTermsLength, "termsText");
+        var buyerNote = Text.Optional(draft.BuyerNote, QuoteLimits.MaxNoteLength, "buyerNote");
+        var internalNote = Text.Optional(draft.InternalNote, QuoteLimits.MaxNoteLength, "internalNote");
+        if (draft.Lines is not { Count: <= QuoteLimits.MaxLinesPerVersion })
+            throw new ValidationException("lines", $"A quote has at most {QuoteLimits.MaxLinesPerVersion} lines; split a larger one.");
+        if (draft.Lines.DistinctBy(l => l.VariantId).Count() != draft.Lines.Count)
+            throw new ValidationException("lines", "Each catalogue item appears on one line only.");
+        var lines = draft.Lines.Select((l, i) => QuoteLine.From(Guid.NewGuid(), Id, i + 1, l)).ToList();
+
+        Contribute(editorId, nowUtc);
+        (ValidityDays, PaymentTerms, ShippingMode, ShipToSiteId, ShippingFees, TermsText, BuyerNote, InternalNote) =
+            (draft.ValidityDays, draft.PaymentTerms, draft.ShippingMode, draft.ShipToSiteId, fees, terms, buyerNote, internalNote);
+        _lines.Clear();
+        _lines.AddRange(lines);
+    }
+
+    /// <summary>Everything is checked first, so a refusal changes nothing; then the snapshot is written. The status is the caller's.</summary>
+    internal void Freeze(QuoteIssue issue, Guid submitterId, QuoteOptions options, DateTime nowUtc)
+    {
+        EnsureDraft();
+        ArgumentNullException.ThrowIfNull(issue);
+        if (submitterId == Guid.Empty) throw new ValidationException("submittedBy", "The sender is required.");
+        if (_lines.Count == 0) throw new ValidationException("lines", "A quote needs at least one line.");
+        ValidateValidity(ValidityDays, options);
+        if (!IsHash(issue.ContentHash)) throw new ValidationException("contentHash", "The content hash is a lower-case SHA-256.");
+        _ = Text.Required(issue.Company?.Name, QuoteLimits.MaxNameLength, "company.name");
+        var preparer = Text.Required(issue.PreparerName, QuoteLimits.MaxNameLength, "preparerName");
+        var facts = (issue.Facts ?? []).DistinctBy(f => f.VariantId).ToDictionary(f => f.VariantId);
+        if (facts.Count != (issue.Facts ?? []).Count || facts.Count != _lines.Count || _lines.Any(l => !facts.ContainsKey(l.VariantId)))
+            throw new ConflictException("QUOTE_CHANGED", "The lines changed while they were checked. Check them again.");
+        foreach (var l in _lines) QuoteLine.Check(facts[l.VariantId], l.VariantId, $"lines[{l.LineNo}]");
+        if (ShippingMode == QuoteShippingMode.Fixed && !ShippingFees!.Select(f => f.SellerId).ToHashSet().SetEquals(facts.Values.Select(f => f.SellerId)))
+            throw new ValidationException("shippingFees", "Fixed delivery needs one fee for each seller of the lines.");
+        var flags = issue.Flags ?? QuoteFlags.None;
+        var ids = _lines.Select(l => l.Id).ToHashSet();
+        if (flags.BelowFloorLineIds.Concat(flags.OverAuthorityLineIds).Any(id => !ids.Contains(id))
+            || flags.BelowFloorLineIds.Distinct().Count() != flags.BelowFloorLineIds.Count
+            || flags.OverAuthorityLineIds.Distinct().Count() != flags.OverAuthorityLineIds.Count)
+            throw new ValidationException("flags", "Flags name lines of this version, once each.");
+        if (_lines.Any(l => l.BelowFloorReason is null && flags.BelowFloorLineIds.Contains(l.Id)))
+            throw new ValidationException("belowFloorReason", "A line below the margin floor needs a written reason.");
+
+        foreach (var l in _lines) l.Apply(facts[l.VariantId]);
+        (ContentHash, SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, Flags, UpdatedAtUtc) =
+            (issue.ContentHash, submitterId, nowUtc, issue.Company, preparer, flags, nowUtc);
+    }
+
+    /// <summary>Draft n + 1 with this version's header, notes and lines (new line ids); the reviser is its only contributor.</summary>
+    internal QuoteVersion CopyAsDraft(Guid id, int versionNo, Guid reviserId, DateTime nowUtc)
+    {
+        var next = new QuoteVersion(id, QuoteId, versionNo, ValidityDays, reviserId, nowUtc)
+        {
+            PaymentTerms = PaymentTerms,
+            ShippingMode = ShippingMode,
+            ShipToSiteId = ShipToSiteId,
+            ShippingFees = ShippingFees?.ToList(),
+            TermsText = TermsText,
+            BuyerNote = BuyerNote,
+            InternalNote = InternalNote,
+        };
+        next._lines.AddRange(_lines.Select(l => l.CopyTo(id)));
+        return next;
+    }
+
+    // ---- Steps (each validates its input before it moves) -----------------------------------------------------------
+
+    internal void MarkSent(Guid senderId, DateTime nowUtc)
+    {
+        Move(S.Sent, nowUtc);
+        (SentBy, SentAtUtc, ValidUntilUtc) = (senderId, nowUtc, QuoteValidity.ValidUntilUtc(nowUtc, ValidityDays));
+    }
+
+    internal void MoveToApproval(DateTime nowUtc) => Move(S.PendingApproval, nowUtc);
+
+    internal void RecordApproval(Guid approverId, string? comment, DateTime nowUtc) =>
+        (ApprovedBy, ApprovedAtUtc, ApprovalComment) = (approverId, nowUtc, comment);
+
+    /// <summary>PendingApproval → Draft: a rejected approval (with its comment) or a recall. A new send freezes it again.</summary>
+    internal void BackToDraft(Guid? rejectedBy, string? comment, DateTime nowUtc)
+    {
+        Move(S.Draft, nowUtc);
+        (ContentHash, SubmittedBy, SubmittedAtUtc, Flags) = (null, null, null, null);
+        if (rejectedBy is not null) (ApprovalRejectedBy, ApprovalRejectedAtUtc, ApprovalComment) = (rejectedBy, nowUtc, comment);
+    }
+
+    internal void RecordAcceptance(Guid orderId, Guid acceptedBy, DateTime nowUtc)
+    {
+        if (Status != S.Accepted) Move(S.Accepted, nowUtc);
+        (AcceptedOrderId, AcceptedBy, AcceptedAtUtc, UpdatedAtUtc) = (orderId, acceptedBy, nowUtc, nowUtc);
+    }
+
+    internal void Reject(Guid rejectedBy, string? reason, DateTime nowUtc)
+    {
+        var why = Text.Optional(reason, QuoteLimits.MaxRejectReasonLength, "reason");
+        Move(S.Rejected, nowUtc);
+        (RejectedBy, RejectedAtUtc, RejectReason) = (rejectedBy, nowUtc, why);
+    }
+
+    internal void Withdraw(Guid withdrawnBy, string reason, DateTime nowUtc)
+    {
+        var why = Text.Reason(reason);
+        Move(S.Withdrawn, nowUtc);
+        (WithdrawnBy, WithdrawnAtUtc, WithdrawReason) = (withdrawnBy, nowUtc, why);
+    }
+
+    internal void Supersede(DateTime nowUtc)
+    {
+        Move(S.Superseded, nowUtc);
+        SupersededAtUtc = nowUtc;
+    }
+
+    internal ConflictException Refused(S to) => new("QUOTE_INVALID_TRANSITION", $"A {Status} quote version cannot become {to}.");
+
+    private void Move(S to, DateTime nowUtc)
+    {
+        if (!CanMove(Status, to)) throw Refused(to);
+        (Status, UpdatedAtUtc) = (to, nowUtc);
+    }
+
+    private void EnsureDraft()
+    {
+        if (Status != S.Draft)
+            throw new ConflictException("QUOTE_NOT_EDITABLE", $"A {Status} quote version cannot be changed. Revise the quote to make a new version.");
+    }
+
+    private void Contribute(Guid editorId, DateTime nowUtc)
+    {
+        if (editorId == Guid.Empty) throw new ValidationException("editor", "The editor is required.");
+        if (!_contributors.Any(c => c.UserId == editorId)) _contributors.Add(new QuoteVersionContributor(Id, editorId, nowUtc));
+        UpdatedAtUtc = nowUtc;
+    }
+
+    private static void ValidateValidity(int days, QuoteOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (days < 1 || days > Math.Min(options.MaxValidityDays, QuoteOptions.HardMaxValidityDays))
+            throw new ValidationException("validityDays", $"A quote is valid for 1 to {options.MaxValidityDays} days.");
+    }
+
+    private static List<QuoteShippingFee>? ValidShipping(QuoteDraft d)
+    {
+        if (!Enum.IsDefined(d.ShippingMode)) throw new ValidationException("shippingMode", "Unknown shipping mode.");
+        if (d.ShippingMode == QuoteShippingMode.Calculated)
+            return d.ShipToSiteId is null && d.ShippingFees is not { Count: > 0 } ? null
+                : throw new ValidationException("shippingMode", "Calculated delivery has no site and no fees; the buyer chooses at acceptance.");
+        if (d.ShipToSiteId is not { } site || site == Guid.Empty || d.ShippingFees is not { Count: > 0 } fees)
+            throw new ValidationException("shipToSiteId", "Fixed delivery needs the company site and the fees.");
+        if (fees.Any(f => f.SellerId == Guid.Empty || f.ShippingMinor is < 0 or > PriceListLimits.MaxUnitPriceMinor)
+            || fees.DistinctBy(f => f.SellerId).Count() != fees.Count)
+            throw new ValidationException("shippingFees", "One fee of zero or more per seller.");
+        return [.. fees];
+    }
+}
+
+/// <summary>
+/// One line of a version (§4): a catalogue variant, a quantity and an absolute VAT-exclusive unit price in whole poisha, plus
+/// the snapshot of the variant written by the server. Totals, VAT and the staff-only check figures come with D4.3.
+/// </summary>
+public sealed class QuoteLine : Entity<Guid>
+{
+    public Guid VersionId { get; private set; }
+    public int LineNo { get; private set; }
+    public Guid VariantId { get; private set; }
+    public Guid? RfqLineId { get; private set; }
+    public int Quantity { get; private set; }
+    public long UnitPriceMinor { get; private set; }
+    public string? LineNote { get; private set; }
+    public string? BelowFloorReason { get; private set; }
+    public Guid SellerId { get; private set; }
+    public string Sku { get; private set; } = string.Empty;
+    public string? PartNumber { get; private set; }
+    public string TitleEn { get; private set; } = string.Empty;
+    public string TitleBn { get; private set; } = string.Empty;
+    public decimal VatRate { get; private set; }
+    public long PublicUnitPriceMinor { get; private set; }
+
+    private QuoteLine() { }
+
+    internal static QuoteLine From(Guid id, Guid versionId, int lineNo, QuoteLineDraft d)
+    {
+        ArgumentNullException.ThrowIfNull(d);
+        var field = $"lines[{lineNo}]";
+        if (d.VariantId == Guid.Empty) throw new ValidationException(field, "Choose a catalogue item.");
+        if (d.Quantity is < 1 or > QuoteLimits.MaxQuantityPerLine)
+            throw new ValidationException(field, $"Quantity must be 1 to {QuoteLimits.MaxQuantityPerLine}.");
+        if (d.UnitPriceMinor is < 1 or > PriceListLimits.MaxUnitPriceMinor)
+            throw new ValidationException(field, "The unit price must be positive and not above the maximum unit price.");
+        Check(d.Facts, d.VariantId, field);
+        var line = new QuoteLine
+        {
+            Id = id,
+            VersionId = versionId,
+            LineNo = lineNo,
+            VariantId = d.VariantId,
+            RfqLineId = d.RfqLineId,
+            Quantity = d.Quantity,
+            UnitPriceMinor = d.UnitPriceMinor,
+            LineNote = Text.Optional(d.LineNote, QuoteLimits.MaxLineNoteLength, field),
+            BelowFloorReason = string.IsNullOrWhiteSpace(d.BelowFloorReason) ? null : Text.Reason(d.BelowFloorReason),
+        };
+        line.Apply(d.Facts);
+        return line;
+    }
+
+    /// <summary>The same rules at draft and at send: an active variant, an orderable quantity, a complete snapshot.</summary>
+    internal static void Check(QuoteLineFacts? f, Guid variantId, string field)
+    {
+        if (f is null || f.VariantId != variantId) throw new ValidationException(field, "The catalogue facts are of another item.");
+        if (!f.Active) throw new ConflictException("VARIANT_UNAVAILABLE", $"{f.Sku} is no longer sold.");
+        if (f.QuantityProblem is { } problem) throw new ValidationException(field, problem);
+        if (f.SellerId == Guid.Empty) throw new ValidationException(field, "The seller is required.");
+        _ = Text.Required(f.Sku, QuoteLimits.MaxSkuLength, field);
+        _ = Text.Optional(f.PartNumber, QuoteLimits.MaxSkuLength, field);
+        _ = Text.Required(f.TitleEn, QuoteLimits.MaxTitleLength, field);
+        _ = Text.Required(f.TitleBn, QuoteLimits.MaxTitleLength, field);
+        if (f.VatRate is < 0 or > 1 || decimal.Round(f.VatRate, 4) != f.VatRate)
+            throw new ValidationException(field, "The VAT rate is 0 to 1 with at most four decimals.");
+        if (f.PublicUnitPriceMinor is < 1 or > PriceListLimits.MaxUnitPriceMinor)
+            throw new ValidationException(field, "The item needs a public price.");
+    }
+
+    internal void Apply(QuoteLineFacts f) =>
+        (SellerId, Sku, PartNumber, TitleEn, TitleBn, VatRate, PublicUnitPriceMinor) =
+        (f.SellerId, f.Sku.Trim(), Text.Optional(f.PartNumber, QuoteLimits.MaxSkuLength, "partNumber"), f.TitleEn.Trim(), f.TitleBn.Trim(),
+            f.VatRate, f.PublicUnitPriceMinor);
+
+    internal QuoteLine CopyTo(Guid versionId)
+    {
+        var copy = (QuoteLine)MemberwiseClone();
+        (copy.Id, copy.VersionId) = (Guid.NewGuid(), versionId);
+        return copy;
+    }
+}
+
+/// <summary>A user who created or changed a version (§5); none of them may approve it (checked by D4.3 / D4.8).</summary>
+public sealed class QuoteVersionContributor
+{
+    public Guid VersionId { get; private set; }
+    public Guid UserId { get; private set; }
+    public DateTime FirstContributedAtUtc { get; private set; }
+
+    private QuoteVersionContributor() { }
+
+    internal QuoteVersionContributor(Guid versionId, Guid userId, DateTime atUtc) =>
+        (VersionId, UserId, FirstContributedAtUtc) = (versionId, userId, atUtc);
+}
