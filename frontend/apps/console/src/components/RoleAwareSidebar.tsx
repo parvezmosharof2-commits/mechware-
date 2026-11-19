@@ -37,6 +37,27 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'quotes-rfqs',
+    label: 'RFQ inbox',
+    requiredPermission: 'quotes.view',
+    href: '/quotes/rfqs',
+    group: 'Quotes'
+  },
+  {
+    id: 'quotes-list',
+    label: 'Quotes',
+    requiredPermission: 'quotes.view',
+    href: '/quotes',
+    group: 'Quotes'
+  },
+  {
+    id: 'quotes-new',
+    label: 'New quote for a company',
+    requiredPermission: 'quotes.edit',
+    href: '/quotes/new',
+    group: 'Quotes'
+  },
+  {
     id: 'catalog-products',
     label: 'Products',
     requiredPermission: 'catalog.manage',

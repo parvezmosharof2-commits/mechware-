@@ -494,3 +494,5 @@ export * from "./staff-orders-model";
 export * from "./staff-orders";
 export * from "./rfq-buyer-model";
 export * from "./rfq-buyer";
+export * from "./quotes-desk-model";
+export * from "./quotes-desk";
