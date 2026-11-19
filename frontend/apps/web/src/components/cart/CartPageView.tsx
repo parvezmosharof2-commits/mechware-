@@ -28,6 +28,7 @@ import { announceCart } from '../../lib/cart-events';
 import { actionErrorKey } from '../../lib/cart-ui';
 import dynamic from 'next/dynamic';
 import type { CartCompanyPricesResult } from './CartCompanyPrices';
+import { QuoteEntry } from '../quotes/QuoteEntry';
 import { CartSkeleton } from './CartSkeleton';
 
 // Company prices are private and only for signed-in users: the code is a separate chunk that guests never load.
@@ -177,6 +178,7 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
   const headingRef = React.useRef<HTMLDivElement>(null);
   // Private company prices: fetched in the browser for a signed-in company buyer; nothing happens for anyone else.
   const tc = useTranslations('CompanyPrice');
+  const tq = useTranslations('Quotes');
   const askLines = React.useMemo(() => (cart?.lines ?? []).map((l) => ({ variantId: l.variantId, quantity: l.quantity })), [cart]);
   const [companyPrices, setCompanyPrices] = React.useState<CartCompanyPricesResult | null>(null);
 
@@ -431,6 +433,9 @@ export function CartPageView({ locale }: { locale: 'en' | 'bn' }) {
               )}
             </>
           )}
+          <div className="mt-3 text-center">
+            <QuoteEntry source="cart" text={tq('askForCart')} look="link" testId="cart-ask-quote" />
+          </div>
           <Link prefetch={false} href={`${prefix}/search`} className="mt-3 block text-center text-sm text-accent underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             {t('continueShopping')}
           </Link>

@@ -10,6 +10,7 @@ import { companiesApi } from '../../lib/api';
 import type { DashboardTab } from '../../lib/dashboard-tab';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
+import { RfqLinkCard } from '../quotes/RfqLinkCard';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath } from './shared';
 
 // Every panel loads on demand (the dashboard header renders first), so the route's first-load JS stays under budget.
@@ -71,6 +72,7 @@ function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: D
       </section>
 
       <CompanyCreditCard company={c} />
+      <RfqLinkCard companyId={companyId} />
 
       <Tabs defaultValue={initialTab === 'members' && !isAdmin ? 'sites' : initialTab}>
         <TabsList>

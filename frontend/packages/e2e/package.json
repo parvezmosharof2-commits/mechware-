@@ -17,6 +17,7 @@
     "test:console-orders": "node tests/console-orders.mjs",
     "test:console-products": "node tests/console-products.mjs",
     "test:credit": "node tests/credit.mjs",
+    "test:quotes": "node tests/quotes.mjs",
     "test:storefront": "node tests/storefront.mjs",
     "test:checkout": "node tests/checkout.mjs",
     "test:company-prices": "node tests/company-prices.mjs",

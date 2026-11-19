@@ -8,7 +8,7 @@ const intlMiddleware = createMiddleware({
   localePrefix: 'as-needed'
 });
 
-const PROTECTED_PATH_SEGMENTS = ['/account', '/checkout', '/orders'];
+const PROTECTED_PATH_SEGMENTS = ['/account', '/checkout', '/orders', '/request-quote'];
 
 /**
  * Sanitize returnTo URL to prevent Open Redirect attacks (OWASP Top 10).

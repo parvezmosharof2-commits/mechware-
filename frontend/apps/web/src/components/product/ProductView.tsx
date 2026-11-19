@@ -11,6 +11,7 @@ import { addErrorKey } from '../../lib/cart-ui';
 import { Availability } from '../search/hit-parts';
 import { CopyPartNumber } from '../search/CopyPartNumber';
 import { CompanyPriceGate } from './CompanyPriceGate';
+import { QuoteEntry } from '../quotes/QuoteEntry';
 import {
   absoluteMediaUrl,
   clampQuantity,
@@ -94,6 +95,7 @@ function Gallery({ images, title, mediaBase, t }: { images: MediaDto[]; title: s
 
 export function ProductView({ product, initialSku, mediaBase, banner, sections }: ProductViewProps) {
   const t = useTranslations('Product');
+  const tq = useTranslations('Quotes');
   const locale = useLocale();
   const [sku, setSku] = React.useState<string | undefined>(initialSku);
   const variant: VariantDto | undefined = pickVariant(product.variants, sku);
@@ -281,15 +283,8 @@ export function ProductView({ product, initialSku, mediaBase, banner, sections }
         </div>
 
         <div className="mt-4">
-          {/* A disabled button gets no tooltip or focus, so the reason is also visible text, tied on by aria-describedby. */}
-          <span title={t('comingSoon')} className="inline-block">
-            <Button type="button" variant="accent" size="lg" disabled aria-describedby="pdp-quote-note">
-              {t('addToQuote')}
-            </Button>
-          </span>
-          <p id="pdp-quote-note" className="mt-2 text-xs text-text-muted">
-            {t('comingSoon')}
-          </p>
+          {/* Company buyers only: a guest or personal account sees a short note instead. Nothing private is in the server HTML. */}
+          <QuoteEntry source="product" variantId={variant?.id} quantity={variant ? clampQuantity(Number(qtyText), variant) : 1} label={title} text={tq('askForProduct')} disabled={!variant || onRequest} />
         </div>
 
         <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
