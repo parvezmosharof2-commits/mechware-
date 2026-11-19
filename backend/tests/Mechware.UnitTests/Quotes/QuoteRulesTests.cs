@@ -38,8 +38,9 @@ public class QuoteRulesTests
         QuoteValidity.IsValidAt(validUntil, validUntil.AddTicks(1)).Should().BeFalse();
 
         var quote = Drafted(sent.AddDays(-3));
-        quote.EditDraft(1, Content(days, Line(V1)), Author, Options, sent.AddDays(-3));
-        quote.Send(1, Issue(quote), Sender, false, Options, sent);
+        quote.EditDraft(1, Content(days, Line(V1)), Staff(Author), Options, sent.AddDays(-3));
+        if (quote.Send(1, Issue(quote), Staff(Sender), false, Options, sent) == QuoteVersionStatus.PendingApproval)
+            ApproveAs(quote, 1, sent); // more than 30 days needs a second person (D4.3); the validity starts at the approval
         quote.Version(1).ValidUntilUtc.Should().Be(expected);
         quote.IsAcceptable(1, false, expected.AddTicks(-1)).Should().BeTrue();
         quote.IsAcceptable(1, false, expected).Should().BeFalse();
@@ -50,15 +51,15 @@ public class QuoteRulesTests
     {
         var drafted = Now;
         var direct = Drafted(drafted);
-        direct.Send(1, Issue(direct), Sender, false, Options, drafted.AddDays(4));
+        direct.Send(1, Issue(direct), Staff(Sender), false, Options, drafted.AddDays(4));
         direct.Version(1).ValidUntilUtc.Should().Be(QuoteValidity.ValidUntilUtc(drafted.AddDays(4), 15));
         direct.Version(1).ValidUntilUtc.Should().NotBe(QuoteValidity.ValidUntilUtc(drafted, 15));
 
         // Through an approval: submitted on day 4, approved on day 6. The validity starts at the approval (= send).
         var approved = Drafted(drafted);
-        approved.Send(1, Issue(approved, flags: OverAuthority(approved)), Sender, false, Options, drafted.AddDays(4));
+        approved.Send(1, Issue(approved, overAuthority: true), Staff(Sender), false, Options, drafted.AddDays(4));
         approved.Version(1).ValidUntilUtc.Should().BeNull();
-        approved.Approve(1, Approver, Hash(), null, false, drafted.AddDays(6));
+        ApproveAs(approved, 1, drafted.AddDays(6));
         approved.Version(1).ValidUntilUtc.Should().Be(QuoteValidity.ValidUntilUtc(drafted.AddDays(6), 15));
         approved.Version(1).SentAtUtc.Should().Be(drafted.AddDays(6));
     }
@@ -71,7 +72,7 @@ public class QuoteRulesTests
     public void ValidityOutsideOneToTheMaximum_IsRefused(int days)
     {
         var quote = Drafted();
-        FluentActions.Invoking(() => quote.EditDraft(1, Content(days, Line(V1)), Author, Options, Now))
+        FluentActions.Invoking(() => quote.EditDraft(1, Content(days, Line(V1)), Staff(Author), Options, Now))
             .Should().Throw<ValidationException>().Which.Errors.Should().ContainSingle(e => e.Field == "validityDays");
         quote.Version(1).ValidityDays.Should().Be(15);
     }
@@ -80,9 +81,9 @@ public class QuoteRulesTests
     public void ValidityAllowedWhenDrafted_IsCheckedAgainAtSend_AgainstTheOptionsOfThatMoment()
     {
         var quote = Drafted();
-        quote.EditDraft(1, Content(60, Line(V1)), Author, Options, Now);
+        quote.EditDraft(1, Content(60, Line(V1)), Staff(Author), Options, Now);
         var tighter = Options with { MaxValidityDays = 45, ValidityWithoutApprovalDays = 30 };
-        FluentActions.Invoking(() => quote.Send(1, Issue(quote), Sender, false, tighter, Now))
+        FluentActions.Invoking(() => quote.Send(1, Issue(quote), Staff(Sender), false, tighter, Now))
             .Should().Throw<ValidationException>();
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Draft);
     }
@@ -192,11 +193,11 @@ public class QuoteRulesTests
         QuoteLimits.MaxQuantityPerLine.Should().Be(PlaceOrderRequest.MaxQuantityPerLine);
         var quote = Drafted();
         var fifty = Enumerable.Range(1, 50).Select(i => Line(Guid.NewGuid())).ToArray();
-        quote.EditDraft(1, Content(fifty), Author, Options, Now);
+        quote.EditDraft(1, Content(fifty), Staff(Author), Options, Now);
         quote.Version(1).Lines.Select(l => l.LineNo).Should().Equal(Enumerable.Range(1, 50));
 
         var fiftyOne = fifty.Append(Line(Guid.NewGuid())).ToArray();
-        FluentActions.Invoking(() => quote.EditDraft(1, Content(fiftyOne), Author, Options, Now)).Should().Throw<ValidationException>();
+        FluentActions.Invoking(() => quote.EditDraft(1, Content(fiftyOne), Staff(Author), Options, Now)).Should().Throw<ValidationException>();
         quote.Version(1).Lines.Should().HaveCount(50);
     }
 
@@ -224,7 +225,7 @@ public class QuoteRulesTests
     {
         var quote = Drafted();
         var before = QuoteLifecycleTests.Fingerprint(quote.Version(1));
-        FluentActions.Invoking(() => quote.EditDraft(1, Content(lines), Editor, Options, Now)).Should().Throw<ValidationException>(why);
+        FluentActions.Invoking(() => quote.EditDraft(1, Content(lines), Staff(Editor), Options, Now)).Should().Throw<ValidationException>(why);
         QuoteLifecycleTests.Fingerprint(quote.Version(1)).Should().Be(before);
     }
 
@@ -233,16 +234,16 @@ public class QuoteRulesTests
     {
         var quote = Drafted();
         FluentActions.Invoking(() => quote.EditDraft(1, Content(Line(V1) with { Facts = Facts(V1, problem: "SKU-1: sold in packs of 4.") }),
-            Author, Options, Now)).Should().Throw<ValidationException>().WithMessage("*packs of 4*");
-        FluentActions.Invoking(() => quote.EditDraft(1, Content(Line(V1) with { Facts = Facts(V1, active: false) }), Author, Options, Now))
+            Staff(Author), Options, Now)).Should().Throw<ValidationException>().WithMessage("*packs of 4*");
+        FluentActions.Invoking(() => quote.EditDraft(1, Content(Line(V1) with { Facts = Facts(V1, active: false) }), Staff(Author), Options, Now))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("VARIANT_UNAVAILABLE");
 
         // The same rules again at send, with the facts of that moment.
         var issue = Issue(quote);
         var packChanged = issue with { Facts = [issue.Facts[0] with { QuantityProblem = "sold in packs of 3" }, issue.Facts[1]] };
-        FluentActions.Invoking(() => quote.Send(1, packChanged, Sender, false, Options, Now)).Should().Throw<ValidationException>();
+        FluentActions.Invoking(() => quote.Send(1, packChanged, Staff(Sender), false, Options, Now)).Should().Throw<ValidationException>();
         var retired = issue with { Facts = [issue.Facts[0], issue.Facts[1] with { Active = false }] };
-        FluentActions.Invoking(() => quote.Send(1, retired, Sender, false, Options, Now))
+        FluentActions.Invoking(() => quote.Send(1, retired, Staff(Sender), false, Options, Now))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("VARIANT_UNAVAILABLE");
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Draft);
     }
@@ -252,44 +253,57 @@ public class QuoteRulesTests
     {
         var quote = Drafted();
         var issue = Issue(quote);
-        FluentActions.Invoking(() => quote.Send(1, issue with { Facts = [issue.Facts[0]] }, Sender, false, Options, Now))
+        FluentActions.Invoking(() => quote.Send(1, issue with { Facts = [issue.Facts[0]] }, Staff(Sender), false, Options, Now))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CHANGED");
 
         var fresh = issue with { Facts = [issue.Facts[0] with { TitleEn = "Siemens S7-1200 CPU 1214C", PublicUnitPriceMinor = 125_000 }, issue.Facts[1]] };
-        quote.Send(1, fresh, Sender, false, Options, Now);
+        quote.Send(1, fresh, Staff(Sender), false, Options, Now);
         quote.Version(1).Lines.First().Should().Match<QuoteLine>(l => l.TitleEn == "Siemens S7-1200 CPU 1214C" && l.PublicUnitPriceMinor == 125_000);
     }
 
     [Fact]
-    public void Send_IsRefused_WithoutLinesHashSnapshotOrPreparer()
+    public void Send_IsRefused_WithoutLinesSnapshotOrPreparer()
     {
         var empty = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Author, Options, Now);
-        FluentActions.Invoking(() => empty.Send(1, Issue(empty), Sender, false, Options, Now)).Should().Throw<ValidationException>();
+        FluentActions.Invoking(() => empty.Send(1, Issue(empty), Staff(Sender), false, Options, Now)).Should().Throw<ValidationException>();
 
         var quote = Drafted();
         foreach (var bad in new[]
                  {
-                     Issue(quote, hash: "ABC"), Issue(quote, hash: new string('A', 64)), Issue(quote) with { PreparerName = " " },
-                     Issue(quote) with { Company = Company with { Name = "" } },
+                     Issue(quote) with { PreparerName = " " }, Issue(quote) with { Company = Company with { Name = "" } },
+                     Issue(quote) with { Company = null! },
                  })
-            FluentActions.Invoking(() => quote.Send(1, bad, Sender, false, Options, Now)).Should().Throw<ValidationException>();
+            FluentActions.Invoking(() => quote.Send(1, bad, Staff(Sender), false, Options, Now)).Should().Throw<ValidationException>();
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Draft);
     }
 
     [Fact]
-    public void ABelowFloorLine_NeedsAWrittenReason_AndFlagsNameOnlyLinesOfTheVersion()
+    public void ABelowFloorLine_NeedsAWrittenReason_AndTheFlagsAreTheServersForTheseLines()
     {
         var quote = Drafted();
-        var line = quote.Version(1).Lines.First().Id;
-        FluentActions.Invoking(() => quote.Send(1, Issue(quote, flags: new QuoteFlags([line], [], false)), Sender, false, Options, Now))
+        // V1 at 100,000 with cost 100,000 and the 10 % floor (110,000): below the floor, not below cost.
+        QuoteIssue BelowFloor() => Issue(quote) with
+        {
+            Check = QuoteApprovalPolicy.Evaluate(quote.Version(1), [Cost(V1, 100_000), Cost(V2)], TenPercentFloor,
+                quote.Version(1).Lines.Select(l => Reference(l.VariantId, l.UnitPriceMinor)).ToList(), Options, false),
+        };
+        FluentActions.Invoking(() => quote.Send(1, BelowFloor(), Staff(Sender), false, Options, Now))
             .Should().Throw<ValidationException>().Which.Errors.Should().ContainSingle(e => e.Field == "belowFloorReason");
-        FluentActions.Invoking(() => quote.Send(1, Issue(quote, flags: new QuoteFlags([], [Guid.NewGuid()], false)), Sender, false, Options, Now))
-            .Should().Throw<ValidationException>();
 
-        quote.EditDraft(1, Content(Line(V1, reason: "Project price agreed by the owner"), Line(V2)), Author, Options, Now);
-        line = quote.Version(1).Lines.First().Id;
-        quote.Send(1, Issue(quote, flags: new QuoteFlags([line], [], false)), Sender, false, Options, Now).Should().Be(QuoteVersionStatus.PendingApproval);
+        var stale = BelowFloor();
+        quote.EditDraft(1, Content(Line(V1, reason: "Project price agreed by the owner"), Line(V2)), Staff(Author), Options, Now);
+        FluentActions.Invoking(() => quote.Send(1, stale, Staff(Sender), false, Options, Now))
+            .Should().Throw<ConflictException>("the check was made for the lines before the edit").Which.Code.Should().Be("QUOTE_CHANGED");
+        FluentActions.Invoking(() => quote.Send(1, Issue(quote) with { Check = Check(Drafted()) }, Staff(Sender), false, Options, Now))
+            .Should().Throw<ConflictException>("a check of another version").Which.Code.Should().Be("QUOTE_CHANGED");
+        FluentActions.Invoking(() => quote.Send(1, Issue(quote) with { Check = null! }, Staff(Sender), false, Options, Now))
+            .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CHANGED");
+        quote.Version(1).Status.Should().Be(QuoteVersionStatus.Draft);
+
+        var line = quote.Version(1).Lines.First().Id;
+        quote.Send(1, BelowFloor(), Staff(Sender), false, Options, Now).Should().Be(QuoteVersionStatus.PendingApproval);
         quote.Version(1).Flags!.BelowFloorLineIds.Should().Equal(line);
+        quote.Version(1).Flags!.OverAuthorityLineIds.Should().BeEmpty();
     }
 
     [Fact]
@@ -306,14 +320,14 @@ public class QuoteRulesTests
                      Fixed(Site, new(Seller1, 5_000), new(Seller1, 6_000)),
                      Content(lines) with { ShipToSiteId = Site }, Content(lines) with { ShippingFees = [new(Seller1, 5_000)] },
                  })
-            FluentActions.Invoking(() => quote.EditDraft(1, bad, Author, Options, Now)).Should().Throw<ValidationException>();
+            FluentActions.Invoking(() => quote.EditDraft(1, bad, Staff(Author), Options, Now)).Should().Throw<ValidationException>();
 
-        quote.EditDraft(1, Fixed(Site, new QuoteShippingFee(Seller1, 5_000)), Author, Options, Now); // a draft may still be incomplete
-        FluentActions.Invoking(() => quote.Send(1, Issue(quote), Sender, false, Options, Now))
+        quote.EditDraft(1, Fixed(Site, new QuoteShippingFee(Seller1, 5_000)), Staff(Author), Options, Now); // a draft may still be incomplete
+        FluentActions.Invoking(() => quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now))
             .Should().Throw<ValidationException>("every seller of the lines needs its fee").Which.Errors.Should().ContainSingle(e => e.Field == "shippingFees");
 
-        quote.EditDraft(1, Fixed(Site, new(Seller1, 5_000), new(Seller2, 0)), Author, Options, Now);
-        quote.Send(1, Issue(quote), Sender, false, Options, Now).Should().Be(QuoteVersionStatus.Sent);
+        quote.EditDraft(1, Fixed(Site, new(Seller1, 5_000), new(Seller2, 0)), Staff(Author), Options, Now);
+        quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now).Should().Be(QuoteVersionStatus.Sent);
         quote.Version(1).ShippingFees!.Select(f => f.ShippingMinor).Should().Equal(5_000, 0);
     }
 
@@ -321,7 +335,7 @@ public class QuoteRulesTests
     public void FreeText_IsTrimmed_AndLimited()
     {
         var quote = Drafted();
-        quote.EditDraft(1, Content(Line(V1)) with { BuyerNote = "  ", TermsText = " Net 30 ", InternalNote = null }, Author, Options, Now);
+        quote.EditDraft(1, Content(Line(V1)) with { BuyerNote = "  ", TermsText = " Net 30 ", InternalNote = null }, Staff(Author), Options, Now);
         (quote.Version(1).BuyerNote, quote.Version(1).TermsText, quote.Version(1).InternalNote).Should().Be((null, "Net 30", null));
 
         foreach (var bad in new[]
@@ -329,7 +343,7 @@ public class QuoteRulesTests
                      Content(Line(V1)) with { TermsText = new string('t', 4_001) }, Content(Line(V1)) with { BuyerNote = new string('b', 2_001) },
                      Content(Line(V1)) with { InternalNote = new string('i', 2_001) }, Content(Line(V1)) with { PaymentTerms = (QuotePaymentTerms)9 },
                  })
-            FluentActions.Invoking(() => quote.EditDraft(1, bad, Author, Options, Now)).Should().Throw<ValidationException>();
+            FluentActions.Invoking(() => quote.EditDraft(1, bad, Staff(Author), Options, Now)).Should().Throw<ValidationException>();
     }
 
     [Fact]

@@ -11,7 +11,8 @@ namespace Mechware.Domain.Quotes;
 /// <para>
 /// The order side is not part of this aggregate. Where a rule depends on it, the caller passes <c>acceptedOrderLapsed</c>: true
 /// when the order of the Accepted version is Cancelled and was never confirmed (§8.6), so that version may be accepted again,
-/// revised and superseded. Four-eyes, the flags and the acknowledgement lists of an approval are D4.3 / D4.8.
+/// revised and superseded. Permissions and step-up are the API's (D4.8); four-eyes, the conflict-of-interest refusal, the
+/// flags (<see cref="QuoteApprovalPolicy"/>), their acknowledgement and the content hash are checked here.
 /// </para>
 /// </summary>
 public sealed class Quote : AggregateRoot<Guid>
@@ -68,20 +69,25 @@ public sealed class Quote : AggregateRoot<Guid>
         (AssignedTo, UpdatedAtUtc) = (staffId, nowUtc);
     }
 
-    public void EditDraft(int versionNo, QuoteDraft draft, Guid editorId, QuoteOptions options, DateTime nowUtc)
+    public void EditDraft(int versionNo, QuoteDraft draft, QuoteActor editor, QuoteOptions options, DateTime nowUtc)
     {
         EnsureOpen();
-        Version(versionNo).Edit(draft, editorId, options, nowUtc);
+        EnsureNoConflictOfInterest(editor);
+        Version(versionNo).Edit(draft, editor.UserId, options, nowUtc);
     }
 
-    /// <summary>Freezes the Draft. No flag: Sent now (validity starts, the live version is superseded). Flags: PendingApproval.</summary>
-    public S Send(int versionNo, QuoteIssue issue, Guid senderId, bool acceptedOrderLapsed, QuoteOptions options, DateTime nowUtc)
+    /// <summary>
+    /// Freezes the Draft with the policy run of this moment (<see cref="QuoteIssue.Check"/>) and computes its content hash. No flag:
+    /// Sent now (validity starts, the live version is superseded). Flags: PendingApproval. A line below cost is refused.
+    /// </summary>
+    public S Send(int versionNo, QuoteIssue issue, QuoteActor sender, bool acceptedOrderLapsed, QuoteOptions options, DateTime nowUtc)
     {
         EnsureOpen();
+        EnsureNoConflictOfInterest(sender);
         var v = Version(versionNo);
         if (v.Status != S.Draft) throw v.Refused(S.Sent);
         EnsureNoLiveOrder(acceptedOrderLapsed);
-        v.Freeze(issue, senderId, options, nowUtc);
+        v.Freeze(this, issue, sender.UserId, options, nowUtc);
         if (v.Flags!.NeedsApproval)
         {
             v.MoveToApproval(nowUtc);
@@ -89,22 +95,35 @@ public sealed class Quote : AggregateRoot<Guid>
             return S.PendingApproval;
         }
 
-        Issue(v, senderId, nowUtc);
+        Issue(v, sender.UserId, nowUtc);
         return S.Sent;
     }
 
-    /// <summary>The approval sends the version (§5, §15 decision 13). The approver returns the content hash they were shown.</summary>
-    public void Approve(int versionNo, Guid approverId, string expectedContentHash, string? comment, bool acceptedOrderLapsed, DateTime nowUtc)
+    /// <summary>
+    /// The approval sends the version (§5, §15 decision 13). Four-eyes: the approver did not create, change or submit this
+    /// version. The approver returns the content hash they were shown, and acknowledges exactly the flagged lines of
+    /// <paramref name="check"/>, the policy run inside this approval (cost, floors and buyer prices of now, not of the send).
+    /// </summary>
+    public void Approve(int versionNo, QuoteActor approver, QuoteApproval approval, QuoteApprovalCheck check, bool acceptedOrderLapsed, DateTime nowUtc)
     {
         EnsureOpen();
+        ArgumentNullException.ThrowIfNull(approval);
         var v = Version(versionNo);
         if (v.Status != S.PendingApproval) throw v.Refused(S.Sent);
-        if (approverId == Guid.Empty) throw new ValidationException("approvedBy", "The approver is required.");
-        EnsureHash(v, expectedContentHash);
-        var note = Text.Optional(comment, QuoteLimits.MaxReasonLength, "comment");
+        EnsureNoConflictOfInterest(approver);
+        if (v.IsAuthoredBy(approver.UserId))
+            throw new ConflictException("QUOTE_FOUR_EYES", "Whoever created, changed or submitted a quote version cannot approve it. Another approver must.");
+        EnsureHash(v, approval.ContentHash);
+        var note = Text.Optional(approval.Comment, QuoteLimits.MaxReasonLength, "comment");
         EnsureNoLiveOrder(acceptedOrderLapsed);
-        v.RecordApproval(approverId, note, nowUtc);
-        Issue(v, approverId, nowUtc);
+        var flags = v.Matching(check, atApproval: true).Flags;
+        if (flags.BelowFloorLineIds.Count > 0 && !approval.MayApproveBelowFloor)
+            throw new ForbiddenException("BELOW_FLOOR_PERMISSION_REQUIRED", "Approving prices below the margin floor needs its own permission.");
+        if (!flags.BelowFloorLineIds.ToHashSet().SetEquals(approval.BelowFloorLineIds ?? [])
+            || !flags.OverAuthorityLineIds.ToHashSet().SetEquals(approval.OverAuthorityLineIds ?? []))
+            throw new ConflictException("QUOTE_FLAGS_NOT_ACKNOWLEDGED", "Acknowledge exactly the lines that are below the floor or over the discount authority now.");
+        v.RecordApproval(approver.UserId, note, check, nowUtc);
+        Issue(v, approver.UserId, nowUtc);
     }
 
     public void RejectApproval(int versionNo, Guid rejectedBy, string comment, DateTime nowUtc)
@@ -207,9 +226,20 @@ public sealed class Quote : AggregateRoot<Guid>
             throw new ConflictException("QUOTE_ALREADY_ACCEPTED", "This quote has a live or confirmed order.");
     }
 
-    private static void EnsureHash(QuoteVersion v, string expected)
+    /// <summary>A staff member of the quote's company may not edit, send or approve its quotes (§5, QT6). Unknown membership fails closed.</summary>
+    private void EnsureNoConflictOfInterest(QuoteActor actor)
     {
-        if (!string.Equals(expected, v.ContentHash, StringComparison.Ordinal))
+        ArgumentNullException.ThrowIfNull(actor);
+        if (actor.UserId == Guid.Empty || actor.CompanyIds is null) throw new ValidationException("actor", "The staff user and their memberships are required.");
+        if (actor.CompanyIds.Contains(CompanyId))
+            throw new ForbiddenException("QUOTE_CONFLICT_OF_INTEREST", "You are a member of this company, so you may not edit, send or approve its quotes.");
+    }
+
+    /// <summary>The hash the caller was shown must be the stored one, and the stored one must still be the content's own (recomputed).</summary>
+    private void EnsureHash(QuoteVersion v, string expected)
+    {
+        if (!string.Equals(expected, v.ContentHash, StringComparison.Ordinal)
+            || !string.Equals(v.ContentHash, QuoteContentHash.Compute(this, v), StringComparison.Ordinal))
             throw new ConflictException("QUOTE_CHANGED", "The quote is not the one you reviewed. Reload it and review again.");
     }
 }

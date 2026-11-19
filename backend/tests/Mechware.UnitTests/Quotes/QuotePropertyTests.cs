@@ -36,10 +36,10 @@ public class QuotePropertyTests
                 var hash = rng.Next(5) == 0 ? Hash('e') : v.ContentHash ?? Hash();
                 Action act = rng.Next(11) switch
                 {
-                    0 => () => quote.EditDraft(n, Content(rng.Next(1, 40), Line(V1, price: rng.NextInt64(1, 1_000_000)), Line(V3)), Editor, Options, at),
-                    1 => () => quote.Send(n, Issue(quote, n, hash: Hash((char)('a' + n % 6))), Sender, lapsed, Options, at),
-                    2 => () => quote.Send(n, Issue(quote, n, OverAuthority(quote, n), Hash((char)('a' + n % 6))), Sender, lapsed, Options, at),
-                    3 => () => quote.Approve(n, Approver, hash, null, lapsed, at),
+                    0 => () => quote.EditDraft(n, Content(rng.Next(1, 40), Line(V1, price: rng.NextInt64(1, 1_000_000)), Line(V3)), Staff(Editor), Options, at),
+                    1 => () => quote.Send(n, Issue(quote, n), Staff(Sender), lapsed, Options, at),
+                    2 => () => quote.Send(n, Issue(quote, n, overAuthority: true), Staff(Sender), lapsed, Options, at),
+                    3 => () => ApproveAs(quote, n, at, hash: hash, lapsed: lapsed),
                     4 => () => quote.RejectApproval(n, Approver, "Not this price", at),
                     5 => () => quote.Recall(n, Author, at),
                     6 => () => quote.Accept(n, hash, Guid.NewGuid(), Buyer, lapsed, at),
@@ -69,6 +69,7 @@ public class QuotePropertyTests
                     if (frozen.TryGetValue(x.VersionNo, out var was)) content.Should().Be(was, $"version {x.VersionNo} is {x.Status}");
                     else frozen[x.VersionNo] = content;
                     x.ValidUntilUtc.Should().Be(QuoteValidity.ValidUntilUtc(x.SentAtUtc!.Value, x.ValidityDays));
+                    x.ContentHash.Should().Be(QuoteContentHash.Compute(quote, x), "the stored hash is always the content's own");
                 }
             }
         });

@@ -55,15 +55,31 @@ public sealed record QuoteDraft(int ValidityDays, QuotePaymentTerms PaymentTerms
 /// <summary>The buyer company as the PDF prints it, frozen when the version leaves Draft.</summary>
 public sealed record QuoteCompanySnapshot(string Name, string? Bin, string? BillingAddress);
 
-/// <summary>Approval flags of ADR-0011 §5, computed by the policy (D4.3); any flag sends the version to PendingApproval.</summary>
+/// <summary>Approval flags of ADR-0011 §5, computed by <see cref="QuoteApprovalPolicy"/>; any flag sends the version to PendingApproval.</summary>
 public sealed record QuoteFlags(IReadOnlyList<Guid> BelowFloorLineIds, IReadOnlyList<Guid> OverAuthorityLineIds, bool LongValidity)
 {
     public static readonly QuoteFlags None = new([], [], false);
     public bool NeedsApproval => BelowFloorLineIds.Count > 0 || OverAuthorityLineIds.Count > 0 || LongValidity;
 }
 
-/// <summary>What the server fixes when a version leaves Draft (§4, §6): fresh line facts, company snapshot, preparer, hash, flags.</summary>
-public sealed record QuoteIssue(string ContentHash, QuoteCompanySnapshot Company, string PreparerName, IReadOnlyList<QuoteLineFacts> Facts, QuoteFlags Flags);
+/// <summary>
+/// What the server fixes when a version leaves Draft (§4, §6): fresh line facts, company snapshot, preparer, and the policy run
+/// of that moment. The content hash is not an input: the domain computes it (<see cref="QuoteContentHash"/>).
+/// </summary>
+public sealed record QuoteIssue(QuoteCompanySnapshot Company, string PreparerName, IReadOnlyList<QuoteLineFacts> Facts, QuoteApprovalCheck Check);
+
+/// <summary>
+/// A staff user acting on a quote, with the companies they are an effective member of, read from <c>company_members</c> in the
+/// same request (never from the body). A member of the quote's company may not edit, send or approve it (§5, QT6).
+/// </summary>
+public sealed record QuoteActor(Guid UserId, IReadOnlyCollection<Guid> CompanyIds);
+
+/// <summary>
+/// What the approver sends back (§5, §12): the content hash they were shown and exactly the flagged line ids they acknowledge.
+/// <paramref name="MayApproveBelowFloor"/> = the approver holds <c>quotes.approve_below_floor</c>.
+/// </summary>
+public sealed record QuoteApproval(bool MayApproveBelowFloor, string ContentHash, IReadOnlyCollection<Guid> BelowFloorLineIds,
+    IReadOnlyCollection<Guid> OverAuthorityLineIds, string? Comment);
 
 // Outbox events (§14): ids only; the publisher reads recipients and values at send time.
 public sealed record RfqSubmittedEvent(Guid RfqId, Guid CompanyId) : DomainEventBase;

@@ -37,10 +37,23 @@ public sealed class QuoteVersion : Entity<Guid>
 
     public QuoteCompanySnapshot? CompanySnapshot { get; private set; }
     public string? PreparerName { get; private set; }
+
+    /// <summary><see cref="QuoteContentHash"/> of the frozen content, computed by the domain when the version leaves Draft.</summary>
     public string? ContentHash { get; private set; }
 
-    /// <summary>Staff only: the approval flags found when the version left Draft.</summary>
+    /// <summary>Staff only: the approval flags of the send, replaced by those of the approval (§5).</summary>
     public QuoteFlags? Flags { get; private set; }
+
+    /// <summary>Version totals (<see cref="QuoteTotals"/>): kept current in a Draft, fixed at the send.</summary>
+    public long GoodsNetMinor { get; private set; }
+
+    public long TaxMinor { get; private set; }
+    public long GoodsTotalMinor { get; private set; }
+
+    /// <summary>Fixed delivery only (with a fee for every seller); null for calculated delivery.</summary>
+    public long? ShippingTotalMinor { get; private set; }
+
+    public long? GrandTotalMinor { get; private set; }
 
     public Guid CreatedBy { get; private set; }
     public Guid? SubmittedBy { get; private set; }
@@ -103,23 +116,27 @@ public sealed class QuoteVersion : Entity<Guid>
         if (draft.Lines.DistinctBy(l => l.VariantId).Count() != draft.Lines.Count)
             throw new ValidationException("lines", "Each catalogue item appears on one line only.");
         var lines = draft.Lines.Select((l, i) => QuoteLine.From(Guid.NewGuid(), Id, i + 1, l)).ToList();
+        var totals = Totals(lines, l => (l.SellerId, l.VatRate), draft.ShippingMode, fees);
 
         Contribute(editorId, nowUtc);
         (ValidityDays, PaymentTerms, ShippingMode, ShipToSiteId, ShippingFees, TermsText, BuyerNote, InternalNote) =
             (draft.ValidityDays, draft.PaymentTerms, draft.ShippingMode, draft.ShipToSiteId, fees, terms, buyerNote, internalNote);
         _lines.Clear();
         _lines.AddRange(lines);
+        ApplyTotals(totals);
     }
 
-    /// <summary>Everything is checked first, so a refusal changes nothing; then the snapshot is written. The status is the caller's.</summary>
-    internal void Freeze(QuoteIssue issue, Guid submitterId, QuoteOptions options, DateTime nowUtc)
+    /// <summary>
+    /// Everything is checked first, so a refusal changes nothing; then the snapshot, totals and check figures are written and the
+    /// content hash is computed from them. The status is the caller's.
+    /// </summary>
+    internal void Freeze(Quote quote, QuoteIssue issue, Guid submitterId, QuoteOptions options, DateTime nowUtc)
     {
         EnsureDraft();
         ArgumentNullException.ThrowIfNull(issue);
         if (submitterId == Guid.Empty) throw new ValidationException("submittedBy", "The sender is required.");
         if (_lines.Count == 0) throw new ValidationException("lines", "A quote needs at least one line.");
         ValidateValidity(ValidityDays, options);
-        if (!IsHash(issue.ContentHash)) throw new ValidationException("contentHash", "The content hash is a lower-case SHA-256.");
         _ = Text.Required(issue.Company?.Name, QuoteLimits.MaxNameLength, "company.name");
         var preparer = Text.Required(issue.PreparerName, QuoteLimits.MaxNameLength, "preparerName");
         var facts = (issue.Facts ?? []).DistinctBy(f => f.VariantId).ToDictionary(f => f.VariantId);
@@ -128,19 +145,39 @@ public sealed class QuoteVersion : Entity<Guid>
         foreach (var l in _lines) QuoteLine.Check(facts[l.VariantId], l.VariantId, $"lines[{l.LineNo}]");
         if (ShippingMode == QuoteShippingMode.Fixed && !ShippingFees!.Select(f => f.SellerId).ToHashSet().SetEquals(facts.Values.Select(f => f.SellerId)))
             throw new ValidationException("shippingFees", "Fixed delivery needs one fee for each seller of the lines.");
-        var flags = issue.Flags ?? QuoteFlags.None;
-        var ids = _lines.Select(l => l.Id).ToHashSet();
-        if (flags.BelowFloorLineIds.Concat(flags.OverAuthorityLineIds).Any(id => !ids.Contains(id))
-            || flags.BelowFloorLineIds.Distinct().Count() != flags.BelowFloorLineIds.Count
-            || flags.OverAuthorityLineIds.Distinct().Count() != flags.OverAuthorityLineIds.Count)
-            throw new ValidationException("flags", "Flags name lines of this version, once each.");
-        if (_lines.Any(l => l.BelowFloorReason is null && flags.BelowFloorLineIds.Contains(l.Id)))
-            throw new ValidationException("belowFloorReason", "A line below the margin floor needs a written reason.");
+        var totals = Totals(_lines, l => (facts[l.VariantId].SellerId, facts[l.VariantId].VatRate), ShippingMode, ShippingFees);
+        var check = Matching(issue.Check, atApproval: false);
 
         foreach (var l in _lines) l.Apply(facts[l.VariantId]);
-        (ContentHash, SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, Flags, UpdatedAtUtc) =
-            (issue.ContentHash, submitterId, nowUtc, issue.Company, preparer, flags, nowUtc);
+        ApplyTotals(totals);
+        RecordCheck(check);
+        (SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, UpdatedAtUtc) = (submitterId, nowUtc, issue.Company, preparer, nowUtc);
+        ContentHash = QuoteContentHash.Compute(quote, this);
     }
+
+    /// <summary>What a policy run is bound to: this version, its validity and every line's id, variant, quantity and price.</summary>
+    internal string CheckKey() =>
+        string.Join("|", _lines.OrderBy(l => l.LineNo).Select(l => $"{l.Id:N}:{l.VariantId:N}:{l.Quantity}:{l.UnitPriceMinor}").Prepend($"{Id:N}:{ValidityDays}"));
+
+    /// <summary>
+    /// The check if it was computed for this content and allows the step: no line below cost (unless allowed), and every
+    /// below-floor line carries its reason. A line that fell below the floor after the send cannot get one: the approver rejects.
+    /// </summary>
+    internal QuoteApprovalCheck Matching(QuoteApprovalCheck? check, bool atApproval)
+    {
+        if (check is null || check.VersionId != Id || !string.Equals(check.Key, CheckKey(), StringComparison.Ordinal))
+            throw new ConflictException("QUOTE_CHANGED", "The prices were checked for other content. Check them again.");
+        if (check.BelowCostLineIds.Count > 0)
+            throw new ConflictException("QUOTE_BELOW_COST", "A line is below cost at this moment. Raise its price.");
+        if (_lines.Any(l => l.BelowFloorReason is null && check.Flags.BelowFloorLineIds.Contains(l.Id)))
+            throw atApproval
+                ? new ConflictException("BELOW_FLOOR_REASON_REQUIRED", "A line is now below the margin floor and has no reason. Reject the approval.")
+                : new ValidationException("belowFloorReason", "A line below the margin floor needs a written reason.");
+        return check;
+    }
+
+    /// <summary>The author of this version, its submitter or anyone who changed it (four-eyes, §5).</summary>
+    internal bool IsAuthoredBy(Guid userId) => userId == CreatedBy || userId == SubmittedBy || _contributors.Any(c => c.UserId == userId);
 
     /// <summary>Draft n + 1 with this version's header, notes and lines (new line ids); the reviser is its only contributor.</summary>
     internal QuoteVersion CopyAsDraft(Guid id, int versionNo, Guid reviserId, DateTime nowUtc)
@@ -154,6 +191,11 @@ public sealed class QuoteVersion : Entity<Guid>
             TermsText = TermsText,
             BuyerNote = BuyerNote,
             InternalNote = InternalNote,
+            GoodsNetMinor = GoodsNetMinor,
+            TaxMinor = TaxMinor,
+            GoodsTotalMinor = GoodsTotalMinor,
+            ShippingTotalMinor = ShippingTotalMinor,
+            GrandTotalMinor = GrandTotalMinor,
         };
         next._lines.AddRange(_lines.Select(l => l.CopyTo(id)));
         return next;
@@ -169,8 +211,12 @@ public sealed class QuoteVersion : Entity<Guid>
 
     internal void MoveToApproval(DateTime nowUtc) => Move(S.PendingApproval, nowUtc);
 
-    internal void RecordApproval(Guid approverId, string? comment, DateTime nowUtc) =>
+    /// <summary>The approval's own policy run replaces the check figures and flags of the send (the only content-free write, §6).</summary>
+    internal void RecordApproval(Guid approverId, string? comment, QuoteApprovalCheck check, DateTime nowUtc)
+    {
+        RecordCheck(check);
         (ApprovedBy, ApprovedAtUtc, ApprovalComment) = (approverId, nowUtc, comment);
+    }
 
     /// <summary>PendingApproval → Draft: a rejected approval (with its comment) or a recall. A new send freezes it again.</summary>
     internal void BackToDraft(Guid? rejectedBy, string? comment, DateTime nowUtc)
@@ -227,6 +273,28 @@ public sealed class QuoteVersion : Entity<Guid>
         UpdatedAtUtc = nowUtc;
     }
 
+    private static QuoteVersionTotals Totals(IEnumerable<QuoteLine> lines, Func<QuoteLine, (Guid Seller, decimal Vat)> facts, QuoteShippingMode mode,
+        IReadOnlyList<QuoteShippingFee>? fees) =>
+        QuoteTotals.Compute(lines.Select(l =>
+        {
+            var (seller, vat) = facts(l);
+            return new QuoteTotalsLine(l.Id, l.VariantId, seller, l.Quantity, l.UnitPriceMinor, vat);
+        }).ToList(), mode, fees);
+
+    private void ApplyTotals(QuoteVersionTotals t)
+    {
+        foreach (var l in _lines) l.ApplyTotals(t.Lines[l.Id]);
+        (GoodsNetMinor, TaxMinor, GoodsTotalMinor, ShippingTotalMinor, GrandTotalMinor) =
+            (t.GoodsNetMinor, t.TaxMinor, t.GoodsTotalMinor, t.ShippingTotalMinor, t.GrandTotalMinor);
+    }
+
+    private void RecordCheck(QuoteApprovalCheck check)
+    {
+        var byLine = check.Lines.ToDictionary(c => c.LineId);
+        foreach (var l in _lines) l.RecordCheck(byLine[l.Id]);
+        Flags = check.Flags;
+    }
+
     private static void ValidateValidity(int days, QuoteOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -251,7 +319,8 @@ public sealed class QuoteVersion : Entity<Guid>
 
 /// <summary>
 /// One line of a version (§4): a catalogue variant, a quantity and an absolute VAT-exclusive unit price in whole poisha, plus
-/// the snapshot of the variant written by the server. Totals, VAT and the staff-only check figures come with D4.3.
+/// the snapshot of the variant written by the server, the line's money (<see cref="QuoteTotals"/>) and the staff-only check
+/// figures of the last policy run (<see cref="QuoteApprovalPolicy"/>), which are never in the content hash.
 /// </summary>
 public sealed class QuoteLine : Entity<Guid>
 {
@@ -270,6 +339,17 @@ public sealed class QuoteLine : Entity<Guid>
     public string TitleBn { get; private set; } = string.Empty;
     public decimal VatRate { get; private set; }
     public long PublicUnitPriceMinor { get; private set; }
+    public long LineNetMinor { get; private set; }
+    public long LineTaxMinor { get; private set; }
+    public long LineTotalMinor { get; private set; }
+
+    // Staff-only check figures (§4); cost and floor are shown only with pricing.view_cost.
+    public long? ReferenceUnitPriceMinor { get; private set; }
+    public PriceSource? ReferenceSource { get; private set; }
+    public long? CostMinorAtCheck { get; private set; }
+    public long? FloorMinorAtCheck { get; private set; }
+    public bool BelowFloor { get; private set; }
+    public bool OverAuthority { get; private set; }
 
     private QuoteLine() { }
 
@@ -321,15 +401,24 @@ public sealed class QuoteLine : Entity<Guid>
         (f.SellerId, f.Sku.Trim(), Text.Optional(f.PartNumber, QuoteLimits.MaxSkuLength, "partNumber"), f.TitleEn.Trim(), f.TitleBn.Trim(),
             f.VatRate, f.PublicUnitPriceMinor);
 
+    internal void ApplyTotals(QuoteLineTotals t) => (LineNetMinor, LineTaxMinor, LineTotalMinor) = (t.NetMinor, t.TaxMinor, t.TotalMinor);
+
+    internal void RecordCheck(QuoteLineCheck c) =>
+        (ReferenceUnitPriceMinor, ReferenceSource, CostMinorAtCheck, FloorMinorAtCheck, BelowFloor, OverAuthority) =
+        (c.ReferenceUnitPriceMinor, c.ReferenceSource, c.CostMinor, c.FloorMinor, c.BelowFloor, c.OverAuthority);
+
+    /// <summary>The same line for a new Draft; the old check figures are not carried over (a new send checks again).</summary>
     internal QuoteLine CopyTo(Guid versionId)
     {
         var copy = (QuoteLine)MemberwiseClone();
         (copy.Id, copy.VersionId) = (Guid.NewGuid(), versionId);
+        (copy.ReferenceUnitPriceMinor, copy.ReferenceSource, copy.CostMinorAtCheck, copy.FloorMinorAtCheck, copy.BelowFloor, copy.OverAuthority) =
+            (null, null, null, null, false, false);
         return copy;
     }
 }
 
-/// <summary>A user who created or changed a version (§5); none of them may approve it (checked by D4.3 / D4.8).</summary>
+/// <summary>A user who created or changed a version (§5); none of them may approve it (<see cref="Quote.Approve"/>; DB trigger in D4.4).</summary>
 public sealed class QuoteVersionContributor
 {
     public Guid VersionId { get; private set; }

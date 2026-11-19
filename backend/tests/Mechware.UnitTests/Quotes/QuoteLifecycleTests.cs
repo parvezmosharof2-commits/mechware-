@@ -32,15 +32,13 @@ public class QuoteLifecycleTests
     /// <summary>Each command, the one status §3 allows it from (the Accepted version's order has not lapsed) and where it moves version 1.</summary>
     private static readonly (string Name, QuoteVersionStatus From, QuoteVersionStatus To, Action<Quote> Run)[] Commands =
     [
-        ("send", QuoteVersionStatus.Draft, QuoteVersionStatus.Sent, q => q.Send(1, Issue(q), Sender, false, Options, Now.AddDays(1))),
+        ("send", QuoteVersionStatus.Draft, QuoteVersionStatus.Sent, q => q.Send(1, Issue(q), Staff(Sender), false, Options, Now.AddDays(1))),
         ("send with flags", QuoteVersionStatus.Draft, QuoteVersionStatus.PendingApproval,
-            q => q.Send(1, Issue(q, flags: OverAuthority(q)), Sender, false, Options, Now.AddDays(1))),
-        ("approve", QuoteVersionStatus.PendingApproval, QuoteVersionStatus.Sent,
-            q => q.Approve(1, Approver, q.Version(1).ContentHash ?? Hash(), null, false, Now.AddDays(1))),
+            q => q.Send(1, Issue(q, overAuthority: true), Staff(Sender), false, Options, Now.AddDays(1))),
+        ("approve", QuoteVersionStatus.PendingApproval, QuoteVersionStatus.Sent, q => ApproveAs(q, 1, Now.AddDays(1))),
         ("reject approval", QuoteVersionStatus.PendingApproval, QuoteVersionStatus.Draft, q => q.RejectApproval(1, Approver, "Price too low", Now.AddDays(1))),
         ("recall", QuoteVersionStatus.PendingApproval, QuoteVersionStatus.Draft, q => q.Recall(1, Author, Now.AddDays(1))),
-        ("accept", QuoteVersionStatus.Sent, QuoteVersionStatus.Accepted,
-            q => q.Accept(1, q.Version(1).ContentHash ?? Hash(), Guid.NewGuid(), Buyer, false, Now.AddDays(1))),
+        ("accept", QuoteVersionStatus.Sent, QuoteVersionStatus.Accepted, q => q.Accept(1, HashOf(q), Guid.NewGuid(), Buyer, false, Now.AddDays(1))),
         ("reject", QuoteVersionStatus.Sent, QuoteVersionStatus.Rejected, q => q.Reject(1, Buyer, null, Now.AddDays(1))),
         ("withdraw", QuoteVersionStatus.Sent, QuoteVersionStatus.Withdrawn, q => q.Withdraw(1, Sender, "Wrong prices", Now.AddDays(1))),
     ];
@@ -81,7 +79,7 @@ public class QuoteLifecycleTests
         var quote = WithVersion1In(status);
         var before = Fingerprint(quote.Version(1));
 
-        var act = () => quote.EditDraft(1, Content(Line(V1, price: 1)), Editor, Options, Now.AddDays(1));
+        var act = () => quote.EditDraft(1, Content(Line(V1, price: 1)), Staff(Editor), Options, Now.AddDays(1));
 
         act.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_NOT_EDITABLE");
         Fingerprint(quote.Version(1)).Should().Be(before);
@@ -92,7 +90,7 @@ public class QuoteLifecycleTests
     public void ADraftCanBeEdited_AndEveryEditorBecomesAContributor()
     {
         var quote = Drafted();
-        quote.EditDraft(1, Content(7, Line(V3, qty: 2, price: 5_000, note: "Delivered in 3 weeks")), Editor, Options, Now.AddHours(1));
+        quote.EditDraft(1, Content(7, Line(V3, qty: 2, price: 5_000, note: "Delivered in 3 weeks")), Staff(Editor), Options, Now.AddHours(1));
 
         var v = quote.Version(1);
         v.ValidityDays.Should().Be(7);
@@ -107,14 +105,15 @@ public class QuoteLifecycleTests
     public void SendWithoutFlags_SendsAtOnce_AndSendWithFlags_WaitsForApproval()
     {
         var direct = Drafted();
-        direct.Send(1, Issue(direct), Sender, false, Options, Now).Should().Be(QuoteVersionStatus.Sent);
+        direct.Send(1, Issue(direct), Staff(Sender), false, Options, Now).Should().Be(QuoteVersionStatus.Sent);
         direct.Version(1).Should().Match<QuoteVersion>(v => v.SentBy == Sender && v.SentAtUtc == Now && v.SubmittedBy == Sender
-            && v.ContentHash == Hash() && v.CompanySnapshot == Company && v.PreparerName == "Rahim Uddin");
+            && QuoteVersion.IsHash(v.ContentHash) && v.ContentHash == QuoteContentHash.Compute(direct, v)
+            && v.CompanySnapshot == Company && v.PreparerName == "Rahim Uddin");
         direct.DomainEvents.OfType<QuoteSentEvent>().Should().ContainSingle();
 
         var flagged = Drafted();
-        flagged.Send(1, Issue(flagged, flags: OverAuthority(flagged)), Sender, false, Options, Now).Should().Be(QuoteVersionStatus.PendingApproval);
-        flagged.Version(1).Should().Match<QuoteVersion>(v => v.SentAtUtc == null && v.ValidUntilUtc == null && v.ContentHash == Hash());
+        flagged.Send(1, Issue(flagged, overAuthority: true), Staff(Sender), false, Options, Now).Should().Be(QuoteVersionStatus.PendingApproval);
+        flagged.Version(1).Should().Match<QuoteVersion>(v => v.SentAtUtc == null && v.ValidUntilUtc == null && QuoteVersion.IsHash(v.ContentHash));
         flagged.DomainEvents.OfType<QuoteApprovalRequestedEvent>().Should().ContainSingle();
         flagged.DomainEvents.OfType<QuoteSentEvent>().Should().BeEmpty();
     }
@@ -123,11 +122,11 @@ public class QuoteLifecycleTests
     public void Approval_SendsTheVersion_AndNeedsTheHashTheApproverWasShown()
     {
         var quote = Pending();
-        var stale = () => quote.Approve(1, Approver, Hash('f'), null, false, Now.AddHours(1));
+        var stale = () => ApproveAs(quote, 1, Now.AddHours(1), hash: Hash('f'));
         stale.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CHANGED");
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.PendingApproval);
 
-        quote.Approve(1, Approver, Hash(), "Within the project budget", false, Now.AddHours(1));
+        ApproveAs(quote, 1, Now.AddHours(1), comment: "Within the project budget");
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Sent && v.ApprovedBy == Approver
             && v.SentBy == Approver && v.SentAtUtc == Now.AddHours(1) && v.ApprovalComment == "Within the project budget");
         quote.DomainEvents.OfType<QuoteSentEvent>().Should().ContainSingle();
@@ -141,8 +140,8 @@ public class QuoteLifecycleTests
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Draft && v.ContentHash == null
             && v.SubmittedBy == null && v.ApprovalRejectedBy == Approver && v.ApprovalComment == "Five percent is the most");
 
-        quote.EditDraft(1, Content(Line(V1, price: 110_000)), Author, Options, Now.AddHours(2));
-        quote.Send(1, Issue(quote, hash: Hash('c')), Sender, false, Options, Now.AddHours(2)).Should().Be(QuoteVersionStatus.Sent);
+        quote.EditDraft(1, Content(Line(V1, price: 110_000)), Staff(Author), Options, Now.AddHours(2));
+        quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now.AddHours(2)).Should().Be(QuoteVersionStatus.Sent);
     }
 
     [Fact]
@@ -153,7 +152,7 @@ public class QuoteLifecycleTests
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Sent, "the old version stays acceptable until the new one is sent");
         quote.IsAcceptable(1, false, Now.AddHours(1)).Should().BeTrue();
 
-        quote.Send(2, Issue(quote, 2, hash: Hash('b')), Sender, false, Options, Now.AddHours(2));
+        quote.Send(2, Issue(quote, 2), Staff(Sender), false, Options, Now.AddHours(2));
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Superseded && v.SupersededAtUtc == Now.AddHours(2));
         quote.LiveVersion!.VersionNo.Should().Be(2);
         quote.IsAcceptable(1, false, Now.AddHours(2)).Should().BeFalse();
@@ -164,10 +163,10 @@ public class QuoteLifecycleTests
     {
         var quote = Sent();
         quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
-        quote.Send(2, Issue(quote, 2, OverAuthority(quote, 2), Hash('b')), Sender, false, Options, Now.AddHours(2));
+        quote.Send(2, Issue(quote, 2, overAuthority: true), Staff(Sender), false, Options, Now.AddHours(2));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Sent);
 
-        quote.Approve(2, Approver, Hash('b'), null, false, Now.AddHours(3));
+        ApproveAs(quote, 2, Now.AddHours(3));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Superseded);
         quote.Versions.Count(v => v.Status is QuoteVersionStatus.Sent or QuoteVersionStatus.Accepted).Should().Be(1);
     }
@@ -228,12 +227,12 @@ public class QuoteLifecycleTests
         var stale = () => quote.Accept(1, Hash('9'), order, Buyer, false, Now.AddHours(1));
         stale.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CHANGED");
 
-        quote.Accept(1, Hash(), order, Buyer, false, Now.AddHours(1));
+        quote.Accept(1, HashOf(quote), order, Buyer, false, Now.AddHours(1));
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Accepted && v.AcceptedOrderId == order
             && v.AcceptedBy == Buyer && v.AcceptedAtUtc == Now.AddHours(1));
         quote.DomainEvents.OfType<QuoteAcceptedEvent>().Should().ContainSingle().Which.OrderId.Should().Be(order);
 
-        var twice = () => quote.Accept(1, Hash(), Guid.NewGuid(), Buyer, false, Now.AddHours(2));
+        var twice = () => quote.Accept(1, HashOf(quote), Guid.NewGuid(), Buyer, false, Now.AddHours(2));
         twice.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_ALREADY_ACCEPTED");
         quote.Version(1).AcceptedOrderId.Should().Be(order);
     }
@@ -246,18 +245,18 @@ public class QuoteLifecycleTests
         quote.IsAcceptable(1, acceptedOrderLapsed: true, Now.AddHours(2)).Should().BeTrue();
 
         var second = Guid.NewGuid();
-        quote.Accept(1, Hash(), second, Buyer, acceptedOrderLapsed: true, Now.AddHours(2));
+        quote.Accept(1, HashOf(quote), second, Buyer, acceptedOrderLapsed: true, Now.AddHours(2));
         quote.Version(1).AcceptedOrderId.Should().Be(second);
 
         var revise = () => quote.Revise(Guid.NewGuid(), Editor, acceptedOrderLapsed: false, Now.AddHours(3));
         revise.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_ALREADY_ACCEPTED");
 
         quote.Revise(Guid.NewGuid(), Editor, acceptedOrderLapsed: true, Now.AddHours(3));
-        var sendWhileLive = () => quote.Send(2, Issue(quote, 2, hash: Hash('b')), Sender, acceptedOrderLapsed: false, Options, Now.AddHours(4));
+        var sendWhileLive = () => quote.Send(2, Issue(quote, 2), Staff(Sender), acceptedOrderLapsed: false, Options, Now.AddHours(4));
         sendWhileLive.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_ALREADY_ACCEPTED");
         quote.Version(2).Status.Should().Be(QuoteVersionStatus.Draft, "a refused send freezes nothing");
 
-        quote.Send(2, Issue(quote, 2, hash: Hash('b')), Sender, acceptedOrderLapsed: true, Options, Now.AddHours(4));
+        quote.Send(2, Issue(quote, 2), Staff(Sender), acceptedOrderLapsed: true, Options, Now.AddHours(4));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Superseded);
     }
 
@@ -269,11 +268,11 @@ public class QuoteLifecycleTests
         quote.Version(1).IsExpired(until.AddTicks(-1)).Should().BeFalse();
         quote.Version(1).IsExpired(until).Should().BeTrue();
 
-        var late = () => quote.Accept(1, Hash(), Guid.NewGuid(), Buyer, false, until);
+        var late = () => quote.Accept(1, HashOf(quote), Guid.NewGuid(), Buyer, false, until);
         late.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_NOT_ACCEPTABLE");
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Sent);
 
-        quote.Accept(1, Hash(), Guid.NewGuid(), Buyer, false, until.AddTicks(-1));
+        quote.Accept(1, HashOf(quote), Guid.NewGuid(), Buyer, false, until.AddTicks(-1));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Accepted);
     }
 
@@ -313,15 +312,15 @@ public class QuoteLifecycleTests
         var pending = Pending();
         pending.Close(Sender, "No longer needed", Now.AddHours(1));
         pending.Version(1).Status.Should().Be(QuoteVersionStatus.Draft);
-        FluentActions.Invoking(() => pending.Send(1, Issue(pending), Sender, false, Options, Now.AddHours(2)))
+        FluentActions.Invoking(() => pending.Send(1, Issue(pending), Staff(Sender), false, Options, Now.AddHours(2)))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CLOSED");
-        FluentActions.Invoking(() => pending.EditDraft(1, Content(Line(V1)), Author, Options, Now.AddHours(2)))
+        FluentActions.Invoking(() => pending.EditDraft(1, Content(Line(V1)), Staff(Author), Options, Now.AddHours(2)))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CLOSED");
 
         var accepted = WithVersion1In(QuoteVersionStatus.Accepted);
         accepted.Close(Sender, "Order lapsed, project cancelled", Now.AddHours(2));
         accepted.IsAcceptable(1, acceptedOrderLapsed: true, Now.AddHours(3)).Should().BeFalse();
-        FluentActions.Invoking(() => accepted.Accept(1, Hash(), Guid.NewGuid(), Buyer, true, Now.AddHours(3)))
+        FluentActions.Invoking(() => accepted.Accept(1, HashOf(accepted), Guid.NewGuid(), Buyer, true, Now.AddHours(3)))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_NOT_ACCEPTABLE");
     }
 
@@ -334,8 +333,13 @@ public class QuoteLifecycleTests
     /// <summary>Everything a buyer could see of a version, plus its status fields: equal fingerprints = nothing changed.</summary>
     internal static string Fingerprint(QuoteVersion v) =>
         string.Join("|", v.Status, v.ValidityDays, v.PaymentTerms, v.ShippingMode, v.ShipToSiteId, v.TermsText, v.BuyerNote, v.InternalNote,
-            v.ContentHash, v.CompanySnapshot, v.PreparerName, v.SubmittedBy, v.SentAtUtc, v.ValidUntilUtc, v.AcceptedOrderId,
+            v.ContentHash, v.CompanySnapshot, v.PreparerName, v.SubmittedBy, v.SentAtUtc, v.ValidUntilUtc, v.AcceptedOrderId, v.ApprovedBy,
+            v.GoodsNetMinor, v.TaxMinor, v.GoodsTotalMinor, v.ShippingTotalMinor, v.GrandTotalMinor,
+            v.Flags is { } f ? $"{string.Join(",", f.BelowFloorLineIds)}/{string.Join(",", f.OverAuthorityLineIds)}/{f.LongValidity}" : "-",
+            string.Join(";", v.Contributors.Select(c => c.UserId)),
             string.Join(";", v.ShippingFees?.Select(f => $"{f.SellerId}:{f.ShippingMinor}") ?? []),
             string.Join(";", v.Lines.Select(l => $"{l.Id}:{l.LineNo}:{l.VariantId}:{l.Quantity}:{l.UnitPriceMinor}:{l.LineNote}:{l.BelowFloorReason}:"
-                + $"{l.Sku}:{l.PartNumber}:{l.TitleEn}:{l.TitleBn}:{l.SellerId}:{l.VatRate}:{l.PublicUnitPriceMinor}")));
+                + $"{l.Sku}:{l.PartNumber}:{l.TitleEn}:{l.TitleBn}:{l.SellerId}:{l.VatRate}:{l.PublicUnitPriceMinor}:"
+                + $"{l.LineNetMinor}:{l.LineTaxMinor}:{l.LineTotalMinor}:{l.ReferenceUnitPriceMinor}:{l.ReferenceSource}:{l.CostMinorAtCheck}:"
+                + $"{l.FloorMinorAtCheck}:{l.BelowFloor}:{l.OverAuthority}")));
 }
