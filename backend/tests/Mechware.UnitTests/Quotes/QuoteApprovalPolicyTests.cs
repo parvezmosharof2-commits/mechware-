@@ -16,7 +16,7 @@ public class QuoteApprovalPolicyTests
     /// <summary>One line (V1, 10 × <paramref name="price"/>) drafted by <see cref="Author"/>.</summary>
     private static Quote OneLine(long price, string? reason = null, int validityDays = 15)
     {
-        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Author, Options, Now);
+        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Staff(Author), Options, Now);
         quote.EditDraft(1, Content(validityDays, Line(V1, price: price, reason: reason)), Staff(Author), Options, Now);
         return quote;
     }
@@ -78,10 +78,10 @@ public class QuoteApprovalPolicyTests
         // v1 at the buyer's price; v2 at 5 % below v1 (within); v3 at 5 % below v2, which is 9.75 % below the buyer's price.
         var quote = OneLine(100_000);
         SendWith(quote, Evaluate(quote, reference: 100_000)).Should().Be(QuoteVersionStatus.Sent);
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         quote.EditDraft(2, Content(Line(V1, price: 95_000)), Staff(Editor), Options, Now.AddHours(1));
         SendWith(quote, Evaluate(quote, reference: 100_000, versionNo: 2), 2).Should().Be(QuoteVersionStatus.Sent);
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(2));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(2));
         quote.EditDraft(3, Content(Line(V1, price: 90_250)), Staff(Editor), Options, Now.AddHours(2));
 
         var check = Evaluate(quote, reference: 100_000, versionNo: 3);
@@ -91,7 +91,7 @@ public class QuoteApprovalPolicyTests
         // And the other way: a contract price of 90,000 makes 86,000 within authority, though it is 14 % below version 1.
         var contract = OneLine(100_000);
         SendWith(contract, Evaluate(contract, reference: 100_000));
-        contract.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        contract.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         contract.EditDraft(2, Content(Line(V1, price: 86_000)), Staff(Editor), Options, Now.AddHours(1));
         Evaluate(contract, reference: 90_000, versionNo: 2).Flags.NeedsApproval.Should().BeFalse();
     }
@@ -239,7 +239,7 @@ public class QuoteApprovalPolicyTests
     public void TheVersionsCreator_IsRefused_EvenWhenSomeoneElseSubmitted()
     {
         var quote = Sent();
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1)); // Editor creates version 2
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1)); // Editor creates version 2
         quote.Send(2, Issue(quote, 2, overAuthority: true), Staff(Sender), false, Options, Now.AddHours(1));
         FluentActions.Invoking(() => ApproveAs(quote, 2, Now.AddHours(2), approver: Editor))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_FOUR_EYES");
@@ -303,7 +303,7 @@ public class QuoteApprovalPolicyTests
     public void FlagsAreRecheckedAtApproval_WithTheCostFloorAndPriceOfThatMoment()
     {
         // Line 1 over authority at send; line 2 fine. Line 2 has a reason on file, in case it falls below the floor.
-        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Author, Options, Now);
+        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Staff(Author), Options, Now);
         quote.EditDraft(1, Content(Line(V1), Line(V2, qty: 4, price: 250_000, reason: "Agreed with the owner for this project")), Staff(Author), Options, Now);
         var v = quote.Version(1);
         var (l1, l2) = (LineId(quote), LineId(quote, 2));
@@ -411,7 +411,7 @@ public class QuoteApprovalPolicyTests
     {
         var quote = Pending();
         ApproveAs(quote, 1, Now.AddHours(1));
-        var v2 = quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(2));
+        var v2 = quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(2));
         v2.Flags.Should().BeNull();
         v2.Lines.Should().AllSatisfy(l => (l.ReferenceUnitPriceMinor, l.ReferenceSource, l.CostMinorAtCheck, l.FloorMinorAtCheck, l.BelowFloor, l.OverAuthority)
             .Should().Be(((long?)null, (PriceSource?)null, (long?)null, (long?)null, false, false)));

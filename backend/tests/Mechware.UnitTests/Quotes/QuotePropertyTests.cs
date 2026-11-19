@@ -45,7 +45,7 @@ public class QuotePropertyTests
                     6 => () => quote.Accept(n, hash, Guid.NewGuid(), Buyer, lapsed, at),
                     7 => () => quote.Reject(n, Buyer, null, at),
                     8 => () => quote.Withdraw(n, Sender, "Wrong prices", at),
-                    9 => () => quote.Revise(Guid.NewGuid(), Editor, lapsed, at),
+                    9 => () => quote.Revise(Guid.NewGuid(), Staff(Editor), lapsed, at),
                     _ => () => lapsed = rng.Next(2) == 0, // the order side: an order lapses (or a new one is live)
                 };
 

@@ -103,7 +103,7 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
         var quote = await SentAsync(w);
         await using (var ctx = db.CreateContext())
         {
-            (await LoadAsync(ctx, quote.Id)).Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+            (await LoadAsync(ctx, quote.Id)).Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
             await ctx.SaveChangesAsync();
         }
 
@@ -121,7 +121,7 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
         {
             await using var ctx = db.CreateContext();
             var q = await LoadAsync(ctx, other.Id);
-            q.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(n));
+            q.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(n));
             await ctx.SaveChangesAsync();
             q.Send(n, Issue(q, n, w), Staff(Sender), false, Options, Now.AddHours(n));
             await ctx.SaveChangesAsync();
@@ -459,7 +459,7 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
     /// <summary>A quote of the world's company whose version 1 is a Draft with two lines, by <see cref="Author"/> and changed by <see cref="Editor"/>.</summary>
     private static Quote Drafted(World w, bool fixedDelivery = false, Guid? rfqId = null)
     {
-        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), w.Company, rfqId, w.Contact, Author, Options, Now);
+        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), w.Company, rfqId, w.Contact, Staff(Author), Options, Now);
         quote.EditDraft(1, Content(w, fixedDelivery, Line(w.V1, w.Seller1), Line(w.V2, w.Seller2, qty: 4, price: 250_000, vat: 0.075m)),
             Staff(Editor), Options, Now);
         return quote;

@@ -148,7 +148,7 @@ public class QuoteLifecycleTests
     public void ANewerVersion_SupersedesTheSentOne_OnlyWhenItIsSent()
     {
         var quote = Sent();
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Sent, "the old version stays acceptable until the new one is sent");
         quote.IsAcceptable(1, false, Now.AddHours(1)).Should().BeTrue();
 
@@ -162,7 +162,7 @@ public class QuoteLifecycleTests
     public void AnApprovedNewerVersion_AlsoSupersedesTheSentOne()
     {
         var quote = Sent();
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         quote.Send(2, Issue(quote, 2, overAuthority: true), Staff(Sender), false, Options, Now.AddHours(2));
         quote.Version(1).Status.Should().Be(QuoteVersionStatus.Sent);
 
@@ -179,7 +179,7 @@ public class QuoteLifecycleTests
     public void Revise_IsRefusedWhileAVersionIsOpen(QuoteVersionStatus open)
     {
         var quote = WithVersion1In(open);
-        var act = () => quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        var act = () => quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         act.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_OPEN_VERSION_EXISTS");
         quote.Versions.Should().ContainSingle();
     }
@@ -188,8 +188,8 @@ public class QuoteLifecycleTests
     public void Revise_IsRefusedASecondTime_SoThereIsAtMostOneOpenVersion()
     {
         var quote = Sent();
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
-        var again = () => quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(2));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
+        var again = () => quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(2));
         again.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_OPEN_VERSION_EXISTS");
         quote.Versions.Count(v => v.Status is QuoteVersionStatus.Draft or QuoteVersionStatus.PendingApproval).Should().Be(1);
     }
@@ -204,7 +204,7 @@ public class QuoteLifecycleTests
         var before = Fingerprint(quote.Version(1));
         var newId = Guid.NewGuid();
 
-        var v2 = quote.Revise(newId, Editor, false, Now.AddDays(2));
+        var v2 = quote.Revise(newId, Staff(Editor), false, Now.AddDays(2));
 
         (v2.Id, v2.VersionNo, v2.Status, v2.CreatedBy, quote.LatestVersionNo).Should().Be((newId, 2, QuoteVersionStatus.Draft, Editor, 2));
         v2.Contributors.Select(c => c.UserId).Should().Equal(Editor);
@@ -248,10 +248,10 @@ public class QuoteLifecycleTests
         quote.Accept(1, HashOf(quote), second, Buyer, acceptedOrderLapsed: true, Now.AddHours(2));
         quote.Version(1).AcceptedOrderId.Should().Be(second);
 
-        var revise = () => quote.Revise(Guid.NewGuid(), Editor, acceptedOrderLapsed: false, Now.AddHours(3));
+        var revise = () => quote.Revise(Guid.NewGuid(), Staff(Editor), acceptedOrderLapsed: false, Now.AddHours(3));
         revise.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_ALREADY_ACCEPTED");
 
-        quote.Revise(Guid.NewGuid(), Editor, acceptedOrderLapsed: true, Now.AddHours(3));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), acceptedOrderLapsed: true, Now.AddHours(3));
         var sendWhileLive = () => quote.Send(2, Issue(quote, 2), Staff(Sender), acceptedOrderLapsed: false, Options, Now.AddHours(4));
         sendWhileLive.Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_ALREADY_ACCEPTED");
         quote.Version(2).Status.Should().Be(QuoteVersionStatus.Draft, "a refused send freezes nothing");
@@ -284,7 +284,7 @@ public class QuoteLifecycleTests
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Rejected && v.RejectedBy == Buyer
             && v.RejectReason == "Delivery must be within two weeks");
         quote.DomainEvents.OfType<QuoteRejectedEvent>().Should().ContainSingle();
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(2)).VersionNo.Should().Be(2);
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(2)).VersionNo.Should().Be(2);
     }
 
     // ---- close --------------------------------------------------------------------------------------------------------
@@ -300,7 +300,7 @@ public class QuoteLifecycleTests
             && v.WithdrawReason == "Customer bought elsewhere");
         quote.DomainEvents.OfType<QuoteWithdrawnEvent>().Should().ContainSingle();
 
-        FluentActions.Invoking(() => quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(2)))
+        FluentActions.Invoking(() => quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(2)))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CLOSED");
         FluentActions.Invoking(() => quote.Close(Sender, "Again please", Now.AddHours(2)))
             .Should().Throw<ConflictException>().Which.Code.Should().Be("QUOTE_CLOSED");

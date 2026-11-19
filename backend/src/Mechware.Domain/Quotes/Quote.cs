@@ -36,8 +36,11 @@ public sealed class Quote : AggregateRoot<Guid>
 
     private Quote() { }
 
-    /// <summary>A new quote whose version 1 is an empty Draft with the default validity; the author is its first contributor.</summary>
-    public static Quote Create(Guid id, Guid firstVersionId, string number, Guid companyId, Guid? rfqId, Guid contactUserId, Guid createdBy,
+    /// <summary>
+    /// A new quote whose version 1 is an empty Draft with the default validity; the author is its first contributor. A staff member
+    /// of the company may not create its quote (conflict of interest, §5, QT6).
+    /// </summary>
+    public static Quote Create(Guid id, Guid firstVersionId, string number, Guid companyId, Guid? rfqId, Guid contactUserId, QuoteActor creator,
         QuoteOptions options, DateTime nowUtc)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -51,12 +54,13 @@ public sealed class Quote : AggregateRoot<Guid>
             CompanyId = companyId,
             RfqId = rfqId,
             ContactUserId = contactUserId,
-            CreatedBy = createdBy,
             LatestVersionNo = 1,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc,
         };
-        quote._versions.Add(new QuoteVersion(firstVersionId, id, 1, options.DefaultValidityDays, createdBy, nowUtc));
+        quote.EnsureNoConflictOfInterest(creator);
+        quote.CreatedBy = creator.UserId;
+        quote._versions.Add(new QuoteVersion(firstVersionId, id, 1, options.DefaultValidityDays, creator.UserId, nowUtc));
         return quote;
     }
 
@@ -181,15 +185,19 @@ public sealed class Quote : AggregateRoot<Guid>
         AddDomainEvent(new QuoteAcceptedEvent(Id, v.Id, v.VersionNo, orderId) { OccurredOnUtc = nowUtc });
     }
 
-    /// <summary>Copies the latest version into Draft n + 1 (§3) while no version is open and no order of the quote is live or confirmed.</summary>
-    public QuoteVersion Revise(Guid newVersionId, Guid reviserId, bool acceptedOrderLapsed, DateTime nowUtc)
+    /// <summary>
+    /// Copies the latest version (the highest number, whatever order the versions were loaded in) into Draft n + 1 (§3) while no
+    /// version is open and no order of the quote is live or confirmed. A staff member of the company may not revise its quote.
+    /// </summary>
+    public QuoteVersion Revise(Guid newVersionId, QuoteActor reviser, bool acceptedOrderLapsed, DateTime nowUtc)
     {
         EnsureOpen();
+        EnsureNoConflictOfInterest(reviser);
         if (OpenVersion is not null)
             throw new ConflictException("QUOTE_OPEN_VERSION_EXISTS", "This quote already has an open version. Finish or recall it first.");
         EnsureNoLiveOrder(acceptedOrderLapsed);
         if (newVersionId == Guid.Empty || _versions.Any(v => v.Id == newVersionId)) throw new ValidationException("id", "A new version needs a new id.");
-        var next = _versions[^1].CopyAsDraft(newVersionId, LatestVersionNo + 1, reviserId, nowUtc);
+        var next = _versions.MaxBy(v => v.VersionNo)!.CopyAsDraft(newVersionId, LatestVersionNo + 1, reviser.UserId, nowUtc);
         _versions.Add(next);
         (LatestVersionNo, UpdatedAtUtc) = (next.VersionNo, nowUtc);
         return next;

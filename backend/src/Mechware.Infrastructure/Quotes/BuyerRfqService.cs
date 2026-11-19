@@ -242,7 +242,10 @@ public sealed partial class BuyerRfqService(MechwareDbContext db, IQuickOrderVal
         new(r.Id, r.Number, r.Status.ToString().ToLowerInvariant(), r.Source.ToString().ToLowerInvariant(), r.LineCount, r.Message, r.NeededBy, r.ShipToSiteId,
             r.RequestedBy == actor, r.CreatedAtUtc, r.ClosedAtUtc, r.CloseReason, r.WithdrawnAtUtc);
 
-    private async Task<RfqDetailDto> DetailAsync(Rfq r, Guid actor, CancellationToken ct)
+    private async Task<RfqDetailDto> DetailAsync(Rfq r, Guid actor, CancellationToken ct) => new(Summary(r, actor), await LinesOfAsync(db, r, ct));
+
+    /// <summary>The RFQ's lines as asked, each with the catalogue item it matched (and an obsolete one's successor); shared with the staff desk.</summary>
+    internal static async Task<IReadOnlyList<RfqLineDto>> LinesOfAsync(MechwareDbContext db, Rfq r, CancellationToken ct)
     {
         var ids = r.Lines.SelectMany(l => new[] { l.VariantId, l.SuccessorVariantId }).Where(id => id is not null).Select(id => id!.Value).Distinct().ToList();
         var variants = ids.Count == 0 ? [] : await (from v in db.ProductVariants.AsNoTracking()
@@ -250,7 +253,7 @@ public sealed partial class BuyerRfqService(MechwareDbContext db, IQuickOrderVal
                                                     where ids.Contains(v.Id)
                                                     select new RfqVariantDto(v.Id, v.Sku, p.TitleEn, p.TitleBn)).ToDictionaryAsync(v => v.Id, ct);
         RfqVariantDto? Of(Guid? id) => id is { } k && variants.TryGetValue(k, out var v) ? v : null;
-        return new RfqDetailDto(Summary(r, actor), [.. r.Lines.OrderBy(l => l.LineNo).Select(l => new RfqLineDto(l.LineNo, l.RawText, l.PartKey, l.Quantity,
-            l.MatchStatus switch { RfqMatchStatus.NotFound => "not_found", var s => s.ToString().ToLowerInvariant() }, Of(l.VariantId), Of(l.SuccessorVariantId), l.Note))]);
+        return [.. r.Lines.OrderBy(l => l.LineNo).Select(l => new RfqLineDto(l.LineNo, l.RawText, l.PartKey, l.Quantity,
+            l.MatchStatus switch { RfqMatchStatus.NotFound => "not_found", var s => s.ToString().ToLowerInvariant() }, Of(l.VariantId), Of(l.SuccessorVariantId), l.Note))];
     }
 }

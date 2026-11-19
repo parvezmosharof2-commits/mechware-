@@ -22,4 +22,12 @@ public static class BuyerQuoteAccess
          join c in db.Companies.AsNoTracking() on m.CompanyId equals c.Id
          where m.CompanyId == companyId && m.UserId == userId && m.IsActive && m.AcceptedAtUtc != null
          select new BuyerQuoteMember(m.Roles, c.Status)).FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Every company a (staff) user is an effective member of, in any status: the conflict-of-interest input of the quote desk
+    /// (ADR-0011 §5, QT6), read in the same request, never from the body.
+    /// </summary>
+    public static async Task<IReadOnlyCollection<Guid>> CompanyIdsAsync(MechwareDbContext db, Guid userId, CancellationToken ct) =>
+        await db.CompanyMembers.AsNoTracking().Where(m => m.UserId == userId && m.IsActive && m.AcceptedAtUtc != null)
+            .Select(m => m.CompanyId).Distinct().ToListAsync(ct);
 }

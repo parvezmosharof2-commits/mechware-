@@ -20,7 +20,7 @@ public class QuoteContentHashTests
     [Fact]
     public void TheCanonicalJson_IsFixed_AndTheHashIsItsLowerHexSha256()
     {
-        var quote = Quote.Create(QuoteId, Guid.NewGuid(), "MWQ-261117-K7Q2MX", CompanyA, null, Contact, Author, Options, Now);
+        var quote = Quote.Create(QuoteId, Guid.NewGuid(), "MWQ-261117-K7Q2MX", CompanyA, null, Contact, Staff(Author), Options, Now);
         quote.EditDraft(1, Content(Line(V1, note: "Lead time 3 weeks"), Line(V2, qty: 4, price: 250_000)), Staff(Author), Options, Now);
         quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now);
         var v = quote.Version(1);
@@ -54,7 +54,7 @@ public class QuoteContentHashTests
     {
         var quote = Sent();
         var h1 = HashOf(quote);
-        quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
         quote.Send(2, Issue(quote, 2), Staff(Sender), false, Options, Now.AddHours(1));
         HashOf(quote, 2).Should().NotBe(h1, "the version number is part of what the buyer accepts");
         HashOf(quote).Should().Be(h1);
@@ -113,7 +113,7 @@ public class QuoteContentHashTests
     /// <summary>Builds the quote of <paramref name="s"/>, sends version 1 and returns its stored hash (Sent or PendingApproval).</summary>
     private static string Build(Spec s)
     {
-        var quote = Quote.Create(s.QuoteId, Guid.NewGuid(), s.Number, s.CompanyId, null, s.ContactId, s.AuthorId, Options, s.SentAt.AddDays(-1));
+        var quote = Quote.Create(s.QuoteId, Guid.NewGuid(), s.Number, s.CompanyId, null, s.ContactId, Staff(s.AuthorId), Options, s.SentAt.AddDays(-1));
         quote.EditDraft(1, new QuoteDraft(s.ValidityDays, s.Terms, s.Mode, s.Site, s.Fees, s.TermsText, s.BuyerNote, s.InternalNote,
                 s.Lines.Select(l => new QuoteLineDraft(l.Variant, l.Quantity, l.Price, FactsOf(l), l.Note, l.Reason)).ToList()),
             Staff(s.AuthorId), Options, s.SentAt.AddDays(-1));

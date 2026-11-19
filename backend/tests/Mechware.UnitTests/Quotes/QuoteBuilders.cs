@@ -53,7 +53,7 @@ internal static class QuoteBuilders
     /// <summary>A new quote of <see cref="CompanyA"/> whose version 1 is a Draft with two lines (V1, V2), made by <see cref="Author"/>.</summary>
     public static Quote Drafted(DateTime? at = null)
     {
-        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(at ?? Now), CompanyA, null, Contact, Author, Options, at ?? Now);
+        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(at ?? Now), CompanyA, null, Contact, Staff(Author), Options, at ?? Now);
         quote.EditDraft(1, Content(Line(V1), Line(V2, qty: 4, price: 250_000)), Staff(Author), Options, at ?? Now);
         return quote;
     }
@@ -134,7 +134,7 @@ internal static class QuoteBuilders
             case QuoteVersionStatus.Rejected: quote.Reject(1, Buyer, "Too expensive", Now.AddHours(1)); break;
             case QuoteVersionStatus.Withdrawn: quote.Withdraw(1, Sender, "Wrong prices", Now.AddHours(1)); break;
             case QuoteVersionStatus.Superseded:
-                quote.Revise(Guid.NewGuid(), Editor, false, Now.AddHours(1));
+                quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1));
                 quote.Send(2, Issue(quote, 2), Staff(Sender), false, Options, Now.AddHours(2));
                 break;
         }

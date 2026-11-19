@@ -2346,6 +2346,350 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/rfqs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The RFQ inbox. `status`: `open` (Submitted or Quoting, oldest first) or one status; `assigned`: `me`, `none`
+         *     or a staff user id; `companyId`; `q` (number or company name); `page`, `pageSize` (at most 50).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    assigned?: string;
+                    companyId?: string;
+                    q?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rfqs/{rfqId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rfqId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rfqs/{rfqId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assigns an open RFQ to a staff member who prepares quotes, or unassigns it (`assigneeId: null`). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rfqId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AssignRfqRequest"];
+                    "text/json": components["schemas"]["AssignRfqRequest"];
+                    "application/*+json": components["schemas"]["AssignRfqRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/rfqs/{rfqId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Closes an RFQ with a reason the buyer sees (for example "no bid"); its quotes stay as they are. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    rfqId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StaffReasonRequest"];
+                    "text/json": components["schemas"]["StaffReasonRequest"];
+                    "application/*+json": components["schemas"]["StaffReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quotes, newest first. `status`: `draft`, `pending_approval`, `sent`, `expired`, `accepted`, `rejected`,
+         *     `withdrawn` (of the latest version) or `closed`; `assigned`, `companyId`, `q`, `page`, `pageSize`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    assigned?: string;
+                    companyId?: string;
+                    q?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** `{rfqId}` (the matched lines pre-filled at the company's own price) or `{companyId, contactUserId}`; version 1 is a Draft. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateStaffQuoteRequest"];
+                    "text/json": components["schemas"]["CreateStaffQuoteRequest"];
+                    "application/*+json": components["schemas"]["CreateStaffQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copies the latest version into a new Draft while no version is open and no order of the quote is live. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ends the quote with a reason: its Sent version is withdrawn and a pending one recalled, in the same transaction. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StaffReasonRequest"];
+                    "text/json": components["schemas"]["StaffReasonRequest"];
+                    "application/*+json": components["schemas"]["StaffReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/refunds": {
         parameters: {
             query?: never;
@@ -5818,6 +6162,10 @@ export interface components {
             expectedContentHash?: string | null;
             acknowledgedBelowFloorEntryIds?: string[] | null;
         };
+        AssignRfqRequest: {
+            /** Format: uuid */
+            assigneeId?: string | null;
+        };
         BounceCreditPaymentRequest: {
             reason?: string | null;
         };
@@ -5876,6 +6224,14 @@ export interface components {
             neededBy?: string | null;
             /** Format: uuid */
             shipToSiteId?: string | null;
+        };
+        CreateStaffQuoteRequest: {
+            /** Format: uuid */
+            rfqId?: string | null;
+            /** Format: uuid */
+            companyId?: string | null;
+            /** Format: uuid */
+            contactUserId?: string | null;
         };
         CreditAllocationInput: {
             /** Format: uuid */
@@ -6209,6 +6565,9 @@ export interface components {
             division?: string | null;
             postalCode?: string | null;
             isDefaultDelivery?: boolean;
+        };
+        StaffReasonRequest: {
+            reason?: string | null;
         };
         StartPaymentBody: {
             provider?: string | null;

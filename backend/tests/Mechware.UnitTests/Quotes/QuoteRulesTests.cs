@@ -137,7 +137,7 @@ public class QuoteRulesTests
     {
         QuoteNumber.IsQuoteNumber(number).Should().BeFalse();
         if (number is not null)
-            FluentActions.Invoking(() => Quote.Create(Guid.NewGuid(), Guid.NewGuid(), number, CompanyA, null, Contact, Author, Options, Now))
+            FluentActions.Invoking(() => Quote.Create(Guid.NewGuid(), Guid.NewGuid(), number, CompanyA, null, Contact, Staff(Author), Options, Now))
                 .Should().Throw<ValidationException>();
     }
 
@@ -264,7 +264,7 @@ public class QuoteRulesTests
     [Fact]
     public void Send_IsRefused_WithoutLinesSnapshotOrPreparer()
     {
-        var empty = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Author, Options, Now);
+        var empty = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, null, Contact, Staff(Author), Options, Now);
         FluentActions.Invoking(() => empty.Send(1, Issue(empty), Staff(Sender), false, Options, Now)).Should().Throw<ValidationException>();
 
         var quote = Drafted();
@@ -350,11 +350,11 @@ public class QuoteRulesTests
     public void Create_NeedsACompanyContactAndAuthor()
     {
         foreach (var (company, contact, author) in new[] { (Guid.Empty, Contact, Author), (CompanyA, Guid.Empty, Author), (CompanyA, Contact, Guid.Empty) })
-            FluentActions.Invoking(() => Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), company, null, contact, author, Options, Now))
+            FluentActions.Invoking(() => Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), company, null, contact, Staff(author), Options, Now))
                 .Should().Throw<ValidationException>();
 
         var rfq = Guid.NewGuid();
-        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, rfq, Contact, Author, Options, Now);
+        var quote = Quote.Create(Guid.NewGuid(), Guid.NewGuid(), QuoteNumber.NewQuote(Now), CompanyA, rfq, Contact, Staff(Author), Options, Now);
         (quote.CompanyId, quote.RfqId, quote.ContactUserId, quote.CreatedBy, quote.LatestVersionNo).Should().Be((CompanyA, (Guid?)rfq, Contact, Author, 1));
         quote.Version(1).Should().Match<QuoteVersion>(v => v.Status == QuoteVersionStatus.Draft && v.CreatedBy == Author && v.Lines.Count == 0);
     }

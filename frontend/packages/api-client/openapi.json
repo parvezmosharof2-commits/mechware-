@@ -2356,6 +2356,359 @@
         }
       }
     },
+    "/api/v1/admin/rfqs": {
+      "get": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "The RFQ inbox. `status`: `open` (Submitted or Quoting, oldest first) or one status; `assigned`: `me`, `none`\r\nor a staff user id; `companyId`; `q` (number or company name); `page`, `pageSize` (at most 50).",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigned",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rfqs/{rfqId}": {
+      "get": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "parameters": [
+          {
+            "name": "rfqId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rfqs/{rfqId}/assign": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Assigns an open RFQ to a staff member who prepares quotes, or unassigns it (`assigneeId: null`).",
+        "parameters": [
+          {
+            "name": "rfqId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRfqRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRfqRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRfqRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/rfqs/{rfqId}/close": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Closes an RFQ with a reason the buyer sees (for example \"no bid\"); its quotes stay as they are.",
+        "parameters": [
+          {
+            "name": "rfqId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "`{rfqId}` (the matched lines pre-filled at the company's own price) or `{companyId, contactUserId}`; version 1 is a Draft.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaffQuoteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaffQuoteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaffQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Quotes, newest first. `status`: `draft`, `pending_approval`, `sent`, `expired`, `accepted`, `rejected`,\r\n`withdrawn` (of the latest version) or `closed`; `assigned`, `companyId`, `q`, `page`, `pageSize`.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assigned",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}": {
+      "get": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/revise": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Copies the latest version into a new Draft while no version is open and no order of the quote is live.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/close": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Ends the quote with a reason: its Sent version is withdrawn and a pending one recalled, in the same transaction.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/refunds": {
       "get": {
         "tags": [
@@ -5546,6 +5899,17 @@
         },
         "additionalProperties": false
       },
+      "AssignRfqRequest": {
+        "type": "object",
+        "properties": {
+          "assigneeId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "BounceCreditPaymentRequest": {
         "type": "object",
         "properties": {
@@ -5714,6 +6078,27 @@
         },
         "additionalProperties": false,
         "description": "What an RFQ request carries. `source` is `cart`, `text`, `csv` or `product`; only that source's own member is read\r\n(`text`, or `variantId` and `quantity`). There is no line list, price or company in it: other JSON members are ignored."
+      },
+      "CreateStaffQuoteRequest": {
+        "type": "object",
+        "properties": {
+          "rfqId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "companyId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "contactUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       },
       "CreditAllocationInput": {
         "type": "object",
@@ -6737,6 +7122,16 @@
         },
         "additionalProperties": false
       },
+      "StaffReasonRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "StartPaymentBody": {
         "type": "object",
         "properties": {
@@ -7263,6 +7658,9 @@
     },
     {
       "name": "AdminProducts"
+    },
+    {
+      "name": "AdminQuotes"
     },
     {
       "name": "AdminRefunds"

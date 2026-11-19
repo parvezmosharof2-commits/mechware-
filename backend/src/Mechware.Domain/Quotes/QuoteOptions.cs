@@ -28,6 +28,12 @@ public sealed record QuoteOptions
     /// <summary>Company roles that see every RFQ and quote of the company (§13); any other member sees their own.</summary>
     public CompanyRoles VisibleTo { get; init; } = CompanyRoles.Admin | CompanyRoles.Buyer;
 
+    /// <summary>The KPI "first quote within 4 working hours" (§15 decision 12), on the <see cref="QuoteSla"/> clock; shown in the inbox only.</summary>
+    public int FirstQuoteSlaWorkingHours { get; init; } = 4;
+
+    /// <summary>Dhaka public holidays the SLA clock skips (owner item c: empty until the owner gives the list).</summary>
+    public IReadOnlyList<DateOnly> SlaHolidays { get; init; } = [];
+
     public IReadOnlyList<string> Problems()
     {
         var p = new List<string>();
@@ -41,6 +47,7 @@ public sealed record QuoteOptions
         Check(MaxOpenRfqsPerCompany >= 1, nameof(MaxOpenRfqsPerCompany), "must be at least 1");
         Check(VisibleTo != CompanyRoles.None && (VisibleTo & ~(CompanyRoles.Requester | CompanyRoles.Buyer | CompanyRoles.Approver | CompanyRoles.Admin)) == 0,
             nameof(VisibleTo), "must name at least one company role");
+        Check(FirstQuoteSlaWorkingHours is >= 1 and <= 45, nameof(FirstQuoteSlaWorkingHours), "must be 1 to 45 (one working week)");
         return p;
     }
 
