@@ -63,6 +63,9 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Credit.ICreditReadService, Credit.CreditReadService>();
         services.TryAddScoped<Mechware.Application.Credit.IBuyerCreditService, Credit.BuyerCreditService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditReconciliationService, Credit.CreditReconciliationService>();
+        // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
+        services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
+        services.TryAddScoped<Mechware.Application.Quotes.IBuyerRfqService, Quotes.BuyerRfqService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();

@@ -179,7 +179,7 @@ internal static class Text
 {
     public static string? Optional(string? value, int max, string field)
     {
-        var t = value?.Trim();
+        var t = PlainText.Clean(value)?.Trim();   // QT17: control characters go before the text is measured
         if (string.IsNullOrEmpty(t)) return null;
         return t.Length <= max ? t : throw new ValidationException(field, $"At most {max} characters.");
     }
@@ -189,7 +189,7 @@ internal static class Text
 
     public static string Reason(string? value)
     {
-        var t = (value ?? string.Empty).Trim();
+        var t = (PlainText.Clean(value) ?? string.Empty).Trim();
         return t.Length is >= QuoteLimits.MinReasonLength and <= QuoteLimits.MaxReasonLength ? t
             : throw new ValidationException("reason", $"Give a reason of {QuoteLimits.MinReasonLength} to {QuoteLimits.MaxReasonLength} characters.");
     }

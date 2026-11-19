@@ -136,6 +136,8 @@ builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.Fro
 // Credit settlement (ADR-0010 §13): defaults pending owner confirmation, changed under Credit:*; an invalid value stops the host here.
 builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validated(
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
+// RFQs and quotes (ADR-0011 §2, §15): the owner defaults, changed under Quotes:*; an invalid value stops the host here.
+builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Quotes.QuoteOptions.Section).Get<Mechware.Domain.Quotes.QuoteOptions>() ?? new Mechware.Domain.Quotes.QuoteOptions()).Validated());
 // Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
 builder.Services.AddSingleton(Mechware.Infrastructure.Pricing.PricingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
@@ -324,6 +326,21 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 Window = TimeSpan.FromMinutes(1)
             }));
+
+    // Asking for a quote (threat model QT10): 10 a minute per signed-in user, on top of the per-company caps counted in the database.
+    // A request without a verified identity is not counted here (it gets 401 from the endpoint, and the general anonymous budget still applies).
+    options.AddPolicy("QuoteRequests", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "quote-requests:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:QuoteRequestsPermitPerMinute") ?? 10,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("quote-requests-anonymous"));
 
     // Credit CSV exports (threat model CS27): a few a minute per signed-in staff member, on top of the general budget.
     // A request without a verified identity is not counted here (it gets 401 from the endpoint, and the general anonymous budget still applies).

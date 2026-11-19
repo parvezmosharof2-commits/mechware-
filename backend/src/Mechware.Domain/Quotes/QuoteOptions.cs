@@ -1,3 +1,5 @@
+using Mechware.Domain.Companies;
+
 namespace Mechware.Domain.Quotes;
 
 /// <summary>
@@ -23,6 +25,9 @@ public sealed record QuoteOptions
     public int MaxRfqsPerCompanyPerHour { get; init; } = 10;
     public int MaxOpenRfqsPerCompany { get; init; } = 20;
 
+    /// <summary>Company roles that see every RFQ and quote of the company (§13); any other member sees their own.</summary>
+    public CompanyRoles VisibleTo { get; init; } = CompanyRoles.Admin | CompanyRoles.Buyer;
+
     public IReadOnlyList<string> Problems()
     {
         var p = new List<string>();
@@ -34,6 +39,8 @@ public sealed record QuoteOptions
         Check(DiscountAuthorityBasisPoints is >= 0 and < 10_000, nameof(DiscountAuthorityBasisPoints), "must be 0 to 9999");
         Check(MaxRfqsPerCompanyPerHour >= 1, nameof(MaxRfqsPerCompanyPerHour), "must be at least 1");
         Check(MaxOpenRfqsPerCompany >= 1, nameof(MaxOpenRfqsPerCompany), "must be at least 1");
+        Check(VisibleTo != CompanyRoles.None && (VisibleTo & ~(CompanyRoles.Requester | CompanyRoles.Buyer | CompanyRoles.Approver | CompanyRoles.Admin)) == 0,
+            nameof(VisibleTo), "must name at least one company role");
         return p;
     }
 

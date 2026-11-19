@@ -4607,6 +4607,146 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/companies/{companyId}/rfqs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The company's RFQs, newest first: all of them for an Admin or Buyer, otherwise the caller's own. `status`, `page`, `pageSize` (at most 50). */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["CreateRfqBody"];
+                    "text/json": components["schemas"]["CreateRfqBody"];
+                    "application/*+json": components["schemas"]["CreateRfqBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/rfqs/{rfqId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                    rfqId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/rfqs/{rfqId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraws an open RFQ (any time before staff close it). Withdrawing twice is one withdrawal. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                    rfqId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/locations/bd": {
         parameters: {
             query?: never;
@@ -5719,6 +5859,23 @@ export interface components {
             validFromUtc?: string;
             /** Format: date-time */
             validToUtc?: string;
+        };
+        /**
+         * @description What an RFQ request carries. `source` is `cart`, `text`, `csv` or `product`; only that source's own member is read
+         *     (`text`, or `variantId` and `quantity`). There is no line list, price or company in it: other JSON members are ignored.
+         */
+        CreateRfqBody: {
+            source?: string | null;
+            text?: string | null;
+            /** Format: uuid */
+            variantId?: string | null;
+            /** Format: int32 */
+            quantity?: number | null;
+            message?: string | null;
+            /** Format: date */
+            neededBy?: string | null;
+            /** Format: uuid */
+            shipToSiteId?: string | null;
         };
         CreditAllocationInput: {
             /** Format: uuid */

@@ -4346,6 +4346,167 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/rfqs": {
+      "post": {
+        "tags": [
+          "CompanyRfqs"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfqBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfqBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfqBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "CompanyRfqs"
+        ],
+        "summary": "The company's RFQs, newest first: all of them for an Admin or Buyer, otherwise the caller's own. `status`, `page`, `pageSize` (at most 50).",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/rfqs/{rfqId}": {
+      "get": {
+        "tags": [
+          "CompanyRfqs"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "rfqId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/rfqs/{rfqId}/withdraw": {
+      "post": {
+        "tags": [
+          "CompanyRfqs"
+        ],
+        "summary": "Withdraws an open RFQ (any time before staff close it). Withdrawing twice is one withdrawal.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "rfqId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/locations/bd": {
       "get": {
         "tags": [
@@ -5514,6 +5675,45 @@
           }
         },
         "additionalProperties": false
+      },
+      "CreateRfqBody": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "nullable": true
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "variantId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "neededBy": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "shipToSiteId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What an RFQ request carries. `source` is `cart`, `text`, `csv` or `product`; only that source's own member is read\r\n(`text`, or `variantId` and `quantity`). There is no line list, price or company in it: other JSON members are ignored."
       },
       "CreditAllocationInput": {
         "type": "object",
@@ -7096,6 +7296,9 @@
     },
     {
       "name": "CompanyPrices"
+    },
+    {
+      "name": "CompanyRfqs"
     },
     {
       "name": "Locations"
