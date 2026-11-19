@@ -3781,6 +3781,776 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Quotes.Quote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AssignedTo")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("close_reason");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<Guid>("ContactUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contact_user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("LatestVersionNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("latest_version_no");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)")
+                        .HasColumnName("number");
+
+                    b.Property<Guid?>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedTo")
+                        .HasDatabaseName("ix_quotes_open_assigned")
+                        .HasFilter("closed_at IS NULL");
+
+                    b.HasIndex("ContactUserId");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quotes_number");
+
+                    b.HasIndex("RfqId")
+                        .HasDatabaseName("ix_quotes_rfq");
+
+                    b.HasIndex("CompanyId", "CreatedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_quotes_company_created");
+
+                    b.ToTable("quotes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quotes_closed", "(closed_at IS NULL) = (closed_by IS NULL) AND (closed_at IS NULL) = (close_reason IS NULL) AND (close_reason IS NULL OR char_length(close_reason) BETWEEN 5 AND 500)");
+
+                            t.HasCheckConstraint("ck_quotes_latest_version", "latest_version_no >= 1");
+
+                            t.HasCheckConstraint("ck_quotes_number", "number ~ '^MWQ-[0-9]{6}-[A-Z2-7]{6}$'");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("BelowFloor")
+                        .HasColumnType("boolean")
+                        .HasColumnName("below_floor");
+
+                    b.Property<string>("BelowFloorReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("below_floor_reason");
+
+                    b.Property<long?>("CostMinorAtCheck")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cost_minor_at_check");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("FloorMinorAtCheck")
+                        .HasColumnType("bigint")
+                        .HasColumnName("floor_minor_at_check");
+
+                    b.Property<long>("LineNetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("line_net_minor");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_no");
+
+                    b.Property<string>("LineNote")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("line_note");
+
+                    b.Property<long>("LineTaxMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("line_tax_minor");
+
+                    b.Property<long>("LineTotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("line_total_minor");
+
+                    b.Property<bool>("OverAuthority")
+                        .HasColumnType("boolean")
+                        .HasColumnName("over_authority");
+
+                    b.Property<string>("PartNumber")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("part_number");
+
+                    b.Property<long>("PublicUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("public_unit_price_minor");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("ReferenceSource")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("reference_source");
+
+                    b.Property<long?>("ReferenceUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reference_unit_price_minor");
+
+                    b.Property<Guid?>("RfqLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_line_id");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_id");
+
+                    b.Property<string>("Sku")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sku");
+
+                    b.Property<string>("TitleBn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title_bn");
+
+                    b.Property<string>("TitleEn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("title_en");
+
+                    b.Property<long>("UnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_price_minor");
+
+                    b.Property<Guid>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.Property<decimal>("VatRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("vat_rate");
+
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RfqLineId");
+
+                    b.HasIndex("SellerId");
+
+                    b.HasIndex("VariantId")
+                        .HasDatabaseName("ix_quote_lines_variant");
+
+                    b.HasIndex("VersionId", "LineNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quote_lines_line_no");
+
+                    b.HasIndex("VersionId", "VariantId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quote_lines_variant");
+
+                    b.ToTable("quote_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quote_lines_below_floor_reason", "(NOT below_floor OR below_floor_reason IS NOT NULL) AND (below_floor_reason IS NULL OR char_length(below_floor_reason) BETWEEN 5 AND 500)");
+
+                            t.HasCheckConstraint("ck_quote_lines_check", "(reference_unit_price_minor IS NULL) = (reference_source IS NULL) AND (reference_unit_price_minor IS NULL OR reference_unit_price_minor > 0) AND (reference_source IS NULL OR reference_source IN ('List', 'Sale', 'QuantityBreak', 'GroupList', 'Contract')) AND (cost_minor_at_check IS NULL OR cost_minor_at_check > 0) AND (floor_minor_at_check IS NULL OR floor_minor_at_check > 0)");
+
+                            t.HasCheckConstraint("ck_quote_lines_line", "line_no BETWEEN 1 AND 50 AND quantity BETWEEN 1 AND 10000 AND unit_price_minor BETWEEN 1 AND 100000000000");
+
+                            t.HasCheckConstraint("ck_quote_lines_money", "line_net_minor = quantity::bigint * unit_price_minor AND line_tax_minor >= 0 AND line_total_minor = line_net_minor + line_tax_minor");
+
+                            t.HasCheckConstraint("ck_quote_lines_snapshot", "vat_rate BETWEEN 0 AND 1 AND public_unit_price_minor > 0 AND char_length(sku) BETWEEN 1 AND 64 AND (part_number IS NULL OR char_length(part_number) <= 64) AND char_length(title_en) BETWEEN 1 AND 255 AND char_length(title_bn) BETWEEN 1 AND 255 AND (line_note IS NULL OR char_length(line_note) <= 300)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("AcceptedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_by");
+
+                    b.Property<Guid?>("AcceptedOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_order_id");
+
+                    b.Property<string>("ApprovalComment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("approval_comment");
+
+                    b.Property<DateTime?>("ApprovalRejectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approval_rejected_at");
+
+                    b.Property<Guid?>("ApprovalRejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approval_rejected_by");
+
+                    b.Property<DateTime?>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at");
+
+                    b.Property<Guid?>("ApprovedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by");
+
+                    b.Property<string>("BuyerNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("buyer_note");
+
+                    b.Property<string>("CompanySnapshot")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("company_snapshot");
+
+                    b.Property<string>("ContentHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("content_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Flags")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("flags");
+
+                    b.Property<long>("GoodsNetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("goods_net_minor");
+
+                    b.Property<long>("GoodsTotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("goods_total_minor");
+
+                    b.Property<long?>("GrandTotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("grand_total_minor");
+
+                    b.Property<string>("InternalNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("internal_note");
+
+                    b.Property<string>("PaymentTerms")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("payment_terms");
+
+                    b.Property<string>("PdfBnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pdf_bn_key");
+
+                    b.Property<string>("PdfBnSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("pdf_bn_sha256")
+                        .IsFixedLength();
+
+                    b.Property<string>("PdfEnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pdf_en_key");
+
+                    b.Property<string>("PdfEnSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("pdf_en_sha256")
+                        .IsFixedLength();
+
+                    b.Property<string>("PreparerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("preparer_name");
+
+                    b.Property<Guid>("QuoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_id");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("reject_reason");
+
+                    b.Property<DateTime?>("RejectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("rejected_at");
+
+                    b.Property<Guid?>("RejectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rejected_by");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<Guid?>("SentBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sent_by");
+
+                    b.Property<string>("ShipToJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ship_to");
+
+                    b.Property<Guid?>("ShipToSiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ship_to_site_id");
+
+                    b.Property<string>("ShippingFees")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("shipping_fees");
+
+                    b.Property<string>("ShippingMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("shipping_mode");
+
+                    b.Property<long?>("ShippingTotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("shipping_total_minor");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("SubmittedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid?>("SubmittedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by");
+
+                    b.Property<DateTime?>("SupersededAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("superseded_at");
+
+                    b.Property<long>("TaxMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("tax_minor");
+
+                    b.Property<string>("TermsText")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("terms_text");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("ValidUntilUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_until_utc");
+
+                    b.Property<int>("ValidityDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("validity_days");
+
+                    b.Property<int>("VersionNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("version_no");
+
+                    b.Property<string>("WithdrawReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("withdraw_reason");
+
+                    b.Property<DateTime?>("WithdrawnAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.Property<Guid?>("WithdrawnBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("withdrawn_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcceptedOrderId")
+                        .HasDatabaseName("ix_quote_versions_accepted_order")
+                        .HasFilter("accepted_order_id IS NOT NULL");
+
+                    b.HasIndex("QuoteId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quote_versions_one_open")
+                        .HasFilter("status IN ('Draft', 'PendingApproval')");
+
+                    b.HasIndex("SubmittedAtUtc")
+                        .HasDatabaseName("ix_quote_versions_approval_queue")
+                        .HasFilter("status = 'PendingApproval'");
+
+                    b.HasIndex("ValidUntilUtc")
+                        .HasDatabaseName("ix_quote_versions_expiry")
+                        .HasFilter("status = 'Sent'");
+
+                    b.HasIndex("QuoteId", "VersionNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quote_versions_version_no");
+
+                    b.ToTable("quote_versions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quote_versions_approval_shape", "(approved_by IS NULL) = (approved_at IS NULL) AND (approved_by IS NULL OR status IN ('Sent', 'Accepted', 'Rejected', 'Withdrawn', 'Superseded')) AND (approval_rejected_by IS NULL) = (approval_rejected_at IS NULL)");
+
+                            t.HasCheckConstraint("ck_quote_versions_four_eyes", "approved_by IS NULL OR (submitted_by IS NOT NULL AND approved_by <> created_by AND approved_by <> submitted_by)");
+
+                            t.HasCheckConstraint("ck_quote_versions_frozen", "content_hash IS NULL OR content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_quote_versions_frozen_shape", "(status = 'Draft') = (content_hash IS NULL) AND (content_hash IS NULL) = (submitted_by IS NULL) AND (submitted_by IS NULL) = (submitted_at IS NULL) AND (content_hash IS NULL) = (flags IS NULL) AND (status = 'Draft' OR (company_snapshot IS NOT NULL AND preparer_name IS NOT NULL))");
+
+                            t.HasCheckConstraint("ck_quote_versions_header", "version_no >= 1 AND validity_days BETWEEN 1 AND 365 AND payment_terms IN ('AsAccount', 'Advance') AND shipping_mode IN ('Calculated', 'Fixed')");
+
+                            t.HasCheckConstraint("ck_quote_versions_money", "goods_net_minor >= 0 AND tax_minor >= 0 AND goods_total_minor = goods_net_minor + tax_minor AND (shipping_total_minor IS NULL) = (grand_total_minor IS NULL) AND (shipping_total_minor IS NULL OR (shipping_total_minor >= 0 AND grand_total_minor = goods_total_minor + shipping_total_minor))");
+
+                            t.HasCheckConstraint("ck_quote_versions_outcome_shape", "(accepted_order_id IS NULL) = (accepted_by IS NULL) AND (accepted_order_id IS NULL) = (accepted_at IS NULL) AND (status <> 'Accepted' OR accepted_order_id IS NOT NULL) AND (accepted_order_id IS NULL OR status IN ('Accepted', 'Superseded')) AND (status = 'Rejected') = (rejected_by IS NOT NULL) AND (rejected_by IS NULL) = (rejected_at IS NULL) AND (status = 'Withdrawn') = (withdrawn_by IS NOT NULL) AND (withdrawn_by IS NULL) = (withdrawn_at IS NULL) AND (withdrawn_by IS NULL) = (withdraw_reason IS NULL) AND (status = 'Superseded') = (superseded_at IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_quote_versions_pdf", "(pdf_en_key IS NULL) = (pdf_en_sha256 IS NULL) AND (pdf_bn_key IS NULL) = (pdf_bn_sha256 IS NULL) AND (pdf_en_sha256 IS NULL OR pdf_en_sha256 ~ '^[0-9a-f]{64}$') AND (pdf_bn_sha256 IS NULL OR pdf_bn_sha256 ~ '^[0-9a-f]{64}$') AND (pdf_en_key IS NULL AND pdf_bn_key IS NULL OR status IN ('Sent', 'Accepted', 'Rejected', 'Withdrawn', 'Superseded'))");
+
+                            t.HasCheckConstraint("ck_quote_versions_sent_shape", "(status IN ('Sent', 'Accepted', 'Rejected', 'Withdrawn', 'Superseded')) = (sent_at IS NOT NULL) AND (sent_at IS NULL) = (sent_by IS NULL) AND (sent_at IS NULL) = (valid_until_utc IS NULL) AND (valid_until_utc IS NULL OR valid_until_utc > sent_at)");
+
+                            t.HasCheckConstraint("ck_quote_versions_shipping", "(shipping_mode = 'Calculated' AND ship_to_site_id IS NULL AND shipping_fees IS NULL AND ship_to IS NULL AND shipping_total_minor IS NULL) OR (shipping_mode = 'Fixed' AND ship_to_site_id IS NOT NULL AND shipping_fees IS NOT NULL AND jsonb_typeof(shipping_fees) = 'array' AND (status = 'Draft' OR grand_total_minor IS NOT NULL))");
+
+                            t.HasCheckConstraint("ck_quote_versions_status", "status IN ('Draft', 'PendingApproval', 'Sent', 'Accepted', 'Rejected', 'Withdrawn', 'Superseded')");
+
+                            t.HasCheckConstraint("ck_quote_versions_texts", "(terms_text IS NULL OR char_length(terms_text) <= 4000) AND (buyer_note IS NULL OR char_length(buyer_note) <= 2000) AND (internal_note IS NULL OR char_length(internal_note) <= 2000) AND (preparer_name IS NULL OR char_length(preparer_name) BETWEEN 1 AND 200) AND (approval_comment IS NULL OR char_length(approval_comment) <= 500) AND (reject_reason IS NULL OR char_length(reject_reason) <= 1000) AND (withdraw_reason IS NULL OR char_length(withdraw_reason) BETWEEN 5 AND 500)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersionContributor", b =>
+                {
+                    b.Property<Guid>("VersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("version_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("FirstContributedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_contributed_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("VersionId", "UserId");
+
+                    b.ToTable("quote_version_contributors", (string)null);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.Rfq", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AssignedTo")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_to");
+
+                    b.Property<string>("CloseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("close_reason");
+
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("FirstQuoteSentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_quote_sent_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_count");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("message");
+
+                    b.Property<DateOnly?>("NeededBy")
+                        .HasColumnType("date")
+                        .HasColumnName("needed_by");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(17)
+                        .HasColumnType("character varying(17)")
+                        .HasColumnName("number");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("request_hash")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<Guid?>("ShipToSiteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ship_to_site_id");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("WithdrawnAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedTo");
+
+                    b.HasIndex("CreatedAtUtc")
+                        .HasDatabaseName("ix_rfqs_inbox")
+                        .HasFilter("status IN ('Submitted', 'Quoting')");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rfqs_number");
+
+                    b.HasIndex("CompanyId", "CreatedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_rfqs_company_created");
+
+                    b.HasIndex("RequestedBy", "CreatedAtUtc")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_rfqs_requester_created");
+
+                    b.HasIndex("RequestedBy", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rfqs_idempotency");
+
+                    b.ToTable("rfqs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_rfqs_answered", "(status IN ('Submitted', 'Quoting') AND first_quote_sent_at IS NULL) OR (status = 'Answered' AND first_quote_sent_at IS NOT NULL) OR status IN ('Closed', 'Withdrawn')");
+
+                            t.HasCheckConstraint("ck_rfqs_closed", "(status = 'Closed') = (closed_at IS NOT NULL) AND (closed_at IS NULL) = (closed_by IS NULL) AND (closed_at IS NULL) = (close_reason IS NULL) AND (close_reason IS NULL OR char_length(close_reason) BETWEEN 5 AND 500)");
+
+                            t.HasCheckConstraint("ck_rfqs_number", "number ~ '^MWR-[0-9]{6}-[A-Z2-7]{6}$'");
+
+                            t.HasCheckConstraint("ck_rfqs_source", "source IN ('Cart', 'Text', 'Csv', 'Product')");
+
+                            t.HasCheckConstraint("ck_rfqs_status", "status IN ('Submitted', 'Quoting', 'Answered', 'Closed', 'Withdrawn')");
+
+                            t.HasCheckConstraint("ck_rfqs_texts", "(message IS NULL OR char_length(message) <= 2000) AND char_length(idempotency_key) BETWEEN 8 AND 100 AND request_hash ~ '^[0-9a-f]{64}$' AND line_count BETWEEN 1 AND 500");
+
+                            t.HasCheckConstraint("ck_rfqs_withdrawn", "(status = 'Withdrawn') = (withdrawn_at IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.RfqLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_no");
+
+                    b.Property<string>("MatchStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("match_status");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("PartKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("part_key");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("RawText")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("raw_text");
+
+                    b.Property<Guid>("RfqId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rfq_id");
+
+                    b.Property<Guid?>("SuccessorVariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("successor_variant_id");
+
+                    b.Property<Guid?>("VariantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("variant_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SuccessorVariantId");
+
+                    b.HasIndex("VariantId");
+
+                    b.HasIndex("RfqId", "LineNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rfq_lines_line_no");
+
+                    b.ToTable("rfq_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_rfq_lines_line", "line_no BETWEEN 1 AND 500 AND quantity BETWEEN 1 AND 10000");
+
+                            t.HasCheckConstraint("ck_rfq_lines_match_status", "match_status IN ('Matched', 'Ambiguous', 'NotFound', 'Obsolete')");
+
+                            t.HasCheckConstraint("ck_rfq_lines_texts", "char_length(raw_text) BETWEEN 1 AND 200 AND (part_key IS NULL OR char_length(part_key) <= 64) AND (note IS NULL OR char_length(note) <= 500)");
+
+                            t.HasCheckConstraint("ck_rfq_lines_variant", "(variant_id IS NOT NULL) = (match_status IN ('Matched', 'Obsolete')) AND (successor_variant_id IS NULL OR match_status = 'Obsolete')");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Reviews.Answer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4760,6 +5530,119 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Quotes.Quote", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedTo")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ContactUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Quotes.Rfq", null)
+                        .WithMany()
+                        .HasForeignKey("RfqId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteLine", b =>
+                {
+                    b.HasOne("Mechware.Domain.Quotes.RfqLine", null)
+                        .WithMany()
+                        .HasForeignKey("RfqLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Sellers.Seller", null)
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Catalog.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("VariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Quotes.QuoteVersion", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.ClientCascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersion", b =>
+                {
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("AcceptedOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Quotes.Quote", null)
+                        .WithMany("Versions")
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersionContributor", b =>
+                {
+                    b.HasOne("Mechware.Domain.Quotes.QuoteVersion", null)
+                        .WithMany("Contributors")
+                        .HasForeignKey("VersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.Rfq", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("AssignedTo")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.RfqLine", b =>
+                {
+                    b.HasOne("Mechware.Domain.Quotes.Rfq", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("RfqId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Catalog.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("SuccessorVariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Catalog.ProductVariant", null)
+                        .WithMany()
+                        .HasForeignKey("VariantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Mechware.Domain.Reviews.Answer", b =>
                 {
                     b.HasOne("Mechware.Domain.Reviews.Question", null)
@@ -4894,6 +5777,23 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Navigation("Contributors");
 
                     b.Navigation("Entries");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.Quote", b =>
+                {
+                    b.Navigation("Versions");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersion", b =>
+                {
+                    b.Navigation("Contributors");
+
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.Rfq", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Mechware.Domain.Reviews.Question", b =>

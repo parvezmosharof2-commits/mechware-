@@ -63,6 +63,17 @@ public static class Permissions
     /// <summary>Read the payment and adjustment queues, aging, and company statements, and export them as CSV (Finance, Admin; ADR-0010 §5, §10). The all-company CSV also needs step-up.</summary>
     public const string CreditView = "credit.view";
 
+    // RFQs and quotes (ADR-0011 §13). Four-eyes is per version (approver ≠ creator, submitter, contributor; domain + database),
+    // so holding edit and approve never lets anyone approve a quote they wrote.
+    /// <summary>The quote inbox, RFQs, quotes, PDFs and the document check (Support, Finance, Admin).</summary>
+    public const string QuotesView = "quotes.view";
+    /// <summary>Create, edit, send within authority, revise, withdraw, close and assign (Support, Admin).</summary>
+    public const string QuotesEdit = "quotes.edit";
+    /// <summary>Approve (and so send) or reject a pending version, never one's own; with step-up (Finance, Admin).</summary>
+    public const string QuotesApprove = "quotes.approve";
+    /// <summary>Needed in addition to approve a version with a line below the margin floor (Admin only).</summary>
+    public const string QuotesApproveBelowFloor = "quotes.approve_below_floor";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -86,12 +97,17 @@ public static class Permissions
             Roles.Buyer => [OrdersViewOwn],
             Roles.Seller => [OrdersViewOwn, CatalogCreate, CatalogUpdateOwn, SellersManageOwn],
             // Support is the sales-facing staff role: it prepares price lists but never approves them.
-            Roles.Support => [OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, CompaniesView, PriceListsView, PriceListsEdit, ShippingView],
+            Roles.Support =>
+            [
+                OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, CompaniesView, PriceListsView, PriceListsEdit, ShippingView,
+                QuotesView, QuotesEdit
+            ],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
-                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView
+                PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView,
+                QuotesView, QuotesApprove
             ],
             Roles.Admin =>
             [
@@ -125,7 +141,11 @@ public static class Permissions
                 CreditAdjust,
                 CreditAdjustApprove,
                 CreditHoldOverride,
-                CreditView
+                CreditView,
+                QuotesView,
+                QuotesEdit,
+                QuotesApprove,
+                QuotesApproveBelowFloor
             ],
             _ => []
         };

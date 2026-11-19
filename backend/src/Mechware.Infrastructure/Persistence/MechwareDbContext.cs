@@ -106,6 +106,11 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Mechware.Domain.Pricing.PriceLists.PriceList> PriceLists => Set<Mechware.Domain.Pricing.PriceLists.PriceList>();
     public DbSet<Mechware.Domain.Pricing.PriceLists.MarginFloor> MarginFloors => Set<Mechware.Domain.Pricing.PriceLists.MarginFloor>();
 
+    // RFQs and quotes (D4.4): lines and contributors are loaded through their aggregate; triggers in QuoteSql.
+    public DbSet<Mechware.Domain.Quotes.Rfq> Rfqs => Set<Mechware.Domain.Quotes.Rfq>();
+    public DbSet<Mechware.Domain.Quotes.Quote> Quotes => Set<Mechware.Domain.Quotes.Quote>();
+    public DbSet<Mechware.Domain.Quotes.QuoteVersion> QuoteVersions => Set<Mechware.Domain.Quotes.QuoteVersion>();
+
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
