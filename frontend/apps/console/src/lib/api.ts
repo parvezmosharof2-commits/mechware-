@@ -1,5 +1,5 @@
 import {
-  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, creditErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
+  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, createStaffOrdersApi, creditErrorText, shouldReloadStaffOrders, staffOrderErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
@@ -16,6 +16,7 @@ export const marginFloorsApi = createMarginFloorsApi(api);
 export const shippingZonesApi = createShippingZonesApi(api);
 export const storefrontApi = createStorefrontApi(api);
 export const creditPaymentsApi = createCreditPaymentsApi(api);
+export const staffOrdersApi = createStaffOrdersApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus };
 
@@ -72,4 +73,12 @@ export function creditError(err: unknown): { text: string; code: string | null; 
   const code = problemCode(err);
   const fields = problemFieldErrors(err);
   return { text: creditErrorText({ status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadCredit(code), retry: status === null || status >= 500 };
+}
+
+/** Plain words for a failed staff order call (cancel, refunds); `code` tells the screen whether the code dialog stays open (STEP_UP_*) and `reload` whether what it showed is stale. */
+export function staffOrderError(err: unknown): { text: string; code: string | null; status: number | null; fields: Record<string, string>; reload: boolean; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  const fields = problemFieldErrors(err);
+  return { text: staffOrderErrorText({ status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadStaffOrders(code), retry: status === null || status >= 500 };
 }

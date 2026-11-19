@@ -23,9 +23,18 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     href: '/companies'
   },
   {
+    id: 'orders-overdue',
+    label: 'Overdue orders',
+    requiredPermission: 'orders.view_all',
+    href: '/orders',
+    group: 'Orders'
+  },
+  {
     id: 'orders-refund',
-    label: 'SubOrder Escrow & Refunds',
-    requiredPermission: 'orders.refund'
+    label: 'Refunds',
+    requiredPermission: 'orders.refund',
+    href: '/refunds',
+    group: 'Orders'
   },
   {
     id: 'catalog-products',
