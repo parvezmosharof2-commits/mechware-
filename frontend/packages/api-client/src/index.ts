@@ -501,3 +501,5 @@ export * from "./quote-editor-model";
 export * from "./quote-lookups-model";
 export * from "./quote-approval-model";
 export * from "./quotes-desk";
+export * from "./quote-terms-model";
+export * from "./quote-terms";

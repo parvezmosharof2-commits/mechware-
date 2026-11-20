@@ -1,5 +1,5 @@
 import {
-  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, createStaffOrdersApi, createStaffQuotesApi, deskErrorText, shouldReloadDesk, creditErrorText, shouldReloadStaffOrders, staffOrderErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi,
+  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, createStaffOrdersApi, createStaffQuotesApi, deskErrorText, shouldReloadDesk, creditErrorText, shouldReloadStaffOrders, staffOrderErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi, createQuoteTermsApi, termsErrorText,
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
@@ -18,6 +18,7 @@ export const storefrontApi = createStorefrontApi(api);
 export const creditPaymentsApi = createCreditPaymentsApi(api);
 export const staffOrdersApi = createStaffOrdersApi(api);
 export const staffQuotesApi = createStaffQuotesApi(api);
+export const quoteTermsApi = createQuoteTermsApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus };
 
@@ -90,4 +91,11 @@ export function deskError(err: unknown): { text: string; code: string | null; st
   const code = problemCode(err);
   const fields = problemFieldErrors(err);
   return { text: deskErrorText({ status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadDesk(code), retry: status === null || status >= 500 };
+}
+
+/** Plain words for a failed default-terms call; `code` tells the screen whether it is the "someone changed these" case. */
+export function termsError(err: unknown): { text: string; code: string | null; status: number | null; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  return { text: termsErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) }), code, status, retry: status === null || status >= 500 };
 }
