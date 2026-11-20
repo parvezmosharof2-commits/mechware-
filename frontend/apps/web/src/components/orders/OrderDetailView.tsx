@@ -22,6 +22,7 @@ import { classifyOrderError, formatOrderDate } from '../../lib/orders-ui';
 import { useResource } from '../../lib/useResource';
 import { OrderCreditNote, OrderStatusChip, OrderTotals } from './OrderParts';
 import { ReorderPanel } from './ReorderPanel';
+import { ShipmentPanel } from './ShipmentPanel';
 
 type Translate = ReturnType<typeof useTranslations>;
 
@@ -153,6 +154,7 @@ export function OrderDetailView({ locale, orderNumber }: { locale: 'en' | 'bn'; 
           <span className="block text-text-muted">{t('expectedNote')}</span>
         </p>
       )}
+      <ShipmentPanel order={o} locale={locale} />
       {o.subOrders.map((sub) => (
         <Shipment key={sub.id} sub={sub} currency={o.currency} locale={locale} t={t} />
       ))}

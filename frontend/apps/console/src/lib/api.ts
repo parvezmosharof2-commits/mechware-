@@ -1,5 +1,5 @@
 import {
-  MechWareApiClient, catalogAdminErrorText, createCreditPaymentsApi, createStaffOrdersApi, createStaffQuotesApi, deskErrorText, shouldReloadDesk, creditErrorText, shouldReloadStaffOrders, staffOrderErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi, createQuoteTermsApi, termsErrorText,
+  MechWareApiClient, fulfilErrorText, shouldReloadFulfil, type FulfilStep, catalogAdminErrorText, createCreditPaymentsApi, createStaffOrdersApi, createStaffQuotesApi, deskErrorText, shouldReloadDesk, creditErrorText, shouldReloadStaffOrders, staffOrderErrorText, shouldReloadCredit, createAdminLookupsApi, createCatalogAdminApi, createCatalogImportApi, createCompaniesApi, createMarginFloorsApi, createPriceListsApi, createShippingZonesApi, createStaffApi, createStorefrontApi, createQuoteTermsApi, termsErrorText,
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
@@ -83,6 +83,14 @@ export function staffOrderError(err: unknown): { text: string; code: string | nu
   const code = problemCode(err);
   const fields = problemFieldErrors(err);
   return { text: staffOrderErrorText({ status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadStaffOrders(code), retry: status === null || status >= 500 };
+}
+
+/** Plain words for a failed fulfilment move; `reload` says the order changed under the screen (ORDER_CHANGED, ORDER_INVALID_TRANSITION); `fields` are the server's ship field errors. */
+export function fulfilError(step: FulfilStep, err: unknown): { text: string; code: string | null; status: number | null; fields: Record<string, string>; reload: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  const fields = problemFieldErrors(err);
+  return { text: fulfilErrorText(step, { status, code, message: problemMessage(err, ''), fields }), code, status, fields, reload: shouldReloadFulfil(code) };
 }
 
 /** Plain words for a failed quote-desk call; `reload` says the screen shows an old state (a 409 race) and must be reloaded. */

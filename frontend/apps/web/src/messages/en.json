@@ -736,7 +736,24 @@
       "due": "Due {date}",
       "outstanding": "Still owed: {amount}"
     },
-    "sourceQuote": "Accepted from quote {number}"
+    "sourceQuote": "Accepted from quote {number}",
+    "tracking": {
+      "title": "Shipment",
+      "courier": "Courier",
+      "number": "Tracking number",
+      "copy": "Copy the tracking number",
+      "copied": "Tracking number copied",
+      "link": "Tracking page",
+      "open": "Track on the courier's site",
+      "newTab": "(opens in a new tab)",
+      "shipped": "Shipped",
+      "delivered": "Delivered",
+      "wait_pending_approval": "Not shipped yet. Your order is waiting for a company approver.",
+      "wait_pending_payment": "Not shipped yet. We are waiting for your payment.",
+      "wait_confirmed": "Not shipped yet. Your order is confirmed and will be prepared soon.",
+      "wait_processing": "Not shipped yet. Your order is being prepared.",
+      "wait_packed": "Not shipped yet. Your order is packed and waiting for the courier."
+    }
   },
   "QuickOrder": {
     "metaTitle": "Quick order",

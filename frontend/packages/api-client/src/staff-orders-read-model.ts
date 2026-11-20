@@ -4,6 +4,8 @@
  * The API checks every filter again and its answer wins; nothing here is a permission check.
  */
 
+import type { StaffShipment } from './staff-fulfilment-model';
+
 export const ORDER_LIST_PAGE_SIZE = 25;
 
 export interface StaffOrderListItem {
@@ -34,6 +36,8 @@ export interface StaffOrderDetail {
   buyer: { userId: string; name: string; phone: string | null }; shipTo: StaffShipTo | null; paymentState: string; paysOnCredit: boolean;
   credit: { status: string; dueOn: string | null; chargedMinor: number; outstandingMinor: number } | null;
   subOrders: StaffSubOrder[]; events: StaffOrderEvent[]; payments: StaffOrderPayment[];
+  /** Send with every fulfilment move (F1.1). */
+  rowVersion: number; shipments: StaffShipment[];
 }
 
 // ---------- words ----------

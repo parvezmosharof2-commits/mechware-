@@ -3,7 +3,10 @@ import type { CancelledOrder, OverdueOrder, RefundQueueItem, StaffPage, StaffRef
 import { overdueQuery } from './staff-orders-model';
 import { orderListQuery, type OrderFilters, type StaffOrderDetail, type StaffOrderListItem } from './staff-orders-read-model';
 
+import { shipBody, type FulfilStep, type ShipFields, type StaffShipment } from './staff-fulfilment-model';
+
 type Data<T> = { data: T };
+export interface FulfilResult { id: string; orderNumber: string; status: string; rowVersion: number; shipments: StaffShipment[] }
 
 /**
  * Staff order screens (`/api/v1/admin`). Overdue list needs orders.view_all; cancel needs orders.cancel and ALWAYS an authenticator
@@ -21,6 +24,9 @@ export function createStaffOrdersApi(client: MechWareApiClient) {
       client.fetch<Data<CancelledOrder>>(`${base}/orders/${id(orderId)}/cancel`, {
         method: 'POST', body: JSON.stringify({ reason }), headers: { 'X-Step-Up-Code': stepUpCode.trim() }
       }),
+    /** One fulfilment move (orders.fulfil, no code); `rowVersion` is the one the detail showed. Ship carries the courier fields. */
+    fulfil: (orderId: string, step: FulfilStep, rowVersion: number, ship?: ShipFields) =>
+      client.fetch<Data<FulfilResult>>(`${base}/orders/${id(orderId)}/${step}`, { method: 'POST', body: JSON.stringify(step === 'ship' && ship ? shipBody(rowVersion, ship) : { rowVersion }) }),
     refundQueue: () => client.fetch<Data<RefundQueueItem[]>>(`${base}/refunds`),
     requestRefund: (paymentId: string, amountMinor: number, reason: string) =>
       client.fetch<Data<StaffRefund>>(`${base}/payments/${id(paymentId)}/refunds`, { method: 'POST', body: JSON.stringify({ amountMinor, reason }) }),

@@ -14,6 +14,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, Loading, NoAccess } from './CreditShared';
 import { useOrderCancel } from './OrderCancelFlow';
+import { ShipmentBlock, useOrderFulfil } from './OrderFulfilment';
 
 const th = 'px-3 py-2';
 const money = (minor: number, currency = 'BDT') => `${currency} ${formatBdt(minor)}`;
@@ -60,6 +61,7 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
   const d = res.data?.data ?? null;
   const failure = res.error ? staffOrderError(res.error) : null;
   const cancel = useOrderCancel(permissions, res.reload);
+  const fulfil = useOrderFulfil(permissions, d, res.reload);
   const canRefunds = canViewRefunds(permissions);
   const hint = d ? cancelHint(d, permissions) : null;
 
@@ -67,6 +69,7 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
     <div className="space-y-6">
       <BackLink href="/orders">Back to all orders</BackLink>
       {cancel.banner}
+      {fulfil.banner}
       <FailureAlert failure={failure} onRetry={res.reload} />
       {res.loading && !d && <Loading />}
       {d && (
@@ -80,11 +83,14 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
                 <Badge variant="outline">{d.source === 'quote' ? 'From a quote' : 'From a cart'}</Badge>
               </p>
             </div>
-            {hint && permissions.some((p) => p.toLowerCase() === 'orders.cancel') && (
-              hint.allowed
-                ? <Button type="button" variant="destructive" disabled={cancel.busy} onClick={() => cancel.open({ orderId: d.id, orderNumber: d.orderNumber })}>Cancel order</Button>
-                : <span className="max-w-xs text-xs text-text-muted" data-testid="cancel-hint">{hint.reason}</span>
-            )}
+            <div className="flex flex-wrap items-start gap-3">
+              {fulfil.control}
+              {hint && permissions.some((p) => p.toLowerCase() === 'orders.cancel') && (
+                hint.allowed
+                  ? <Button type="button" variant="destructive" disabled={cancel.busy} onClick={() => cancel.open({ orderId: d.id, orderNumber: d.orderNumber })}>Cancel order</Button>
+                  : <span className="max-w-xs text-xs text-text-muted" data-testid="cancel-hint">{hint.reason}</span>
+              )}
+            </div>
           </header>
 
           <Section title="Order">
@@ -96,6 +102,8 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
               ['Quote', d.quote ? <Link href={`/quotes/${d.quote.quoteId}`} className="text-brand-accent underline" data-testid="quote-link">Quote {d.quote.number}</Link> : null]
             ]} />
           </Section>
+
+          <ShipmentBlock shipments={d.shipments ?? []} />
 
           <Section title="Delivery address">
             {d.shipTo ? (
@@ -117,7 +125,7 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
             {d.subOrders.map((s) => (
               <div key={s.id} className="space-y-1" data-testid="sub-order">
                 <p className="text-sm"><span className="font-semibold">{s.storeName}</span> <span className="font-mono text-xs">{s.subOrderNumber}</span>, {orderStatusText(s.status)}, shipping {money(s.shippingMinor, d.currency)}</p>
-                <div className="overflow-x-auto rounded-md border border-surface-border">
+                <div className="overflow-x-auto rounded-md border border-surface-border" role="region" tabIndex={0} aria-label={`Lines of sub-order ${s.subOrderNumber}`}>
                   <table className="w-full text-left text-sm">
                     <caption className="sr-only">Lines of sub-order {s.subOrderNumber} from {s.storeName}, with the price at order time</caption>
                     <thead className="bg-bg-subtle text-xs text-text-muted">
@@ -166,6 +174,7 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
         </>
       )}
       {cancel.dialogs}
+      {fulfil.dialog}
     </div>
   );
 }

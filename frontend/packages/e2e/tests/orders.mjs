@@ -2,9 +2,12 @@
 // not-found for another user, error + retry, axe, 360 and 1280 px, en + bn. Orders are placed for real through the API (the
 // checkout UI itself is covered by checkout.mjs); only the 503 case is mocked.
 //
+// F1.3 adds the Shipment block: with E2E_SQL_CMD (a command reading SQL on stdin against a scratch DB mw_*) one order is moved by staff through the real
+// API (processing, packed, shipped with a courier link, delivered) and the buyer page is checked in EN and BN at each step.
 // Needs the API (seeded catalogue, Development demo accounts) and the web app built against it. The API allows CORS only from
 // localhost:3000/3001. Skipped (exit 0) unless E2E_ORDERS=1. Creates and cancels ~24 orders and one company: use a scratch DB.
 //   E2E_ORDERS=1 E2E_API_URL=http://localhost:5950 E2E_WEB_URL=http://localhost:3000 E2E_VARIANT_A=<id> E2E_VARIANT_B=<id> node tests/orders.mjs
+import { execSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -280,6 +283,77 @@ async function signIn(page, prefix, who, path) {
       }
     }
   }
+
+  // ================= F1.3: shipment tracking on the buyer page (real staff moves through the API, EN + BN)
+  if (!process.env.E2E_SQL_CMD || !/mw_/.test(process.env.E2E_SQL_CMD)) console.log('SKIP  tracking block (needs E2E_SQL_CMD against a scratch DB mw_*)');
+  else {
+    const admin = await adminToken();
+    const T = await place({ lines: [{ variantId: VARIANT_B, quantity: 1 }], shippingAddressId: addr.id });
+    toCancel.push(T.orderId);
+    const Tn = (await full(T)).orderNumber;
+    execSync(process.env.E2E_SQL_CMD, { input: `UPDATE orders SET status = 'Confirmed' WHERE id = '${T.orderId}';`, encoding: 'utf8' });
+    let rv = (await apiCall(admin, 'GET', `/api/v1/admin/orders/${T.orderId}`)).json.data.rowVersion;
+    const move = async (step, extra = {}) => {
+      const res = await apiCall(admin, 'POST', `/api/v1/admin/orders/${T.orderId}/${step}`, { rowVersion: rv, ...extra });
+      if (res.status !== 200) throw new Error(`staff move ${step} failed: ${res.status} ${JSON.stringify(res.json).slice(0, 200)}`);
+      rv = res.json.data.rowVersion;
+      return res.json.data;
+    };
+    const dateText = (iso, lname) => new Intl.DateTimeFormat(lname === 'bn' ? 'bn-BD' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dhaka' }).format(new Date(iso));
+    const LINK = 'https://steadfast.com.bd/t/SF-2026-0001';
+    async function buyerPages(label, fn) {
+      for (const [lname, width] of [['en', 360], ['bn', 360], ['en', 1280]]) {
+        const m = ALL[lname].Orders;
+        const prefix = lname === 'bn' ? '/bn' : '';
+        const ctx = await browser.newContext({ viewport: { width, height: 800 }, locale: lname === 'bn' ? 'bn-BD' : 'en-US' });
+        await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: WEB }).catch(() => undefined);
+        const page = await ctx.newPage();
+        const errors = [];
+        page.on('pageerror', (e) => errors.push(e.message.slice(0, 80)));
+        await signIn(page, prefix, USERS.buyer, `/account/orders/${Tn}`);
+        await page.getByTestId('order-number').waitFor();
+        await fn({ page, m, lname, width, tag: `${label} ${lname} ${width}px` });
+        check(`[${label} ${lname} ${width}px] no horizontal overflow, no page errors`, (await noOverflow(page)) && errors.length === 0, errors.join(' | '));
+        await ctx.close();
+      }
+    }
+    const waiting = (key, label) => buyerPages(label, async ({ page, m, tag }) => {
+      check(`[${tag}] before shipping: the status in words, no tracking block`, (await page.getByTestId('tracking-waiting').innerText()).includes(m.tracking[key]) && (await page.getByTestId('tracking-block').count()) === 0);
+      await axeCheck(page, `${tag} tracking waiting`);
+    });
+    await waiting('wait_confirmed', 'confirmed');
+    await move('processing');
+    await waiting('wait_processing', 'processing');
+    await move('packed');
+    await waiting('wait_packed', 'packed');
+    const shipped = await move('ship', { courierName: 'Steadfast Courier', trackingNumber: 'SF-2026-0001', trackingUrl: LINK });
+    const sh = shipped.shipments[0];
+    await buyerPages('shipped', async ({ page, m, lname, tag }) => {
+      const block = page.getByTestId('tracking-block');
+      check(`[${tag}] shipped: courier, tracking number and the shipped date (Dhaka day), no delivered date yet`,
+        (await page.getByTestId('tracking-courier').innerText()) === 'Steadfast Courier' && (await page.getByTestId('tracking-number').innerText()) === 'SF-2026-0001'
+        && (await page.getByTestId('tracking-shipped').innerText()) === dateText(sh.shippedAtUtc, lname) && (await page.getByTestId('tracking-delivered').count()) === 0);
+      const link = page.getByTestId('tracking-link');
+      check(`[${tag}] shipped: the courier link opens in a new tab with rel=noopener noreferrer and says so for screen readers`,
+        (await link.getAttribute('href')) === LINK && (await link.getAttribute('target')) === '_blank' && (await link.getAttribute('rel')) === 'noopener noreferrer' && (await link.innerText()).includes(m.tracking.newTab));
+      await block.getByRole('button', { name: m.tracking.copy }).click();
+      await page.getByText(m.tracking.copied).waitFor({ state: 'attached' });
+      check(`[${tag}] shipped: the copy button puts the tracking number on the clipboard and announces it`, (await page.evaluate(() => navigator.clipboard.readText().catch(() => 'blocked'))) === 'SF-2026-0001');
+      const html = await page.content();
+      check(`[${tag}] shipped: no staff id or shipment id on the page`, !html.includes(sh.createdBy) && !html.includes(sh.id));
+      check(`[${tag}] shipped: the progress line marks Shipped and the status chip says it`, (await page.locator('main').innerText()).includes(m.status_shipped));
+      await axeCheck(page, `${tag} tracking shipped`);
+      await page.screenshot({ path: `${SHOTS}/orders-tracking-${lname}.png` });
+    });
+    const api = (await call('GET', `/api/v1/orders/${T.orderId}`)).json.data.shipments[0];
+    check('buyer API: the shipment has exactly courier, tracking number, link and the two dates (no ids)', JSON.stringify(Object.keys(api).sort()) === JSON.stringify(['courierName', 'deliveredAtUtc', 'shippedAtUtc', 'trackingNumber', 'trackingUrl']));
+    const delivered = await move('delivered');
+    await buyerPages('delivered', async ({ page, lname, tag }) => {
+      check(`[${tag}] delivered: the delivered date (Dhaka day) is shown next to the shipped one`, (await page.getByTestId('tracking-delivered').innerText()) === dateText(delivered.shipments[0].deliveredAtUtc, lname));
+      await axeCheck(page, `${tag} tracking delivered`);
+    });
+  }
+
   await browser.close();
   for (const id of toCancel) await cancel(id);
   const failed = results.filter((r) => !r).length;

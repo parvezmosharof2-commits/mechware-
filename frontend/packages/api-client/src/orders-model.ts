@@ -1,5 +1,7 @@
 // Buyer order pages (E3.6 + F5.1): wire types and pure helpers. Money is always the server's, in minor units; nothing here computes a price.
 
+import type { BuyerShipment } from './staff-fulfilment-model';
+
 export interface OrderListItem {
   id: string;
   orderNumber: string;
@@ -60,6 +62,8 @@ export interface OrderDetail {
   estimatedDeliveryBy?: string | null;
   /** Credit position of a charged credit order, only for a member who may see the company's credit (B3.9); otherwise null or absent. */
   credit?: { status: string; dueOn: string; outstandingMinor: number } | null;
+  /** Manual tracking (F1.1): oldest first, empty before shipping. */
+  shipments?: BuyerShipment[];
 }
 
 export const ORDER_PAGE_SIZE = 20;
