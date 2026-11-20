@@ -235,8 +235,8 @@ internal sealed class QuoteVersionConfiguration : IEntityTypeConfiguration<Quote
         b.Property(v => v.PaymentTerms).HasColumnName("payment_terms").HasConversion<string>().HasMaxLength(20);
         b.Property(v => v.ShippingMode).HasColumnName("shipping_mode").HasConversion<string>().HasMaxLength(20);
         b.Property(v => v.ShipToSiteId).HasColumnName("ship_to_site_id");
-        // The delivery address snapshot of a fixed-delivery version; the domain gains it in D4.7 (frozen by the guard already).
-        b.Property<string?>("ShipToJson").HasColumnName("ship_to").HasColumnType("jsonb");
+        // The delivery address snapshot of a fixed-delivery version (D4.7; frozen after Draft by the guard). Plain text, as orders.ship_to.
+        b.Property(v => v.ShipTo).Jsonb("ship_to", v => QuoteColumns.Json(v!), s => QuoteColumns.FromJson<QuoteShipTo>(s), (x, y) => Equals(x, y));
         b.Property(v => v.ShippingFees).Jsonb("shipping_fees",
             v => QuoteColumns.Json(v!.OrderBy(f => f.SellerId).ToArray()),
             s => QuoteColumns.FromJson<QuoteShippingFee[]>(s),

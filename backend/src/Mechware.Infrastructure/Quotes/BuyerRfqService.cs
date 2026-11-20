@@ -254,6 +254,6 @@ public sealed partial class BuyerRfqService(MechwareDbContext db, IQuickOrderVal
                                                     select new RfqVariantDto(v.Id, v.Sku, p.TitleEn, p.TitleBn)).ToDictionaryAsync(v => v.Id, ct);
         RfqVariantDto? Of(Guid? id) => id is { } k && variants.TryGetValue(k, out var v) ? v : null;
         return [.. r.Lines.OrderBy(l => l.LineNo).Select(l => new RfqLineDto(l.LineNo, l.RawText, l.PartKey, l.Quantity,
-            l.MatchStatus switch { RfqMatchStatus.NotFound => "not_found", var s => s.ToString().ToLowerInvariant() }, Of(l.VariantId), Of(l.SuccessorVariantId), l.Note))];
+            l.MatchStatus switch { RfqMatchStatus.NotFound => "not_found", var s => s.ToString().ToLowerInvariant() }, Of(l.VariantId), Of(l.SuccessorVariantId), l.Note, l.Id))];
     }
 }

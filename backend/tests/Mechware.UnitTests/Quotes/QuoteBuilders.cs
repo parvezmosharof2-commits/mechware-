@@ -24,6 +24,9 @@ internal static class QuoteBuilders
     public static readonly QuoteOptions Options = new();
     public static readonly QuoteCompanySnapshot Company = new("Acme Engineering Ltd", "000123456-0101", "12 Tejgaon I/A, Dhaka 1208");
 
+    /// <summary>The copy of <see cref="Site"/> a fixed-delivery draft carries.</summary>
+    public static readonly QuoteShipTo ShipTo = new("Tejgaon plant", "Karim Mia", "01711000000", "12 Tejgaon I/A", null, "Tejgaon", "Dhaka", "Dhaka", "1208");
+
     /// <summary>A global floor of 0 % on cost: with <see cref="Cost"/> 1 every price of 1 poisha or more is on or above the floor.</summary>
     public static readonly MarginFloorRow[] ZeroFloor = [new(MarginFloorScope.Global, null, null, 0m)];
 

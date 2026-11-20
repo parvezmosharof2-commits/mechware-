@@ -99,9 +99,11 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
             .ToList();
     }
 
+    // A value each route constraint accepts, so the probe reaches the endpoint (and its authorization) instead of a 404 (D4.7: {versionNo:int}).
     private static string Concrete(string pattern) =>
         "/" + Regex.Replace(pattern.TrimStart('/'), "{([^}:]+)(:[^}]+)?}", m =>
-            m.Groups[2].Value.Contains("guid", StringComparison.OrdinalIgnoreCase) ? Guid.NewGuid().ToString() : "probe");
+            m.Groups[2].Value.Contains("guid", StringComparison.OrdinalIgnoreCase) ? Guid.NewGuid().ToString()
+            : m.Groups[2].Value.Contains("int", StringComparison.OrdinalIgnoreCase) ? "1" : "probe");
 
     [PostgresFact]
     public void EveryEndpoint_IsProtectedOrOnTheReviewedPublicAllowList()

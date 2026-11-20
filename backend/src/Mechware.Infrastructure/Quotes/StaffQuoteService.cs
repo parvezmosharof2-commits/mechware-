@@ -25,8 +25,8 @@ namespace Mechware.Infrastructure.Quotes;
 /// conflict-of-interest refusal reads the actor's memberships from <c>company_members</c> in the same request. A unique or exclusion
 /// violation that still slips through (23505, 23P01 at commit) is a 409, never a 500. Audit row and outbox events commit with the change.
 /// </summary>
-public sealed class StaffQuoteService(MechwareDbContext db, IPriceResolver prices, QuoteOptions options, ICurrentUserService user, TimeProvider clock)
-    : IStaffQuoteService
+public sealed partial class StaffQuoteService(MechwareDbContext db, IPriceResolver prices, IPriceCheckFacts checks, QuoteOptions options,
+    ICurrentUserService user, TimeProvider clock) : IStaffQuoteService
 {
     public const int MaxPageSize = 50;
 
@@ -332,9 +332,9 @@ public sealed class StaffQuoteService(MechwareDbContext db, IPriceResolver price
         return (Math.Max(1, q.Page), Math.Clamp(q.PageSize, 1, MaxPageSize), status, who, assigned == "none", like);
     }
 
-    private static T Parse<T>(string value) where T : struct, Enum =>
-        !int.TryParse(value, out _) && Enum.TryParse<T>(value, ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
-            ? parsed : throw new ValidationException("status", "Unknown status.");
+    private static T Parse<T>(string value, string field = "status") where T : struct, Enum =>
+        !int.TryParse(value, out _) && Enum.TryParse<T>(value.Replace("_", string.Empty), ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
+            ? parsed : throw new ValidationException(field, $"Unknown {field}.");
 
     private async Task<Dictionary<Guid, string>> NamesAsync(IEnumerable<Guid?> ids, CancellationToken ct)
     {

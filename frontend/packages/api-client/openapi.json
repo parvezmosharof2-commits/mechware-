@@ -2666,6 +2666,110 @@
         }
       }
     },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}": {
+      "put": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Replaces a Draft's whole content (header and every line) and answers the quote with the new `rowVersion`. A stale\r\n`rowVersion` or a version that is no longer a Draft is 409; a staff member of the company is 403 `QUOTE_CONFLICT_OF_INTEREST`;\r\na new contact must be an effective Buyer or Admin member and may change only while no version waits, is sent or is accepted.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/price-preview": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "What a send of this (unsaved) content would do now: totals, the buyer's own price per line, the flags and the reasons a send would be\r\nrefused; cost and floor only with `pricing.view_cost`. Same body as the edit (its `rowVersion` is not needed); nothing is saved.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditQuoteDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/quotes/{quoteId}/close": {
       "post": {
         "tags": [
@@ -6136,6 +6240,65 @@
         },
         "additionalProperties": false
       },
+      "EditQuoteDraftRequest": {
+        "type": "object",
+        "properties": {
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "contactUserId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "validityDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "paymentTerms": {
+            "type": "string",
+            "nullable": true
+          },
+          "shippingMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "shipToSiteId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "shippingFees": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteShippingFeeInput"
+            },
+            "nullable": true
+          },
+          "termsText": {
+            "type": "string",
+            "nullable": true
+          },
+          "buyerNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "internalNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuoteDraftLineInput"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ForgotPasswordRequestDto": {
         "type": "object",
         "properties": {
@@ -6536,6 +6699,51 @@
         },
         "additionalProperties": false,
         "description": "The only thing read from the client: the pasted text. No prices, ids or company are bound."
+      },
+      "QuoteDraftLineInput": {
+        "type": "object",
+        "properties": {
+          "variantId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unitPriceMinor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lineNote": {
+            "type": "string",
+            "nullable": true
+          },
+          "belowFloorReason": {
+            "type": "string",
+            "nullable": true
+          },
+          "rfqLineId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "QuoteShippingFeeInput": {
+        "type": "object",
+        "properties": {
+          "sellerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shippingMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
       },
       "RecordCreditPaymentRequest": {
         "type": "object",

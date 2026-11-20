@@ -32,6 +32,10 @@ public static class QuoteLimits
     public const int MaxMessageLength = 2_000, MaxRawTextLength = 200, MaxPartKeyLength = 64, MaxRfqNoteLength = 500;
     public const int MaxLineNoteLength = 300, MaxTermsLength = 4_000, MaxNoteLength = 2_000, MaxRejectReasonLength = 1_000;
     public const int MaxNameLength = 200, MaxSkuLength = 64, MaxTitleLength = 255;
+
+    /// <summary>The company-site limits (<c>CompanySite.Update</c>), so a site always fits its snapshot.</summary>
+    public const int MaxSiteNameLength = 100, MaxRecipientLength = 150, MaxPhoneLength = 20, MaxAddressLineLength = 255, MaxPlaceLength = 100,
+        MaxPostalCodeLength = 20;
     public const int MaxNeededByDaysAhead = 365;
 }
 
@@ -48,9 +52,20 @@ public sealed record QuoteLineDraft(Guid VariantId, int Quantity, long UnitPrice
 
 public sealed record QuoteShippingFee(Guid SellerId, long ShippingMinor);
 
-/// <summary>The whole editable content of a Draft (header and all lines), replaced at once (D4.7 <c>PUT</c>).</summary>
+/// <summary>
+/// The delivery address of a fixed-delivery version (§8.3, §11 <c>ship_to</c>): the company site as it was when the draft was saved,
+/// so a later change or removal of the site never changes what was quoted. Buyer-visible and in the content hash (schema v2).
+/// </summary>
+public sealed record QuoteShipTo(string SiteName, string RecipientName, string Phone, string Line1, string? Line2, string Upazila, string District,
+    string Division, string? PostalCode);
+
+/// <summary>
+/// The whole editable content of a Draft (header and all lines), replaced at once (D4.7 <c>PUT</c>). <paramref name="ShipTo"/> is the
+/// server's copy of the site <paramref name="ShipToSiteId"/> names: present exactly when the site is (fixed delivery).
+/// </summary>
 public sealed record QuoteDraft(int ValidityDays, QuotePaymentTerms PaymentTerms, QuoteShippingMode ShippingMode, Guid? ShipToSiteId,
-    IReadOnlyList<QuoteShippingFee>? ShippingFees, string? TermsText, string? BuyerNote, string? InternalNote, IReadOnlyList<QuoteLineDraft> Lines);
+    IReadOnlyList<QuoteShippingFee>? ShippingFees, string? TermsText, string? BuyerNote, string? InternalNote, IReadOnlyList<QuoteLineDraft> Lines,
+    QuoteShipTo? ShipTo = null);
 
 /// <summary>The buyer company as the PDF prints it, frozen when the version leaves Draft.</summary>
 public sealed record QuoteCompanySnapshot(string Name, string? Bin, string? BillingAddress);

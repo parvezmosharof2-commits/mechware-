@@ -312,13 +312,16 @@ public class QuoteRulesTests
         var quote = Drafted();
         var lines = new[] { Line(V1, seller: Seller1), Line(V2, seller: Seller2) };
         QuoteDraft Fixed(Guid? site, params QuoteShippingFee[] fees) =>
-            Content(lines) with { ShippingMode = QuoteShippingMode.Fixed, ShipToSiteId = site, ShippingFees = fees };
+            Content(lines) with { ShippingMode = QuoteShippingMode.Fixed, ShipToSiteId = site, ShippingFees = fees, ShipTo = site is null ? null : ShipTo };
 
         foreach (var bad in new[]
                  {
                      Fixed(null, new(Seller1, 5_000), new(Seller2, 0)), Fixed(Site), Fixed(Site, new(Seller1, -1), new(Seller2, 0)),
                      Fixed(Site, new(Seller1, 5_000), new(Seller1, 6_000)),
+                     Fixed(Site, new(Seller1, 5_000), new(Seller2, 0)) with { ShipTo = null },
+                     Fixed(Site, new(Seller1, 5_000), new(Seller2, 0)) with { ShipTo = ShipTo with { Line1 = " " } },
                      Content(lines) with { ShipToSiteId = Site }, Content(lines) with { ShippingFees = [new(Seller1, 5_000)] },
+                     Content(lines) with { ShipTo = ShipTo },
                  })
             FluentActions.Invoking(() => quote.EditDraft(1, bad, Staff(Author), Options, Now)).Should().Throw<ValidationException>();
 
@@ -329,6 +332,27 @@ public class QuoteRulesTests
         quote.EditDraft(1, Fixed(Site, new(Seller1, 5_000), new(Seller2, 0)), Staff(Author), Options, Now);
         quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now).Should().Be(QuoteVersionStatus.Sent);
         quote.Version(1).ShippingFees!.Select(f => f.ShippingMinor).Should().Equal(5_000, 0);
+        quote.Version(1).ShipTo.Should().Be(ShipTo, "the site's address is frozen with the version");
+
+        quote.Revise(Guid.NewGuid(), Staff(Editor), false, Now.AddHours(1)).ShipTo.Should().Be(ShipTo, "a revision starts from the same delivery");
+    }
+
+    [Fact]
+    public void TheShipToCopy_IsPlainTextWithinTheSiteLimits()
+    {
+        var quote = Drafted();
+        var draft = Content(Line(V1)) with
+        {
+            ShippingMode = QuoteShippingMode.Fixed,
+            ShipToSiteId = Site,
+            ShippingFees = [new(Seller1, 0)],
+            ShipTo = ShipTo with { SiteName = " Plant\u0007 2 ", Line2 = "  ", PostalCode = null },
+        };
+        quote.EditDraft(1, draft, Staff(Author), Options, Now);
+        quote.Version(1).ShipTo.Should().Be(ShipTo with { SiteName = "Plant 2", Line2 = null, PostalCode = null });
+
+        foreach (var bad in new[] { ShipTo with { Phone = new string('1', 21) }, ShipTo with { District = "" }, ShipTo with { Line2 = new string('x', 256) } })
+            FluentActions.Invoking(() => quote.EditDraft(1, draft with { ShipTo = bad }, Staff(Author), Options, Now)).Should().Throw<ValidationException>();
     }
 
     [Fact]

@@ -15,23 +15,44 @@ namespace Mechware.Domain.Quotes;
 /// </summary>
 public static class QuoteContentHash
 {
-    /// <summary>Changing anything in <see cref="CanonicalJson"/> needs a new schema name; issued hashes keep theirs.</summary>
-    public const string Schema = "mechware.quote.v1";
+    /// <summary>
+    /// Changing anything in <see cref="CanonicalJson"/> needs a new schema name; issued hashes keep theirs. v2 (D4.7) adds the ship-to
+    /// address snapshot (<c>shipping.shipTo</c>); v1 had only the site id.
+    /// </summary>
+    public const string Schema = "mechware.quote.v2";
+
+    /// <summary>The first schema: without <c>shipping.shipTo</c>. A v1 hash still verifies for a version that has no ship-to snapshot.</summary>
+    public const string SchemaV1 = "mechware.quote.v1";
 
     // Hashed only, never rendered or sent: the relaxed encoder keeps Bangla and punctuation literal (fewer escapes to reproduce).
     private static readonly JsonWriterOptions Writer = new() { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
-    public static string Compute(Quote quote, QuoteVersion version) => Convert.ToHexStringLower(SHA256.HashData(CanonicalJson(quote, version)));
+    /// <summary>The hash of the current schema; every new send stores this one.</summary>
+    public static string Compute(Quote quote, QuoteVersion version) => Hex(CanonicalJson(quote, version));
 
-    public static byte[] CanonicalJson(Quote quote, QuoteVersion v)
+    /// <summary>
+    /// Whether <paramref name="hash"/> is this content's own: the current schema, or v1 for a version without a ship-to snapshot (v1
+    /// had no field for it, so it covers exactly the same content there). A version with a snapshot verifies only under v2.
+    /// </summary>
+    public static bool Matches(Quote quote, QuoteVersion version, string? hash)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        return hash is not null && (string.Equals(hash, Compute(quote, version), StringComparison.Ordinal)
+            || (version.ShipTo is null && string.Equals(hash, Hex(CanonicalJson(quote, version, SchemaV1)), StringComparison.Ordinal)));
+    }
+
+    private static string Hex(byte[] json) => Convert.ToHexStringLower(SHA256.HashData(json));
+
+    public static byte[] CanonicalJson(Quote quote, QuoteVersion v, string schema = Schema)
     {
         ArgumentNullException.ThrowIfNull(quote);
         ArgumentNullException.ThrowIfNull(v);
+        if (schema is not (Schema or SchemaV1)) throw new ArgumentOutOfRangeException(nameof(schema), schema, "Unknown quote hash schema.");
         using var buffer = new MemoryStream();
         using (var w = new Utf8JsonWriter(buffer, Writer))
         {
             w.WriteStartObject();
-            w.WriteString("schema", Schema);
+            w.WriteString("schema", schema);
             w.WriteString("quoteId", Id(quote.Id));
             w.WriteString("number", quote.Number);
             w.WriteNumber("versionNo", v.VersionNo);
@@ -51,6 +72,7 @@ public static class QuoteContentHash
             w.WriteStartObject("shipping");
             w.WriteString("mode", v.ShippingMode.ToString());
             Text(w, "shipToSiteId", v.ShipToSiteId is { } site ? Id(site) : null);
+            if (schema != SchemaV1) ShipTo(w, v.ShipTo);
             w.WriteStartArray("fees");
             foreach (var f in (v.ShippingFees ?? []).OrderBy(f => Id(f.SellerId), StringComparer.Ordinal))
             {
@@ -101,6 +123,27 @@ public static class QuoteContentHash
     }
 
     private static string Id(Guid id) => id.ToString("D");
+
+    private static void ShipTo(Utf8JsonWriter w, QuoteShipTo? a)
+    {
+        if (a is null)
+        {
+            w.WriteNull("shipTo");
+            return;
+        }
+
+        w.WriteStartObject("shipTo");
+        w.WriteString("siteName", a.SiteName);
+        w.WriteString("recipientName", a.RecipientName);
+        w.WriteString("phone", a.Phone);
+        w.WriteString("line1", a.Line1);
+        Text(w, "line2", a.Line2);
+        w.WriteString("upazila", a.Upazila);
+        w.WriteString("district", a.District);
+        w.WriteString("division", a.Division);
+        Text(w, "postalCode", a.PostalCode);
+        w.WriteEndObject();
+    }
 
     private static void Text(Utf8JsonWriter w, string name, string? value)
     {

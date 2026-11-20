@@ -2648,6 +2648,99 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replaces a Draft's whole content (header and every line) and answers the quote with the new `rowVersion`. A stale
+         *     `rowVersion` or a version that is no longer a Draft is 409; a staff member of the company is 403 `QUOTE_CONFLICT_OF_INTEREST`;
+         *     a new contact must be an effective Buyer or Admin member and may change only while no version waits, is sent or is accepted.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["EditQuoteDraftRequest"];
+                    "text/json": components["schemas"]["EditQuoteDraftRequest"];
+                    "application/*+json": components["schemas"]["EditQuoteDraftRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/price-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What a send of this (unsaved) content would do now: totals, the buyer's own price per line, the flags and the reasons a send would be
+         *     refused; cost and floor only with `pricing.view_cost`. Same body as the edit (its `rowVersion` is not needed); nothing is saved.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["EditQuoteDraftRequest"];
+                    "text/json": components["schemas"]["EditQuoteDraftRequest"];
+                    "application/*+json": components["schemas"]["EditQuoteDraftRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/quotes/{quoteId}/close": {
         parameters: {
             query?: never;
@@ -6248,6 +6341,23 @@ export interface components {
             approve?: boolean;
             comment?: string | null;
         };
+        EditQuoteDraftRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
+            /** Format: uuid */
+            contactUserId?: string | null;
+            /** Format: int32 */
+            validityDays?: number;
+            paymentTerms?: string | null;
+            shippingMode?: string | null;
+            /** Format: uuid */
+            shipToSiteId?: string | null;
+            shippingFees?: components["schemas"]["QuoteShippingFeeInput"][] | null;
+            termsText?: string | null;
+            buyerNote?: string | null;
+            internalNote?: string | null;
+            lines?: components["schemas"]["QuoteDraftLineInput"][] | null;
+        };
         ForgotPasswordRequestDto: {
             identifier?: string | null;
         };
@@ -6380,6 +6490,24 @@ export interface components {
         /** @description The only thing read from the client: the pasted text. No prices, ids or company are bound. */
         QuickOrderValidateBody: {
             text?: string | null;
+        };
+        QuoteDraftLineInput: {
+            /** Format: uuid */
+            variantId?: string;
+            /** Format: int32 */
+            quantity?: number;
+            /** Format: int64 */
+            unitPriceMinor?: number;
+            lineNote?: string | null;
+            belowFloorReason?: string | null;
+            /** Format: uuid */
+            rfqLineId?: string | null;
+        };
+        QuoteShippingFeeInput: {
+            /** Format: uuid */
+            sellerId?: string;
+            /** Format: int64 */
+            shippingMinor?: number;
         };
         RecordCreditPaymentRequest: {
             method?: string | null;

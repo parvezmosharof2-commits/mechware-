@@ -96,6 +96,7 @@ public class QuoteTotalsTests
         {
             ShippingMode = QuoteShippingMode.Fixed,
             ShipToSiteId = Site,
+            ShipTo = ShipTo,
             ShippingFees = [new(Seller1, 5_000), new(Seller2, 1_500)],
         }, Staff(Author), Options, Now);
         quote.Send(1, Issue(quote), Staff(Sender), false, Options, Now);

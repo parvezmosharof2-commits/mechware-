@@ -375,21 +375,8 @@ public sealed class PriceListService(MechwareDbContext db, ICurrentUserService u
     /// <summary>Floors for this exact content, with the cost, brand and category ancestry of this instant.</summary>
     private async Task<MarginFloorEvaluation> EvaluateAsync(PriceList list, CancellationToken ct)
     {
-        var ids = list.Entries.Select(e => e.VariantId).Distinct().ToList();
-        var variants = await (from v in db.ProductVariants.AsNoTracking()
-                              where ids.Contains(v.Id)
-                              join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
-                              join c in db.Categories.AsNoTracking() on p.CategoryId equals c.Id
-                              select new { v.Id, v.CostPriceMinor, p.BrandId, p.CategoryId, c.VatRate }).ToListAsync(ct);
-        var parents = await db.Categories.AsNoTracking().Select(c => new { c.Id, c.ParentId }).ToDictionaryAsync(c => c.Id, c => c.ParentId, ct);
-        var facts = variants.Select(v =>
-        {
-            var path = new List<Guid>();
-            for (Guid? c = v.CategoryId; c is { } cur && path.Count < 32 && !path.Contains(cur); c = parents.GetValueOrDefault(cur)) path.Add(cur);
-            return new VariantCostFacts(v.Id, v.CostPriceMinor, v.BrandId, path, v.VatRate);
-        }).ToList();
-        var floors = (await db.MarginFloors.AsNoTracking().ToListAsync(ct)).Select(f => f.ToRow()).ToList();
-        return MarginFloorPolicy.Evaluate(list, facts, floors);
+        var facts = await PriceCheckFactsReader.CostFactsAsync(db, [.. list.Entries.Select(e => e.VariantId)], ct);
+        return MarginFloorPolicy.Evaluate(list, facts, await PriceCheckFactsReader.FloorsAsync(db, ct));
     }
 
     private async Task<PriceListDetailDto> DetailAsync(PriceList list, CancellationToken ct)

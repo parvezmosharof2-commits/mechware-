@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Mechware.Domain.Quotes;
 
 namespace Mechware.Application.Quotes;
 
@@ -51,7 +52,7 @@ public sealed record StaffQuoteLineDto(Guid Id, int LineNo, Guid VariantId, Guid
 
 /// <summary>One version as staff see it (all versions, drafts too). <c>RowVersion</c> is the token a draft edit sends back (D4.7).</summary>
 public sealed record StaffQuoteVersionDto(Guid Id, int VersionNo, string Status, uint RowVersion, int ValidityDays, string PaymentTerms, string ShippingMode,
-    Guid? ShipToSiteId, string? TermsText, string? BuyerNote, string? InternalNote, string? PreparerName, string? ContentHash, StaffQuoteFlagsDto? Flags,
+    Guid? ShipToSiteId, QuoteShipTo? ShipTo, string? TermsText, string? BuyerNote, string? InternalNote, string? PreparerName, string? ContentHash, StaffQuoteFlagsDto? Flags,
     long GoodsNetMinor, long TaxMinor, long GoodsTotalMinor, long? ShippingTotalMinor, long? GrandTotalMinor, Guid CreatedBy, IReadOnlyList<Guid> Contributors,
     Guid? SubmittedBy, DateTime? SubmittedAt, Guid? ApprovedBy, DateTime? ApprovedAt, string? ApprovalComment, Guid? ApprovalRejectedBy,
     DateTime? ApprovalRejectedAt, Guid? SentBy, DateTime? SentAt, DateTime? ValidUntil, Guid? AcceptedOrderId, DateTime? AcceptedAt,
@@ -59,6 +60,40 @@ public sealed record StaffQuoteVersionDto(Guid Id, int VersionNo, string Status,
     DateTime CreatedAt, IReadOnlyList<StaffQuoteLineDto> Lines);
 
 public sealed record StaffQuoteDetailDto(StaffQuoteSummaryDto Quote, IReadOnlyList<StaffQuoteVersionDto> Versions);
+
+public sealed record QuoteShippingFeeInput(Guid SellerId, long ShippingMinor);
+
+/// <summary>A line as staff write it: a catalogue variant, a quantity and an absolute VAT-exclusive unit price in whole poisha (§4).</summary>
+public sealed record QuoteDraftLineInput(Guid VariantId, int Quantity, long UnitPriceMinor, string? LineNote, string? BelowFloorReason, Guid? RfqLineId);
+
+/// <summary>
+/// The whole content of a Draft (§12 <c>PUT</c>): header and every line, replacing what is stored; line numbers follow the list order.
+/// <c>RowVersion</c>: the version's <c>rowVersion</c> from the last read (required by the save; a stale one is 409 <c>QUOTE_VERSION_CHANGED</c>;
+/// the preview ignores it). <c>ContactUserId</c>: null keeps the contact. <c>PaymentTerms</c> <c>as_account</c> (default) or <c>advance</c>;
+/// <c>ShippingMode</c> <c>calculated</c> (default) or <c>fixed</c> (then <c>ShipToSiteId</c>, a site of the quote's company, and the fees).
+/// </summary>
+public sealed record EditQuoteDraftRequest(uint? RowVersion, Guid? ContactUserId, int ValidityDays, string? PaymentTerms, string? ShippingMode,
+    Guid? ShipToSiteId, IReadOnlyList<QuoteShippingFeeInput>? ShippingFees, string? TermsText, string? BuyerNote, string? InternalNote,
+    IReadOnlyList<QuoteDraftLineInput>? Lines);
+
+/// <summary>
+/// One line of a price preview: the server's snapshot, the line money, and the staff check figures of now: the buyer's own resolver
+/// price (<c>ReferenceUnitPriceMinor</c>, <c>ReferenceSource</c>), the flags, and cost and floor only with <c>pricing.view_cost</c>.
+/// </summary>
+public sealed record QuotePreviewLineDto(int LineNo, Guid VariantId, string Sku, string TitleEn, string TitleBn, int Quantity, long UnitPriceMinor,
+    decimal VatRate, long LineNetMinor, long LineTaxMinor, long LineTotalMinor, long PublicUnitPriceMinor, long ReferenceUnitPriceMinor,
+    string ReferenceSource, bool BelowFloor, bool OverAuthority, bool BelowCost, bool ReasonRequired,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StaffQuoteLineCostDto? Cost);
+
+/// <summary>
+/// What a send of this content would do now (§5), computed and not saved. <c>Outcome</c>: <c>send</c> (no flag), <c>approval</c> (flags:
+/// it would wait for a second person) or <c>refused</c>; <c>Problems</c> say why it would be refused: <c>NO_LINES</c>,
+/// <c>SHIPPING_FEES_INCOMPLETE</c> (fixed delivery without a fee for every seller), <c>QUOTE_BELOW_COST</c>, <c>BELOW_FLOOR_REASON_REQUIRED</c>.
+/// Line lists are line numbers. Shipping and grand total only for complete fixed delivery.
+/// </summary>
+public sealed record QuotePricePreviewDto(int VersionNo, string Outcome, IReadOnlyList<string> Problems, IReadOnlyList<int> BelowFloorLineNos,
+    IReadOnlyList<int> OverAuthorityLineNos, bool LongValidity, IReadOnlyList<int> BelowCostLineNos, IReadOnlyList<int> ReasonRequiredLineNos,
+    long GoodsNetMinor, long TaxMinor, long GoodsTotalMinor, long? ShippingTotalMinor, long? GrandTotalMinor, IReadOnlyList<QuotePreviewLineDto> Lines);
 
 /// <summary>
 /// The staff quote desk (ADR-0011 §3, §9, §12-§14; D4.6): the RFQ inbox, assignment and closing, and the quote lifecycle around
@@ -76,4 +111,10 @@ public interface IStaffQuoteService
     Task<StaffQuoteDetailDto> GetQuoteAsync(Guid quoteId, CancellationToken ct = default);
     Task<StaffQuoteDetailDto> ReviseQuoteAsync(Guid quoteId, CancellationToken ct = default);
     Task<StaffQuoteDetailDto> CloseQuoteAsync(Guid quoteId, StaffReasonRequest request, CancellationToken ct = default);
+
+    /// <summary>Replaces a Draft's content (D4.7): optimistic <c>RowVersion</c>, the editor becomes a contributor, a new contact must qualify.</summary>
+    Task<StaffQuoteDetailDto> EditDraftAsync(Guid quoteId, int versionNo, EditQuoteDraftRequest request, CancellationToken ct = default);
+
+    /// <summary>Totals, check figures and the flags a send of this content would raise now; nothing is saved (D4.7).</summary>
+    Task<QuotePricePreviewDto> PreviewAsync(Guid quoteId, int versionNo, EditQuoteDraftRequest request, CancellationToken ct = default);
 }

@@ -79,6 +79,7 @@ public static class DependencyInjection
         services.TryAddSingleton(new Pricing.PricingOptions());
         services.TryAddScoped<Mechware.Application.Pricing.IPriceResolver, Pricing.PriceListResolver>();
         services.TryAddScoped<Mechware.Application.Pricing.IPriceListService, Pricing.PriceListService>();
+        services.TryAddScoped<Mechware.Application.Pricing.IPriceCheckFacts, Pricing.PriceCheckFactsReader>();
         services.TryAddScoped<Mechware.Application.Pricing.IMarginFloorService, Pricing.MarginFloorService>();
         services.TryAddScoped<Mechware.Application.Pricing.ICompanyPriceService, Pricing.CompanyPriceService>();
         services.TryAddScoped<IPaymentService, PaymentService>();

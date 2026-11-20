@@ -84,6 +84,8 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
         v.Lines.Should().OnlyContain(l => l.TitleBn == "সিমেন্স এস৭-১২০০ সিপিইউ" && l.ReferenceSource == PriceSource.Contract
             && l.CostMinorAtCheck == 2, "the approval rewrote the check figures in the same save that sent the version");
         v.CompanySnapshot.Should().Be(new QuoteCompanySnapshot("Acme ইঞ্জিনিয়ারিং Ltd", "000123456-0101", "12 Tejgaon I/A, Dhaka 1208"));
+        v.ShipTo.Should().Be(SiteCopy, "the ship-to snapshot round-trips (D4.7) and is part of the recomputed hash");
+        (await ScalarAsync<string>($"SELECT ship_to->>'siteName' FROM quote_versions WHERE id = '{v.Id}'")).Should().Be("তেজগাঁও কারখানা");
         v.Flags!.OverAuthorityLineIds.Should().ContainSingle();
         v.Contributors.Select(c => c.UserId).Should().BeEquivalentTo([Author, Editor]);
         (await ScalarAsync<string>($"SELECT company_snapshot->>'bin' FROM quote_versions WHERE id = '{v.Id}'"))
@@ -454,7 +456,10 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
 
     private static QuoteDraft Content(World w, bool fixedDelivery, params QuoteLineDraft[] lines) =>
         new(15, QuotePaymentTerms.AsAccount, fixedDelivery ? QuoteShippingMode.Fixed : QuoteShippingMode.Calculated, fixedDelivery ? w.Site : null,
-            fixedDelivery ? [new(w.Seller2, 0), new(w.Seller1, 50_000)] : null, "Prices in BDT.", "আলোচনা অনুযায়ী।", "Margin is thin.", lines);
+            fixedDelivery ? [new(w.Seller2, 0), new(w.Seller1, 50_000)] : null, "Prices in BDT.", "আলোচনা অনুযায়ী।", "Margin is thin.", lines,
+            fixedDelivery ? SiteCopy : null);
+
+    private static readonly QuoteShipTo SiteCopy = new("তেজগাঁও কারখানা", "Karim Mia", "01711000000", "12 Tejgaon I/A", null, "Tejgaon", "Dhaka", "Dhaka", "1208");
 
     /// <summary>A quote of the world's company whose version 1 is a Draft with two lines, by <see cref="Author"/> and changed by <see cref="Editor"/>.</summary>
     private static Quote Drafted(World w, bool fixedDelivery = false, Guid? rfqId = null)

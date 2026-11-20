@@ -31,3 +31,16 @@ public interface IPriceResolver
     Task<IReadOnlyList<ResolvedPrice>> ResolveAsync(
         Guid? verifiedCompanyId, IReadOnlyList<PriceRequestLine> lines, TaxMode mode, DateTime asOfUtc, CancellationToken ct = default);
 }
+
+/// <summary>The cost facts and margin-floor rows of one instant (ADR-0008 §4), and whether this host allows prices below cost.</summary>
+/// <param name="Costs">One per variant found; a variant left out counts as cost unknown (below the floor, fail closed).</param>
+public sealed record PriceCheckFacts(IReadOnlyList<VariantCostFacts> Costs, IReadOnlyList<MarginFloorRow> Floors, bool AllowBelowCost);
+
+/// <summary>
+/// What a price that is not a price-list entry is checked against (quotes, ADR-0011 §5): the same cost, brand, category ancestry and
+/// floor rows the price-list approval reads, and <c>Pricing:AllowBelowCost</c>. Read fresh on every call.
+/// </summary>
+public interface IPriceCheckFacts
+{
+    Task<PriceCheckFacts> ForVariantsAsync(IReadOnlyCollection<Guid> variantIds, CancellationToken ct = default);
+}

@@ -81,6 +81,24 @@ public sealed class Quote : AggregateRoot<Guid>
     }
 
     /// <summary>
+    /// A new buyer contact (§3). It is in every version's content hash but lives on the quote, so it changes only while no version is
+    /// waiting for approval, sent or accepted: no hash an approver or a buyer holds may change under them (409 <c>QUOTE_CONTACT_LOCKED</c>;
+    /// withdraw the sent version or close the quote first). The caller has checked that the contact is an effective Buyer or Admin
+    /// member of the quote's company (QT6). The same contact again changes nothing.
+    /// </summary>
+    public void ChangeContact(Guid contactUserId, QuoteActor editor, DateTime nowUtc)
+    {
+        EnsureOpen();
+        EnsureNoConflictOfInterest(editor);
+        if (contactUserId == Guid.Empty) throw new ValidationException("contactUserId", "Choose the buyer contact for this quote.");
+        if (contactUserId == ContactUserId) return;
+        if (_versions.Any(v => v.Status is S.PendingApproval or S.Sent or S.Accepted))
+            throw new ConflictException("QUOTE_CONTACT_LOCKED",
+                "The contact cannot change while a version waits for approval, is sent or is accepted. Withdraw that version or close the quote first.");
+        (ContactUserId, UpdatedAtUtc) = (contactUserId, nowUtc);
+    }
+
+    /// <summary>
     /// Freezes the Draft with the policy run of this moment (<see cref="QuoteIssue.Check"/>) and computes its content hash. No flag:
     /// Sent now (validity starts, the live version is superseded). Flags: PendingApproval. A line below cost is refused.
     /// </summary>
@@ -246,8 +264,7 @@ public sealed class Quote : AggregateRoot<Guid>
     /// <summary>The hash the caller was shown must be the stored one, and the stored one must still be the content's own (recomputed).</summary>
     private void EnsureHash(QuoteVersion v, string expected)
     {
-        if (!string.Equals(expected, v.ContentHash, StringComparison.Ordinal)
-            || !string.Equals(v.ContentHash, QuoteContentHash.Compute(this, v), StringComparison.Ordinal))
+        if (!string.Equals(expected, v.ContentHash, StringComparison.Ordinal) || !QuoteContentHash.Matches(this, v, v.ContentHash))
             throw new ConflictException("QUOTE_CHANGED", "The quote is not the one you reviewed. Reload it and review again.");
     }
 }

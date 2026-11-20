@@ -11,7 +11,9 @@ public sealed record CreateRfqRequest(Guid UserId, Guid CompanyId, string Idempo
 public sealed record RfqVariantDto(Guid Id, string Sku, string Title, string TitleBn);
 
 /// <param name="MatchStatus"><c>matched</c>, <c>ambiguous</c>, <c>not_found</c> or <c>obsolete</c>.</param>
-public sealed record RfqLineDto(int LineNo, string RawText, string? PartKey, int Quantity, string MatchStatus, RfqVariantDto? Variant, RfqVariantDto? Successor, string? Note);
+/// <param name="Id">The asked line; a quote line answering it carries it as <c>rfqLineId</c> (D4.7 editor).</param>
+public sealed record RfqLineDto(int LineNo, string RawText, string? PartKey, int Quantity, string MatchStatus, RfqVariantDto? Variant, RfqVariantDto? Successor, string? Note,
+    Guid Id);
 
 /// <summary>An RFQ as its company's member sees it: no staff ids, no assignee, no idempotency data. A closed one shows its reason.</summary>
 public sealed record RfqSummaryDto(Guid Id, string Number, string Status, string Source, int LineCount, string? Message, DateOnly? NeededBy, Guid? ShipToSiteId,

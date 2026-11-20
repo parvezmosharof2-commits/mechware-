@@ -10,7 +10,7 @@ namespace Mechware.Api.Controllers;
 /// RFQs, and quotes around their drafts: create (from an RFQ with its matched lines, or for a company), list, read every version,
 /// revise and close. Reads need <c>quotes.view</c>, commands <c>quotes.edit</c>; cost figures need <c>pricing.view_cost</c> as well.
 /// A staff member of the buyer's company may not create or revise its quote (403 <c>QUOTE_CONFLICT_OF_INTEREST</c>). Answers carry
-/// negotiated prices, so none is stored by a cache. Editing, sending and approving are D4.7 and D4.8.
+/// negotiated prices, so none is stored by a cache. The draft editor and its price preview are D4.7; sending and approving are D4.8.
 /// </summary>
 [ApiController]
 [Route("api/v1/admin")]
@@ -95,6 +95,31 @@ public sealed class AdminQuotesController(IStaffQuoteService desk) : ControllerB
     {
         Private();
         return Ok(new { data = await desk.ReviseQuoteAsync(quoteId, ct) });
+    }
+
+    /// <summary>
+    /// Replaces a Draft's whole content (header and every line) and answers the quote with the new <c>rowVersion</c>. A stale
+    /// <c>rowVersion</c> or a version that is no longer a Draft is 409; a staff member of the company is 403 <c>QUOTE_CONFLICT_OF_INTEREST</c>;
+    /// a new contact must be an effective Buyer or Admin member and may change only while no version waits, is sent or is accepted.
+    /// </summary>
+    [HttpPut("quotes/{quoteId:guid}/versions/{versionNo:int}")]
+    [RequirePermission(Permissions.QuotesEdit)]
+    public async Task<IActionResult> EditDraft(Guid quoteId, int versionNo, [FromBody] EditQuoteDraftRequest body, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.EditDraftAsync(quoteId, versionNo, body, ct) });
+    }
+
+    /// <summary>
+    /// What a send of this (unsaved) content would do now: totals, the buyer's own price per line, the flags and the reasons a send would be
+    /// refused; cost and floor only with <c>pricing.view_cost</c>. Same body as the edit (its <c>rowVersion</c> is not needed); nothing is saved.
+    /// </summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/price-preview")]
+    [RequirePermission(Permissions.QuotesEdit)]
+    public async Task<IActionResult> PricePreview(Guid quoteId, int versionNo, [FromBody] EditQuoteDraftRequest body, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.PreviewAsync(quoteId, versionNo, body, ct) });
     }
 
     /// <summary>Ends the quote with a reason: its Sent version is withdrawn and a pending one recalled, in the same transaction.</summary>

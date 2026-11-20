@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Mechware.Domain.Identity;
@@ -7,7 +8,7 @@ using Mechware.IntegrationTests.Support;
 namespace Mechware.IntegrationTests.Quotes;
 
 /// <summary>
-/// D4.6 permission matrix over HTTP (threat model QT1 `StaffQuoteEndpoints_WithoutPermission_Are403`): every staff desk route for
+/// D4.6 (+ D4.7 editor routes) permission matrix over HTTP (threat model QT1 `StaffQuoteEndpoints_WithoutPermission_Are403`): every staff desk route for
 /// Support, Finance, Admin, Moderator, Seller and Buyer with real sign-ins, and anonymous. Reads need <c>quotes.view</c> (Support,
 /// Finance, Admin), commands <c>quotes.edit</c> (Support, Admin). Commands run on ids that do not exist, so a permitted role reaches the
 /// service (404) and nothing is written. Its own class, so its own login budget.
@@ -38,6 +39,9 @@ public sealed class StaffQuoteAccessEndpointsTests(RfqApiFactory factory) : ICla
             ("quote detail", false, HttpStatusCode.NotFound, c => c.GetAsync($"/api/v1/admin/quotes/{id}")),
             ("revise quote", true, HttpStatusCode.NotFound, c => StaffQuoteKit.PostAsync(c, $"/api/v1/admin/quotes/{id}/revise")),
             ("close quote", true, HttpStatusCode.NotFound, c => StaffQuoteKit.PostAsync(c, $"/api/v1/admin/quotes/{id}/close", new { reason = "Duplicate quote" })),
+            ("edit draft (D4.7)", true, HttpStatusCode.NotFound, c => c.PutAsJsonAsync($"/api/v1/admin/quotes/{id}/versions/1", new { rowVersion = 1, validityDays = 15 })),
+            ("price preview (D4.7)", true, HttpStatusCode.NotFound,
+                c => StaffQuoteKit.PostAsync(c, $"/api/v1/admin/quotes/{id}/versions/1/price-preview", new { validityDays = 15 })),
         };
 
         foreach (var (name, edit, allowed, call) in routes)

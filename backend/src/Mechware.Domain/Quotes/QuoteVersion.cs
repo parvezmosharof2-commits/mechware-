@@ -28,6 +28,10 @@ public sealed class QuoteVersion : Entity<Guid>
     public QuotePaymentTerms PaymentTerms { get; private set; } = QuotePaymentTerms.AsAccount;
     public QuoteShippingMode ShippingMode { get; private set; } = QuoteShippingMode.Calculated;
     public Guid? ShipToSiteId { get; private set; }
+
+    /// <summary>The address of <see cref="ShipToSiteId"/> when the draft was saved (fixed delivery only); in the content hash.</summary>
+    public QuoteShipTo? ShipTo { get; private set; }
+
     public IReadOnlyList<QuoteShippingFee>? ShippingFees { get; private set; }
     public string? TermsText { get; private set; }
     public string? BuyerNote { get; private set; }
@@ -107,7 +111,7 @@ public sealed class QuoteVersion : Entity<Guid>
         ArgumentNullException.ThrowIfNull(draft);
         ValidateValidity(draft.ValidityDays, options);
         if (!Enum.IsDefined(draft.PaymentTerms)) throw new ValidationException("paymentTerms", "Unknown payment terms.");
-        var fees = ValidShipping(draft);
+        var (fees, shipTo) = ValidShipping(draft);
         var terms = Text.Optional(draft.TermsText, QuoteLimits.MaxTermsLength, "termsText");
         var buyerNote = Text.Optional(draft.BuyerNote, QuoteLimits.MaxNoteLength, "buyerNote");
         var internalNote = Text.Optional(draft.InternalNote, QuoteLimits.MaxNoteLength, "internalNote");
@@ -119,8 +123,8 @@ public sealed class QuoteVersion : Entity<Guid>
         var totals = Totals(lines, l => (l.SellerId, l.VatRate), draft.ShippingMode, fees);
 
         Contribute(editorId, nowUtc);
-        (ValidityDays, PaymentTerms, ShippingMode, ShipToSiteId, ShippingFees, TermsText, BuyerNote, InternalNote) =
-            (draft.ValidityDays, draft.PaymentTerms, draft.ShippingMode, draft.ShipToSiteId, fees, terms, buyerNote, internalNote);
+        (ValidityDays, PaymentTerms, ShippingMode, ShipToSiteId, ShipTo, ShippingFees, TermsText, BuyerNote, InternalNote) =
+            (draft.ValidityDays, draft.PaymentTerms, draft.ShippingMode, draft.ShipToSiteId, shipTo, fees, terms, buyerNote, internalNote);
         _lines.Clear();
         _lines.AddRange(lines);
         ApplyTotals(totals);
@@ -143,6 +147,8 @@ public sealed class QuoteVersion : Entity<Guid>
         if (facts.Count != (issue.Facts ?? []).Count || facts.Count != _lines.Count || _lines.Any(l => !facts.ContainsKey(l.VariantId)))
             throw new ConflictException("QUOTE_CHANGED", "The lines changed while they were checked. Check them again.");
         foreach (var l in _lines) QuoteLine.Check(facts[l.VariantId], l.VariantId, $"lines[{l.LineNo}]");
+        if (ShippingMode == QuoteShippingMode.Fixed && ShipTo is null)
+            throw new ValidationException("shipToSiteId", "Fixed delivery needs the site's address. Save the draft again.");
         if (ShippingMode == QuoteShippingMode.Fixed && !ShippingFees!.Select(f => f.SellerId).ToHashSet().SetEquals(facts.Values.Select(f => f.SellerId)))
             throw new ValidationException("shippingFees", "Fixed delivery needs one fee for each seller of the lines.");
         var totals = Totals(_lines, l => (facts[l.VariantId].SellerId, facts[l.VariantId].VatRate), ShippingMode, ShippingFees);
@@ -187,6 +193,7 @@ public sealed class QuoteVersion : Entity<Guid>
             PaymentTerms = PaymentTerms,
             ShippingMode = ShippingMode,
             ShipToSiteId = ShipToSiteId,
+            ShipTo = ShipTo,
             ShippingFees = ShippingFees?.ToList(),
             TermsText = TermsText,
             BuyerNote = BuyerNote,
@@ -302,19 +309,31 @@ public sealed class QuoteVersion : Entity<Guid>
             throw new ValidationException("validityDays", $"A quote is valid for 1 to {options.MaxValidityDays} days.");
     }
 
-    private static List<QuoteShippingFee>? ValidShipping(QuoteDraft d)
+    private static (List<QuoteShippingFee>? Fees, QuoteShipTo? ShipTo) ValidShipping(QuoteDraft d)
     {
         if (!Enum.IsDefined(d.ShippingMode)) throw new ValidationException("shippingMode", "Unknown shipping mode.");
         if (d.ShippingMode == QuoteShippingMode.Calculated)
-            return d.ShipToSiteId is null && d.ShippingFees is not { Count: > 0 } ? null
+            return d.ShipToSiteId is null && d.ShipTo is null && d.ShippingFees is not { Count: > 0 } ? (null, null)
                 : throw new ValidationException("shippingMode", "Calculated delivery has no site and no fees; the buyer chooses at acceptance.");
-        if (d.ShipToSiteId is not { } site || site == Guid.Empty || d.ShippingFees is not { Count: > 0 } fees)
+        if (d.ShipToSiteId is not { } site || site == Guid.Empty || d.ShipTo is null || d.ShippingFees is not { Count: > 0 } fees)
             throw new ValidationException("shipToSiteId", "Fixed delivery needs the company site and the fees.");
         if (fees.Any(f => f.SellerId == Guid.Empty || f.ShippingMinor is < 0 or > PriceListLimits.MaxUnitPriceMinor)
             || fees.DistinctBy(f => f.SellerId).Count() != fees.Count)
             throw new ValidationException("shippingFees", "One fee of zero or more per seller.");
-        return [.. fees];
+        return ([.. fees], ValidShipTo(d.ShipTo));
     }
+
+    /// <summary>The site copy as plain text within the company-site limits (QT17), so the hash and the PDF see exactly what is stored.</summary>
+    private static QuoteShipTo ValidShipTo(QuoteShipTo a) => new(
+        Text.Required(a.SiteName, QuoteLimits.MaxSiteNameLength, "shipTo.siteName"),
+        Text.Required(a.RecipientName, QuoteLimits.MaxRecipientLength, "shipTo.recipientName"),
+        Text.Required(a.Phone, QuoteLimits.MaxPhoneLength, "shipTo.phone"),
+        Text.Required(a.Line1, QuoteLimits.MaxAddressLineLength, "shipTo.line1"),
+        Text.Optional(a.Line2, QuoteLimits.MaxAddressLineLength, "shipTo.line2"),
+        Text.Required(a.Upazila, QuoteLimits.MaxPlaceLength, "shipTo.upazila"),
+        Text.Required(a.District, QuoteLimits.MaxPlaceLength, "shipTo.district"),
+        Text.Required(a.Division, QuoteLimits.MaxPlaceLength, "shipTo.division"),
+        Text.Optional(a.PostalCode, QuoteLimits.MaxPostalCodeLength, "shipTo.postalCode"));
 }
 
 /// <summary>
