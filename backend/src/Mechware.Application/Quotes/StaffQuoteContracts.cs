@@ -52,7 +52,7 @@ public sealed record StaffQuoteLineDto(Guid Id, int LineNo, Guid VariantId, Guid
 
 /// <summary>One version as staff see it (all versions, drafts too). <c>RowVersion</c> is the token a draft edit sends back (D4.7).</summary>
 public sealed record StaffQuoteVersionDto(Guid Id, int VersionNo, string Status, uint RowVersion, int ValidityDays, string PaymentTerms, string ShippingMode,
-    Guid? ShipToSiteId, QuoteShipTo? ShipTo, string? TermsText, string? BuyerNote, string? InternalNote, string? PreparerName, string? ContentHash, StaffQuoteFlagsDto? Flags,
+    Guid? ShipToSiteId, QuoteShipTo? ShipTo, IReadOnlyList<QuoteShippingFee>? ShippingFees, string? TermsText, string? BuyerNote, string? InternalNote, string? PreparerName, string? ContentHash, StaffQuoteFlagsDto? Flags,
     long GoodsNetMinor, long TaxMinor, long GoodsTotalMinor, long? ShippingTotalMinor, long? GrandTotalMinor, Guid CreatedBy, IReadOnlyList<Guid> Contributors,
     Guid? SubmittedBy, DateTime? SubmittedAt, Guid? ApprovedBy, DateTime? ApprovedAt, string? ApprovalComment, Guid? ApprovalRejectedBy,
     DateTime? ApprovalRejectedAt, Guid? SentBy, DateTime? SentAt, DateTime? ValidUntil, Guid? AcceptedOrderId, DateTime? AcceptedAt,

@@ -16,7 +16,7 @@ internal static class StaffQuoteViews
 
     public static StaffQuoteVersionDto Version(QuoteVersion v, uint rowVersion, DateTime nowUtc, bool canSeeCost) => new(
         v.Id, v.VersionNo, v.IsExpired(nowUtc) ? "expired" : Wire(v.Status), rowVersion, v.ValidityDays, Wire(v.PaymentTerms), Wire(v.ShippingMode),
-        v.ShipToSiteId, v.ShipTo, v.TermsText, v.BuyerNote, v.InternalNote, v.PreparerName, v.ContentHash,
+        v.ShipToSiteId, v.ShipTo, v.ShippingFees, v.TermsText, v.BuyerNote, v.InternalNote, v.PreparerName, v.ContentHash,
         v.Flags is { } f ? new StaffQuoteFlagsDto(f.BelowFloorLineIds, f.OverAuthorityLineIds, f.LongValidity) : null,
         v.GoodsNetMinor, v.TaxMinor, v.GoodsTotalMinor, v.ShippingTotalMinor, v.GrandTotalMinor, v.CreatedBy,
         [.. v.Contributors.OrderBy(c => c.FirstContributedAtUtc).Select(c => c.UserId)],

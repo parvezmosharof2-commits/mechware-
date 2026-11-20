@@ -32,4 +32,5 @@ Source: the owner's own pads in `D:\MECHWARE\COMPANY DOCUMENTS` (quotation pad, 
 - Quote validity: **15 days** on the website (ADR-0011 §15 stays); the PDF prints the real valid-until date.
 - VAT wording "Prices include VAT as shown": approved.
 - The pad's "70 % advance, 30 % on completion / as agreed" line stays on the PDF **and staff must be able to change the default terms** → new unit "quote terms settings" (console page + stored defaults; per-quote "Terms for this quotation" already exists).
+- Sales inbox (`Quotes:SalesInboxEmail`, RFQ received / accepted / rejected / expired mails): parvezmosharof2@gmail.com — set in production config at deploy (H3).
 - Hosting: owner asked for the cheapest option that can grow → recommended a VPS (8 GB RAM, Singapore region) running the H3a Docker compose; resize later. Owner to buy.

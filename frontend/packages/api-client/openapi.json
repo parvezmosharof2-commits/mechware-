@@ -2356,6 +2356,80 @@
         }
       }
     },
+    "/api/v1/admin/companies/{companyId}/sites": {
+      "get": {
+        "tags": [
+          "AdminQuoteLookups"
+        ],
+        "summary": "The company's delivery sites, the default one first.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/companies/{companyId}/quote-contacts": {
+      "get": {
+        "tags": [
+          "AdminQuoteLookups"
+        ],
+        "summary": "Active, accepted members of the company with the Buyer or Admin role: who a quote may be addressed to.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quote-sellers": {
+      "get": {
+        "tags": [
+          "AdminQuoteLookups"
+        ],
+        "summary": "`?variantIds=a&variantIds=b` (1 to 50): the seller of each variant.",
+        "parameters": [
+          {
+            "name": "variantIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/pdf": {
       "get": {
         "tags": [
@@ -8634,6 +8708,9 @@
     },
     {
       "name": "AdminProducts"
+    },
+    {
+      "name": "AdminQuoteLookups"
     },
     {
       "name": "AdminQuotePdf"

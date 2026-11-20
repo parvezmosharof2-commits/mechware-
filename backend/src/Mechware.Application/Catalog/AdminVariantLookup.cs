@@ -6,7 +6,7 @@ namespace Mechware.Application.Catalog;
 /// </summary>
 public sealed record AdminVariantDto(
     Guid VariantId, Guid ProductId, string Sku, string? PartNumber, string Title, string? Brand, string ProductStatus, bool Active,
-    long PriceMinor, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? CostMinor);
+    long PriceMinor, Guid SellerId, int MinOrderQty, int PackSize, [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] long? CostMinor);
 
 public interface IAdminVariantLookup
 {

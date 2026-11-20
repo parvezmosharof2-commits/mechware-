@@ -48,12 +48,15 @@ public sealed class AdminVariantLookup(MechwareDbContext db) : IAdminVariantLook
                 ProductStatus = x.p.Status,
                 VariantStatus = x.v.Status,
                 x.v.PriceMinor,
+                x.p.SellerId,
+                x.v.MinOrderQty,
+                x.v.PackSize,
                 x.v.CostPriceMinor
             }).ToListAsync(ct);
 
         var items = rows.Select(r => new AdminVariantDto(
             r.Id, r.ProductId, r.Sku, r.ManufacturerPartNumber, r.Title, r.Brand, r.ProductStatus.ToString(),
-            r.VariantStatus == VariantStatus.Active, r.PriceMinor, includeCost ? r.CostPriceMinor : null)).ToList();
+            r.VariantStatus == VariantStatus.Active, r.PriceMinor, r.SellerId, r.MinOrderQty, r.PackSize, includeCost ? r.CostPriceMinor : null)).ToList();
         return new PagedResult<AdminVariantDto>(items, page, pageSize, total);
     }
 }
