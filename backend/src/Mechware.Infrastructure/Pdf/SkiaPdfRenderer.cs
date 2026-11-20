@@ -41,6 +41,11 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         private readonly SKFont _fontR = Font(Regular.Value, Body), _fontB = Font(Bold.Value, Body), _fontH = Font(Bold.Value, 16);
         private readonly SKPaint _ink = new() { Color = new SKColor(0x1F, 0x23, 0x28), IsAntialias = true };
         private readonly SKPaint _rule = new() { Color = new SKColor(0xC4, 0xC9, 0xCF), StrokeWidth = 0.5f };
+        private readonly SKPaint _navy = new() { Color = new SKColor(0x0B, 0x25, 0x45), IsAntialias = true };
+        private readonly SKPaint _teal = new() { Color = new SKColor(0x13, 0xA8, 0x9E), IsAntialias = true, StrokeWidth = 1.5f };
+        private readonly SKPaint _white = new() { Color = SKColors.White, IsAntialias = true };
+        private readonly SKPaint _shade = new() { Color = new SKColor(0xEE, 0xF2, 0xF6) };
+        private readonly SKFont _fontT = Font(Bold.Value, 20), _fontS = Font(Regular.Value, 9);
         private SKDocument _doc = null!;
         private SKCanvas? _canvas;
         private int _page;
@@ -81,6 +86,15 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
                             Table(t);
                             _y += 6;
                             break;
+                        case PdfBand b:
+                            Band(b);
+                            break;
+                        case PdfKeyValues kv:
+                            KeyValues(kv);
+                            break;
+                        case PdfTotals tt:
+                            Totals(tt);
+                            break;
                     }
                 }
                 Footer();
@@ -88,7 +102,7 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
                 _doc.Close();
             }
             bytes = ms.ToArray();
-            foreach (IDisposable d in new IDisposable[] { _shapeR, _shapeB, _fontR, _fontB, _fontH, _ink, _rule }) d.Dispose();
+            foreach (IDisposable d in new IDisposable[] { _shapeR, _shapeB, _fontR, _fontB, _fontH, _fontT, _fontS, _ink, _rule, _navy, _teal, _white, _shade }) d.Dispose();
             return _page;
         }
 
@@ -102,7 +116,7 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
 
         private bool Ensure(float height)
         {
-            if (_y + height <= PageH - Margin - 14) return false;
+            if (_y + height <= PageH - Margin - 14 - 11 * (model.FooterLines?.Count ?? 0)) return false;
             NewPage();
             return true;
         }
@@ -110,13 +124,16 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         private void Footer()
         {
             float fy = PageH - Margin / 2;
-            _canvas!.DrawLine(Margin, fy - 12, PageW - Margin, fy - 12, _rule);
+            int n = model.FooterLines?.Count ?? 0;
+            float rule = fy - 12 - 11 * n;
+            _canvas!.DrawLine(Margin, rule, PageW - Margin, rule, _rule);
+            for (int i = 0; i < n; i++) Text(model.FooterLines![i], Margin, rule + 10 + 11 * i, _fontS, _shapeR, false);
             Text(model.FooterText ?? model.Title, Margin, fy, _fontR, _shapeR, false);
             string label = model.Locale == "bn" ? $"পৃষ্ঠা {_page} / {totalPages}" : $"Page {_page} of {totalPages}";
             Text(label, PageW - Margin, fy, _fontR, _shapeR, true);
         }
 
-        private void Text(string text, float x, float baseline, SKFont font, SKShaper shaper, bool rightAlign)
+        private void Text(string text, float x, float baseline, SKFont font, SKShaper shaper, bool rightAlign, SKPaint? paint = null)
         {
             if (text.Length == 0) return;
             SKShaper.Result r = shaper.Shape(text, font);
@@ -125,7 +142,7 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
             builder.AddPositionedRun(glyphs, font, r.Points);
             using SKTextBlob? blob = builder.Build();
             if (blob == null) return;
-            _canvas!.DrawText(blob, rightAlign ? x - r.Width : x, baseline, _ink);
+            _canvas!.DrawText(blob, rightAlign ? x - r.Width : x, baseline, paint ?? _ink);
         }
 
         private static IEnumerable<string> Wrap(string text, float width, SKFont font, SKShaper shaper)
@@ -162,6 +179,60 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
             return cut;
         }
 
+        private void Band(PdfBand b)
+        {
+            float h = Math.Max(b.Subtitle is null ? 34 : 52, b.RightLines.Count * 12 + 16);
+            Ensure(h);
+            _canvas!.DrawRect(Margin, _y, PageW - 2 * Margin, h, b.Teal ? _teal : _navy);
+            float x = Margin + 12;
+            if (b.Logo is { Length: > 0 } && SKBitmap.Decode(b.Logo) is { } bmp)
+            {
+                using (bmp)
+                {
+                    float lh = h - 16, lw = lh * bmp.Width / bmp.Height;
+                    _canvas.DrawBitmap(bmp, new SKRect(x, _y + 8, x + lw, _y + 8 + lh));
+                    x += lw + 10;
+                }
+            }
+            Text(b.Title, x, _y + (b.Subtitle is null ? 23 : 25), _fontT, _shapeB, false, _white);
+            if (b.Subtitle is not null) Text(b.Subtitle, x, _y + 42, _fontS, _shapeR, false, _white);
+            float ry = _y + 16;
+            foreach (string l in b.RightLines) { Text(l, PageW - Margin - 12, ry, _fontS, _shapeR, true, _white); ry += 12; }
+            _y += h + 8;
+        }
+
+        private void KeyValues(PdfKeyValues kv)
+        {
+            float h = kv.Rows.Count * Lead + 2 * Pad;
+            Ensure(h);
+            _canvas!.DrawRect(Margin, _y, PageW - 2 * Margin, h, _shade);
+            float ly = _y + Pad + Lead - 4;
+            foreach (var (k, v) in kv.Rows)
+            {
+                Text(k, Margin + 8, ly, _fontB, _shapeB, false);
+                Text(v, Margin + 150, ly, _fontR, _shapeR, false);
+                ly += Lead;
+            }
+            _y += h + 18;
+        }
+
+        private void Totals(PdfTotals t)
+        {
+            float right = PageW - Margin - Pad;
+            for (int i = 0; i < t.Rows.Count; i++)
+            {
+                bool last = i == t.Rows.Count - 1;
+                Ensure(Lead + 6);
+                if (last) { _canvas!.DrawLine(PageW - Margin - 230, _y + 2, PageW - Margin, _y + 2, _teal); _y += 6; }
+                SKFont f = last ? _fontB : _fontR;
+                SKShaper sh = last ? _shapeB : _shapeR;
+                Text(t.Rows[i].Key, right - 110, _y + Lead - 4, f, sh, true);
+                Text(t.Rows[i].Value, right, _y + Lead - 4, f, sh, true);
+                _y += Lead;
+            }
+            _y += 6;
+        }
+
         private void Table(PdfTable t)
         {
             int n = t.Header.Count;
@@ -181,19 +252,21 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
             float h = lines.Max(l => l.Count) * Lead + 2 * Pad;
             if (Ensure(h) && !header) Row(t, colW, t.Header, true);   // repeat the header on a continuation page
             float x = Margin;
+            bool branded = header && t.Branded;
+            if (branded) _canvas!.DrawRect(Margin, _y, colW.Sum(), h, _navy);
             for (int c = 0; c < colW.Length; c++)
             {
                 float ly = _y + Pad + Lead - 4;
                 foreach (string l in lines[c])
                 {
-                    if (c == t.MoneyColumn) Text(l, x + colW[c] - Pad, ly, font, shaper, true);
-                    else Text(l, x + Pad, ly, font, shaper, false);
+                    if (c == t.MoneyColumn) Text(l, x + colW[c] - Pad, ly, font, shaper, true, branded ? _white : null);
+                    else Text(l, x + Pad, ly, font, shaper, false, branded ? _white : null);
                     ly += Lead;
                 }
                 x += colW[c];
             }
             _y += h;
-            _canvas!.DrawLine(Margin, _y, PageW - Margin, _y, _rule);
+            _canvas!.DrawLine(Margin, _y, PageW - Margin, _y, branded ? _teal : _rule);
         }
     }
 }

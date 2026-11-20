@@ -2346,6 +2346,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** `locale` = `en` or `bn` (default `en`). A preview carries the header `X-Quote-Pdf: preview`. */
+        get: {
+            parameters: {
+                query?: {
+                    locale?: string;
+                };
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quote-documents/{sha256}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Is this PDF ours and unmodified? The quote, version and language whose stored file has this SHA-256, or 404. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    sha256: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/rfqs": {
         parameters: {
             query?: never;
@@ -5385,6 +5460,49 @@ export interface paths {
                 header?: never;
                 path: {
                     number: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/versions/{versionNo}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The PDF of a version the caller may see, as sent (D4.11; `locale` = `en` or `bn`, default `en`). Rendered on the first request, then served from
+         *     storage after its SHA-256 is checked; anything the caller may not see is the same 404 as the reads. Rate limited like by-number.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    locale?: string;
+                };
+                header?: never;
+                path: {
+                    companyId: string;
+                    quoteId: string;
+                    versionNo: number;
                 };
                 cookie?: never;
             };

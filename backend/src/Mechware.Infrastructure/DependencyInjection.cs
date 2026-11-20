@@ -69,6 +69,8 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();
         services.TryAddScoped<Mechware.Application.Quotes.IQuoteAcceptanceGate, Quotes.QuoteAcceptanceGate>();
         services.TryAddScoped<Mechware.Application.Quotes.IBuyerQuoteService, Quotes.BuyerQuoteService>();
+        services.TryAddSingleton(new Mechware.Application.Quotes.QuotePdfOptions());
+        services.TryAddScoped<Mechware.Application.Quotes.IQuotePdfService, Quotes.QuotePdfService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();

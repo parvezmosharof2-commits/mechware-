@@ -2356,6 +2356,69 @@
         }
       }
     },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/pdf": {
+      "get": {
+        "tags": [
+          "AdminQuotePdf"
+        ],
+        "summary": "`locale` = `en` or `bn` (default `en`). A preview carries the header `X-Quote-Pdf: preview`.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quote-documents/{sha256}": {
+      "get": {
+        "tags": [
+          "AdminQuotePdf"
+        ],
+        "summary": "Is this PDF ours and unmodified? The quote, version and language whose stored file has this SHA-256, or 404.",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/rfqs": {
       "get": {
         "tags": [
@@ -5151,6 +5214,55 @@
             "name": "number",
             "in": "path",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/versions/{versionNo}/pdf": {
+      "get": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "The PDF of a version the caller may see, as sent (D4.11; `locale` = `en` or `bn`, default `en`). Rendered on the first request, then served from\r\nstorage after its SHA-256 is checked; anything the caller may not see is the same 404 as the reads. Rate limited like by-number.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
             "schema": {
               "type": "string"
             }
@@ -8522,6 +8634,9 @@
     },
     {
       "name": "AdminProducts"
+    },
+    {
+      "name": "AdminQuotePdf"
     },
     {
       "name": "AdminQuotes"

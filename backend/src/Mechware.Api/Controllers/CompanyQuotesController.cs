@@ -33,7 +33,7 @@ public sealed record RejectQuoteBody(int? VersionNo, string? Reason);
 [ApiController]
 [Authorize]
 [Route("api/v1/companies/{companyId:guid}/quotes")]
-public sealed class CompanyQuotesController(IOrderService orders, IBuyerQuoteService quotes, ICurrentUserService currentUser) : ControllerBase
+public sealed class CompanyQuotesController(IOrderService orders, IBuyerQuoteService quotes, IQuotePdfService pdfs, ICurrentUserService currentUser) : ControllerBase
 {
     /// <summary>30 a minute per signed-in user (QT8): by-number lookups, and the PDF (D4.11).</summary>
     public const string ReadRateLimitPolicy = "QuoteRead";
@@ -69,6 +69,20 @@ public sealed class CompanyQuotesController(IOrderService orders, IBuyerQuoteSer
     {
         Private();
         return Ok(new { data = await quotes.FindByNumberAsync(Actor, number, ct) });
+    }
+
+    /// <summary>
+    /// The PDF of a version the caller may see, as sent (D4.11; <c>locale</c> = <c>en</c> or <c>bn</c>, default <c>en</c>). Rendered on the first request, then served from
+    /// storage after its SHA-256 is checked; anything the caller may not see is the same 404 as the reads. Rate limited like by-number.
+    /// </summary>
+    [HttpGet("{quoteId:guid}/versions/{versionNo:int}/pdf")]
+    [EnableRateLimiting(ReadRateLimitPolicy)]
+    [Produces("application/pdf", "application/json")]
+    public async Task<IActionResult> Pdf(Guid companyId, Guid quoteId, int versionNo, [FromQuery] string? locale, CancellationToken ct)
+    {
+        Private();
+        var file = await pdfs.BuyerPdfAsync(Actor, companyId, quoteId, versionNo, locale, ct);
+        return File(file.Bytes, "application/pdf", file.FileName);
     }
 
     /// <summary>What accepting would charge now, by the acceptance's own pricing path; nothing is held or written. Send its <c>grandTotalMinor</c> as <c>expectedGrandTotalMinor</c>.</summary>

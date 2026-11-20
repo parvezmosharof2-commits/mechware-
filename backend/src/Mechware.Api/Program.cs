@@ -138,6 +138,8 @@ builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validate
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
 // RFQs and quotes (ADR-0011 §2, §15): the owner defaults, changed under Quotes:*; an invalid value stops the host here.
 builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Quotes.QuoteOptions.Section).Get<Mechware.Domain.Quotes.QuoteOptions>() ?? new Mechware.Domain.Quotes.QuoteOptions()).Validated());
+// Quote PDF letterhead and terms (ADR-0011 §10, docs/COMPANY_FACTS.md): the owner's pad facts as defaults, changed under QuotePdf:*.
+builder.Services.AddSingleton(builder.Configuration.GetSection(Mechware.Application.Quotes.QuotePdfOptions.Section).Get<Mechware.Application.Quotes.QuotePdfOptions>() ?? new Mechware.Application.Quotes.QuotePdfOptions());
 // Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
 builder.Services.AddSingleton(Mechware.Infrastructure.Pricing.PricingOptions.From(
     builder.Configuration, developmentOrTesting: builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"));
