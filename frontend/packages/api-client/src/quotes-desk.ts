@@ -2,6 +2,8 @@ import type { MechWareApiClient } from './index';
 import type { DeskFilter, DeskPage, StaffQuoteDetail, StaffQuoteSummary, StaffRfqDetail, StaffRfqSummary } from './quotes-desk-model';
 import { createQuoteBody, deskQuery } from './quotes-desk-model';
 import type { QuoteDraftBody, QuotePricePreview } from './quote-editor-model';
+import type { QuoteContact, QuoteSeller, QuoteSite } from './quote-lookups-model';
+import { sellersQuery } from './quote-lookups-model';
 import type { QuoteApprovalPage, QuoteApproveBody, QuoteSendResult } from './quote-approval-model';
 
 type Data<T> = { data: T };
@@ -48,6 +50,12 @@ export function createStaffQuotesApi(client: MechWareApiClient) {
     /** quotes.edit: withdraws a Sent version. Reason 5-500. */
     withdrawVersion: (quoteId: string, versionNo: number, reason: string) =>
       client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/withdraw`, post({ reason: reason.trim() })),
+    /** D4.18 (quotes.edit): the company's delivery sites, default first. */
+    sites: (companyId: string) => client.fetch<Data<QuoteSite[]>>(`${base}/companies/${id(companyId)}/sites`, read),
+    /** D4.18 (quotes.edit): active Buyer or Admin members who can be the quote's contact. */
+    contacts: (companyId: string) => client.fetch<Data<QuoteContact[]>>(`${base}/companies/${id(companyId)}/quote-contacts`, read),
+    /** D4.18 (quotes.edit): the seller of each variant (1 to 50 ids). */
+    sellers: (variantIds: readonly string[]) => client.fetch<Data<QuoteSeller[]>>(`${base}/quote-sellers?${sellersQuery(variantIds)}`, read),
     /** quotes.approve: versions waiting for approval, oldest first. */
     approvals: (page = 1, pageSize = 20) =>
       client.fetch<Data<QuoteApprovalPage>>(`${base}/quotes/approvals?page=${Math.max(1, Math.trunc(page))}&pageSize=${Math.max(1, Math.trunc(pageSize))}`, read)

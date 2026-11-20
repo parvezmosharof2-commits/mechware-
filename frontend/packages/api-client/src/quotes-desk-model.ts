@@ -133,6 +133,8 @@ export interface StaffQuoteVersion {
   /** calculated or fixed. */
   shippingMode: string;
   shipToSiteId: string | null;
+  /** Saved fixed-delivery fees, one per seller (D4.18); null when delivery is calculated. */
+  shippingFees?: { sellerId: string; shippingMinor: number }[] | null;
   termsText: string | null;
   buyerNote: string | null;
   internalNote: string | null;

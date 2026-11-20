@@ -6,9 +6,10 @@ import { Input } from '@mechware/ui/src/components/Input';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
   QUOTE_EDITOR_MAX_LINES, QUOTE_PREVIEW_DELAY_MS, QUOTE_VALIDITY_USUAL, addLineProblem, buildDraftBody, canEditQuotes, contactLocked, discountWords, editableVersion,
-  editorErrorText, editorFailureKind, editorProblems, formFromVersion, isDirty, lineNeedsReason, lineProblem, newLineFor, nextEditorKey, outcomeWords, previewFlagWords,
-  previewHasCost, previewKey, previewLineNotes, previewProblemText, quoteStatusLabel, referenceSourceText, removeLine, sendButtonState, sortServerFields, takaShown,
-  type EditorForm, type EditorLine, type QuotePricePreview, type QuoteSendResult, type StaffQuoteDetail, type VariantPick
+  contactOptionText, editorErrorText, editorFailureKind, editorProblems, expectedSellers, formFromVersion, initialSiteId, isDirty, lineNeedsReason, lineProblem, lookupFailureText, newLineFor,
+  nextEditorKey, outcomeWords, previewFlagWords, previewHasCost, previewKey, previewLineNotes, previewProblemText, quantityHint, quoteStatusLabel, referenceSourceText, removeLine,
+  sendButtonState, siteOptionText, sortServerFields, syncFees, takaShown,
+  type EditorFee, type EditorForm, type EditorLine, type QuoteContact, type QuotePricePreview, type QuoteSendResult, type QuoteSeller, type QuoteSite, type StaffQuoteDetail, type VariantPick
 } from '@mechware/api-client';
 import { deskError, lookupsApi, staffQuotesApi } from '../lib/api';
 import { issueError } from '../lib/quoteIssue';
@@ -16,7 +17,6 @@ import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, Notice, useFocusOn } from './CreditShared';
-import { SellerPicker } from './SellerPicker';
 
 // Loaded when first needed, so the page's first load stays small (the dialog library is heavy).
 const SendConfirmDialog = React.lazy(() => import('./QuoteIssueShared').then((m) => ({ default: m.SendConfirmDialog })));
@@ -26,6 +26,33 @@ const CELL = 'w-full rounded-md border border-surface-border bg-surface px-2 py-
 const SELECT = 'w-full rounded-md border border-surface-border bg-surface px-3 py-2 text-sm';
 
 type PreviewState = 'invalid' | 'waiting' | 'loading' | 'ready' | 'failed';
+
+interface LookupState<T> { state: 'idle' | 'loading' | 'ready' | 'error'; data: T; text: string; forKey: string }
+
+/** One staff lookup (D4.18): runs when `key` is non-null and changes, keeps the answer of the key it asked for, retry re-asks. */
+function useLookup<T>(load: () => Promise<{ data: T }>, what: string, key: string | null, empty: T): LookupState<T> & { retry: () => void } {
+  const [s, setS] = React.useState<LookupState<T>>({ state: 'idle', data: empty, text: '', forKey: '' });
+  const [again, setAgain] = React.useState(0);
+  React.useEffect(() => {
+    if (key === null) { setS({ state: 'idle', data: empty, text: '', forKey: '' }); return; }
+    let live = true;
+    setS((p) => ({ ...p, state: 'loading', forKey: key }));
+    load().then((r) => { if (live) setS({ state: 'ready', data: r.data, text: '', forKey: key }); },
+      (err) => { if (live) setS({ state: 'error', data: empty, text: lookupFailureText(what, deskError(err).status), forKey: key }); });
+    return () => { live = false; };
+  }, [key, again]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { ...s, retry: () => setAgain((n) => n + 1) };
+}
+
+function LookupNote({ state, text, onRetry, loading, empty, testId }: { state: LookupState<unknown[]>['state']; text: string; onRetry: () => void; loading: string; empty?: string; testId: string }) {
+  if (state === 'loading') return <p role="status" className="text-xs text-text-muted" data-testid={`${testId}-loading`}>{loading}</p>;
+  if (state === 'error') return (
+    <div role="alert" className="flex flex-wrap items-center gap-2 text-xs font-medium text-fault" data-testid={`${testId}-error`}>
+      <span>{text}</span><Button type="button" size="sm" variant="outline" onClick={onRetry}>Try again</Button>
+    </div>
+  );
+  return empty ? <p role="status" className="text-xs font-medium" data-testid={`${testId}-empty`}>{empty}</p> : null;
+}
 
 function PartSearch({ lines, disabled, onAdd }: { lines: readonly EditorLine[]; disabled: boolean; onAdd: (v: VariantPick) => string | null }) {
   const [q, setQ] = React.useState('');
@@ -57,7 +84,7 @@ function PartSearch({ lines, disabled, onAdd }: { lines: readonly EditorLine[]; 
         <ul aria-label="Matching parts" className="max-h-56 divide-y divide-surface-border overflow-y-auto rounded-md border border-surface-border" data-testid="part-results">
           {found.map((v) => (
             <li key={v.variantId} className="flex flex-wrap items-center justify-between gap-2 p-2 text-sm">
-              <span className="min-w-0 break-words"><span className="font-mono text-xs">{v.sku}</span> {v.title}{v.partNumber && <span className="block text-xs text-text-muted">Part no. {v.partNumber}</span>}</span>
+              <span className="min-w-0 break-words"><span className="font-mono text-xs">{v.sku}</span> {v.title}{v.partNumber && <span className="block text-xs text-text-muted">Part no. {v.partNumber}</span>}{quantityHint(v.minOrderQty, v.packSize) && <span className="block text-xs text-text-muted" data-testid="part-hint">{quantityHint(v.minOrderQty, v.packSize)}</span>}</span>
               <Button type="button" size="sm" variant="outline" aria-label={`Add ${v.sku} to the quote`} disabled={disabled}
                 onClick={() => { const p = addLineProblem(lines, v.variantId); if (p) { setNote(p); return; } const again = onAdd(v); setNote(again); if (!again) { setFound(null); setQ(''); } }}>Add</Button>
             </li>
@@ -89,7 +116,6 @@ function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; deta
   const [previewError, setPreviewError] = React.useState<string | null>(null);
   const previewSeq = React.useRef(0);
   const [focusKey, setFocusKey] = React.useState<string | null>(null);
-  const [findingSeller, setFindingSeller] = React.useState(false);
   const [loadingSaved, setLoadingSaved] = React.useState(false);
   const [sendResult, setSendResult] = React.useState<QuoteSendResult | null>(null);
   const [confirmingSend, setConfirmingSend] = React.useState(false);
@@ -99,6 +125,32 @@ function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; deta
   const key = body ? previewKey(body) : null;
   const problems = React.useMemo(() => (form ? editorProblems(form) : null), [form]);
   const dirty = !!form && !!baseline && isDirty(form, baseline);
+
+  const companyId = quote.companyId;
+  const mode = form?.shippingMode;
+  const fixedEver = React.useRef(false);
+  if (mode === 'fixed') fixedEver.current = true;
+  const locked = contactLocked(detail.versions);
+  const variantKey = form ? [...new Set(form.lines.map((l) => l.variantId.toLowerCase()))].sort().join(',') : '';
+  const sites = useLookup<QuoteSite[]>(() => staffQuotesApi.sites(companyId), 'the delivery sites', version && fixedEver.current ? companyId : null, []);
+  const contacts = useLookup<QuoteContact[]>(() => staffQuotesApi.contacts(companyId), 'the buyer contacts', version && !locked ? companyId : null, []);
+  const sellers = useLookup<QuoteSeller[]>(() => staffQuotesApi.sellers(variantKey.split(',')), 'the sellers of the lines', version && fixedEver.current && variantKey ? variantKey : null, []);
+
+  // A fixed delivery starts on the default site; one fee row exists for each seller of the lines (typed fees stay).
+  React.useEffect(() => {
+    if (sites.state !== 'ready' || mode !== 'fixed') return;
+    setForm((f) => { if (!f) return f; const id = initialSiteId(sites.data, f.shipToSiteId); return id === f.shipToSiteId ? f : { ...f, shipToSiteId: id }; });
+  }, [sites.state, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => {
+    if (mode !== 'fixed') return;
+    const ready = sellers.state === 'ready' && sellers.forKey === variantKey;
+    if (!ready && variantKey) return;
+    setForm((f) => {
+      if (!f) return f;
+      const next = syncFees(f.fees, expectedSellers(f.lines, variantKey ? sellers.data : []), () => nextEditorKey('f'));
+      return next === f.fees ? f : { ...f, fees: next as EditorFee[] };
+    });
+  }, [sellers.state, sellers.forKey, variantKey, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!body || !key || !version) { previewSeq.current++; setPreviewState('invalid'); return; }
@@ -155,7 +207,6 @@ function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; deta
   const shown = preview?.data ?? null;
   const showCost = previewHasCost(shown);
   const notes = shown ? previewLineNotes(shown) : new Map<number, string[]>();
-  const locked = contactLocked(detail.versions);
   const header = { ...serverHeader, ...problems.header };
   const longValidity = /^\d+$/.test(form.validityDays.trim()) && Number(form.validityDays.trim()) > QUOTE_VALIDITY_USUAL;
 
@@ -280,51 +331,67 @@ function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; deta
           </fieldset>
           {form.shippingMode === 'fixed' && (
             <div className="space-y-3 rounded-md border border-surface-border p-3" data-testid="fixed-delivery">
-              <Input label="Delivery site of the company (site id)" value={form.shipToSiteId} onChange={(e) => set({ shipToSiteId: e.target.value })} error={header.shipToSiteId} autoComplete="off" spellCheck={false} data-testid="site-id"
-                helperText="It must be one of this company's sites. There is no staff-side site list yet, so paste the site id (the buyer sees it in the company page)." />
+              <div className="space-y-1">
+                <label htmlFor="ship-site" className="text-sm font-medium">Delivery site of the company</label>
+                <select id="ship-site" className={SELECT} value={form.shipToSiteId} disabled={sites.state !== 'ready' || sites.data.length === 0} data-testid="site-id" aria-invalid={!!header.shipToSiteId}
+                  aria-describedby="ship-site-note" onChange={(e) => set({ shipToSiteId: e.target.value })}>
+                  <option value="">{sites.state === 'loading' ? 'Loading the sites…' : 'Choose a delivery site'}</option>
+                  {form.shipToSiteId && sites.state === 'ready' && !sites.data.some((x) => x.id.toLowerCase() === form.shipToSiteId.toLowerCase()) && <option value={form.shipToSiteId}>Saved site (no longer listed)</option>}
+                  {sites.data.map((x) => <option key={x.id} value={x.id}>{siteOptionText(x)}</option>)}
+                </select>
+                <div id="ship-site-note">
+                  <LookupNote testId="sites" state={sites.state} text={sites.text} onRetry={sites.retry} loading="Loading this company's delivery sites…"
+                    empty={sites.state === 'ready' && sites.data.length === 0 ? 'This company has no delivery site yet. The buyer must add one on their company page before a fixed delivery can be quoted.' : undefined} />
+                  {header.shipToSiteId && sites.state === 'ready' && sites.data.length > 0 && <p role="alert" className="text-xs font-medium text-fault">{header.shipToSiteId}</p>}
+                </div>
+              </div>
               <div className="space-y-2">
                 <p className="text-sm font-medium" id="fees-h">Delivery fee for each seller (BDT, VAT as for goods)</p>
-                {header.shippingFees && <p role="alert" className="text-xs font-medium text-fault">{header.shippingFees}</p>}
+                <LookupNote testId="sellers" state={sellers.state} text={sellers.text} onRetry={sellers.retry} loading="Looking up the sellers of the lines…"
+                  empty={form.lines.length === 0 ? 'Add a line first. One fee row then appears for each seller of the lines.' : undefined} />
+                {header.shippingFees && form.lines.length > 0 && sellers.state === 'ready' && <p role="alert" className="text-xs font-medium text-fault">{header.shippingFees}</p>}
                 {form.fees.length > 0 && (
                   <table className="relative w-full text-left text-sm" data-testid="fee-table">
-                    <caption className="sr-only">Delivery fees, one per seller</caption>
-                    <thead className="text-xs text-text-muted"><tr><th scope="col" className="py-1 pr-2">Seller</th><th scope="col" className="py-1 pr-2">Fee (BDT)</th><th scope="col" className="py-1"><span className="sr-only">Remove</span></th></tr></thead>
+                    <caption className="sr-only">Delivery fees, one per seller of the lines</caption>
+                    <thead className="text-xs text-text-muted"><tr><th scope="col" className="py-1 pr-2">Seller</th><th scope="col" className="py-1 pr-2">Fee (BDT)</th><th scope="col" className="py-1"><span className="sr-only">Problem</span></th></tr></thead>
                     <tbody>
                       {form.fees.map((fee, i) => (
-                        <tr key={fee.key} className="align-top">
+                        <tr key={fee.key} className="align-top" data-testid="fee-row">
+                          <th scope="row" className="py-1 pr-2 text-left font-normal" data-testid="fee-seller">{fee.label || 'Seller'}</th>
                           <td className="py-1 pr-2">
-                            <input aria-label={`Seller id for fee ${i + 1}`} className={CELL + ' font-mono text-xs'} value={fee.sellerId} autoComplete="off" spellCheck={false}
-                              onChange={(e) => set({ fees: form.fees.map((x) => (x.key === fee.key ? { ...x, sellerId: e.target.value } : x)) })} />
-                            {fee.label && <span className="block text-xs text-text-muted">{fee.label}</span>}
-                          </td>
-                          <td className="py-1 pr-2">
-                            <input aria-label={`Fee in taka for seller ${fee.label || i + 1}`} className={CELL + ' font-mono'} inputMode="decimal" value={fee.feeText} data-testid="fee-amount"
+                            <input aria-label={`Fee in taka for seller ${fee.label || i + 1}`} className={CELL + ' font-mono'} inputMode="decimal" value={fee.feeText} data-testid="fee-amount" placeholder="0.00"
+                              aria-invalid={!!problems.fees[i] && (attempted || fee.feeText.trim() !== '')}
                               onChange={(e) => set({ fees: form.fees.map((x) => (x.key === fee.key ? { ...x, feeText: e.target.value } : x)) })} />
                           </td>
-                          <td className="py-1"><Button type="button" size="sm" variant="ghost" aria-label={`Remove the fee for seller ${fee.label || i + 1}`} onClick={() => set({ fees: form.fees.filter((x) => x.key !== fee.key) })}>Remove</Button></td>
-                          {problems.fees[i] && <td role="alert" className="py-1 text-xs font-medium text-fault">{problems.fees[i]}</td>}
+                          <td className="py-1">{problems.fees[i] && (attempted || fee.feeText.trim() !== '') && <span role="alert" className="text-xs font-medium text-fault">{problems.fees[i]}</span>}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant="outline" onClick={() => set({ fees: [...form.fees, { key: nextEditorKey('f'), sellerId: '', label: '', feeText: '' }] })} data-testid="add-fee">Add a fee</Button>
-                  <Button type="button" size="sm" variant="ghost" aria-expanded={findingSeller} onClick={() => setFindingSeller(!findingSeller)}>{findingSeller ? 'Hide the seller search' : 'Find a seller by store name'}</Button>
-                </div>
-                {findingSeller && (
-                  <SellerPicker onChange={(sellerId, name) => {
-                    if (!sellerId || form.fees.some((x) => x.sellerId.toLowerCase() === sellerId.toLowerCase())) return;
-                    set({ fees: [...form.fees, { key: nextEditorKey('f'), sellerId, label: name, feeText: '' }] });
-                  }} />
+                {sellers.state === 'ready' && form.lines.length > 0 && sellers.data.length < new Set(form.lines.map((l) => l.variantId.toLowerCase())).size && (
+                  <p role="status" className="text-xs font-medium" data-testid="sellers-missing">The seller of a line could not be found, so its fee row is missing. Remove that line or reload the page.</p>
                 )}
-                <p className="text-xs text-text-muted">The server needs exactly one fee for each seller whose goods are on the quote, and says so in the preview. Fees saved earlier are not shown again when the page opens: enter them again before saving.</p>
+                <p className="text-xs text-text-muted">Enter 0 for a seller whose delivery is free. The fee rows follow the lines: a part from a new seller adds a row, and a seller with no part left loses its row.</p>
               </div>
             </div>
           )}
 
-          <Input label="Buyer contact (user id)" value={form.contactUserId} onChange={(e) => set({ contactUserId: e.target.value })} error={header.contactUserId} disabled={locked} autoComplete="off" spellCheck={false} data-testid="contact-id"
-            helperText={locked ? 'The contact is locked while a version waits for approval, is sent or is accepted.' : `Now: ${quote.contactName}. Change it only to another current Buyer or Admin member of the company; the server checks it.`} />
+          <div className="space-y-1">
+            <label htmlFor="buyer-contact" className="text-sm font-medium">Buyer contact</label>
+            <select id="buyer-contact" className={SELECT} value={form.contactUserId} disabled={locked || contacts.state !== 'ready'} data-testid="contact-id" aria-invalid={!!header.contactUserId} aria-describedby="buyer-contact-note"
+              onChange={(e) => set({ contactUserId: e.target.value })}>
+              {!contacts.data.some((c) => c.userId.toLowerCase() === form.contactUserId.toLowerCase()) && <option value={form.contactUserId}>{quote.contactName}{locked || contacts.state !== 'ready' ? '' : ' (not a current Buyer or Admin member)'}</option>}
+              {contacts.data.map((c) => <option key={c.userId} value={c.userId}>{contactOptionText(c)}</option>)}
+            </select>
+            <div id="buyer-contact-note" className="space-y-1">
+              {locked && <p className="text-xs text-text-muted">The contact is locked while a version waits for approval, is sent or is accepted.</p>}
+              {!locked && <LookupNote testId="contacts" state={contacts.state} text={contacts.text} onRetry={contacts.retry} loading="Loading the company's Buyer and Admin members…"
+                empty={contacts.state === 'ready' && contacts.data.length === 0 ? 'No active Buyer or Admin member of this company can be the contact. Keep the current one or ask the company to add one.' : undefined} />}
+              {!locked && contacts.state === 'ready' && contacts.data.length > 0 && <p className="text-xs text-text-muted">Only a current Buyer or Admin member of the company can be chosen. Now: {quote.contactName}.</p>}
+              {header.contactUserId && <p role="alert" className="text-xs font-medium text-fault">{header.contactUserId}</p>}
+            </div>
+          </div>
           <Textarea label="Terms (the buyer sees them)" value={form.termsText} onChange={(e) => set({ termsText: e.target.value })} rows={3} maxLength={4000} error={header.termsText} />
           <Textarea label="Note to the buyer" value={form.buyerNote} onChange={(e) => set({ buyerNote: e.target.value })} rows={2} maxLength={2000} error={header.buyerNote} />
           <Textarea label="Internal note (the buyer does not see it)" value={form.internalNote} onChange={(e) => set({ internalNote: e.target.value })} rows={2} maxLength={2000} error={header.internalNote} />
@@ -364,8 +431,9 @@ function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; deta
                         <td className="px-3 py-2">{n}</td>
                         <td className="px-3 py-2"><span className="font-mono text-xs">{l.sku}</span> {l.title}{l.partNumber && <span className="block text-xs text-text-muted">Part no. {l.partNumber}</span>}</td>
                         <td className="px-3 py-2">
-                          <input aria-label={`Quantity for line ${n}, ${l.sku}`} className={CELL + ' w-24 font-mono'} inputMode="numeric" value={l.quantity} aria-invalid={!!err} aria-describedby={err ? `err-${l.key}` : undefined}
+                          <input aria-label={`Quantity for line ${n}, ${l.sku}`} className={CELL + ' w-24 font-mono'} inputMode="numeric" value={l.quantity} aria-invalid={!!err} aria-describedby={[err ? `err-${l.key}` : '', quantityHint(l.minOrderQty, l.packSize) ? `qty-hint-${l.key}` : ''].filter(Boolean).join(' ') || undefined}
                             onChange={(e) => setLine(l.key, { quantity: e.target.value })} data-testid="line-qty" />
+                          {quantityHint(l.minOrderQty, l.packSize) && <span id={`qty-hint-${l.key}`} className="mt-1 block text-xs text-text-muted" data-testid="line-qty-hint">{quantityHint(l.minOrderQty, l.packSize)}</span>}
                         </td>
                         <td className="px-3 py-2">
                           <input id={`price-${l.key}`} aria-label={`Net price in taka for line ${n}, ${l.sku}`} className={CELL + ' w-32 font-mono'} inputMode="decimal" value={l.priceText} aria-invalid={!!err} aria-describedby={err ? `err-${l.key}` : undefined}

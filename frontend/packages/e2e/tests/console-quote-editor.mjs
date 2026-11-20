@@ -1,3 +1,4 @@
+// D4.19 adds: delivery site / buyer contact selects and one fee row per seller (from the D4.18 lookups), saved fees on reopen, MOQ / pack hints, lookup failure words.
 // D4.16: the console quote draft editor (/quotes/[id]/edit): header terms, lines added by part search, net price in taka (poisha on the wire), live price check
 // (debounced; deep discount, below-floor line, reason field, problems and flags in words), Save with rowVersion, a stale save from a second browser (conflict
 // message, edits kept, Load saved), fixed delivery with site and one fee per seller, closed behind the open page, permissions, cost column only for a user with
@@ -109,6 +110,8 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   await apiCall(buyer, 'PUT', `/api/v1/companies/${companyId}/members/${own.id}`, { roles: 10, spendLimitMinor: null, costCentreIds: [], isActive: true });
   const site = await apiCall(buyer, 'POST', `/api/v1/companies/${companyId}/sites`, { name: 'Gazipur Plant', contactName: 'Sabbir', contactPhone: '01711000000', line1: 'Plot 5, BSCIC Area', upazila: 'Tongi', district: 'Gazipur', division: 'Dhaka', isDefaultDelivery: true });
   const siteId = site.json.data.id;
+  const site2 = await apiCall(buyer, 'POST', `/api/v1/companies/${companyId}/sites`, { name: 'Aaa Depot', contactName: 'Sabbir', contactPhone: '01711000000', line1: 'Road 2', upazila: 'Savar', district: 'Dhaka', division: 'Dhaka', isDefaultDelivery: false });
+  const buyerMe = (await apiCall(buyer, 'GET', '/api/v1/users/me')).json.data;
   r.check('setup: an active company with a delivery site', reg.status === 201 && act.status === 200 && site.status < 300, `${reg.status}/${act.status}/${site.status}`);
 
   // three active in-stock variants of ONE seller (one delivery fee); the third gets minimum order 5 and pack size 5 for the quantity error
@@ -196,7 +199,13 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   r.check('with a reason the "needs a reason" problem is gone and the outcome becomes "needs a second person" (the flag stays)',
     (await s.getByTestId('preview-problems').count()) === 0 && (await s.getByTestId('preview-outcome').getAttribute('data-outcome')) === 'approval' && (await lineB.getByTestId('reason-needed').count()) === 0 && (await s.getByTestId('preview-flags').innerText()).includes('Below the margin floor'));
 
-  await add(skuC);
+  await s.getByLabel('Part number, SKU or title').fill(skuC);
+  await s.getByLabel('Part number, SKU or title').press('Enter');
+  await s.getByRole('button', { name: `Add ${skuC} to the quote` }).waitFor();
+  const partHint = await s.getByTestId('part-hint').first().innerText();
+  r.check('the part search shows the minimum order and pack size before the part is added', partHint.includes('Minimum order 5') && partHint.includes('packs of 5'), partHint);
+  await s.getByRole('button', { name: `Add ${skuC} to the quote` }).click();
+  r.check('the added line repeats the hint under its quantity box', (await s.getByTestId('line-qty-hint').first().innerText()).includes('Minimum order 5'));
   await s.keyboard.type(toTaka(priceC));
   await s.getByTestId('line-qty').nth(2).fill('3');
   await s.getByTestId('line-error').first().waitFor({ timeout: 20000 });
@@ -239,13 +248,19 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   await s.getByTestId('editor-notice').filter({ hasText: '2 lines' }).waitFor();
   r.check('a second save by the same editor works (it uses the new token) and the API has 2 lines', (await send(sup, 'GET', quotePath)).json.data.versions[0].lines.length === 2);
 
+  const contactOpts = await s.getByTestId('contact-id').locator('option').allInnerTexts();
+  r.check('the buyer contact is a select of the company\'s Buyer / Admin members (name, email, roles), the saved contact chosen', contactOpts.some((t) => t.includes(buyerMe.email) && /\(.+\)/.test(t)) && (await s.getByTestId('contact-id').inputValue()) === buyerId, contactOpts.join(' | '));
+  r.check('the contact select has a visible label', (await s.getByLabel('Buyer contact').count()) === 1);
   await s.getByTestId('mode-fixed').check();
+  await s.getByTestId('fee-row').first().waitFor({ timeout: 20000 });
+  const siteOpts = await s.getByTestId('site-id').locator('option').allInnerTexts();
+  r.check('the delivery site is a select filled from the company\'s sites, the default site first and already chosen', siteOpts[1].includes('Gazipur Plant') && siteOpts[1].includes('(default)') && siteOpts.some((t) => t.includes('Aaa Depot')) && (await s.getByTestId('site-id').inputValue()) === siteId, siteOpts.join(' | '));
+  const sellerNames = (await send(sup, 'GET', `/api/v1/admin/quote-sellers?variantIds=${vA}&variantIds=${vB}`)).json.data;
+  const feeSeller = (await s.getByTestId('fee-seller').allInnerTexts()).map((t) => t.trim());
+  r.check('one fee row for the one seller of the lines, named by its store (the seller id is never typed)', feeSeller.length === 1 && feeSeller[0] === sellerNames[0].sellerName && sellerNames[0].sellerId === sellerId, feeSeller.join(','));
   await s.getByTestId('save-draft').click();
   await s.getByTestId('editor-alert').waitFor();
-  r.check('fixed delivery without site and fee: the fields say so, nothing sent', (await s.getByText('needs the company\'s delivery site').count()) >= 1 && (await s.getByText('needs one fee for each seller').count()) >= 1);
-  await s.getByTestId('site-id').fill(siteId);
-  await s.getByTestId('add-fee').click();
-  await s.getByLabel('Seller id for fee 1').fill(sellerId);
+  r.check('an empty fee refuses the save in words and nothing is sent', (await s.getByText('Enter the fee in taka').count()) >= 1 && (await send(sup, 'GET', quotePath)).json.data.versions[0].shippingMode === 'calculated');
   await s.getByTestId('fee-amount').fill('350.50');
   await waitPreview(s);
   r.check('the check now shows the delivery and the grand total', (await s.getByTestId('preview-totals').innerText()).includes('BDT 350.50') && (await s.getByTestId('preview-totals').innerText()).includes('Total'));
@@ -253,18 +268,16 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   await s.getByTestId('save-draft').click();
   await s.getByTestId('editor-notice').filter({ hasText: 'Saved' }).waitFor();
   const v2 = (await send(sup, 'GET', quotePath)).json.data.versions[0];
-  r.check('the API has fixed delivery with the site, the ship-to copy and 350.50 delivery', v2.shippingMode === 'fixed' && v2.shipToSiteId === siteId && v2.shipTo?.line1 === 'Plot 5, BSCIC Area' && v2.shippingTotalMinor === 35050, JSON.stringify([v2.shippingMode, v2.shippingTotalMinor]));
+  r.check('the API has fixed delivery with the site, the ship-to copy and 350.50 delivery', v2.shippingMode === 'fixed' && v2.shipToSiteId === siteId && v2.shipTo?.line1 === 'Plot 5, BSCIC Area' && v2.shippingTotalMinor === 35050 && v2.shippingFees?.[0]?.sellerId === sellerId, JSON.stringify([v2.shippingMode, v2.shippingTotalMinor]));
 
   // ================= Admin (pricing.view_cost) in a second browser: cost column, then the stale save
   const a = await newPage(browser);
   await consoleSignIn(a, PEOPLE.admin);
   await a.goto(`${WEB}/quotes/${quoteId}/edit`);
   await a.getByTestId('editor-line').first().waitFor();
-  r.check('a saved fixed delivery opens with no fee rows (the read has none): the field says a fee is needed and the check waits',
-    (await a.getByText('needs one fee for each seller').count()) >= 1 && (await a.getByTestId('preview-state').innerText()).includes('Fix the marked fields'));
-  await a.getByTestId('add-fee').click();
-  await a.getByLabel('Seller id for fee 1').fill(sellerId);
-  await a.getByTestId('fee-amount').fill('350.50');
+  await a.getByTestId('fee-row').first().waitFor({ timeout: 20000 });
+  r.check('a saved fixed delivery reopens with its saved fee (350.50) and its site, no "type the fees again" note, and the check runs',
+    (await a.getByTestId('fee-amount').inputValue()) === '350.50' && (await a.getByTestId('site-id').inputValue()) === siteId && (await a.getByText('Fees saved earlier are not shown').count()) === 0);
   await a.getByTestId('cost-head').waitFor({ timeout: 30000 });
   const costTexts = await a.getByTestId('cost-cell').allInnerTexts();
   r.check('Admin (pricing.view_cost) sees the Cost / floor column with amounts for the costed parts', costTexts.length === 2 && costTexts.every((t) => /\d/.test(t)), costTexts.join(' | '));
@@ -303,9 +316,6 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
 
   // ================= the quote is closed behind the open editor
   await s.getByTestId('line-qty').first().fill('2');
-  await s.getByTestId('add-fee').click();
-  await s.getByLabel('Seller id for fee 1').fill(sellerId);
-  await s.getByTestId('fee-amount').fill('350.50');
   const closed = await send(sup, 'POST', `${quotePath}/close`, { reason: 'Customer withdrew the request' });
   r.check('setup: the quote is closed through the API while the editor is open', closed.status === 200, String(closed.status));
   await s.getByTestId('save-draft').click();
@@ -319,13 +329,27 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   // ================= narrow screen and page errors (a fresh draft for the layout)
   const q2 = await send(sup, 'POST', '/api/v1/admin/quotes', { companyId, contactUserId: buyerId });
   await send(sup, 'PUT', `/api/v1/admin/quotes/${q2.json.data.quote.id}/versions/1`, { rowVersion: q2.json.data.versions[0].rowVersion, validityDays: 14, lines: [{ variantId: vA, quantity: 1, unitPriceMinor: ref[0] }] });
+  const f2 = await newPage(browser);
+  await consoleSignIn(f2, PEOPLE.support);
+  let siteCalls = 0;
+  await f2.route('**/api/v1/admin/companies/*/sites', (route) => { siteCalls++; return siteCalls === 1 ? route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":{"code":"X","message":"x"}}', headers: { 'access-control-allow-origin': '*' } }) : route.continue(); });
+  await f2.goto(`${WEB}/quotes/${q2.json.data.quote.id}/edit`);
+  await f2.getByTestId('editor-line').first().waitFor();
+  await f2.getByTestId('mode-fixed').check();
+  await f2.getByTestId('sites-error').waitFor({ timeout: 20000 });
+  r.check('a failed site lookup says so in words with a Try again button, and the site select stays off', (await f2.getByTestId('sites-error').innerText()).includes('Could not load the delivery sites') && !(await f2.getByTestId('site-id').isEnabled()));
+  await f2.getByRole('button', { name: 'Try again' }).click();
+  await f2.waitForFunction(() => document.querySelector('[data-testid="site-id"]')?.value);
+  r.check('Try again loads the sites and the default one is chosen; a fee row appears for the line\'s seller', (await f2.getByTestId('site-id').inputValue()) === siteId && (await f2.getByTestId('fee-row').count()) === 1);
+  await axeCheck(f2, 'editor with fixed delivery (a fresh draft)');
   await s.setViewportSize({ width: 360, height: 800 });
   await s.goto(`${WEB}/quotes/${q2.json.data.quote.id}/edit`);
   await s.getByTestId('editor-line').first().waitFor();
   const wide = await s.evaluate(() => [`sw=${document.documentElement.scrollWidth} cw=${document.documentElement.clientWidth}`, ...[...document.querySelectorAll('body *')].map((e) => [e, e.getBoundingClientRect().right]).sort((x, y) => y[1] - x[1]).slice(0, 6)
     .map(([e, rt]) => `${e.tagName}.${String(e.className).slice(0, 50)}:${Math.round(rt)}`)]);
   r.check('360 px: the editor has no horizontal page scroll (the line table scrolls inside its box)', !(await overflow(s)), (await overflow(s)) ? wide.join(' | ') : '');
-  r.check('no page errors', s.errors.length === 0 && a.errors.length === 0 && f.errors.length === 0, [...s.errors, ...a.errors, ...f.errors].join(' | '));
+  r.check('360 px: fixed delivery has no horizontal page scroll', await (async () => { await f2.setViewportSize({ width: 360, height: 800 }); return !(await overflow(f2)); })());
+  r.check('no page errors', s.errors.length === 0 && a.errors.length === 0 && f.errors.length === 0 && f2.errors.length === 0, [...s.errors, ...a.errors, ...f.errors, ...f2.errors].join(' | '));
   await browser.close();
   process.exit(r.finish() ? 0 : 1);
 })().catch((e) => { console.error(e); process.exit(1); });

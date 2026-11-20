@@ -11,6 +11,10 @@ export interface AdminVariant {
   active: boolean;
   /** List price, VAT-inclusive, poisha. */
   priceMinor: number;
+  /** D4.18: the seller, and the quantity rules of the variant (1 = no rule). */
+  sellerId?: string;
+  minOrderQty?: number;
+  packSize?: number;
   /** Only present for callers holding `pricing.view_cost`. */
   costMinor?: number;
 }

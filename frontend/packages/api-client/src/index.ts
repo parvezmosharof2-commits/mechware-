@@ -498,5 +498,6 @@ export * from "./quotes-buyer-model";
 export * from "./quotes-buyer";
 export * from "./quotes-desk-model";
 export * from "./quote-editor-model";
+export * from "./quote-lookups-model";
 export * from "./quote-approval-model";
 export * from "./quotes-desk";

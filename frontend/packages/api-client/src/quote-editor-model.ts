@@ -60,6 +60,9 @@ export interface EditorLine {
   lineNote: string;
   reason: string;
   rfqLineId: string | null;
+  /** Hints from the part search (not saved, absent on a line read back from the server). */
+  minOrderQty?: number;
+  packSize?: number;
 }
 
 export interface EditorFee { key: string; sellerId: string; label: string; feeText: string }
@@ -86,6 +89,8 @@ export interface EditorSourceLine {
 }
 export interface EditorSourceVersion {
   versionNo: number; status: string; rowVersion: number; validityDays: number; paymentTerms: string; shippingMode: string; shipToSiteId: string | null;
+  /** Saved fixed-delivery fees (D4.18); null or absent for calculated delivery. */
+  shippingFees?: { sellerId: string; shippingMinor: number }[] | null;
   termsText: string | null; buyerNote: string | null; internalNote: string | null; lines: EditorSourceLine[];
 }
 
@@ -99,21 +104,22 @@ export function lineFromSource(l: EditorSourceLine, key = nextEditorKey('l')): E
   };
 }
 
-/** The saved version as form text. Fees are not part of the staff read (D4.7), so a fixed delivery opens with the fee list empty. */
+/** The saved version as form text. A fixed delivery reopens with its saved fees (seller names come from the sellers lookup). */
 export function formFromVersion(v: EditorSourceVersion, contactUserId: string): EditorForm {
   return {
     originalContactUserId: contactUserId, contactUserId, validityDays: String(v.validityDays),
     paymentTerms: v.paymentTerms === 'advance' ? 'advance' : 'as_account', shippingMode: v.shippingMode === 'fixed' ? 'fixed' : 'calculated',
-    shipToSiteId: v.shipToSiteId ?? '', fees: [], termsText: v.termsText ?? '', buyerNote: v.buyerNote ?? '', internalNote: v.internalNote ?? '',
+    shipToSiteId: v.shipToSiteId ?? '',
+    fees: (v.shippingFees ?? []).map((f) => ({ key: nextEditorKey('f'), sellerId: f.sellerId, label: '', feeText: takaFromPoisha(f.shippingMinor) })), termsText: v.termsText ?? '', buyerNote: v.buyerNote ?? '', internalNote: v.internalNote ?? '',
     lines: [...v.lines].map((l) => lineFromSource(l))
   };
 }
 
-export interface VariantPick { variantId: string; sku: string; partNumber: string | null; title: string; priceMinor?: number }
+export interface VariantPick { variantId: string; sku: string; partNumber: string | null; title: string; priceMinor?: number; minOrderQty?: number; packSize?: number }
 
 /** A new line for a picked variant: quantity 1, the price box empty so a price is always typed on purpose. */
 export function newLineFor(v: VariantPick, key = nextEditorKey('l')): EditorLine {
-  return { key, variantId: v.variantId, sku: v.sku, partNumber: v.partNumber, title: v.title, quantity: '1', priceText: '', lineNote: '', reason: '', rfqLineId: null };
+  return { key, variantId: v.variantId, sku: v.sku, partNumber: v.partNumber, title: v.title, quantity: '1', priceText: '', lineNote: '', reason: '', rfqLineId: null, minOrderQty: v.minOrderQty, packSize: v.packSize };
 }
 
 /** Why a variant cannot be added, or null: the list is full or the item is already on the quote (the server refuses a duplicate item). */
@@ -159,20 +165,20 @@ export function editorProblems(f: EditorForm): EditorProblems {
   const fees: Record<number, string> = {};
   const days = f.validityDays.trim();
   if (!/^\d+$/.test(days) || Number(days) < QUOTE_VALIDITY_MIN || Number(days) > QUOTE_VALIDITY_MAX) header.validityDays = `Enter whole days, ${QUOTE_VALIDITY_MIN} to ${QUOTE_VALIDITY_MAX}.`;
-  if (f.contactUserId.trim() && !isEditorGuid(f.contactUserId)) header.contactUserId = 'A user id looks like 0b9f1c52-6d3e-4c1a-9a55-2f7e8d1c4b60.';
+  if (f.contactUserId.trim() && !isEditorGuid(f.contactUserId)) header.contactUserId = 'Choose one of the listed contacts.';
   if (f.termsText.length > QUOTE_TERMS_MAX) header.termsText = `Terms can be at most ${QUOTE_TERMS_MAX} characters.`;
   if (f.buyerNote.length > QUOTE_NOTE_MAX) header.buyerNote = `The note can be at most ${QUOTE_NOTE_MAX} characters.`;
   if (f.internalNote.length > QUOTE_NOTE_MAX) header.internalNote = `The note can be at most ${QUOTE_NOTE_MAX} characters.`;
   if (f.lines.length > QUOTE_EDITOR_MAX_LINES) header.lines = `A quote has at most ${QUOTE_EDITOR_MAX_LINES} lines.`;
   f.lines.forEach((l, i) => { const p = lineProblem(l); if (p) lines[i + 1] = p; });
   if (f.shippingMode === 'fixed') {
-    if (!isEditorGuid(f.shipToSiteId)) header.shipToSiteId = 'Fixed delivery needs the company\'s delivery site (its id).';
+    if (!isEditorGuid(f.shipToSiteId)) header.shipToSiteId = 'Fixed delivery needs the company\'s delivery site. Choose one.';
     if (f.fees.length === 0) header.shippingFees = 'Fixed delivery needs one fee for each seller of the lines.';
     const seen = new Set<string>();
     f.fees.forEach((fee, i) => {
       const id = fee.sellerId.trim().toLowerCase();
       const minor = poishaFromTaka(fee.feeText);
-      if (!isEditorGuid(id)) fees[i] = 'Enter the seller\'s id.';
+      if (!isEditorGuid(id)) fees[i] = 'This fee has no seller. Reload the page.';
       else if (seen.has(id)) fees[i] = 'This seller already has a fee.';
       else if (minor === null) fees[i] = 'Enter the fee in taka, zero or more, at most two decimals.';
       else if (minor > QUOTE_MAX_PRICE_MINOR) fees[i] = 'The fee is above the maximum.';
