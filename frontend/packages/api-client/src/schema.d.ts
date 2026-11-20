@@ -1357,6 +1357,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Staff order list (G5.5), newest first. Filters: `status` (wire name), `companyId`, `orderNumber` (prefix), `from`/`to`
+         *     (Dhaka dates, inclusive), `paymentState` (none, on_credit, pending, captured, failed, needs_refund, refunded), `overdue`.
+         *     `pageSize` at most 50. A bad filter is 400. No buyer name, phone or address. `private, no-store`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    companyId?: string;
+                    orderNumber?: string;
+                    from?: string;
+                    to?: string;
+                    paymentState?: string;
+                    overdue?: boolean;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One order in full for staff (G5.5): lines with the price snapshot, totals, shipping, delivery address, buyer name and phone (personal
+         *     data, never logged), status timeline, payments with refunds (no provider references or card data), credit standing, quote link.
+         *     404 for an unknown id. `private, no-store`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/price-lists": {
         parameters: {
             query?: never;

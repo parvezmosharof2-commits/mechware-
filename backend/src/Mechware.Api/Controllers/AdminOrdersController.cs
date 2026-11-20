@@ -8,7 +8,7 @@ namespace Mechware.Api.Controllers;
 /// <summary>MECHWARE staff views over all orders.</summary>
 [ApiController]
 [Route("api/v1/admin/orders")]
-public sealed class AdminOrdersController(IOrderDeadlineService deadlines, IOrderCancellationService cancellations, TimeProvider clock) : ControllerBase
+public sealed class AdminOrdersController(IOrderDeadlineService deadlines, IOrderCancellationService cancellations, IStaffOrderReadService reads, TimeProvider clock) : ControllerBase
 {
     public const string CancelStepUpAction = "order.cancel";
 
@@ -31,4 +31,35 @@ public sealed class AdminOrdersController(IOrderDeadlineService deadlines, IOrde
     [RequirePermission(Permissions.OrdersViewAll)]
     public async Task<IActionResult> Overdue([FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default) =>
         Ok(new { data = await deadlines.ListOverdueAsync(clock.GetUtcNow().UtcDateTime, page, pageSize, ct) });
+
+    /// <summary>
+    /// Staff order list (G5.5), newest first. Filters: <c>status</c> (wire name), <c>companyId</c>, <c>orderNumber</c> (prefix), <c>from</c>/<c>to</c>
+    /// (Dhaka dates, inclusive), <c>paymentState</c> (none, on_credit, pending, captured, failed, needs_refund, refunded), <c>overdue</c>.
+    /// <c>pageSize</c> at most 50. A bad filter is 400. No buyer name, phone or address. <c>private, no-store</c>.
+    /// </summary>
+    [HttpGet]
+    [RequirePermission(Permissions.OrdersViewAll)]
+    public async Task<IActionResult> List(
+        [FromQuery] string? status, [FromQuery] Guid? companyId, [FromQuery] string? orderNumber, [FromQuery] string? from, [FromQuery] string? to,
+        [FromQuery] string? paymentState, [FromQuery] bool? overdue, [FromQuery] int page = 1, [FromQuery] int pageSize = 25, CancellationToken ct = default)
+    {
+        var result = await reads.ListAsync(new StaffOrderFilter(status, companyId, orderNumber, from, to, paymentState, overdue, page, pageSize),
+            clock.GetUtcNow().UtcDateTime, ct);
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = result });
+    }
+
+    /// <summary>
+    /// One order in full for staff (G5.5): lines with the price snapshot, totals, shipping, delivery address, buyer name and phone (personal
+    /// data, never logged), status timeline, payments with refunds (no provider references or card data), credit standing, quote link.
+    /// 404 for an unknown id. <c>private, no-store</c>.
+    /// </summary>
+    [HttpGet("{orderId:guid}")]
+    [RequirePermission(Permissions.OrdersViewAll)]
+    public async Task<IActionResult> Get(Guid orderId, CancellationToken ct)
+    {
+        var result = await reads.GetAsync(orderId, clock.GetUtcNow().UtcDateTime, ct);
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = result });
+    }
 }

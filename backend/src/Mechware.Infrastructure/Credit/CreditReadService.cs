@@ -1,4 +1,3 @@
-using System.Data;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -209,14 +208,8 @@ public sealed class CreditReadService(MechwareDbContext db, ICurrentUserService 
     private Task<T> SnapshotAsync<T>(Func<Task<T>> read, CancellationToken ct) => SnapshotAsync(db, read, ct);
 
     /// <summary>Shared with the buyer reads (B3.9): the same snapshot, the same absence of locks.</summary>
-    internal static async Task<T> SnapshotAsync<T>(MechwareDbContext db, Func<Task<T>> read, CancellationToken ct)
-    {
-        if (db.Database.CurrentTransaction is not null) return await read();
-        await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
-        var result = await read();
-        await tx.CommitAsync(ct);
-        return result;
-    }
+    internal static Task<T> SnapshotAsync<T>(MechwareDbContext db, Func<Task<T>> read, CancellationToken ct) =>
+        ReadSnapshot.RunAsync(db, read, ct);
 
     private async Task AuditExportAsync(string action, string entity, string entityId, object details, Guid actor, DateTime now, CancellationToken ct)
     {

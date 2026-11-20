@@ -58,10 +58,10 @@ public sealed class OrderDeadlineService(MechwareDbContext db) : IOrderDeadlineS
     public const int MaxPageSize = 50;
 
     // Delivered, completed, cancelled, refunded, returned and return flows are never overdue. A failed delivery still is.
-    private static readonly OrderStatus[] DeliveryOpen =
+    internal static readonly OrderStatus[] DeliveryOpen =
         [OrderStatus.Confirmed, OrderStatus.Processing, OrderStatus.Packed, OrderStatus.Shipped, OrderStatus.OutForDelivery, OrderStatus.DeliveryFailed];
 
-    private static readonly OrderStatus[] HandoverOpen = [OrderStatus.Confirmed, OrderStatus.Processing, OrderStatus.Packed];
+    internal static readonly OrderStatus[] HandoverOpen = [OrderStatus.Confirmed, OrderStatus.Processing, OrderStatus.Packed];
 
     /// <summary>
     /// "Same city" (E8.3, simple on purpose): the order's ship-to <c>districtId</c> equals the district of a dispatch warehouse of a

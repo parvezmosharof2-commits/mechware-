@@ -1303,6 +1303,113 @@
         }
       }
     },
+    "/api/v1/admin/orders": {
+      "get": {
+        "tags": [
+          "AdminOrders"
+        ],
+        "summary": "Staff order list (G5.5), newest first. Filters: `status` (wire name), `companyId`, `orderNumber` (prefix), `from`/`to`\r\n(Dhaka dates, inclusive), `paymentState` (none, on_credit, pending, captured, failed, needs_refund, refunded), `overdue`.\r\n`pageSize` at most 50. A bad filter is 400. No buyer name, phone or address. `private, no-store`.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "orderNumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "paymentState",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "overdue",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/orders/{orderId}": {
+      "get": {
+        "tags": [
+          "AdminOrders"
+        ],
+        "summary": "One order in full for staff (G5.5): lines with the price snapshot, totals, shipping, delivery address, buyer name and phone (personal\r\ndata, never logged), status timeline, payments with refunds (no provider references or card data), credit standing, quote link.\r\n404 for an unknown id. `private, no-store`.",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/price-lists": {
       "get": {
         "tags": [
