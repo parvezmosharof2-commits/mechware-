@@ -52,6 +52,8 @@ builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.Fro
 // The approval sweep confirms credit orders here, so it reads the same Credit:* settings as the API (ADR-0010 §13).
 builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validated(
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
+// The E7.3 stock sweep reads StockReconciliation:* (interval, grace period, batch size); bad values stop the host at start-up.
+builder.Services.AddSingleton(Mechware.Infrastructure.Orders.StockReconciliationOptions.From(builder.Configuration));
 builder.Services.AddCatalogServices();
 builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 {

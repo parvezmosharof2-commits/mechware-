@@ -90,21 +90,31 @@ public sealed class OrderCancellationService(
         var returned = new List<ReturnedStockDto>();
         try
         {
-            await inventory.CancelAsync(orderId, CancellationToken.None);
-            var taken = await db.StockReservations.AsNoTracking().Where(r => r.ReferenceId == orderId && r.Status == ReservationStatus.Fulfilled)
-                .GroupBy(r => r.VariantId).Select(g => new { VariantId = g.Key, Quantity = g.Sum(r => r.Quantity) }).ToListAsync(CancellationToken.None);
-            foreach (var line in taken.OrderBy(l => l.VariantId))
-            {
-                var result = await inventory.RestockAsync(new RestockRequest(line.VariantId, line.Quantity, RestockReason.OrderCancelled,
-                    RestockRequest.OrderReference, orderId, ActorUserId: actor), CancellationToken.None);
-                if (!result.AlreadyApplied) returned.Add(new ReturnedStockDto(line.VariantId, line.Quantity));
-            }
+            await ReturnStockAsync(db, inventory, orderId, actor, returned);
             return (returned, false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             log?.LogError(ex, "Order {OrderId} is cancelled but its stock was not returned; cancelling again (or E7.3) finishes it", orderId);
             return (returned, true);
+        }
+    }
+
+    /// <summary>
+    /// The post-commit stock step of a cancelled order, shared with the E7.3 sweep (<see cref="StockReconciliationService"/>, actor
+    /// null = system): release any hold never committed, then put each variant's committed holds back once. Lines actually put back
+    /// (not replays) are added to <paramref name="returned"/>; it throws on the first failure, leaving the rest for a retry.
+    /// </summary>
+    internal static async Task ReturnStockAsync(MechwareDbContext db, IInventoryService inventory, Guid orderId, Guid? actor, List<ReturnedStockDto> returned)
+    {
+        await inventory.CancelAsync(orderId, CancellationToken.None);
+        var taken = await db.StockReservations.AsNoTracking().Where(r => r.ReferenceId == orderId && r.Status == ReservationStatus.Fulfilled)
+            .GroupBy(r => r.VariantId).Select(g => new { VariantId = g.Key, Quantity = g.Sum(r => r.Quantity) }).ToListAsync(CancellationToken.None);
+        foreach (var line in taken.OrderBy(l => l.VariantId))
+        {
+            var result = await inventory.RestockAsync(new RestockRequest(line.VariantId, line.Quantity, RestockReason.OrderCancelled,
+                RestockRequest.OrderReference, orderId, ActorUserId: actor), CancellationToken.None);
+            if (!result.AlreadyApplied) returned.Add(new ReturnedStockDto(line.VariantId, line.Quantity));
         }
     }
 

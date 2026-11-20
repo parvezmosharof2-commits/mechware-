@@ -227,6 +227,10 @@ public static class DependencyInjection
         services.AddHostedService<CreditReconciliationWorker>();
         services.TryAddScoped<Quotes.QuoteNoticeService>();
         services.AddHostedService<QuoteNoticeWorker>();
+        // E7.3 stock sweep: options from StockReconciliation:* when the host registered them first, the defaults otherwise.
+        services.TryAddSingleton(new Orders.StockReconciliationOptions());
+        services.TryAddScoped<Orders.StockReconciliationService>();
+        services.AddHostedService<StockReconciliationWorker>();
         return services;
     }
 }
