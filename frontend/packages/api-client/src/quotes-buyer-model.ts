@@ -242,6 +242,19 @@ export function quotePdfPath(companyId: string, quoteId: string, versionNo: numb
   return `/api/v1/companies/${encodeURIComponent(companyId)}/quotes/${encodeURIComponent(quoteId)}/versions/${Math.floor(versionNo)}/pdf?locale=${locale === 'bn' ? 'bn' : 'en'}`;
 }
 
+export type QuotePdfErrorKind = 'notFound' | 'rateLimited' | 'unverified' | 'signIn' | 'failed';
+
+/** The PDF route's refusals in words: 404 (one answer for anything not the buyer's), 429 (too many downloads), 503 QUOTE_PDF_UNAVAILABLE (hash check failed, staff told). */
+export function classifyQuotePdfError(error: unknown): QuotePdfErrorKind {
+  const e = (typeof error === 'object' && error !== null ? error : {}) as { status?: unknown; error?: { code?: unknown } };
+  const status = typeof e.status === 'number' ? e.status : null;
+  if (e.error?.code === 'QUOTE_PDF_UNAVAILABLE') return 'unverified';
+  if (status === 404) return 'notFound';
+  if (status === 429) return 'rateLimited';
+  if (status === 401) return 'signIn';
+  return 'failed';
+}
+
 // ---------- errors ----------
 
 export type QuoteErrorKind =

@@ -6,8 +6,11 @@
 // E2E_SQL_CMD = a command that reads SQL on stdin against the scratch DB, e.g. `docker exec -i mechware_postgres psql -U mechware -d mw_d414 -At -q -v ON_ERROR_STOP=1`.
 //   E2E_QUOTES_BUYER=1 E2E_API_URL=http://localhost:5415 E2E_WEB_URL=http://localhost:3414 E2E_SQL_CMD="..." node tests/quotes-buyer.mjs
 // Real: every success path, the refusals of the real states (expired, replaced, foreign, Requester). Mocked (request rewrite): PRICE_CHANGED and a credit hold.
-// Skipped (exit 0) unless E2E_QUOTES_BUYER=1. The PDF button is behind NEXT_PUBLIC_QUOTE_PDF (D4.11 route): this run checks that it is hidden.
+// PDF (D4.11 route, D4.14b): the button downloads the real file in the page language; it starts with %PDF, and its SHA-256 is found by the staff
+// document lookup (/admin/quote-documents/{sha256}) as this very quote, version and language (buyers are shown no hash). 404/429/503 are worded (mocked).
+// Skipped (exit 0) unless E2E_QUOTES_BUYER=1.
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -186,7 +189,24 @@ async function signIn(page, prefix, who, path) {
     await page.getByTestId('quote-accept').waitFor();
     const apiTotal = (await apiDetail(buyer, companyId, acceptQ)).json.data.versions[0].goodsTotalMinor;
     r.check(`${L} detail: number, status word, lines, the goods total, and the buyer note`, (await page.getByTestId('quote-number').innerText()) === acceptQ.number && (await page.getByTestId('quote-lines').locator('li').count()) === 1 && (await page.getByTestId('quote-note').innerText()).includes(tag) && (await page.getByTestId('quote-total').innerText()).length > 0 && apiTotal > 0);
-    r.check(`${L} detail: no PDF button yet (D4.11 route not wired)`, (await page.getByTestId('quote-pdf').count()) === 0);
+    {
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.getByTestId('quote-pdf').click()]);
+      const bytes = readFileSync(await dl.path());
+      const sha = createHash('sha256').update(bytes).digest('hex');
+      const found = await send(admin, 'GET', `/api/v1/admin/quote-documents/${sha}`);
+      const direct = await fetch(`${API}/api/v1/companies/${companyId}/quotes/${acceptQ.id}/versions/1/pdf?locale=${lang}`, { headers: { authorization: `Bearer ${buyer}` } });
+      const directBytes = Buffer.from(await direct.arrayBuffer());
+      r.check(`${L} PDF: the button downloads a real PDF named after the quote`, bytes.subarray(0, 4).toString('latin1') === '%PDF' && bytes.length > 1000 && dl.suggestedFilename() === `${acceptQ.number}-v1.pdf`, `${bytes.length} bytes ${dl.suggestedFilename()}`);
+      r.check(`${L} PDF: its SHA-256 is the stored document of this quote and language (staff lookup), and the API serves the same bytes`, found.status === 200 && found.json.data.number === acceptQ.number && found.json.data.versionNo === 1 && found.json.data.locale === lang && direct.headers.get('content-type')?.startsWith('application/pdf') && directBytes.equals(bytes), `${found.status} ${JSON.stringify(found.json).slice(0, 120)}`);
+      for (const [status, code, kind] of [[404, 'NOT_FOUND', 'notFound'], [429, 'RATE_LIMITED', 'rateLimited'], [503, 'QUOTE_PDF_UNAVAILABLE', 'unverified']]) {
+        await page.route('**/versions/*/pdf*', (route) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify({ error: { code, message: 'x' } }) }));
+        await page.getByTestId('quote-pdf').click();
+        await page.getByTestId('quote-pdf-error').waitFor();
+        r.check(`${L} PDF mocked ${status}: worded in ${L}, kind ${kind}`, (await page.getByTestId('quote-pdf-error').getAttribute('data-kind')) === kind && (await page.getByTestId('quote-pdf-error').innerText()) === m[`pdfError_${kind}`], await page.getByTestId('quote-pdf-error').innerText());
+        await page.unroute('**/versions/*/pdf*');
+      }
+      page.errors = page.errors.filter((x) => !/status of 503/.test(x)); // the mocked 503 is the browser's own log line
+    }
     r.check(`${L} detail: no horizontal scroll`, !(await overflow(page)));
     await axeCheck(page, `${L} quote detail`);
     await page.getByTestId('quote-accept').click();

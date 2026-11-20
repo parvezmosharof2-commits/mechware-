@@ -6,13 +6,13 @@ import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@mechware/ui/src/components/Button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
 import {
-  QUOTE_REJECT_MAX, canRejectVersion, classifyQuoteError, lineTitle, mayAccept, newestAcceptable, newestVersion, quotedTotal, quoteStatusKey,
-  type BuyerQuoteDetail, type BuyerQuoteVersion, type QuoteErrorKind
+  QUOTE_REJECT_MAX, canRejectVersion, classifyQuoteError, classifyQuotePdfError, lineTitle, mayAccept, newestAcceptable, newestVersion, quotedTotal, quoteStatusKey,
+  type BuyerQuoteDetail, type BuyerQuoteVersion, type QuoteErrorKind, type QuotePdfErrorKind
 } from '@mechware/api-client';
 import { companiesApi } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { ordersApi } from '../../lib/checkout-client';
-import { QUOTE_PDF_ENABLED, buyerQuotesApi, downloadQuotePdf } from '../../lib/quotes-client';
+import { buyerQuotesApi, downloadQuotePdf } from '../../lib/quotes-client';
 import { useResource } from '../../lib/useResource';
 import { ListSkeleton, PageShell, RequireSignIn, useLocalePath } from '../company/shared';
 import { BuyerQuoteBadge, formatDay, useNumberFormat, useQuoteErrorText, useQuoteMoney } from './parts';
@@ -90,7 +90,7 @@ function Panel({ companyId, quoteId }: { companyId: string; quoteId: string }) {
   const [busy, setBusy] = React.useState(false);
   const [rejected, setRejected] = React.useState<BuyerQuoteDetail | null>(null);
   const [failure, setFailure] = React.useState<QuoteErrorKind | null>(null);
-  const [pdfFailed, setPdfFailed] = React.useState(false);
+  const [pdfFailed, setPdfFailed] = React.useState<QuotePdfErrorKind | null>(null);
   const working = React.useRef(false);
 
   if (result.loading && !result.data) return <ListSkeleton rows={4} />;
@@ -139,11 +139,11 @@ function Panel({ companyId, quoteId }: { companyId: string; quoteId: string }) {
   };
 
   const pdf = async () => {
-    setPdfFailed(false);
+    setPdfFailed(null);
     try {
       await downloadQuotePdf(companyId, quoteId, newest.versionNo, locale, `${detail.quote.number}-v${newest.versionNo}.pdf`);
-    } catch {
-      setPdfFailed(true);
+    } catch (e) {
+      setPdfFailed(classifyQuotePdfError(e));
     }
   };
 
@@ -171,9 +171,9 @@ function Panel({ companyId, quoteId }: { companyId: string; quoteId: string }) {
         {acceptable && mayAccept(r.roles) && !accepting && <Button onClick={() => setAccepting(true)} data-testid="quote-accept">{t('accept')}</Button>}
         {acceptable && !mayAccept(r.roles) && <p className="text-sm text-text-muted" data-testid="quote-no-accept">{t('onlyBuyerAccepts')}</p>}
         {canRejectVersion(newest) && !rejected && <Button variant="outline" onClick={() => setRejecting(true)} disabled={busy} data-testid="quote-reject">{t('reject')}</Button>}
-        {QUOTE_PDF_ENABLED && <Button variant="outline" onClick={() => void pdf()} data-testid="quote-pdf">{t('downloadPdf')}</Button>}
+        <Button variant="outline" onClick={() => void pdf()} data-testid="quote-pdf">{t('downloadPdf')}</Button>
       </div>
-      {pdfFailed && <p role="alert" className="text-sm text-fault">{t('pdfFailed')}</p>}
+      {pdfFailed && <p role="alert" data-testid="quote-pdf-error" data-kind={pdfFailed} className="text-sm text-fault">{t(`pdfError_${pdfFailed}` as 'pdfError_failed')}</p>}
 
       {accepting && acceptable && <QuoteAcceptPanel companyId={companyId} quoteId={quoteId} version={acceptable} onStale={() => { setAccepting(false); result.reload(); }} />}
 

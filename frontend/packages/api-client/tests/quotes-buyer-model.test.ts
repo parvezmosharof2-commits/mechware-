@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  acceptBody, acceptFingerprint, canRejectVersion, classifyQuoteError, lineTitle, mayAccept, newestAcceptable, quotePaymentChoices, quotedTotal, previewBody, quoteKeepKeyAfter,
+  acceptBody, acceptFingerprint, canRejectVersion, classifyQuoteError, classifyQuotePdfError, lineTitle, mayAccept, newestAcceptable, quotePaymentChoices, quotedTotal, previewBody, quoteKeepKeyAfter,
   quoteNeedsReload, quotePageCount, quotePageQuery, quotePdfPath, quoteStatusKey, quoteStatusTone, rejectBody
 } from '../src/quotes-buyer-model.ts';
 
@@ -97,4 +97,14 @@ test('paging, titles and the pdf path', () => {
   assert.equal(lineTitle({ titleEn: 'Drill', titleBn: '' }, 'bn'), 'Drill');
   assert.equal(quotePdfPath('c 1', 'q', 2.9), '/api/v1/companies/c%201/quotes/q/versions/2/pdf?locale=en');
   assert.ok(quotePdfPath('c', 'q', 1, 'bn').endsWith('/pdf?locale=bn'));
+});
+
+test('classifyQuotePdfError: 404, 429, the unverified-document 503, then a plain failure', () => {
+  assert.equal(classifyQuotePdfError(problem(404, 'NOT_FOUND')), 'notFound');
+  assert.equal(classifyQuotePdfError(problem(429)), 'rateLimited');
+  assert.equal(classifyQuotePdfError(problem(503, 'QUOTE_PDF_UNAVAILABLE')), 'unverified');
+  assert.equal(classifyQuotePdfError(problem(503)), 'failed');
+  assert.equal(classifyQuotePdfError(problem(401)), 'signIn');
+  assert.equal(classifyQuotePdfError(new TypeError('network')), 'failed');
+  assert.equal(classifyQuotePdfError(null), 'failed');
 });
