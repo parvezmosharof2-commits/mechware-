@@ -5058,6 +5058,65 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/accept": {
+      "post": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "Accepts the version as one order of all its lines (§8.3). `Idempotency-Key` required: 201 with the order (and `quoteNumber`),\r\n200 for a replay with the same key and body (also after the order was cancelled), 409 `IDEMPOTENCY_KEY_REUSED` for another body.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptQuoteBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptQuoteBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptQuoteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/rfqs": {
       "post": {
         "tags": [
@@ -6120,6 +6179,49 @@
   },
   "components": {
     "schemas": {
+      "AcceptQuoteBody": {
+        "type": "object",
+        "properties": {
+          "versionNo": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "expectedGrandTotalMinor": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "payOnCredit": {
+            "type": "boolean"
+          },
+          "shipToSiteId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "shippingAddressId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "costCentreId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "purchaseOrderNumber": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What accepting a quote carries (ADR-0011 §8.1, QT2): the version and the content hash the buyer saw, the total the accept preview showed\r\n(required), and the buyer's own choices: payment on company credit, delivery site or saved address (calculated delivery only), cost\r\ncentre and PO number. There are no lines, quantities, prices, coupons or company id in it: other JSON members are ignored."
+      },
       "AddCartItemBody": {
         "type": "object",
         "properties": {
@@ -8197,6 +8299,9 @@
     },
     {
       "name": "CompanyPrices"
+    },
+    {
+      "name": "CompanyQuotes"
     },
     {
       "name": "CompanyRfqs"

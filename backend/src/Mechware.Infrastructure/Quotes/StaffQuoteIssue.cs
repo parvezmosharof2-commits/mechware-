@@ -4,7 +4,6 @@ using Mechware.Application.Quotes;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Companies;
 using Mechware.Domain.Identity;
-using Mechware.Domain.Orders;
 using Mechware.Domain.Pricing;
 using Mechware.Domain.Quotes;
 using Mechware.Infrastructure.Persistence;
@@ -188,10 +187,8 @@ public sealed partial class StaffQuoteService
         return new QuoteCompanySnapshot(company.LegalName, string.IsNullOrWhiteSpace(company.Bin) ? null : company.Bin, address);
     }
 
-    /// <summary>§8.6: the Accepted version's order is Cancelled and was never confirmed, so the version may be superseded or accepted again.</summary>
-    private async Task<bool> LapsedAsync(Quote quote, CancellationToken ct) =>
-        quote.Versions.FirstOrDefault(v => v.Status == S.Accepted)?.AcceptedOrderId is { } orderId
-        && await db.Orders.AnyAsync(o => o.Id == orderId && o.Status == OrderStatus.Cancelled && o.ConfirmedAtUtc == null, ct);
+    /// <summary>§8.6, one rule for the desk and the acceptance: <see cref="QuoteAcceptanceGate.LapsedAsync"/>.</summary>
+    private Task<bool> LapsedAsync(Quote quote, CancellationToken ct) => QuoteAcceptanceGate.LapsedAsync(db, quote, ct);
 
     /// <summary>A sent quote answers its RFQ (the first one stamps the SLA); the RFQ row is locked after the quote tier (§9).</summary>
     private async Task AnsweredAsync(Quote quote, DateTime now, CancellationToken ct)

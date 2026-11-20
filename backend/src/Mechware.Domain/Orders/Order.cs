@@ -42,6 +42,9 @@ public sealed class OrderItem : Entity<Guid>
     /// <summary>The lowest public price (list, sale, public break) for this quantity at that instant, on <see cref="PriceBasis"/>.</summary>
     public long? PublicUnitPriceMinor { get; private set; }
 
+    /// <summary>The accepted quote line, for a <see cref="Pricing.PriceLists.PriceSource.Quote"/> price only (ADR-0011 §11).</summary>
+    public Guid? QuoteLineId { get; private set; }
+
     private OrderItem() { }
 
     internal OrderItem(Guid id, Guid subOrderId, PricedLine line) : base(id)
@@ -52,6 +55,7 @@ public sealed class OrderItem : Entity<Guid>
                 (price.Source, price.Basis, price.PriceListId, price.PriceListVersion, price.EntryId, price.ContractRef, price.PublicUnitPriceMinor);
         }
 
+        QuoteLineId = line.QuoteLineId;
         SubOrderId = subOrderId;
         VariantId = line.VariantId;
         Sku = line.Sku;
@@ -205,6 +209,14 @@ public sealed class Order : AggregateRoot<Guid>
     /// <summary>Whether the same-city period applied (true), the other-city one (false), or the destination or dispatch district was unknown (null, short period used).</summary>
     public bool? DeadlineSameCity { get; private set; }
 
+    /// <summary>
+    /// The quote and the version this order accepted (ADR-0011 §8, §11): both or neither, a company order whose every line is a quote
+    /// line, set at placement and never changed. Whether the quote may be accepted again is derived from this order's status.
+    /// </summary>
+    public Guid? QuoteId { get; private set; }
+
+    public Guid? QuoteVersionId { get; private set; }
+
     public IReadOnlyCollection<SubOrder> SubOrders => _subOrders.AsReadOnly();
     public IReadOnlyCollection<OrderEventRecord> Events => _events.AsReadOnly();
 
@@ -213,11 +225,14 @@ public sealed class Order : AggregateRoot<Guid>
     public static Order Place(
         Guid id, string orderNumber, Guid userId, Guid? companyId, PricedOrder priced, TaxMode taxMode, string shipToJson,
         OrderStatus initialStatus, DateTime nowUtc, bool paysOnCredit = false, DateTime? paymentDueAtUtc = null, Guid? costCentreId = null,
-        string? purchaseOrderNumber = null)
+        string? purchaseOrderNumber = null, Guid? quoteId = null, Guid? quoteVersionId = null)
     {
         var po = NormalisePurchaseOrderNumber(purchaseOrderNumber);
         if (po is not null && companyId is null)
             throw new ValidationException("purchaseOrderNumber", "A purchase order number applies to company orders only.");
+        if ((quoteId is null) != (quoteVersionId is null) || (quoteId is not null && companyId is null)
+            || priced.SubOrders.SelectMany(s => s.Lines).Any(l => (l.QuoteLineId is null) != (quoteId is null)))
+            throw new ValidationException("quote", "A quote order is a company order of the quote's version, and every line of it is a quote line.");
         if (!OrderNumber_IsValid(orderNumber)) throw new ValidationException("orderNumber", "Invalid order number.");
         if (initialStatus is not (OrderStatus.PendingPayment or OrderStatus.PendingApproval))
             throw new ValidationException("status", "An order starts pending payment or pending approval.");
@@ -240,7 +255,9 @@ public sealed class Order : AggregateRoot<Guid>
             PaysOnCredit = paysOnCredit,
             CostCentreId = costCentreId,
             PurchaseOrderNumber = po,
-            PaymentDueAtUtc = initialStatus == OrderStatus.PendingPayment ? paymentDueAtUtc : null
+            PaymentDueAtUtc = initialStatus == OrderStatus.PendingPayment ? paymentDueAtUtc : null,
+            QuoteId = quoteId,
+            QuoteVersionId = quoteVersionId
         };
 
         var n = 0;

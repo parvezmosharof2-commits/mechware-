@@ -41,8 +41,19 @@ public sealed record PlaceOrderRequest(
     public const string ApprovalSubjectType = "order";
 }
 
+/// <summary>
+/// Accepting a sent quote version as an order (ADR-0011 §8.1). There are no lines, quantities, prices, coupons or company choice: the
+/// order is the quote's version, in the quote's company (<paramref name="CompanyId"/> is the URL's and must be the quote's).
+/// <paramref name="ContentHash"/> is the hash of the version the buyer saw; <paramref name="ExpectedGrandTotalMinor"/> (required) is the
+/// accept preview's total: a higher server total is 409 <c>PRICE_CHANGED</c>, a lower or equal one goes through at the server's.
+/// </summary>
+public sealed record AcceptQuoteRequest(
+    Guid UserId, string IdempotencyKey, Guid CompanyId, Guid QuoteId, int? VersionNo, string? ContentHash, long? ExpectedGrandTotalMinor,
+    bool PayOnCredit = false, Guid? ShipToSiteId = null, Guid? ShippingAddressId = null, Guid? CostCentreId = null, string? PurchaseOrderNumber = null);
+
+/// <param name="QuoteNumber">The accepted quote's number, for an order placed from a quote (ADR-0011 §12); null otherwise.</param>
 public sealed record PlacedOrder(
-    Guid OrderId, string OrderNumber, string Status, long GrandTotalMinor, DateTime ReservationExpiresAtUtc, bool Replayed);
+    Guid OrderId, string OrderNumber, string Status, long GrandTotalMinor, DateTime ReservationExpiresAtUtc, bool Replayed, string? QuoteNumber = null);
 
 /// <param name="PriceSource">
 /// Where the unit price came from (ADR-0008 §8): <c>list</c>, <c>sale</c>, <c>quantity_break</c>, <c>group_list</c>,
@@ -71,10 +82,12 @@ public sealed record OrderShipToDto(
 /// </summary>
 public sealed record OrderPaymentDto(string Status, string? Method, long AmountMinor, DateTime? PaidAt, int Attempts);
 
+/// <param name="QuoteNumber">The number of the quote this order accepted (ADR-0011 §11); null for an order placed from the cart.</param>
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
     long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null,
-    DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null, OrderCreditDto? Credit = null);
+    DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null, OrderCreditDto? Credit = null,
+    string? QuoteNumber = null);
 
 /// <summary>
 /// Where a credit order stands in the ledger (ADR-0010 §10, B3.9): <paramref name="Status"/> = <c>open</c>, <c>partially_paid</c>, <c>paid</c>,
@@ -142,6 +155,16 @@ public interface IOrderService
     /// the original order; the same key with a different request is refused.
     /// </summary>
     Task<PlacedOrder> PlaceAsync(PlaceOrderRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Accepts a sent quote version as one order of all its lines, through the same path as <see cref="PlaceAsync"/> (ADR-0011 §8.3): the
+    /// idempotency record, a verified account, the open-unpaid cap, cost-centre rules, the company's approval rule on the server total, the
+    /// credit check and overdue hold, spend limit and budget, stock reservation. Lines at their quoted net prices with today's VAT rate, no
+    /// promotions; delivery fixed to the quoted site or calculated as for an order; advance-only terms never on credit. The quote row and its
+    /// versions are locked first in the order's transaction and checked again there; one live order per version. Anything the caller may
+    /// not see is one 404 ("Quote not found."), a member without the Buyer role 403 <c>COMPANY_ROLE_REQUIRED</c>.
+    /// </summary>
+    Task<PlacedOrder> PlaceFromQuoteAsync(AcceptQuoteRequest request, CancellationToken ct = default);
 
     /// <summary>
     /// The shipping <see cref="PlaceAsync"/> would charge for these lines and destination, computed the same way and from the

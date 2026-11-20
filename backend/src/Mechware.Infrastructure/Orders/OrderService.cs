@@ -7,6 +7,7 @@ using Npgsql;
 using Mechware.Application.Inventory;
 using Mechware.Application.Orders;
 using Mechware.Application.Pricing;
+using Mechware.Application.Quotes;
 using Mechware.Application.Shipping;
 using Mechware.Domain.Approvals;
 using Mechware.Domain.Catalog;
@@ -16,13 +17,17 @@ using Mechware.Domain.Credit;
 using Mechware.Domain.Orders;
 using Mechware.Domain.Pricing;
 using Mechware.Domain.Pricing.PriceLists;
+using Mechware.Domain.Quotes;
+using Mechware.Domain.Sellers;
 using Mechware.Infrastructure.Persistence;
 
 namespace Mechware.Infrastructure.Orders;
 
+/// <param name="quotes">The quote side of <see cref="PlaceFromQuoteAsync"/> (ADR-0011 §8.3); the only way this module reaches quotes.</param>
 public sealed partial class OrderService(
     MechwareDbContext db, IInventoryService inventory, TimeProvider clock, IOrderShippingQuoter shippingQuoter, IPriceResolver prices,
-    Func<DateTime, string>? orderNumbers = null, DeliveryOptions? delivery = null, Application.Credit.CreditOptions? credit = null) : IOrderService
+    Func<DateTime, string>? orderNumbers = null, DeliveryOptions? delivery = null, Application.Credit.CreditOptions? credit = null,
+    IQuoteAcceptanceGate? quotes = null) : IOrderService
 {
     private readonly DeliveryOptions deliveryOptions = delivery ?? new DeliveryOptions();
     private readonly Application.Credit.CreditOptions creditOptions = credit ?? new Application.Credit.CreditOptions();
@@ -31,13 +36,47 @@ public sealed partial class OrderService(
     [GeneratedRegex("^[A-Za-z0-9_-]{8,100}$")]
     private static partial Regex KeyPattern();
 
+    /// <summary>A quote version being accepted, with the content hash the buyer saw (ADR-0011 §8).</summary>
+    private sealed record QuoteAcceptance(QuoteForOrder Quote, string ContentHash);
+
     public async Task<PlacedOrder> PlaceAsync(PlaceOrderRequest request, CancellationToken ct = default)
     {
-        if (!KeyPattern().IsMatch(request.IdempotencyKey ?? string.Empty))
-            throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
+        RequireKey(request.IdempotencyKey);
         var lines = Normalise(request);
         var hash = HashOf(request, lines);
+        return await UnderBuyerLocksAsync(request, () => PlaceLockedAsync(request, lines, hash, null, ct), ct);
+    }
 
+    public async Task<PlacedOrder> PlaceFromQuoteAsync(AcceptQuoteRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var gate = quotes ?? throw new InvalidOperationException("Quote acceptance needs an IQuoteAcceptanceGate.");
+        RequireKey(request.IdempotencyKey);
+        if (request.VersionNo is not > 0) throw new ValidationException("versionNo", "Name the version of the quote you accept.");
+        if (string.IsNullOrWhiteSpace(request.ContentHash)) throw new ValidationException("contentHash", "Send the content hash of the quote you reviewed.");
+        if (request.ExpectedGrandTotalMinor is null)
+            throw new ValidationException("expectedGrandTotalMinor", "Send the total the accept preview showed you.");
+
+        // Who may accept what (§8.2): one 404 for anything the caller may not see, 403 without the Buyer role. The order is the quote's,
+        // in the quote's company: its lines and that company come from the quote, never from the request.
+        var quote = await gate.FindAsync(request.UserId, request.CompanyId, request.QuoteId, request.VersionNo.Value, ct);
+        var asOrder = new PlaceOrderRequest(request.UserId, request.IdempotencyKey, [.. quote.Lines.Select(l => new PlaceOrderLine(l.VariantId, l.Quantity))],
+            request.ShippingAddressId, quote.CompanyId, request.PayOnCredit, null, request.ShipToSiteId, request.CostCentreId, request.PurchaseOrderNumber,
+            request.ExpectedGrandTotalMinor);
+        var lines = Normalise(asOrder);
+        var hash = HashOf(asOrder, lines, $"quote:{quote.QuoteId:N}:{quote.VersionNo}:{request.ContentHash}");
+        var placed = await UnderBuyerLocksAsync(asOrder, () => PlaceLockedAsync(asOrder, lines, hash, new QuoteAcceptance(quote, request.ContentHash), ct), ct);
+        return placed with { QuoteNumber = quote.Number };
+    }
+
+    private static void RequireKey(string? key)
+    {
+        if (!KeyPattern().IsMatch(key ?? string.Empty))
+            throw new ValidationException("idempotencyKey", "An Idempotency-Key of 8 to 100 letters, digits, '-' or '_' is required.");
+    }
+
+    private async Task<PlacedOrder> UnderBuyerLocksAsync(PlaceOrderRequest request, Func<Task<PlacedOrder>> place, CancellationToken ct)
+    {
         // A buyer's order requests queue up here, one at a time. With the same key this stops a client retrying while its
         // first request is still reserving stock from losing the stock race and being told "insufficient stock" instead
         // of getting its own order back. Across keys it makes the open-unpaid-order cap exact: parallel requests cannot all
@@ -55,7 +94,7 @@ public sealed partial class OrderService(
                 await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_lock(hashtextextended({centreKey}, 0))", ct);
             try
             {
-                return await PlaceLockedAsync(request, lines, hash, ct);
+                return await place();
             }
             finally
             {
@@ -70,9 +109,20 @@ public sealed partial class OrderService(
         }
     }
 
-    private async Task<PlacedOrder> PlaceLockedAsync(PlaceOrderRequest request, List<PlaceOrderLine> lines, string hash, CancellationToken ct)
+    private async Task<PlacedOrder> PlaceLockedAsync(PlaceOrderRequest request, List<PlaceOrderLine> lines, string hash, QuoteAcceptance? quote, CancellationToken ct)
     {
         if (await ReplayAsync(request.UserId, request.IdempotencyKey, hash, ct) is { } replay) return replay;
+
+        // The order's single server instant: prices, the quote's validity (here and again under its lock), approvals and budgets.
+        var now = clock.GetUtcNow().UtcDateTime;
+        if (quote is not null)
+        {
+            // ADR-0011 §8.3 steps 3-4 (QT12): a quote never grants credit, so advance-only terms are paid, never put on account; then the
+            // early answer before any stock is held. Both are decided again where it binds (credit under the company lock, the quote under its own).
+            if (quote.Quote.PaymentTerms == QuotePaymentTerms.Advance && request.PayOnCredit)
+                throw new ConflictException("QUOTE_REQUIRES_ADVANCE_PAYMENT", "This quote is for payment in advance only. Choose a payment method instead of company credit.");
+            await quotes!.EnsureAcceptableAsync(quote.Quote, quote.ContentHash, request.UserId, now, ct);
+        }
 
         await RequireBuyerMayHoldStockAsync(request, ct);
         var member = request.CompanyId is { } companyId ? await RequireCompanyMayBuyAsync(request.UserId, companyId, ct) : null;
@@ -86,13 +136,18 @@ public sealed partial class OrderService(
             if (!member.CostCentreIds.Contains(chosen))
                 throw new ForbiddenException("COST_CENTRE_NOT_ASSIGNED", "You are not assigned to this cost centre.");
         }
-        var (shipTo, districtId) = await ResolveShipToAsync(request, ct);
+        var (shipTo, districtId) = quote?.Quote is { ShippingMode: QuoteShippingMode.Fixed } fixedDelivery
+            ? await QuotedSiteAsync(request, fixedDelivery, ct)
+            : await ResolveShipToAsync(request, ct);
 
-        var now = clock.GetUtcNow().UtcDateTime;
         // Negotiated prices only for the company whose membership was just checked (B1), never for the id in the body.
         var verifiedCompanyId = member?.CompanyId;
         var mode = verifiedCompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        var (priced, applied, categories, _) = await PriceAsync(request, lines, verifiedCompanyId, mode, now, districtId, ct);
+        PricedOrder priced;
+        IReadOnlyList<AppliedPromotion> applied = [];
+        IReadOnlyList<Guid> categories;
+        if (quote is null) (priced, applied, categories, _) = await PriceAsync(request, lines, verifiedCompanyId, mode, now, districtId, ct);
+        else (priced, categories) = await PriceQuoteAsync(quote.Quote, lines, districtId, ct);
 
         // The total the buyer was shown can only stop the order, never set a price (ADR-0008 §9).
         if (request.ExpectedGrandTotalMinor is { } shown && priced.GrandTotalMinor > shown)
@@ -130,13 +185,14 @@ public sealed partial class OrderService(
             var reserved = await ReserveAsync(orderId, lines, approvalRule is null ? UnpaidOrderLifetime : ApprovalHoldLifetime + UnpaidOrderLifetime, ct);
 
             var order = Order.Place(orderId, _nextOrderNumber(now), request.UserId, request.CompanyId, priced, mode,
-                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime, request.CostCentreId, request.PurchaseOrderNumber);
+                shipTo, initialStatus, now, request.PayOnCredit, now + UnpaidOrderLifetime, request.CostCentreId, request.PurchaseOrderNumber,
+                quote?.Quote.QuoteId, quote?.Quote.VersionId);
             db.Orders.Add(order);
             db.IdempotencyKeys.Add(new IdempotencyRecord(request.UserId, request.IdempotencyKey, hash, orderId));
 
             try
             {
-                await SaveAsync(order, request, applied, approvalRule, categories, now, ct);
+                await SaveAsync(order, request, applied, approvalRule, categories, now, quote, ct);
                 // Credit orders that need no approval are confirmed at once (brief §8.5): the held stock becomes a real deduction.
                 if (order.Status == OrderStatus.Confirmed) await inventory.CommitAsync(orderId, ct);
 
@@ -156,6 +212,9 @@ public sealed partial class OrderService(
                 }
 
                 if (pg.ConstraintName == "ux_orders_number" && attempt < 4) continue;
+                // ADR-0011 §8.6: the database backstop of "one live order per quote version" (the quote lock decides first).
+                if (pg.ConstraintName == "ux_orders_live_quote_version")
+                    throw new ConflictException("QUOTE_ALREADY_ACCEPTED", "This quote has already been accepted.");
                 throw;
             }
             catch
@@ -225,6 +284,35 @@ public sealed partial class OrderService(
         return fallback is not null
             ? await FromAddressAsync(fallback, ct)
             : throw new ValidationException("shippingAddressId", "Add a shipping address before placing an order.");
+    }
+
+    /// <summary>
+    /// A fixed delivery goes to the quoted site only, at the address the quote was sent with (ADR-0011 §8.3, QT16): another site or a saved
+    /// address is 409 <c>QUOTE_DELIVERY_FIXED</c> (its fee is for that site), a site removed since is 409 <c>QUOTE_DELIVERY_SITE_GONE</c>.
+    /// </summary>
+    private async Task<(string Json, Guid? DistrictId)> QuotedSiteAsync(PlaceOrderRequest r, QuoteForOrder q, CancellationToken ct)
+    {
+        if (r.ShippingAddressId is not null || (r.ShipToSiteId is { } chosen && chosen != q.ShipToSiteId))
+            throw new ConflictException("QUOTE_DELIVERY_FIXED", "This quote's delivery is priced for its quoted site only. Ask for a revised quote to deliver elsewhere.");
+        if (q.ShipTo is not { } a || !await db.CompanySites.AsNoTracking().AnyAsync(s => s.Id == q.ShipToSiteId && s.CompanyId == q.CompanyId, ct))
+            throw new ConflictException("QUOTE_DELIVERY_SITE_GONE", "The delivery site of this quote was removed. Ask for a revised quote.");
+        var districtId = await DistrictIdAsync(a.District, a.Division, ct);
+        return (System.Text.Json.JsonSerializer.Serialize(new
+        {
+            source = "quote_site",
+            sourceId = q.ShipToSiteId,
+            districtId,
+            siteName = a.SiteName,
+            recipientName = a.RecipientName,
+            phone = a.Phone,
+            line1 = a.Line1,
+            line2 = a.Line2,
+            upazila = a.Upazila,
+            district = a.District,
+            division = a.Division,
+            postalCode = a.PostalCode,
+            country = "BD"
+        }), districtId);
     }
 
     private async Task<(string Json, Guid? DistrictId)> FromAddressAsync(Domain.Identity.Address a, CancellationToken ct)
@@ -517,7 +605,8 @@ public sealed partial class OrderService(
                     i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList(),
                 storeNames.GetValueOrDefault(s.SellerId))).ToList(),
             order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments),
-            await CreditForBuyerAsync(order, ct));
+            await CreditForBuyerAsync(order, ct),
+            order.QuoteId is { } quoteId ? await db.Quotes.AsNoTracking().Where(q => q.Id == quoteId).Select(q => q.Number).FirstOrDefaultAsync(ct) : null);
     }
 
     /// <summary>
@@ -631,9 +720,10 @@ public sealed partial class OrderService(
         return merged;
     }
 
-    private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines)
+    /// <param name="quote">For an acceptance (ADR-0011 §8.3): the quote, version and content hash, so no cart order and no other version shares its hash.</param>
+    private static string HashOf(PlaceOrderRequest r, List<PlaceOrderLine> lines, string? quote = null)
     {
-        var canonical = string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.CostCentreId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
+        var canonical = (quote is null ? string.Empty : quote + "|") + string.Join(';', lines.Select(l => $"{l.VariantId:N}:{l.Quantity}")) + $"|{r.CompanyId:N}|{r.ShippingAddressId:N}|{r.ShipToSiteId:N}|{r.CostCentreId:N}|{r.PayOnCredit}|{string.Join(',', NormalisedCodes(r).Order())}";
         // The PO number is part of what was asked (E8.2). Appended only when present, so keys stored before it existed still replay.
         if (Order.NormalisePurchaseOrderNumber(r.PurchaseOrderNumber) is { } po) canonical += $"|po:{po}";
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
@@ -659,28 +749,7 @@ public sealed partial class OrderService(
     private async Task<(PricedOrder Priced, IReadOnlyList<AppliedPromotion> Applied, IReadOnlyList<Guid> Categories, OrderShipping Shipping)> PriceAsync(
         PlaceOrderRequest request, List<PlaceOrderLine> lines, Guid? verifiedCompanyId, TaxMode mode, DateTime now, Guid? districtId, CancellationToken ct)
     {
-        var ids = lines.Select(l => l.VariantId).ToList();
-        var rows = await (from v in db.ProductVariants.AsNoTracking()
-                          join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
-                          join c in db.Categories.AsNoTracking() on p.CategoryId equals c.Id
-                          join s in db.Sellers.AsNoTracking() on p.SellerId equals s.Id
-                          where ids.Contains(v.Id)
-                          select new { Variant = v, Product = p, Category = c, Seller = s }).ToListAsync(ct);
-
-        var byId = rows.ToDictionary(r => r.Variant.Id);
-        var unavailable = lines.Where(l => !byId.TryGetValue(l.VariantId, out var r)
-                                           || r.Product.Status != ProductStatus.Active
-                                           || r.Variant.Status != VariantStatus.Active).Select(l => l.VariantId).ToList();
-        if (unavailable.Count > 0)
-            throw new ConflictException("VARIANT_UNAVAILABLE", $"These items are not available: {string.Join(", ", unavailable)}.");
-
-        // Order units (PIM): the cart rounds up for the buyer, but the order endpoint can be called directly. The buyer is
-        // told which line breaks which rule; nothing is rounded here, because a silently changed quantity on a company
-        // order is a different order from the one approved.
-        var quantityErrors = lines
-            .Select(l => byId[l.VariantId].Variant.QuantityProblem(l.Quantity))
-            .OfType<string>().Select(m => new ValidationError("quantity", m)).ToList();
-        if (quantityErrors.Count > 0) throw new ValidationException(quantityErrors);
+        var byId = await CatalogueAsync(lines, null, ct);
 
         // One resolver call for all lines, from the catalogue facts just read and the order's single instant. Lines are already
         // merged per variant, so the quantity is all units of that variant (§5).
@@ -692,8 +761,6 @@ public sealed partial class OrderService(
         var drafts = new List<OrderLineDraft>();
         var categoryOf = new Dictionary<Guid, Guid>();
         var guestUnitPrice = new Dictionary<Guid, long>();
-        var commission = new Dictionary<Guid, decimal>();
-        var shippingLines = new List<ShippingQuoteLine>();
         foreach (var line in lines)
         {
             var r = byId[line.VariantId];
@@ -703,9 +770,6 @@ public sealed partial class OrderService(
             guestUnitPrice[lineId] = price.GuestUnitPriceMinor;
             drafts.Add(new OrderLineDraft(lineId, r.Variant.Id, r.Seller.Id, r.Variant.Sku, r.Product.TitleEn,
                 line.Quantity, price.Price.UnitPriceMinor, r.Category.VatRate, 0, price.Price));
-            commission.TryAdd(r.Seller.Id, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate);
-            shippingLines.Add(new ShippingQuoteLine(r.Variant.Id, r.Variant.Sku, r.Seller.Id, line.Quantity, r.Variant.WeightKg,
-                r.Product.LengthCm, r.Product.WidthCm, r.Product.HeightCm));
         }
 
         var applied = await ApplyPromotionsAsync(request, drafts, categoryOf, now, ct);
@@ -718,11 +782,77 @@ public sealed partial class OrderService(
         // company never misses free shipping a guest gets for the same cart.
         // TODO(E8, owner + tax adviser): VAT on shipping. Today the fee is a final amount with no VAT split (OrderPricing).
         var goodsTotal = OrderPricing.FreeShippingBasisMinor(discounted, guestUnitPrice, mode);
-        var shipping = await shippingQuoter.QuoteAsync(districtId, shippingLines, goodsTotal, ct);
-        var fees = shipping.PerSeller.ToDictionary(s => s.SellerId, s => s.ShippingMinor);
-        var terms = commission.Select(c => new SellerTerms(c.Key,
-            fees.TryGetValue(c.Key, out var fee) ? fee : throw new InvalidOperationException($"No shipping fee for seller {c.Key}."), c.Value)).ToList();
+        var shipping = await shippingQuoter.QuoteAsync(districtId, ShippingLines(lines, byId), goodsTotal, ct);
+        var terms = Terms(lines, byId, shipping.PerSeller.ToDictionary(s => s.SellerId, s => s.ShippingMinor));
         return (OrderPricing.Price(discounted, terms, mode), applied.Applied, categoryOf.Values.Distinct().ToList(), shipping);
+    }
+
+    /// <summary>
+    /// The lines of a quote version (ADR-0011 §8.3 steps 1-2, §8.4; QT2, QT15): no resolver and no promotions. Each line at its quoted net
+    /// unit price with today's VAT rate of its category, as a quote price (the public price of the send, its quote line); delivery is the
+    /// quote's fee per seller when fixed, else the normal quoter for the destination with the quote's goods total (VAT included) as the
+    /// free-shipping basis. The catalogue checks are an order's, and the item must still be sold by the quoted seller.
+    /// </summary>
+    private async Task<(PricedOrder Priced, IReadOnlyList<Guid> Categories)> PriceQuoteAsync(QuoteForOrder quote, List<PlaceOrderLine> lines, Guid? districtId,
+        CancellationToken ct)
+    {
+        var quotedSeller = quote.Lines.ToDictionary(l => l.VariantId, l => l.SellerId);
+        var byId = await CatalogueAsync(lines, r => quotedSeller[r.Variant.Id] == r.Seller.Id, ct);
+        var drafts = quote.Lines.Select(l => new OrderLineDraft(Guid.NewGuid(), l.VariantId, l.SellerId, l.Sku, l.TitleEn, l.Quantity, l.UnitPriceMinor,
+            byId[l.VariantId].Category.VatRate, 0,
+            new PriceResolution(l.VariantId, l.UnitPriceMinor, PriceSource.Quote, PriceBasis.NetOfVat, null, null, null, null, l.PublicUnitPriceMinor), l.LineId)).ToList();
+        var fees = quote.ShippingMode == QuoteShippingMode.Fixed
+            ? quote.ShippingFees.ToDictionary(f => f.SellerId, f => f.ShippingMinor)
+            : (await shippingQuoter.QuoteAsync(districtId, ShippingLines(lines, byId), drafts.Sum(d => OrderPricing.PriceLine(d, TaxMode.Exclusive).TotalMinor), ct))
+                .PerSeller.ToDictionary(s => s.SellerId, s => s.ShippingMinor);
+        return (OrderPricing.Price(drafts, Terms(lines, byId, fees), TaxMode.Exclusive), [.. byId.Values.Select(r => r.Product.CategoryId).Distinct()]);
+    }
+
+    private sealed record CatalogueRow(ProductVariant Variant, Product Product, Category Category, Seller Seller);
+
+    /// <summary>
+    /// The lines' catalogue rows at the order's instant. An item that is not sold now (or that <paramref name="sold"/> refuses) is 409
+    /// <c>VARIANT_UNAVAILABLE</c>; a quantity outside the order units (MOQ, pack) is 400.
+    /// </summary>
+    private async Task<Dictionary<Guid, CatalogueRow>> CatalogueAsync(List<PlaceOrderLine> lines, Func<CatalogueRow, bool>? sold, CancellationToken ct)
+    {
+        var ids = lines.Select(l => l.VariantId).ToList();
+        var rows = await (from v in db.ProductVariants.AsNoTracking()
+                          join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
+                          join c in db.Categories.AsNoTracking() on p.CategoryId equals c.Id
+                          join s in db.Sellers.AsNoTracking() on p.SellerId equals s.Id
+                          where ids.Contains(v.Id)
+                          select new CatalogueRow(v, p, c, s)).ToListAsync(ct);
+
+        var byId = rows.ToDictionary(r => r.Variant.Id);
+        var unavailable = lines.Where(l => !byId.TryGetValue(l.VariantId, out var r)
+                                           || r.Product.Status != ProductStatus.Active
+                                           || r.Variant.Status != VariantStatus.Active
+                                           || (sold is not null && !sold(r))).Select(l => l.VariantId).ToList();
+        if (unavailable.Count > 0)
+            throw new ConflictException("VARIANT_UNAVAILABLE", $"These items are not available: {string.Join(", ", unavailable)}.");
+
+        // Order units (PIM): the cart rounds up for the buyer, but the order endpoint can be called directly. The buyer is
+        // told which line breaks which rule; nothing is rounded here, because a silently changed quantity on a company
+        // order is a different order from the one approved.
+        var quantityErrors = lines
+            .Select(l => byId[l.VariantId].Variant.QuantityProblem(l.Quantity))
+            .OfType<string>().Select(m => new ValidationError("quantity", m)).ToList();
+        if (quantityErrors.Count > 0) throw new ValidationException(quantityErrors);
+        return byId;
+    }
+
+    private static List<ShippingQuoteLine> ShippingLines(List<PlaceOrderLine> lines, Dictionary<Guid, CatalogueRow> byId) =>
+        [.. lines.Select(l => (Line: l, Row: byId[l.VariantId])).Select(x => new ShippingQuoteLine(x.Row.Variant.Id, x.Row.Variant.Sku, x.Row.Seller.Id,
+            x.Line.Quantity, x.Row.Variant.WeightKg, x.Row.Product.LengthCm, x.Row.Product.WidthCm, x.Row.Product.HeightCm))];
+
+    /// <summary>Each seller's delivery fee and commission (the seller's override, else the category rate of its first line).</summary>
+    private static List<SellerTerms> Terms(List<PlaceOrderLine> lines, Dictionary<Guid, CatalogueRow> byId, IReadOnlyDictionary<Guid, long> fees)
+    {
+        var commission = new Dictionary<Guid, decimal>();
+        foreach (var r in lines.Select(l => byId[l.VariantId])) commission.TryAdd(r.Seller.Id, r.Seller.CommissionOverrideRate ?? r.Category.CommissionRate);
+        return [.. commission.Select(c => new SellerTerms(c.Key,
+            fees.TryGetValue(c.Key, out var fee) ? fee : throw new InvalidOperationException($"No shipping fee for seller {c.Key}."), c.Value))];
     }
 
     /// <summary>
@@ -810,9 +940,13 @@ public sealed partial class OrderService(
     /// two orders can never both take the last use.
     /// </summary>
     private async Task SaveAsync(Order order, PlaceOrderRequest request, IReadOnlyList<AppliedPromotion> applied,
-        ApprovalRule? approvalRule, IReadOnlyList<Guid> categories, DateTime now, CancellationToken ct)
+        ApprovalRule? approvalRule, IReadOnlyList<Guid> categories, DateTime now, QuoteAcceptance? quote, CancellationToken ct)
     {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // ADR-0011 §8.3 step 5, §9: the quote tier first (the quote row, then its versions), before price lists, the company and promotions,
+        // and checked again with the same instant: a withdrawal, a newer version or another acceptance that committed meanwhile wins.
+        if (quote is not null) await quotes!.AcceptAsync(quote.Quote, quote.ContentHash, order.Id, order.UserId, now, ct);
 
         // ADR-0008 §10: the lists the prices came from are read again FOR SHARE in this transaction. A withdrawal updates the
         // row, so it either waits until this order has committed, or this read waits for the withdrawal and then no longer

@@ -2735,6 +2735,14 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("purchase_order_number");
 
+                    b.Property<Guid?>("QuoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_id");
+
+                    b.Property<Guid?>("QuoteVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_version_id");
+
                     b.Property<string>("ShipToJson")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -2788,6 +2796,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_orders_number");
 
+                    b.HasIndex("QuoteId")
+                        .HasDatabaseName("ix_orders_quote")
+                        .HasFilter("quote_id IS NOT NULL");
+
+                    b.HasIndex("QuoteVersionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_orders_live_quote_version")
+                        .HasFilter("quote_version_id IS NOT NULL AND status <> 'Cancelled'");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_orders_status");
 
@@ -2806,6 +2823,8 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_orders_discount", "discount_total <= subtotal");
 
                             t.HasCheckConstraint("ck_orders_money", "subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0 AND shipping_total >= 0 AND grand_total >= 0");
+
+                            t.HasCheckConstraint("ck_orders_quote_link", "(quote_id IS NULL) = (quote_version_id IS NULL) AND (quote_id IS NULL OR company_id IS NOT NULL)");
                         });
                 });
 
@@ -2918,6 +2937,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
 
+                    b.Property<Guid?>("QuoteLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_line_id");
+
                     b.Property<string>("Sku")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2963,6 +2986,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasIndex("PriceListId")
                         .HasDatabaseName("ix_order_items_price_list");
 
+                    b.HasIndex("QuoteLineId")
+                        .HasDatabaseName("ix_order_items_quote_line")
+                        .HasFilter("quote_line_id IS NOT NULL");
+
                     b.HasIndex("SubOrderId");
 
                     b.HasIndex("VariantId")
@@ -2972,7 +2999,7 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_order_items_money", "unit_price >= 0 AND gross >= 0 AND discount >= 0 AND discount <= gross AND net >= 0 AND tax >= 0 AND total = net + tax");
 
-                            t.HasCheckConstraint("ck_order_items_price_snapshot", "(price_basis IS NULL OR price_basis IN ('GrossInclVat', 'NetOfVat')) AND (price_source IS NULL OR (price_source IN ('List', 'Sale', 'QuantityBreak', 'GroupList', 'Contract', 'Quote') AND price_basis IS NOT NULL AND COALESCE(public_unit_price_minor, 0) > 0)) AND (price_list_id IS NULL) = (price_list_version IS NULL) AND (price_list_id IS NULL) = (price_list_entry_id IS NULL) AND (price_list_id IS NULL) = (price_source IS NULL OR price_source NOT IN ('QuantityBreak', 'GroupList', 'Contract')) AND (contract_ref IS NULL) = (price_source IS DISTINCT FROM 'Contract') AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL)");
+                            t.HasCheckConstraint("ck_order_items_price_snapshot", "(price_basis IS NULL OR price_basis IN ('GrossInclVat', 'NetOfVat')) AND (price_source IS NULL OR (price_source IN ('List', 'Sale', 'QuantityBreak', 'GroupList', 'Contract', 'Quote') AND price_basis IS NOT NULL AND COALESCE(public_unit_price_minor, 0) > 0)) AND (price_list_id IS NULL) = (price_list_version IS NULL) AND (price_list_id IS NULL) = (price_list_entry_id IS NULL) AND (price_list_id IS NULL) = (price_source IS NULL OR price_source NOT IN ('QuantityBreak', 'GroupList', 'Contract')) AND (contract_ref IS NULL) = (price_source IS DISTINCT FROM 'Contract') AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL) AND (quote_line_id IS NULL) = (price_source IS DISTINCT FROM 'Quote')");
 
                             t.HasCheckConstraint("ck_order_items_qty", "quantity > 0");
                         });
@@ -4168,7 +4195,7 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("sent_by");
 
-                    b.Property<string>("ShipToJson")
+                    b.Property<string>("ShipTo")
                         .HasColumnType("jsonb")
                         .HasColumnName("ship_to");
 
@@ -5378,6 +5405,16 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Mechware.Domain.Orders.Order", b =>
                 {
+                    b.HasOne("Mechware.Domain.Quotes.Quote", null)
+                        .WithMany()
+                        .HasForeignKey("QuoteId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Quotes.QuoteVersion", null)
+                        .WithMany()
+                        .HasForeignKey("QuoteVersionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Mechware.Domain.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -5404,6 +5441,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasOne("Mechware.Domain.Pricing.PriceLists.PriceList", null)
                         .WithMany()
                         .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Quotes.QuoteLine", null)
+                        .WithMany()
+                        .HasForeignKey("QuoteLineId")
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Mechware.Domain.Orders.SubOrder", null)

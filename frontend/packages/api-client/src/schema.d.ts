@@ -5294,6 +5294,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accepts the version as one order of all its lines (§8.3). `Idempotency-Key` required: 201 with the order (and `quoteNumber`),
+         *     200 for a replay with the same key and body (also after the order was cancelled), 409 `IDEMPOTENCY_KEY_REUSED` for another body.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    companyId: string;
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AcceptQuoteBody"];
+                    "text/json": components["schemas"]["AcceptQuoteBody"];
+                    "application/*+json": components["schemas"]["AcceptQuoteBody"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies/{companyId}/rfqs": {
         parameters: {
             query?: never;
@@ -6462,6 +6510,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description What accepting a quote carries (ADR-0011 §8.1, QT2): the version and the content hash the buyer saw, the total the accept preview showed
+         *     (required), and the buyer's own choices: payment on company credit, delivery site or saved address (calculated delivery only), cost
+         *     centre and PO number. There are no lines, quantities, prices, coupons or company id in it: other JSON members are ignored.
+         */
+        AcceptQuoteBody: {
+            /** Format: int32 */
+            versionNo?: number | null;
+            contentHash?: string | null;
+            /** Format: int64 */
+            expectedGrandTotalMinor?: number | null;
+            payOnCredit?: boolean;
+            /** Format: uuid */
+            shipToSiteId?: string | null;
+            /** Format: uuid */
+            shippingAddressId?: string | null;
+            /** Format: uuid */
+            costCentreId?: string | null;
+            purchaseOrderNumber?: string | null;
+        };
         /**
          * @description What the buyer asks for. Nothing else is bound: a price, unit price or total in the JSON is ignored, because every price
          *     on the response is the server's own. `Quantity` is required (no default).

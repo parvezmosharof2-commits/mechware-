@@ -4,6 +4,7 @@ using Mechware.Domain.Identity;
 using Mechware.Domain.Orders;
 using Mechware.Domain.Payments;
 using Mechware.Domain.Pricing.PriceLists;
+using Mechware.Domain.Quotes;
 
 namespace Mechware.Infrastructure.Persistence.Configurations;
 
@@ -15,6 +16,8 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         {
             t.HasCheckConstraint("ck_orders_money", "subtotal >= 0 AND discount_total >= 0 AND tax_total >= 0 AND shipping_total >= 0 AND grand_total >= 0");
             t.HasCheckConstraint("ck_orders_discount", "discount_total <= subtotal");
+            // ADR-0011 §11: an order accepted from a quote names the quote and the version, both or neither, and is a company order.
+            t.HasCheckConstraint("ck_orders_quote_link", "(quote_id IS NULL) = (quote_version_id IS NULL) AND (quote_id IS NULL OR company_id IS NOT NULL)");
         });
         b.MapAudit();
         b.IgnoreEvents();
@@ -47,6 +50,15 @@ internal sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         b.Property(o => o.CourierHandoverDeadlineUtc).HasColumnName("courier_handover_deadline_at");
         b.Property(o => o.DeadlineSameCity).HasColumnName("deadline_same_city");
         b.HasIndex(o => o.LegalDeliveryDeadlineUtc).HasFilter("legal_delivery_deadline_at IS NOT NULL").HasDatabaseName("ix_orders_legal_deadline");
+
+        // Accepted quotes (ADR-0011 §8.6, §11). One live order per version: the backstop of the check under the quote lock. A cancelled
+        // order frees the version (it may be accepted again only if the order was never confirmed: domain and the quote_versions guard).
+        b.Property(o => o.QuoteId).HasColumnName("quote_id");
+        b.Property(o => o.QuoteVersionId).HasColumnName("quote_version_id");
+        b.HasOne<Quote>().WithMany().HasForeignKey(o => o.QuoteId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<QuoteVersion>().WithMany().HasForeignKey(o => o.QuoteVersionId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(o => o.QuoteVersionId).IsUnique().HasFilter("quote_version_id IS NOT NULL AND status <> 'Cancelled'").HasDatabaseName("ux_orders_live_quote_version");
+        b.HasIndex(o => o.QuoteId).HasFilter("quote_id IS NOT NULL").HasDatabaseName("ix_orders_quote");
 
         b.HasOne<User>().WithMany().HasForeignKey(o => o.UserId).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(o => o.SubOrders).WithOne().HasForeignKey(s => s.OrderId).OnDelete(DeleteBehavior.Cascade);
@@ -107,7 +119,8 @@ internal sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderIte
                 "AND (price_list_id IS NULL) = (price_list_version IS NULL) AND (price_list_id IS NULL) = (price_list_entry_id IS NULL) " +
                 "AND (price_list_id IS NULL) = (price_source IS NULL OR price_source NOT IN ('QuantityBreak', 'GroupList', 'Contract')) " +
                 "AND (contract_ref IS NULL) = (price_source IS DISTINCT FROM 'Contract') " +
-                "AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL)");
+                "AND (public_unit_price_minor IS NULL OR price_source IS NOT NULL) " +
+                "AND (quote_line_id IS NULL) = (price_source IS DISTINCT FROM 'Quote')");
         });
         b.MapAudit(updated: false);
         b.Property(i => i.SubOrderId).HasColumnName("sub_order_id");
@@ -135,6 +148,10 @@ internal sealed class OrderItemConfiguration : IEntityTypeConfiguration<OrderIte
         b.HasIndex(i => i.VariantId).HasDatabaseName("ix_order_items_variant");
         b.HasIndex(i => i.PriceListId).HasDatabaseName("ix_order_items_price_list");
         b.HasIndex(i => i.PriceListEntryId).HasDatabaseName("ix_order_items_price_list_entry");
+        // The accepted quote line (ADR-0011 §11); quote lines are never deleted once sent.
+        b.Property(i => i.QuoteLineId).HasColumnName("quote_line_id");
+        b.HasOne<QuoteLine>().WithMany().HasForeignKey(i => i.QuoteLineId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(i => i.QuoteLineId).HasFilter("quote_line_id IS NOT NULL").HasDatabaseName("ix_order_items_quote_line");
     }
 }
 
