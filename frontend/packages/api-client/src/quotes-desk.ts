@@ -1,6 +1,7 @@
 import type { MechWareApiClient } from './index';
 import type { DeskFilter, DeskPage, StaffQuoteDetail, StaffQuoteSummary, StaffRfqDetail, StaffRfqSummary } from './quotes-desk-model';
 import { createQuoteBody, deskQuery } from './quotes-desk-model';
+import type { QuoteDraftBody, QuotePricePreview } from './quote-editor-model';
 
 type Data<T> = { data: T };
 
@@ -24,7 +25,13 @@ export function createStaffQuotesApi(client: MechWareApiClient) {
     createQuote: (input: { rfqId: string } | { companyId: string; contactUserId: string }) =>
       client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes`, post(createQuoteBody(input))),
     reviseQuote: (quoteId: string) => client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/revise`, post()),
-    closeQuote: (quoteId: string, reason: string) => client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/close`, post({ reason }))
+    closeQuote: (quoteId: string, reason: string) => client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/close`, post({ reason })),
+    /** D4.7: replaces the whole Draft; `body.rowVersion` is required, a stale one is 409 QUOTE_VERSION_CHANGED. */
+    saveDraft: (quoteId: string, versionNo: number, body: QuoteDraftBody) =>
+      client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}`, { method: 'PUT', body: JSON.stringify(body) }),
+    /** D4.7: the same body, nothing saved. Cost and floor amounts arrive only with pricing.view_cost. */
+    previewDraft: (quoteId: string, versionNo: number, body: QuoteDraftBody) =>
+      client.fetch<Data<QuotePricePreview>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/price-preview`, { method: 'POST', body: JSON.stringify(body), cache: 'no-store' })
   };
 }
 

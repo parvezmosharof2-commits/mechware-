@@ -106,7 +106,7 @@ function VersionView({ v, quoteId, latest, canEdit }: { v: StaffQuoteVersion; qu
       {latest && v.status === 'draft' && (
         <p className="text-sm text-text-muted" data-testid="editor-placeholder">
           {canEdit
-            ? <>Changing the lines, prices and terms, and sending the quote, are built in the next units. <Link href={`/quotes/${quoteId}/edit`} className="text-brand-accent underline">Open the editor page (not built yet)</Link>.</>
+            ? <><Link href={`/quotes/${quoteId}/edit`} className="font-semibold text-brand-accent underline" data-testid="edit-draft">Edit this draft</Link>: lines, prices, terms and the price check. Sending the quote comes in the next unit.</>
             : 'You can read this draft. Editing needs the quotes.edit permission.'}
         </p>
       )}

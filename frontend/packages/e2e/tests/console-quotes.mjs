@@ -308,13 +308,13 @@ const focused = (p) => p.evaluate(() => document.activeElement?.getAttribute('da
   const q1Id = s.url().split('/').pop();
   const q1Json = (await send(sup, 'GET', `/api/v1/admin/quotes/${q1Id}`));
   r.check('a quote was made from r1: one draft version, one pre-filled line, assigned to Support (real API)', q1Json.json.data.versions.length === 1 && q1Json.json.data.versions[0].lines.length === 1 && q1Json.json.data.quote.assignedTo === supId, JSON.stringify(q1Json.json.data.versions[0].lines.length));
-  r.check('the page shows Version 1 (latest), Draft, the line and the totals, and the placeholder link for the editor', (await s.getByTestId('quote-version').count()) === 1 && (await s.getByTestId('quote-version').innerText()).includes('Version 1 (latest)') && (await s.getByTestId('version-line').count()) === 1 && (await s.getByTestId('version-totals').innerText()).includes('Goods, net') && (await s.getByRole('link', { name: /Open the editor page/ }).count()) === 1);
+  r.check('the page shows Version 1 (latest), Draft, the line and the totals, and the link to the editor', (await s.getByTestId('quote-version').count()) === 1 && (await s.getByTestId('quote-version').innerText()).includes('Version 1 (latest)') && (await s.getByTestId('version-line').count()) === 1 && (await s.getByTestId('version-totals').innerText()).includes('Goods, net') && (await s.getByRole('link', { name: /Edit this draft/ }).count()) === 1);
   r.check('Support has no cost column and the API JSON has no cost object for Support', (await s.getByTestId('cost-head').count()) === 0 && !JSON.stringify(q1Json.json).includes('"cost"'));
   r.check('"Revise" is disabled with the reason while the draft is open', !(await s.getByTestId('revise-quote').isEnabled()) && (await s.getByTestId('revise-hint').innerText()).includes('open version'));
   await axeCheck(s, 'quote detail (draft)');
-  await s.getByRole('link', { name: /Open the editor page/ }).click();
-  await s.getByTestId('editor-not-built').waitFor();
-  r.check('the editor link goes to a plain "not built yet" page', (await s.getByTestId('editor-not-built').innerText()).includes('D4.16'));
+  await s.getByRole('link', { name: /Edit this draft/ }).click();
+  await s.getByTestId('editor-heading').waitFor();
+  r.check('the editor link opens the draft editor (D4.16)', (await s.getByTestId('editor-heading').innerText()).includes('draft'));
   await s.goBack();
   await s.getByTestId('quote-number').waitFor();
 
