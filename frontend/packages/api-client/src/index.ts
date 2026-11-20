@@ -491,6 +491,7 @@ export * from "./credit-buyer";
 export * from "./audit-model";
 export * from "./audit";
 export * from "./staff-orders-model";
+export * from "./staff-orders-read-model";
 export * from "./staff-orders";
 export * from "./rfq-buyer-model";
 export * from "./rfq-buyer";

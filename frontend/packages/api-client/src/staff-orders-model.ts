@@ -54,7 +54,7 @@ export function overdueQuery(q: { page?: number; pageSize?: number } = {}): stri
 }
 
 export const STAFF_ORDER_STATUS_LABEL: Record<string, string> = {
-  pending: 'Waiting for payment', pending_approval: 'Waiting for approval', confirmed: 'Confirmed', processing: 'Processing', packed: 'Packed',
+  pending: 'Waiting for payment', pending_payment: 'Waiting for payment', pending_approval: 'Waiting for approval', out_for_delivery: 'Out for delivery', completed: 'Completed', delivery_failed: 'Delivery failed', return_requested: 'Return requested', return_approved: 'Return approved', confirmed: 'Confirmed', processing: 'Processing', packed: 'Packed',
   shipped: 'Shipped', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', returned: 'Returned'
 };
 

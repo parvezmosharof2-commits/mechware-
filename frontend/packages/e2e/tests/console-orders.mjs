@@ -170,13 +170,13 @@ const row = (p, orderNumber) => p.getByTestId('overdue-row').filter({ hasText: o
   s.on('request', (req) => { if (req.method() === 'POST' && req.url().includes('/cancel')) cancelPosts.push(req.url()); });
   await consoleSignIn(s, PEOPLE.support);
   const nav = s.getByRole('navigation', { name: 'Modules' });
-  r.check('support sees an Orders heading with both links', (await nav.getByText('Orders', { exact: true }).count()) === 1 && (await nav.getByRole('link', { name: /Overdue orders/ }).count()) === 1 && (await nav.getByRole('link', { name: /Refunds/ }).count()) === 1);
+  r.check('support sees an Orders heading with the order links', (await nav.getByText('Orders', { exact: true }).count()) === 1 && (await nav.getByRole('link', { name: /Overdue orders/ }).count()) === 1 && (await nav.getByRole('link', { name: /Refunds/ }).count()) === 1);
   await nav.getByRole('link', { name: /Overdue orders/ }).click();
-  await s.waitForURL(/\/orders$/);
+  await s.waitForURL(/\/orders\/overdue$/);
   await s.getByTestId('overdue-table').waitFor();
   r.check('the table lists the four overdue orders with their status and what is late', (await row(s, o1.number).count()) === 1 && (await row(s, o4.number).innerText()).includes('Confirmed') && (await row(s, o1.number).innerText()).includes('Past the legal delivery deadline') && (await row(s, o1.number).innerText()).includes('Past the courier handover deadline'));
   r.check('overdue time is shown in words (most overdue first: handover is 30 h late)', (await row(s, o1.number).innerText()).includes('1 day 6 h'));
-  await axeCheck(s, '/orders');
+  await axeCheck(s, '/orders/overdue');
 
   // reason is checked before a code is asked for
   await s.getByRole('button', { name: `Cancel order ${o1.number}` }).click();
@@ -324,7 +324,7 @@ const row = (p, orderNumber) => p.getByTestId('overdue-row').filter({ hasText: o
   r.check('rejected: the amount is free to ask for again (2,500.50)', (await fitem.getByTestId('askable').innerText()) === 'BDT 2,500.50' && (await fitem.getByRole('button', { name: /Ask for a refund/ }).count()) === 1);
 
   // ================= narrow screens and page errors
-  for (const [pg, path, label] of [[s, '/orders', '/orders'], [f, '/refunds', '/refunds']]) {
+  for (const [pg, path, label] of [[s, '/orders/overdue', '/orders/overdue'], [f, '/refunds', '/refunds']]) {
     await pg.setViewportSize({ width: 360, height: 800 });
     await pg.goto(`${WEB}${path}`);
     await pg.getByRole('heading', { level: 1 }).first().waitFor().catch(() => {});

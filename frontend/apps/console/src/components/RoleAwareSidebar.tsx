@@ -23,10 +23,17 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     href: '/companies'
   },
   {
+    id: 'orders-all',
+    label: 'All orders',
+    requiredPermission: 'orders.view_all',
+    href: '/orders',
+    group: 'Orders'
+  },
+  {
     id: 'orders-overdue',
     label: 'Overdue orders',
     requiredPermission: 'orders.view_all',
-    href: '/orders',
+    href: '/orders/overdue',
     group: 'Orders'
   },
   {

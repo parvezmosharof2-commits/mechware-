@@ -1,5 +1,5 @@
-import { OverdueOrdersView } from '../../components/OverdueOrdersView';
+import { OrdersListView } from '../../components/OrdersListView';
 
 export default function OrdersPage() {
-  return <OverdueOrdersView />;
+  return <OrdersListView />;
 }
