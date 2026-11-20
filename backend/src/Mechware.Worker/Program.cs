@@ -68,7 +68,8 @@ builder.Services.AddSearchIndexing();
 builder.Services.AddNotifications(
     builder.Configuration.GetSection(Mechware.Infrastructure.Notifications.EmailOptions.SectionName).Get<Mechware.Infrastructure.Notifications.EmailOptions>() ?? new(),
     requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")),
-    storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"]);
+    storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"],
+    salesInboxEmail: builder.Configuration["Quotes:SalesInboxEmail"]);
 
 await builder.Build().RunAsync();
 return 0;

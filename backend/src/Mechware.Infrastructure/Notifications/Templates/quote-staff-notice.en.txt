@@ -1,0 +1,7 @@
+Hello {{staffName}},
+
+{{headline}} - {{reference}} ({{company}}).
+
+{{detail}}
+
+Open the quote desk in the console to act on it.

@@ -154,7 +154,8 @@ builder.Services.AddSearch(searchOptions, requireRealSetup: !(builder.Environmen
 builder.Services.AddNotifications(
     builder.Configuration.GetSection(Mechware.Infrastructure.Notifications.EmailOptions.SectionName).Get<Mechware.Infrastructure.Notifications.EmailOptions>() ?? new(),
     requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.EnvironmentName == "Testing"),
-    storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"]);
+    storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"],
+    salesInboxEmail: builder.Configuration["Quotes:SalesInboxEmail"]);
 
 builder.Services.AddPdfRendering();
 // Cart (E1.2): Redis cart store + signed guest-cart token; GuestCart:TokenKey is required outside Development/Testing.

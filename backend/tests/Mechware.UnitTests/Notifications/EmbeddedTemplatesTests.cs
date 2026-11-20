@@ -15,6 +15,8 @@ public class EmbeddedTemplatesTests
         ["order-confirmed"] = new() { ["customerName"] = "Rahim", ["orderNumber"] = "MW-1001", ["total"] = "BDT 12,500", ["orderUrl"] = "https://mechware.test/orders/1001" },
         ["approval-needed"] = new() { ["approverName"] = "Karim", ["requesterName"] = "Rahim", ["orderNumber"] = "MW-1002", ["total"] = "BDT 80,000", ["approvalUrl"] = "https://mechware.test/approvals/1002" },
         ["quote-sent"] = new() { ["customerName"] = "Rahim", ["quoteNumber"] = "Q-77", ["total"] = "BDT 45,000", ["validUntil"] = "30 Nov 2026", ["quoteUrl"] = "https://mechware.test/quotes/77" },
+        ["quote-expiring"] = new() { ["customerName"] = "Rahim", ["quoteNumber"] = "Q-77", ["validUntil"] = "30 Nov 2026", ["quoteUrl"] = "https://mechware.test/quotes/77" },
+        ["quote-staff-notice"] = new() { ["staffName"] = "Karim", ["headline"] = "Quote accepted", ["reference"] = "Q-77", ["company"] = "Acme Ltd", ["detail"] = "The buyer accepted version 1." },
     };
 
     private static readonly Dictionary<(string Key, string Locale), (string Subject, string[] TextContains)> Golden = new()
@@ -25,6 +27,9 @@ public class EmbeddedTemplatesTests
         [("approval-needed", "bn")] = ("অর্ডার MW-1002-এর জন্য আপনার অনুমোদন প্রয়োজন", ["প্রিয় Karim,", "Rahim অর্ডার MW-1002 (BDT 80,000) দিয়েছেন", "দেখে অনুমোদন করুন: https://mechware.test/approvals/1002"]),
         [("quote-sent", "en")] = ("Your quote Q-77 from Mechware", ["Hello Rahim,", "Total: BDT 45,000. It is valid until 30 Nov 2026.", "View your quote: https://mechware.test/quotes/77"]),
         [("quote-sent", "bn")] = ("Mechware থেকে আপনার কোটেশন Q-77", ["প্রিয় Rahim,", "মোট: BDT 45,000। কোটেশনটি 30 Nov 2026 পর্যন্ত বৈধ।", "কোটেশন দেখুন: https://mechware.test/quotes/77"]),
+        [("quote-expiring", "en")] = ("Your quote Q-77 expires soon", ["Hello Rahim,", "is valid until 30 Nov 2026.", "View your quote: https://mechware.test/quotes/77"]),
+        [("quote-expiring", "bn")] = ("আপনার কোটেশন Q-77 শীঘ্রই শেষ হচ্ছে", ["প্রিয় Rahim,", "30 Nov 2026 পর্যন্ত বৈধ", "কোটেশন দেখুন: https://mechware.test/quotes/77"]),
+        [("quote-staff-notice", "en")] = ("Quote accepted: Q-77", ["Hello Karim,", "Quote accepted - Q-77 (Acme Ltd).", "The buyer accepted version 1."]),
     };
 
     public static IEnumerable<object[]> Cases() => Golden.Keys.Select(k => new object[] { k.Key, k.Locale });
@@ -40,7 +45,9 @@ public class EmbeddedTemplatesTests
         foreach (var part in textContains) r.Text.Should().Contain(part);
         r.Text.Should().StartWith("MECHWARE\n").And.Contain("--\n").And.NotContain("{{");
         r.Html.Should().Contain($"<html lang=\"{locale}\">").And.Contain("MECHWARE").And.NotContain("{{")
-            .And.Contain("href=\"https://mechware.test/").And.Contain(Models[key].Values.First());
+            .And.Contain(Models[key].Values.First());
+        // The staff notice has no link (the console has no public address in the settings yet).
+        if (Models[key].Keys.Any(k => k.EndsWith("Url", StringComparison.Ordinal))) r.Html.Should().Contain("href=\"https://mechware.test/");
     }
 
     [Fact]

@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Your quote {{quoteNumber}} is valid until {{validUntil}}. After that its prices can no longer be accepted.
+
+View your quote: {{quoteUrl}}

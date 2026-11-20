@@ -152,7 +152,7 @@ public static class DependencyInjection
     /// Email (SMTP) and the bilingual template engine. Outside Development and Testing the SMTP host and the From address must be set.
     /// With no host in Development/Testing, messages are only logged.
     /// </summary>
-    public static IServiceCollection AddNotifications(this IServiceCollection services, EmailOptions options, bool requireRealSetup, string? storefrontBaseUrl = null)
+    public static IServiceCollection AddNotifications(this IServiceCollection services, EmailOptions options, bool requireRealSetup, string? storefrontBaseUrl = null, string? salesInboxEmail = null)
     {
         bool haveHost = !string.IsNullOrWhiteSpace(options.Host);
         if (requireRealSetup && !haveHost)
@@ -168,6 +168,8 @@ public static class DependencyInjection
         services.TryAddSingleton(new StorefrontLinks(NotificationFormat.NormalizeBaseUrl(storefrontBaseUrl, requireRealSetup)));
         services.TryAddScoped<NotificationDispatcher>();
         services.AddScoped<IOutboxPublisher, NotificationOutboxPublisher>();
+        services.TryAddSingleton(new QuoteNoticeOptions(salesInboxEmail));
+        services.AddScoped<IOutboxPublisher, QuoteNotificationPublisher>();
         services.TryAddSingleton<INotificationTemplates, EmbeddedTemplates>();
         if (haveHost) services.TryAddSingleton<INotificationSender, SmtpEmailSender>();
         else services.TryAddSingleton<INotificationSender, LoggingEmailSender>();
@@ -219,6 +221,8 @@ public static class DependencyInjection
         services.AddHostedService<OutboxRelayWorker>();
         services.AddHostedService<CreditHoldWorker>();
         services.AddHostedService<CreditReconciliationWorker>();
+        services.TryAddScoped<Quotes.QuoteNoticeService>();
+        services.AddHostedService<QuoteNoticeWorker>();
         return services;
     }
 }
