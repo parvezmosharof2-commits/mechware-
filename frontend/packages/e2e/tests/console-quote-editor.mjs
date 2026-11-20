@@ -148,8 +148,8 @@ const activeTestId = (p) => p.evaluate(() => document.activeElement?.getAttribut
   await s.getByTestId('edit-draft').click();
   await s.getByTestId('editor-heading').waitFor();
   r.check('the quote page links to the editor; the editor names quote, company and version', (await s.getByTestId('editor-heading').innerText()).includes('version 1, draft'));
-  r.check('an empty draft says so; Send is disabled with the reason (D4.17); the back link is there',
-    (await s.getByTestId('no-lines').count()) === 1 && !(await s.getByTestId('send-quote').isEnabled()) && (await s.getByTestId('send-note').innerText()).includes('D4.17') && (await s.getByRole('link', { name: 'Back to the quote' }).count()) === 1);
+  r.check('an empty draft says so; Send is disabled with the reason (add a line first); the back link is there',
+    (await s.getByTestId('no-lines').count()) === 1 && !(await s.getByTestId('send-quote').isEnabled()) && (await s.getByTestId('send-note').innerText()).includes('Add at least one line') && (await s.getByRole('link', { name: 'Back to the quote' }).count()) === 1);
   await axeCheck(s, 'editor (empty draft)');
 
   const add = async (sku) => {

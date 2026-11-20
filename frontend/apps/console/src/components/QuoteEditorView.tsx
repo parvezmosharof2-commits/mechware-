@@ -7,15 +7,20 @@ import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
   QUOTE_EDITOR_MAX_LINES, QUOTE_PREVIEW_DELAY_MS, QUOTE_VALIDITY_USUAL, addLineProblem, buildDraftBody, canEditQuotes, contactLocked, discountWords, editableVersion,
   editorErrorText, editorFailureKind, editorProblems, formFromVersion, isDirty, lineNeedsReason, lineProblem, newLineFor, nextEditorKey, outcomeWords, previewFlagWords,
-  previewHasCost, previewKey, previewLineNotes, previewProblemText, quoteStatusLabel, referenceSourceText, removeLine, sortServerFields, takaShown,
-  type EditorForm, type EditorLine, type QuotePricePreview, type StaffQuoteDetail, type VariantPick
+  previewHasCost, previewKey, previewLineNotes, previewProblemText, quoteStatusLabel, referenceSourceText, removeLine, sendButtonState, sortServerFields, takaShown,
+  type EditorForm, type EditorLine, type QuotePricePreview, type QuoteSendResult, type StaffQuoteDetail, type VariantPick
 } from '@mechware/api-client';
 import { deskError, lookupsApi, staffQuotesApi } from '../lib/api';
+import { issueError } from '../lib/quoteIssue';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, Notice, useFocusOn } from './CreditShared';
 import { SellerPicker } from './SellerPicker';
+
+// Loaded when first needed, so the page's first load stays small (the dialog library is heavy).
+const SendConfirmDialog = React.lazy(() => import('./QuoteIssueShared').then((m) => ({ default: m.SendConfirmDialog })));
+const SendResultPanel = React.lazy(() => import('./QuoteIssueShared').then((m) => ({ default: m.SendResultPanel })));
 
 const CELL = 'w-full rounded-md border border-surface-border bg-surface px-2 py-1 text-sm';
 const SELECT = 'w-full rounded-md border border-surface-border bg-surface px-3 py-2 text-sm';
@@ -63,7 +68,7 @@ function PartSearch({ lines, disabled, onAdd }: { lines: readonly EditorLine[]; 
   );
 }
 
-function EditorBody({ id, detail, onLoadSaved }: { id: string; detail: StaffQuoteDetail; onLoadSaved: () => Promise<void> }) {
+function EditorBody({ id, detail, permissions, onLoadSaved }: { id: string; detail: StaffQuoteDetail; permissions: readonly string[]; onLoadSaved: () => Promise<void> }) {
   const quote = detail.quote;
   const version = quote.status === 'closed' ? null : editableVersion(detail.versions);
   const initial = React.useMemo(() => (version ? formFromVersion(version, quote.contactUserId) : null), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -86,6 +91,8 @@ function EditorBody({ id, detail, onLoadSaved }: { id: string; detail: StaffQuot
   const [focusKey, setFocusKey] = React.useState<string | null>(null);
   const [findingSeller, setFindingSeller] = React.useState(false);
   const [loadingSaved, setLoadingSaved] = React.useState(false);
+  const [sendResult, setSendResult] = React.useState<QuoteSendResult | null>(null);
+  const [confirmingSend, setConfirmingSend] = React.useState(false);
 
   const versionNo = version?.versionNo ?? 0;
   const body = React.useMemo(() => (form ? buildDraftBody(form) : null), [form]);
@@ -188,6 +195,23 @@ function EditorBody({ id, detail, onLoadSaved }: { id: string; detail: StaffQuot
     } finally { inFlight.current = false; setBusy(false); }
   };
 
+  const sendNow = async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setAlertText(null);
+    try {
+      const r = await staffQuotesApi.sendVersion(id, versionNo);
+      setConfirmingSend(false);
+      setSendResult(r.data);
+    } catch (err) {
+      const f = issueError(err);
+      setConfirmingSend(false);
+      setKind(f.reload ? 'gone' : 'other');
+      setAlertText(f.text);
+    } finally { inFlight.current = false; setBusy(false); }
+  };
+
   const loadSaved = async () => {
     setLoadingSaved(true);
     try { await onLoadSaved(); } catch (err) { setKind('other'); setAlertText(editorErrorText(deskError(err))); setLoadingSaved(false); }
@@ -198,6 +222,19 @@ function EditorBody({ id, detail, onLoadSaved }: { id: string; detail: StaffQuot
     if (own && (attempted || l.priceText.trim() !== '' || l.quantity.trim() !== '1')) return own;
     return serverLines[n];
   };
+
+  if (sendResult) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm" data-testid="editor-heading">Quote <span className="font-mono">{quote.number}</span> for {quote.companyName}</p>
+        <React.Suspense fallback={null}><SendResultPanel result={sendResult} quoteId={id} /></React.Suspense>
+      </div>
+    );
+  }
+  const send = sendButtonState({
+    canEdit: canEditQuotes(permissions), dirty, lineCount: form.lines.length, valid: body !== null,
+    checking: previewState === 'waiting' || previewState === 'loading', outcome: previewState === 'failed' ? 'refused' : current?.outcome ?? null
+  });
 
   return (
     <div className="space-y-6">
@@ -404,16 +441,25 @@ function EditorBody({ id, detail, onLoadSaved }: { id: string; detail: StaffQuot
 
         <div className="flex flex-wrap items-center gap-3">
           <Button type="submit" isLoading={busy} disabled={busy} data-testid="save-draft">Save the draft</Button>
-          <Button type="button" variant="outline" disabled aria-describedby="send-note" data-testid="send-quote">Send to the buyer</Button>
-          <span className="text-xs text-text-muted" id="send-note" data-testid="send-note">Sending and approval come in the next unit (D4.17). Until then the draft stays here and the buyer sees nothing.</span>
+          <Button type="button" variant="outline" disabled={busy || !send.allowed} aria-describedby="send-note" data-testid="send-quote" onClick={() => { setAlertText(null); setConfirmingSend(true); }}>{send.label}</Button>
+          <span className="text-xs text-text-muted" id="send-note" data-testid="send-note">{send.reason}</span>
           {dirty && <span role="status" className="text-xs font-medium" data-testid="dirty-note">You have unsaved changes.</span>}
         </div>
       </form>
+
+      {confirmingSend && <React.Suspense fallback={null}><SendConfirmDialog open busy={busy} onCancel={() => setConfirmingSend(false)} onConfirm={() => void sendNow()}
+        title={outcomeIsApproval(current?.outcome) ? `Send version ${versionNo} for approval?` : `Send version ${versionNo} to the buyer?`}
+        confirmLabel={outcomeIsApproval(current?.outcome) ? 'Send for approval' : 'Send to the buyer'}
+        description={outcomeIsApproval(current?.outcome)
+          ? 'A second person must approve it before the buyer sees anything. Until then you can recall it. The prices are checked again by the server.'
+          : 'The buyer can see and accept this version as soon as it is sent. It is valid from now for the days you set, and a version still out with the buyer is replaced. The prices are checked again by the server.'} /></React.Suspense>}
     </div>
   );
 }
 
-function Editor({ id }: { id: string }) {
+const outcomeIsApproval = (o: string | undefined): boolean => o === 'approval';
+
+function Editor({ id, permissions }: { id: string; permissions: readonly string[] }) {
   const res = useResource(() => staffQuotesApi.quote(id), id);
   const [fresh, setFresh] = React.useState<{ detail: StaffQuoteDetail; epoch: number } | null>(null);
   const detail = fresh?.detail ?? res.data?.data ?? null;
@@ -424,7 +470,7 @@ function Editor({ id }: { id: string }) {
   }, [id]);
   if (failure) return <FailureAlert failure={failure} onRetry={res.reload} />;
   if (!detail) return <Loading />;
-  return <EditorBody key={fresh?.epoch ?? 0} id={id} detail={detail} onLoadSaved={loadSaved} />;
+  return <EditorBody key={fresh?.epoch ?? 0} id={id} detail={detail} permissions={permissions} onLoadSaved={loadSaved} />;
 }
 
 export function QuoteEditorView({ id }: { id: string }) {
@@ -432,7 +478,7 @@ export function QuoteEditorView({ id }: { id: string }) {
   const permissions = user?.permissions ?? [];
   return (
     <ConsoleShell activeItemId="quotes-list" title="Edit quote draft">
-      {canEditQuotes(permissions) ? <Editor id={id} /> : (
+      {canEditQuotes(permissions) ? <Editor id={id} permissions={permissions} /> : (
         <div className="space-y-3">
           <NoAccess permission="quotes.edit" />
           <BackLink href={`/quotes/${id}`}>Back to the quote</BackLink>

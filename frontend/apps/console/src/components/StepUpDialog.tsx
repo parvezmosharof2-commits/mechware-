@@ -1,7 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input } from '@mechware/ui';
+import { Button } from '@mechware/ui/src/components/Button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { Input } from '@mechware/ui/src/components/Input';
 import { isStepUpCodeShape } from '@mechware/api-client';
 
 /**

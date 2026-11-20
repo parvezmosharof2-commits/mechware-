@@ -51,6 +51,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Quotes'
   },
   {
+    id: 'quotes-approvals',
+    label: 'Quote approvals',
+    requiredPermission: 'quotes.approve',
+    href: '/quotes/approvals',
+    group: 'Quotes'
+  },
+  {
     id: 'quotes-new',
     label: 'New quote for a company',
     requiredPermission: 'quotes.edit',

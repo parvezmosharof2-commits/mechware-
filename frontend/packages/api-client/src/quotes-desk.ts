@@ -2,6 +2,7 @@ import type { MechWareApiClient } from './index';
 import type { DeskFilter, DeskPage, StaffQuoteDetail, StaffQuoteSummary, StaffRfqDetail, StaffRfqSummary } from './quotes-desk-model';
 import { createQuoteBody, deskQuery } from './quotes-desk-model';
 import type { QuoteDraftBody, QuotePricePreview } from './quote-editor-model';
+import type { QuoteApprovalPage, QuoteApproveBody, QuoteSendResult } from './quote-approval-model';
 
 type Data<T> = { data: T };
 
@@ -31,7 +32,25 @@ export function createStaffQuotesApi(client: MechWareApiClient) {
       client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}`, { method: 'PUT', body: JSON.stringify(body) }),
     /** D4.7: the same body, nothing saved. Cost and floor amounts arrive only with pricing.view_cost. */
     previewDraft: (quoteId: string, versionNo: number, body: QuoteDraftBody) =>
-      client.fetch<Data<QuotePricePreview>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/price-preview`, { method: 'POST', body: JSON.stringify(body), cache: 'no-store' })
+      client.fetch<Data<QuotePricePreview>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/price-preview`, { method: 'POST', body: JSON.stringify(body), cache: 'no-store' }),
+    /** D4.8 (quotes.edit): sent, or pending_approval with the flags. A repeated click is 409 QUOTE_INVALID_TRANSITION. */
+    sendVersion: (quoteId: string, versionNo: number) =>
+      client.fetch<Data<QuoteSendResult>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/send`, post()),
+    /** quotes.approve; ALWAYS needs a fresh authenticator code (`X-Step-Up-Code`, purpose quote.approve): it is spent even when the approval is then refused. */
+    approveVersion: (quoteId: string, versionNo: number, body: QuoteApproveBody, stepUpCode: string) =>
+      client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/approve`, { ...post(body), headers: { 'X-Step-Up-Code': stepUpCode.trim() } }),
+    /** quotes.approve, no code: the version goes back to its author as a draft. Comment 5-500. */
+    rejectApproval: (quoteId: string, versionNo: number, comment: string) =>
+      client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/reject-approval`, post({ comment: comment.trim() })),
+    /** quotes.edit: takes a version waiting for approval back to a draft. */
+    recallVersion: (quoteId: string, versionNo: number) =>
+      client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/recall`, post()),
+    /** quotes.edit: withdraws a Sent version. Reason 5-500. */
+    withdrawVersion: (quoteId: string, versionNo: number, reason: string) =>
+      client.fetch<Data<StaffQuoteDetail>>(`${base}/quotes/${id(quoteId)}/versions/${Math.trunc(versionNo)}/withdraw`, post({ reason: reason.trim() })),
+    /** quotes.approve: versions waiting for approval, oldest first. */
+    approvals: (page = 1, pageSize = 20) =>
+      client.fetch<Data<QuoteApprovalPage>>(`${base}/quotes/approvals?page=${Math.max(1, Math.trunc(page))}&pageSize=${Math.max(1, Math.trunc(pageSize))}`, read)
   };
 }
 
