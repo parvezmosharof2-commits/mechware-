@@ -4054,6 +4054,52 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteTermsSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.PrimitiveCollection<string[]>("TermsBn")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("terms_bn");
+
+                    b.PrimitiveCollection<string[]>("TermsEn")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("terms_en");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UpdatedBy");
+
+                    b.ToTable("quote_terms_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quote_terms_settings_lines", "cardinality(terms_en) <= 12 AND cardinality(terms_bn) <= 12");
+
+                            t.HasCheckConstraint("ck_quote_terms_settings_single", "id = '00000000-0000-0000-0000-0000000d4200'");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersion", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4238,6 +4284,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Property<long>("TaxMinor")
                         .HasColumnType("bigint")
                         .HasColumnName("tax_minor");
+
+                    b.Property<string>("TermsSnapshot")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("terms_snapshot");
 
                     b.Property<string>("TermsText")
                         .HasMaxLength(4000)
@@ -5621,6 +5671,14 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasForeignKey("VersionId")
                         .OnDelete(DeleteBehavior.ClientCascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Quotes.QuoteTermsSettings", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Mechware.Domain.Quotes.QuoteVersion", b =>

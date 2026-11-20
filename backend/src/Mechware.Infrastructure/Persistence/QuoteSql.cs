@@ -108,7 +108,7 @@ public static class QuoteSql
             allowed text[];
             content text[] := ARRAY['validity_days', 'payment_terms', 'shipping_mode', 'ship_to_site_id', 'ship_to', 'shipping_fees', 'terms_text',
                 'buyer_note', 'internal_note', 'goods_net_minor', 'tax_minor', 'goods_total_minor', 'shipping_total_minor', 'grand_total_minor'];
-            frozen text[] := ARRAY['submitted_by', 'submitted_at', 'company_snapshot', 'preparer_name', 'content_hash', 'flags'];
+            frozen text[] := ARRAY['submitted_by', 'submitted_at', 'company_snapshot', 'preparer_name', 'content_hash', 'flags', 'terms_snapshot'];
             sent text[] := ARRAY['sent_by', 'sent_at', 'valid_until_utc'];
             pdf text[] := ARRAY['pdf_en_key', 'pdf_en_sha256', 'pdf_bn_key', 'pdf_bn_sha256'];
             accepted text[] := ARRAY['accepted_order_id', 'accepted_by', 'accepted_at'];

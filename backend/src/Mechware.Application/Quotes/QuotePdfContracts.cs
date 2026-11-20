@@ -66,7 +66,7 @@ public sealed record QuotePdfLine(int LineNo, string? PartNumber, string Sku, st
 public sealed record QuotePdfModel(string Locale, bool Draft, string Number, int VersionNo, DateOnly? IssuedOn, DateOnly? ValidUntil, int ValidityDays,
     string CompanyName, string? CompanyBin, string? CompanyAddress, QuoteShipTo? ShipTo, string PaymentTerms, string ShippingMode,
     IReadOnlyList<QuotePdfLine> Lines, long GoodsNetMinor, long TaxMinor, long GoodsTotalMinor, long? ShippingTotalMinor, long? GrandTotalMinor,
-    string? TermsText, string? BuyerNote, string? PreparerName, string? ContentHash);
+    string? TermsText, string? BuyerNote, string? PreparerName, string? ContentHash, QuoteTermsSnapshot? Terms = null);
 
 /// <summary>
 /// The quote PDF (ADR-0011 §10, D4.11). Rendered lazily on the first request, stored under a key the server builds from ids, and verified against the

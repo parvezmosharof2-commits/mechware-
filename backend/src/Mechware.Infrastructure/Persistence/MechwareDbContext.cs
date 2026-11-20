@@ -107,6 +107,7 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Mechware.Domain.Pricing.PriceLists.MarginFloor> MarginFloors => Set<Mechware.Domain.Pricing.PriceLists.MarginFloor>();
 
     // RFQs and quotes (D4.4): lines and contributors are loaded through their aggregate; triggers in QuoteSql.
+    public DbSet<Mechware.Domain.Quotes.QuoteTermsSettings> QuoteTermsSettings => Set<Mechware.Domain.Quotes.QuoteTermsSettings>();
     public DbSet<Mechware.Domain.Quotes.Rfq> Rfqs => Set<Mechware.Domain.Quotes.Rfq>();
     public DbSet<Mechware.Domain.Quotes.Quote> Quotes => Set<Mechware.Domain.Quotes.Quote>();
     public DbSet<Mechware.Domain.Quotes.QuoteVersion> QuoteVersions => Set<Mechware.Domain.Quotes.QuoteVersion>();

@@ -82,9 +82,10 @@ public sealed record QuoteFlags(IReadOnlyList<Guid> BelowFloorLineIds, IReadOnly
 /// of that moment. The content hash is not an input: the domain computes it (<see cref="QuoteContentHash"/>).
 /// <paramref name="ShipTo"/>: a fixed delivery's site as it is at this instant (it replaces the draft's copy; null when the site is gone,
 /// which refuses the send with <c>QUOTE_DELIVERY_SITE_GONE</c>); always null for calculated delivery.
+/// <paramref name="Terms"/>: the default terms lines of this moment (D4.20), frozen with the version.
 /// </summary>
 public sealed record QuoteIssue(QuoteCompanySnapshot Company, string PreparerName, IReadOnlyList<QuoteLineFacts> Facts, QuoteApprovalCheck Check,
-    QuoteShipTo? ShipTo = null);
+    QuoteShipTo? ShipTo = null, QuoteTermsSnapshot? Terms = null);
 
 /// <summary>
 /// A staff user acting on a quote, with the companies they are an effective member of, read from <c>company_members</c> in the

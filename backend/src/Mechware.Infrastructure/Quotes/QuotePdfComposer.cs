@@ -12,7 +12,7 @@ namespace Mechware.Infrastructure.Quotes;
 /// </summary>
 internal static class QuotePdfComposer
 {
-    public static QuotePdfModel Model(string number, QuoteVersion v, string locale, bool draft, string? liveCompanyName)
+    public static QuotePdfModel Model(string number, QuoteVersion v, string locale, bool draft, string? liveCompanyName, QuoteTermsSnapshot? liveTerms = null)
     {
         bool bn = locale == "bn";
         var issued = v.SentAtUtc is { } sent ? QuoteValidity.DhakaDate(sent) : (DateOnly?)null;
@@ -22,7 +22,8 @@ internal static class QuotePdfComposer
             StaffQuoteViews.Wire(v.PaymentTerms), StaffQuoteViews.Wire(v.ShippingMode),
             [.. v.Lines.OrderBy(l => l.LineNo).Select(l => new QuotePdfLine(l.LineNo, l.PartNumber, l.Sku, bn && l.TitleBn.Length > 0 ? l.TitleBn : l.TitleEn,
                 l.Quantity, l.UnitPriceMinor, l.VatRate, l.LineTotalMinor))],
-            v.GoodsNetMinor, v.TaxMinor, v.GoodsTotalMinor, v.ShippingTotalMinor, v.GrandTotalMinor, v.TermsText, v.BuyerNote, v.PreparerName, v.ContentHash);
+            v.GoodsNetMinor, v.TaxMinor, v.GoodsTotalMinor, v.ShippingTotalMinor, v.GrandTotalMinor, v.TermsText, v.BuyerNote, v.PreparerName, v.ContentHash,
+            v.TermsSnapshot ?? liveTerms);
     }
 
     public static PdfDocumentModel Compose(QuotePdfModel m, QuotePdfOptions o, byte[]? logo)
@@ -90,7 +91,7 @@ internal static class QuotePdfComposer
             : L("Payment is on the company's credit account terms.", "পেমেন্ট কোম্পানির ক্রেডিট অ্যাকাউন্টের শর্ত অনুযায়ী।");
         string stock = L("Stock is not reserved by this quotation and is confirmed when you accept it.", "এই কোটেশনে স্টক সংরক্ষিত নয়; গ্রহণের সময় নিশ্চিত করা হবে।");
         string untilText = m.ValidUntil is { } u ? D(u) : L($"{m.ValidityDays} days from the date of issue", $"ইস্যুর পর {Int(m.ValidityDays, true)} দিন");
-        var terms = new[] { payment, stock }.Concat((bn ? o.TermsBn : o.TermsEn).Select(t => t.Replace("{validUntil}", untilText, StringComparison.Ordinal)))
+        var terms = new[] { payment, stock }.Concat((bn ? m.Terms?.Bn ?? o.TermsBn : m.Terms?.En ?? o.TermsEn).Select(t => t.Replace("{validUntil}", untilText, StringComparison.Ordinal)))
             .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => "- " + t.Trim());
         blocks.Add(new PdfParagraph(string.Join("\n", terms)));
         if (!string.IsNullOrWhiteSpace(m.TermsText)) blocks.Add(new PdfParagraph(L("Terms for this quotation: ", "এই কোটেশনের শর্ত: ") + m.TermsText!.Trim()));

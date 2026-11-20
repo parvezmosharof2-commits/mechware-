@@ -33,7 +33,7 @@ public sealed partial class StaffQuoteService
         var company = await CompanySnapshotAsync(quote.CompanyId, ct);
         var (check, facts) = await CheckNowAsync(quote.CompanyId, v, now, ct);
         var shipTo = v.ShipToSiteId is { } siteId && v.ShippingMode == QuoteShippingMode.Fixed ? await ShipToAsync(quote.CompanyId, siteId, ct) : null;
-        var status = quote.Send(versionNo, new QuoteIssue(company, preparer, facts, check, shipTo), staff, await LapsedAsync(quote, ct), options, now);
+        var status = quote.Send(versionNo, new QuoteIssue(company, preparer, facts, check, shipTo, await QuoteTermsService.SnapshotAsync(db, ct)), staff, await LapsedAsync(quote, ct), options, now);
         if (status == S.Sent) await AnsweredAsync(quote, now, ct);
         var flags = v.Flags!;
         Audit(status == S.Sent ? "quote.sent" : "quote.submitted_for_approval", "quotes", quote.Id, new { VersionNo = versionNo, Status = nameof(S.Draft) }, new

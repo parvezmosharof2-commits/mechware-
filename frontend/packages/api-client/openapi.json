@@ -3205,6 +3205,47 @@
         }
       }
     },
+    "/api/v1/admin/quote-terms": {
+      "get": {
+        "tags": [
+          "AdminQuoteTerms"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "AdminQuoteTerms"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuoteTermsRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuoteTermsRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateQuoteTermsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/refunds": {
       "get": {
         "tags": [
@@ -8389,6 +8430,31 @@
         },
         "additionalProperties": false
       },
+      "UpdateQuoteTermsRequest": {
+        "type": "object",
+        "properties": {
+          "termsEn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "termsBn": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateSellerResourceRequestDto": {
         "type": "object",
         "properties": {
@@ -8717,6 +8783,9 @@
     },
     {
       "name": "AdminQuotes"
+    },
+    {
+      "name": "AdminQuoteTerms"
     },
     {
       "name": "AdminRefunds"

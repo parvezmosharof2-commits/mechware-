@@ -46,6 +46,25 @@ internal static class QuoteColumns
     public static T FromJson<T>(string json) => JsonSerializer.Deserialize<T>(json, Web) ?? throw new InvalidOperationException("Empty jsonb value.");
 }
 
+internal sealed class QuoteTermsSettingsConfiguration : IEntityTypeConfiguration<QuoteTermsSettings>
+{
+    public void Configure(EntityTypeBuilder<QuoteTermsSettings> b)
+    {
+        b.ToTable("quote_terms_settings", t =>
+        {
+            t.HasCheckConstraint("ck_quote_terms_settings_single", "id = '00000000-0000-0000-0000-0000000d4200'");
+            t.HasCheckConstraint("ck_quote_terms_settings_lines",
+                $"cardinality(terms_en) <= {QuoteTermsSettings.MaxLines} AND cardinality(terms_bn) <= {QuoteTermsSettings.MaxLines}");
+        });
+        b.MapAudit();
+        b.Xmin();
+        b.Property(e => e.TermsEn).HasColumnName("terms_en").HasColumnType("text[]");
+        b.Property(e => e.TermsBn).HasColumnName("terms_bn").HasColumnType("text[]");
+        b.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+        b.HasOne<Mechware.Domain.Identity.User>().WithMany().HasForeignKey(e => e.UpdatedBy).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class RfqConfiguration : IEntityTypeConfiguration<Rfq>
 {
     public void Configure(EntityTypeBuilder<Rfq> b)
@@ -249,6 +268,8 @@ internal sealed class QuoteVersionConfiguration : IEntityTypeConfiguration<Quote
             s => ReadCompany(QuoteColumns.FromJson<CompanyJson>(s)),
             (x, y) => Equals(x, y));
         b.Property(v => v.PreparerName).HasColumnName("preparer_name").HasMaxLength(QuoteLimits.MaxNameLength);
+        b.Property(v => v.TermsSnapshot).Jsonb("terms_snapshot", v => QuoteColumns.Json(v!), s => QuoteColumns.FromJson<QuoteTermsSnapshot>(s),
+            (x, y) => x!.En.SequenceEqual(y!.En) && x.Bn.SequenceEqual(y.Bn));
         b.Property(v => v.GoodsNetMinor).HasColumnName("goods_net_minor");
         b.Property(v => v.TaxMinor).HasColumnName("tax_minor");
         b.Property(v => v.GoodsTotalMinor).HasColumnName("goods_total_minor");

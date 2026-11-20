@@ -42,6 +42,9 @@ public sealed class QuoteVersion : Entity<Guid>
     public QuoteCompanySnapshot? CompanySnapshot { get; private set; }
     public string? PreparerName { get; private set; }
 
+    /// <summary>The default PDF terms lines frozen when the version left Draft (D4.20); null on a version frozen before that.</summary>
+    public QuoteTermsSnapshot? TermsSnapshot { get; private set; }
+
     /// <summary><see cref="QuoteContentHash"/> of the frozen content, computed by the domain when the version leaves Draft.</summary>
     public string? ContentHash { get; private set; }
 
@@ -163,6 +166,7 @@ public sealed class QuoteVersion : Entity<Guid>
         ApplyTotals(totals);
         RecordCheck(check);
         (SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, ShipTo, UpdatedAtUtc) = (submitterId, nowUtc, issue.Company, preparer, shipTo, nowUtc);
+        TermsSnapshot = issue.Terms;
         ContentHash = QuoteContentHash.Compute(quote, this);
     }
 

@@ -3216,6 +3216,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/quote-terms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["UpdateQuoteTermsRequest"];
+                    "text/json": components["schemas"]["UpdateQuoteTermsRequest"];
+                    "application/*+json": components["schemas"]["UpdateQuoteTermsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/refunds": {
         parameters: {
             query?: never;
@@ -7533,6 +7589,12 @@ export interface components {
             heightCm?: number | null;
             /** Format: int64 */
             expectedVersion?: number | null;
+        };
+        UpdateQuoteTermsRequest: {
+            termsEn?: string[] | null;
+            termsBn?: string[] | null;
+            /** Format: int32 */
+            rowVersion?: number | null;
         };
         UpdateSellerResourceRequestDto: {
             sku?: string | null;

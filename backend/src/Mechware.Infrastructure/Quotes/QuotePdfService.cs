@@ -20,7 +20,7 @@ namespace Mechware.Infrastructure.Quotes;
 /// id, version and locale (never from the request) and records key and SHA-256 on the version, null to value once: the first writer wins and a
 /// loser serves the winner's file. Every download recomputes the SHA-256 of the stored bytes; a mismatch is never sent, it is logged and audited.
 /// </summary>
-public sealed class QuotePdfService(MechwareDbContext db, IBuyerQuoteService buyers, IPdfRenderer renderer, IObjectStorage storage, QuotePdfOptions options,
+public sealed class QuotePdfService(MechwareDbContext db, IBuyerQuoteService buyers, IPdfRenderer renderer, IObjectStorage storage, QuotePdfOptions options, IQuoteTermsService terms,
     ICurrentUserService user, TimeProvider clock, ILogger<QuotePdfService> log) : IQuotePdfService
 {
     private static KeyNotFoundException NotFound() => new(QuoteAcceptanceGate.NotFoundMessage);
@@ -65,7 +65,9 @@ public sealed class QuotePdfService(MechwareDbContext db, IBuyerQuoteService buy
     private async Task<QuotePdfFile> PreviewAsync(Guid quoteId, int versionNo, string lang, CancellationToken ct)
     {
         var (v, number, company) = await LoadAsync(quoteId, versionNo, ct) ?? throw NotFound();
-        var result = renderer.Render(QuotePdfComposer.Compose(QuotePdfComposer.Model(number, v, lang, draft: true, company), options, Logo()));
+        // A draft has no frozen lines yet: it previews the defaults of this moment. A version waiting for approval prints its own.
+        var live = v.TermsSnapshot is null ? await terms.CurrentAsync(ct) : null;
+        var result = renderer.Render(QuotePdfComposer.Compose(QuotePdfComposer.Model(number, v, lang, draft: true, company, live), options, Logo()));
         return new QuotePdfFile(result.Bytes, FileName(number, versionNo, lang) + ".preview.pdf", result.Sha256Hex, Preview: true);
     }
 
