@@ -5058,6 +5058,163 @@
         }
       }
     },
+    "/api/v1/companies/{companyId}/quotes": {
+      "get": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "The company's quotes, newest sent first: all for a role in `Quotes:VisibleTo` (Admin, Buyer), else those the caller is the contact for. `status`, `page`, `pageSize` (at most 50).",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/quotes/{quoteId}": {
+      "get": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "The quote with every version Sent or later (as sent), oldest first; the newest says whether it may be accepted now.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/quotes/by-number/{number}": {
+      "get": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "Where an e-mailed number lives: `{companyId, quoteId, number}` for a quote the caller may see; every other number is the same 404.",
+        "parameters": [
+          {
+            "name": "number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/accept-preview": {
+      "post": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "What accepting would charge now, by the acceptance's own pricing path; nothing is held or written. Send its `grandTotalMinor` as `expectedGrandTotalMinor`.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptPreviewBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptPreviewBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptPreviewBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/quotes/{quoteId}/accept": {
       "post": {
         "tags": [
@@ -5113,6 +5270,58 @@
         "responses": {
           "201": {
             "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/reject": {
+      "post": {
+        "tags": [
+          "CompanyQuotes"
+        ],
+        "summary": "Rejects a sent version (it becomes `rejected`; the quote stays open for a revision and staff are told). Answers the quote.",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectQuoteBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectQuoteBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectQuoteBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -6179,6 +6388,40 @@
   },
   "components": {
     "schemas": {
+      "AcceptPreviewBody": {
+        "type": "object",
+        "properties": {
+          "versionNo": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "contentHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "payOnCredit": {
+            "type": "boolean"
+          },
+          "shipToSiteId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "shippingAddressId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "costCentreId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The accept body without the total (§8.4): the same choices, priced as acceptance would price them now."
+      },
       "AcceptQuoteBody": {
         "type": "object",
         "properties": {
@@ -7264,6 +7507,22 @@
           }
         },
         "additionalProperties": false
+      },
+      "RejectQuoteBody": {
+        "type": "object",
+        "properties": {
+          "versionNo": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "The buyer's \"no\" to a version (§8.8), with an optional \"what should change\" (at most 1,000 characters)."
       },
       "RejectRefund": {
         "type": "object",

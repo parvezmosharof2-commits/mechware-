@@ -167,6 +167,13 @@ public interface IOrderService
     Task<PlacedOrder> PlaceFromQuoteAsync(AcceptQuoteRequest request, CancellationToken ct = default);
 
     /// <summary>
+    /// The accept preview (ADR-0011 §8.4, QT15): every check and the pricing of <see cref="PlaceFromQuoteAsync"/> at one instant, with no
+    /// stock held and nothing written, so the same request accepted at the same moment is charged exactly the preview's total. The key and
+    /// <c>ExpectedGrandTotalMinor</c> are not read. The same refusals as acceptance (404, 403, 409 codes).
+    /// </summary>
+    Task<Mechware.Application.Quotes.QuoteAcceptPreviewDto> PreviewQuoteAcceptanceAsync(AcceptQuoteRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// The shipping <see cref="PlaceAsync"/> would charge for these lines and destination, computed the same way and from the
     /// database only; holds no stock and writes no order. Refusals are the same 422 codes placement gives.
     /// </summary>

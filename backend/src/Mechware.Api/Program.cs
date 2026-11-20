@@ -342,6 +342,20 @@ builder.Services.AddRateLimiter(options =>
             })
         : RateLimitPartition.GetNoLimiter("quote-requests-anonymous"));
 
+    // Quote lookups by number and quote PDFs (threat model QT8): 30 a minute per signed-in user, so numbers cannot be guessed at speed.
+    options.AddPolicy("QuoteRead", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "quote-read:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:QuoteReadPermitPerMinute") ?? 30,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("quote-read-anonymous"));
+
     // Credit CSV exports (threat model CS27): a few a minute per signed-in staff member, on top of the general budget.
     // A request without a verified identity is not counted here (it gets 401 from the endpoint, and the general anonymous budget still applies).
     options.AddPolicy("CreditExport", httpContext =>

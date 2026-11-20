@@ -50,19 +50,10 @@ public sealed partial class OrderService(
     public async Task<PlacedOrder> PlaceFromQuoteAsync(AcceptQuoteRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var gate = quotes ?? throw new InvalidOperationException("Quote acceptance needs an IQuoteAcceptanceGate.");
         RequireKey(request.IdempotencyKey);
-        if (request.VersionNo is not > 0) throw new ValidationException("versionNo", "Name the version of the quote you accept.");
-        if (string.IsNullOrWhiteSpace(request.ContentHash)) throw new ValidationException("contentHash", "Send the content hash of the quote you reviewed.");
         if (request.ExpectedGrandTotalMinor is null)
             throw new ValidationException("expectedGrandTotalMinor", "Send the total the accept preview showed you.");
-
-        // Who may accept what (§8.2): one 404 for anything the caller may not see, 403 without the Buyer role. The order is the quote's,
-        // in the quote's company: its lines and that company come from the quote, never from the request.
-        var quote = await gate.FindAsync(request.UserId, request.CompanyId, request.QuoteId, request.VersionNo.Value, ct);
-        var asOrder = new PlaceOrderRequest(request.UserId, request.IdempotencyKey, [.. quote.Lines.Select(l => new PlaceOrderLine(l.VariantId, l.Quantity))],
-            request.ShippingAddressId, quote.CompanyId, request.PayOnCredit, null, request.ShipToSiteId, request.CostCentreId, request.PurchaseOrderNumber,
-            request.ExpectedGrandTotalMinor);
+        var (quote, asOrder) = await QuoteAsOrderAsync(request, ct);
         var lines = Normalise(asOrder);
         var hash = HashOf(asOrder, lines, $"quote:{quote.QuoteId:N}:{quote.VersionNo}:{request.ContentHash}");
         var placed = await UnderBuyerLocksAsync(asOrder, () => PlaceLockedAsync(asOrder, lines, hash, new QuoteAcceptance(quote, request.ContentHash), ct), ct);
@@ -115,39 +106,8 @@ public sealed partial class OrderService(
 
         // The order's single server instant: prices, the quote's validity (here and again under its lock), approvals and budgets.
         var now = clock.GetUtcNow().UtcDateTime;
-        if (quote is not null)
-        {
-            // ADR-0011 §8.3 steps 3-4 (QT12): a quote never grants credit, so advance-only terms are paid, never put on account; then the
-            // early answer before any stock is held. Both are decided again where it binds (credit under the company lock, the quote under its own).
-            if (quote.Quote.PaymentTerms == QuotePaymentTerms.Advance && request.PayOnCredit)
-                throw new ConflictException("QUOTE_REQUIRES_ADVANCE_PAYMENT", "This quote is for payment in advance only. Choose a payment method instead of company credit.");
-            await quotes!.EnsureAcceptableAsync(quote.Quote, quote.ContentHash, request.UserId, now, ct);
-        }
-
-        await RequireBuyerMayHoldStockAsync(request, ct);
-        var member = request.CompanyId is { } companyId ? await RequireCompanyMayBuyAsync(request.UserId, companyId, ct) : null;
-        if (request.CostCentreId is not null && request.CompanyId is null)
-            throw new ValidationException("costCentreId", "A cost centre applies to company orders only.");
-        // A member assigned to cost centres buys for those only (threat model v1, M3).
-        if (member is { CostCentreIds.Count: > 0 })
-        {
-            if (request.CostCentreId is not { } chosen)
-                throw new ValidationException("costCentreId", "Choose one of your cost centres for this order.");
-            if (!member.CostCentreIds.Contains(chosen))
-                throw new ForbiddenException("COST_CENTRE_NOT_ASSIGNED", "You are not assigned to this cost centre.");
-        }
-        var (shipTo, districtId) = quote?.Quote is { ShippingMode: QuoteShippingMode.Fixed } fixedDelivery
-            ? await QuotedSiteAsync(request, fixedDelivery, ct)
-            : await ResolveShipToAsync(request, ct);
-
-        // Negotiated prices only for the company whose membership was just checked (B1), never for the id in the body.
+        var (member, shipTo, mode, priced, applied, categories) = await PrepareAsync(request, lines, quote, now, ct);
         var verifiedCompanyId = member?.CompanyId;
-        var mode = verifiedCompanyId is null ? TaxMode.Inclusive : TaxMode.Exclusive;
-        PricedOrder priced;
-        IReadOnlyList<AppliedPromotion> applied = [];
-        IReadOnlyList<Guid> categories;
-        if (quote is null) (priced, applied, categories, _) = await PriceAsync(request, lines, verifiedCompanyId, mode, now, districtId, ct);
-        else (priced, categories) = await PriceQuoteAsync(quote.Quote, lines, districtId, ct);
 
         // The total the buyer was shown can only stop the order, never set a price (ADR-0008 §9).
         if (request.ExpectedGrandTotalMinor is { } shown && priced.GrandTotalMinor > shown)

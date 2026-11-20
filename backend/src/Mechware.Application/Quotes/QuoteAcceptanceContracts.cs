@@ -5,8 +5,9 @@ namespace Mechware.Application.Quotes;
 /// <summary>One line of a sent quote version as the order takes it (ADR-0011 §8.3): the frozen snapshot, never the catalogue's or the client's.</summary>
 /// <param name="UnitPriceMinor">The quoted VAT-exclusive unit price in whole poisha.</param>
 /// <param name="PublicUnitPriceMinor">The public price on the net basis at the send; the order line records it as its public price.</param>
+/// <param name="SentVatRate">The category's VAT rate at the send; the order uses today's, the accept preview tells the buyer when they differ (§8.4).</param>
 public sealed record QuoteOrderLine(Guid LineId, Guid VariantId, Guid SellerId, string Sku, string TitleEn, int Quantity, long UnitPriceMinor,
-    long PublicUnitPriceMinor);
+    long PublicUnitPriceMinor, decimal SentVatRate);
 
 /// <summary>
 /// A sent quote version the caller may accept, as the order path needs it (§8.3): its lines, payment terms and delivery. Fixed delivery

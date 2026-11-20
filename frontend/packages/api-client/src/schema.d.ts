@@ -5294,6 +5294,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/companies/{companyId}/quotes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The company's quotes, newest sent first: all for a role in `Quotes:VisibleTo` (Admin, Buyer), else those the caller is the contact for. `status`, `page`, `pageSize` (at most 50). */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/quotes/{quoteId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The quote with every version Sent or later (as sent), oldest first; the newest says whether it may be accepted now. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quotes/by-number/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Where an e-mailed number lives: `{companyId, quoteId, number}` for a quote the caller may see; every other number is the same 404. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    number: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/accept-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What accepting would charge now, by the acceptance's own pricing path; nothing is held or written. Send its `grandTotalMinor` as `expectedGrandTotalMinor`. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["AcceptPreviewBody"];
+                    "text/json": components["schemas"]["AcceptPreviewBody"];
+                    "application/*+json": components["schemas"]["AcceptPreviewBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies/{companyId}/quotes/{quoteId}/accept": {
         parameters: {
             query?: never;
@@ -5329,6 +5485,49 @@ export interface paths {
             responses: {
                 /** @description Created */
                 201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/companies/{companyId}/quotes/{quoteId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rejects a sent version (it becomes `rejected`; the quote stays open for a revision and staff are told). Answers the quote. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                    quoteId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RejectQuoteBody"];
+                    "text/json": components["schemas"]["RejectQuoteBody"];
+                    "application/*+json": components["schemas"]["RejectQuoteBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -6510,6 +6709,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description The accept body without the total (§8.4): the same choices, priced as acceptance would price them now. */
+        AcceptPreviewBody: {
+            /** Format: int32 */
+            versionNo?: number | null;
+            contentHash?: string | null;
+            payOnCredit?: boolean;
+            /** Format: uuid */
+            shipToSiteId?: string | null;
+            /** Format: uuid */
+            shippingAddressId?: string | null;
+            /** Format: uuid */
+            costCentreId?: string | null;
+        };
         /**
          * @description What accepting a quote carries (ADR-0011 §8.1, QT2): the version and the content hash the buyer saw, the total the accept preview showed
          *     (required), and the buyer's own choices: payment on company credit, delivery site or saved address (calculated delivery only), cost
@@ -6869,6 +7081,12 @@ export interface components {
             reason?: string | null;
         };
         RejectCreditPaymentRequest: {
+            reason?: string | null;
+        };
+        /** @description The buyer's "no" to a version (§8.8), with an optional "what should change" (at most 1,000 characters). */
+        RejectQuoteBody: {
+            /** Format: int32 */
+            versionNo?: number | null;
             reason?: string | null;
         };
         RejectRefund: {

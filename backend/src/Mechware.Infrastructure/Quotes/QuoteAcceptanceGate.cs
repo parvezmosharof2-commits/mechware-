@@ -35,7 +35,7 @@ public sealed class QuoteAcceptanceGate(MechwareDbContext db, QuoteOptions optio
             throw new ForbiddenException("COMPANY_ROLE_REQUIRED", "Only a member with the Buyer role can accept a quote.");
         return new QuoteForOrder(quote.Id, quote.Number, quote.CompanyId, v.Id, v.VersionNo, v.PaymentTerms, v.ShippingMode, v.ShipToSiteId, v.ShipTo,
             v.ShippingFees ?? [], [.. v.Lines.OrderBy(l => l.LineNo).Select(l => new QuoteOrderLine(l.Id, l.VariantId, l.SellerId, l.Sku, l.TitleEn, l.Quantity,
-                l.UnitPriceMinor, l.PublicUnitPriceMinor))]);
+                l.UnitPriceMinor, l.PublicUnitPriceMinor, l.VatRate))]);
     }
 
     public async Task EnsureAcceptableAsync(QuoteForOrder quote, string contentHash, Guid userId, DateTime nowUtc, CancellationToken ct = default)
