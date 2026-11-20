@@ -40,7 +40,9 @@ public sealed class StaffOrderReadEndpointsTests(QuoteIssueFactory factory) : IC
         "lines", "variantId", "sku", "title", "quantity", "unitPriceMinor", "vatRate", "grossMinor", "netMinor", "priceSnapshot", "source", "basis",
         "priceListId", "priceListVersion", "contractRef", "publicUnitPriceMinor", "quoteLineId", "events", "sequence", "fromStatus", "toStatus",
         "actorId", "reason", "atUtc", "payments", "method", "currency", "createdAtUtc", "capturedAtUtc", "refunds", "amountMinor", "requestedBy",
-        "decidedBy", "decidedAtUtc"
+        "decidedBy", "decidedAtUtc",
+        // F1.1: the version the fulfilment moves send back, and the shipments (staff id of the shipper as an id only).
+        "rowVersion", "shipments", "courierName", "trackingNumber", "trackingUrl", "shippedAtUtc", "deliveredAtUtc", "createdBy"
     ];
 
     private const string Phone = "+8801711555123";

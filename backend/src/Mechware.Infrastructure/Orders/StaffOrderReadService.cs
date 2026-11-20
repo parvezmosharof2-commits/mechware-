@@ -105,6 +105,8 @@ public sealed class StaffOrderReadService(MechwareDbContext db) : IStaffOrderRea
             var quote = order.QuoteId is { } qid && order.QuoteVersionId is { } vid
                 ? await db.Quotes.AsNoTracking().Where(q => q.Id == qid).Select(q => new StaffOrderQuoteDto(q.Id, q.Number, vid)).FirstOrDefaultAsync(ct) : null;
 
+            var rowVersion = await db.Orders.Where(o => o.Id == orderId).Select(o => EF.Property<uint>(o, "xmin")).FirstAsync(ct);
+            var shipments = await db.Set<Shipment>().AsNoTracking().Where(s => s.OrderId == orderId).OrderBy(s => s.ShippedAtUtc).ToListAsync(ct);
             var money = payments.OrderByDescending(p => p.Status is PaymentStatus.Captured or PaymentStatus.Refunded or PaymentStatus.NeedsRefund)
                 .ThenByDescending(p => p.CreatedAtUtc).FirstOrDefault();
             return new StaffOrderDetailDto(order.Id, order.OrderNumber, OrderService.ToWire(order.Status), order.Currency, OrderService.ToWire(order.TaxMode),
@@ -122,7 +124,8 @@ public sealed class StaffOrderReadService(MechwareDbContext db) : IStaffOrderRea
                 events.Select(e => new StaffOrderEventDto(e.Sequence, OrderService.ToWire(e.FromStatus), OrderService.ToWire(e.ToStatus), e.ActorId, e.Reason, e.AtUtc)).ToList(),
                 payments.Select(p => new StaffPaymentDto(p.Id, p.Provider, OrderService.ToWire(p.Status), p.AmountMinor, p.Currency, p.CreatedAtUtc, p.CapturedAtUtc,
                     refunds.Where(r => r.PaymentId == p.Id).Select(r => new StaffRefundDto(r.Id, r.AmountMinor, OrderService.ToWire(r.Status), r.Reason, r.RequestedBy,
-                        r.DecidedBy, r.DecidedAtUtc, r.CreatedAtUtc)).ToList())).ToList());
+                        r.DecidedBy, r.DecidedAtUtc, r.CreatedAtUtc)).ToList())).ToList(),
+                rowVersion, shipments.Select(OrderFulfilmentService.ToStaff).ToList());
         }, ct);
 
     private async Task<StaffOrderCreditDto?> CreditAsync(Order order, DateTime nowUtc, CancellationToken ct)

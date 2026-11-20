@@ -3005,6 +3005,73 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Orders.Shipment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CourierName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("courier_name");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime?>("DeliveredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("delivered_at");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<DateTime>("ShippedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("shipped_at");
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("tracking_number");
+
+                    b.Property<string>("TrackingUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("tracking_url");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shipments_order");
+
+                    b.ToTable("shipments", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_shipments_courier_name", "char_length(courier_name) BETWEEN 2 AND 80 AND courier_name !~ '[[:cntrl:]]' AND courier_name = btrim(courier_name)");
+
+                            t.HasCheckConstraint("ck_shipments_delivered_after_shipped", "delivered_at IS NULL OR delivered_at >= shipped_at");
+
+                            t.HasCheckConstraint("ck_shipments_tracking_number", "tracking_number ~ '^[A-Za-z0-9-]{1,60}$'");
+
+                            t.HasCheckConstraint("ck_shipments_tracking_url", "tracking_url IS NULL OR (tracking_url LIKE 'https://%' AND char_length(tracking_url) <= 500)");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Orders.SubOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5502,6 +5569,21 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany("Items")
                         .HasForeignKey("SubOrderId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Orders.Shipment", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

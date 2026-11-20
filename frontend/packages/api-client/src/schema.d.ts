@@ -1271,6 +1271,174 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/orders/{orderId}/processing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirmed → processing. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OrderStepRequest"];
+                    "text/json": components["schemas"]["OrderStepRequest"];
+                    "application/*+json": components["schemas"]["OrderStepRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{orderId}/packed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Processing → packed. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OrderStepRequest"];
+                    "text/json": components["schemas"]["OrderStepRequest"];
+                    "application/*+json": components["schemas"]["OrderStepRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{orderId}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Packed → shipped: courier name (2-80), tracking number (1-60 letters, digits, dashes), optional https tracking link on a known courier site. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ShipOrderRequest"];
+                    "text/json": components["schemas"]["ShipOrderRequest"];
+                    "application/*+json": components["schemas"]["ShipOrderRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{orderId}/delivered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Shipped (or out for delivery) → delivered. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    orderId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OrderStepRequest"];
+                    "text/json": components["schemas"]["OrderStepRequest"];
+                    "application/*+json": components["schemas"]["OrderStepRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/orders/{orderId}/cancel": {
         parameters: {
             query?: never;
@@ -7295,6 +7463,10 @@ export interface components {
             currency?: string | null;
             formatted?: string | null;
         };
+        OrderStepRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
+        };
         OverrideCreditHoldRequest: {
             /** Format: int32 */
             days?: number | null;
@@ -7534,6 +7706,13 @@ export interface components {
             successorIsDropIn?: boolean | null;
             successorNote?: string | null;
             clearSuccessor?: boolean | null;
+        };
+        ShipOrderRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
+            courierName?: string | null;
+            trackingNumber?: string | null;
+            trackingUrl?: string | null;
         };
         ShippingBandDto: {
             /** Format: int32 */

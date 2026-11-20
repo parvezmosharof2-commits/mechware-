@@ -172,6 +172,33 @@ internal sealed class OrderEventRecordConfiguration : IEntityTypeConfiguration<O
     }
 }
 
+/// <summary>F1.1 manual shipments. The CHECKs repeat the domain's rules so no other writer can store a bad courier name, number or link.</summary>
+internal sealed class ShipmentConfiguration : IEntityTypeConfiguration<Shipment>
+{
+    public void Configure(EntityTypeBuilder<Shipment> b)
+    {
+        b.ToTable("shipments", t =>
+        {
+            t.HasCheckConstraint("ck_shipments_courier_name", "char_length(courier_name) BETWEEN 2 AND 80 AND courier_name !~ '[[:cntrl:]]' AND courier_name = btrim(courier_name)");
+            t.HasCheckConstraint("ck_shipments_tracking_number", "tracking_number ~ '^[A-Za-z0-9-]{1,60}$'");
+            t.HasCheckConstraint("ck_shipments_tracking_url", "tracking_url IS NULL OR (tracking_url LIKE 'https://%' AND char_length(tracking_url) <= 500)");
+            t.HasCheckConstraint("ck_shipments_delivered_after_shipped", "delivered_at IS NULL OR delivered_at >= shipped_at");
+        });
+        b.MapAudit();
+        b.Property(s => s.OrderId).HasColumnName("order_id");
+        b.Property(s => s.CourierName).HasColumnName("courier_name").HasMaxLength(Shipment.CourierNameMaxLength).IsRequired();
+        b.Property(s => s.TrackingNumber).HasColumnName("tracking_number").HasMaxLength(Shipment.TrackingNumberMaxLength).IsRequired();
+        b.Property(s => s.TrackingUrl).HasColumnName("tracking_url").HasMaxLength(Shipment.TrackingUrlMaxLength);
+        b.Property(s => s.ShippedAtUtc).HasColumnName("shipped_at");
+        b.Property(s => s.DeliveredAtUtc).HasColumnName("delivered_at");
+        b.Property(s => s.CreatedBy).HasColumnName("created_by");
+        b.HasOne<Order>().WithMany().HasForeignKey(s => s.OrderId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(s => s.CreatedBy).OnDelete(DeleteBehavior.Restrict);
+        // One shipment per order until partial shipments (F1.4), which replaces this index (e.g. by sub-order) without a table change.
+        b.HasIndex(s => s.OrderId).IsUnique().HasDatabaseName("ux_shipments_order");
+    }
+}
+
 internal sealed class IdempotencyRecordConfiguration : IEntityTypeConfiguration<IdempotencyRecord>
 {
     public void Configure(EntityTypeBuilder<IdempotencyRecord> b)

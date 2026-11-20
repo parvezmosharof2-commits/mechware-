@@ -8,9 +8,38 @@ namespace Mechware.Api.Controllers;
 /// <summary>MECHWARE staff views over all orders.</summary>
 [ApiController]
 [Route("api/v1/admin/orders")]
-public sealed class AdminOrdersController(IOrderDeadlineService deadlines, IOrderCancellationService cancellations, IStaffOrderReadService reads, TimeProvider clock) : ControllerBase
+public sealed class AdminOrdersController(
+    IOrderDeadlineService deadlines, IOrderCancellationService cancellations, IStaffOrderReadService reads, IOrderFulfilmentService fulfilment,
+    TimeProvider clock) : ControllerBase
 {
     public const string CancelStepUpAction = "order.cancel";
+
+    // F1.1 manual fulfilment (orders.fulfil: Support, Admin). Body carries the order's rowVersion (stale: 409 ORDER_CHANGED); a move
+    // from the wrong status is 409 ORDER_INVALID_TRANSITION. Each writes an audit row and an outbox event.
+
+    /// <summary>Confirmed → processing.</summary>
+    [HttpPost("{orderId:guid}/processing")]
+    [RequirePermission(Permissions.OrdersFulfil)]
+    public async Task<IActionResult> Processing(Guid orderId, [FromBody] OrderStepRequest body, CancellationToken ct) =>
+        Ok(new { data = await fulfilment.StartProcessingAsync(orderId, body, ct) });
+
+    /// <summary>Processing → packed.</summary>
+    [HttpPost("{orderId:guid}/packed")]
+    [RequirePermission(Permissions.OrdersFulfil)]
+    public async Task<IActionResult> Packed(Guid orderId, [FromBody] OrderStepRequest body, CancellationToken ct) =>
+        Ok(new { data = await fulfilment.MarkPackedAsync(orderId, body, ct) });
+
+    /// <summary>Packed → shipped: courier name (2-80), tracking number (1-60 letters, digits, dashes), optional https tracking link on a known courier site.</summary>
+    [HttpPost("{orderId:guid}/ship")]
+    [RequirePermission(Permissions.OrdersFulfil)]
+    public async Task<IActionResult> Ship(Guid orderId, [FromBody] ShipOrderRequest body, CancellationToken ct) =>
+        Ok(new { data = await fulfilment.ShipAsync(orderId, body, ct) });
+
+    /// <summary>Shipped (or out for delivery) → delivered.</summary>
+    [HttpPost("{orderId:guid}/delivered")]
+    [RequirePermission(Permissions.OrdersFulfil)]
+    public async Task<IActionResult> Delivered(Guid orderId, [FromBody] OrderStepRequest body, CancellationToken ct) =>
+        Ok(new { data = await fulfilment.MarkDeliveredAsync(orderId, body, ct) });
 
     /// <summary>
     /// Cancels a confirmed, processing or packed order (E7.2): stock back to the warehouses it came from, a credit order's charge

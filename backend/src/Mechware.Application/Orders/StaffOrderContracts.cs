@@ -49,13 +49,40 @@ public sealed record StaffPaymentDto(
 /// <summary>A credit order's standing in the company ledger (ADR-0010): <c>open</c>, <c>partially_paid</c>, <c>paid</c>, <c>overdue</c>, <c>cancelled</c>.</summary>
 public sealed record StaffOrderCreditDto(string Status, DateOnly DueOn, long ChargedMinor, long OutstandingMinor);
 
+/// <summary>A shipment as staff see it (F1.1): <paramref name="CreatedBy"/> is the staff id that shipped it (an id only, like event actors).</summary>
+public sealed record StaffShipmentDto(
+    Guid Id, string CourierName, string TrackingNumber, string? TrackingUrl, DateTime ShippedAtUtc, DateTime? DeliveredAtUtc, Guid CreatedBy);
+
+/// <param name="RowVersion">The order's version: what the fulfilment moves (F1.1) send back; a stale one is 409 <c>ORDER_CHANGED</c>.</param>
 public sealed record StaffOrderDetailDto(
     Guid Id, string OrderNumber, string Status, string Currency, string TaxMode, DateTime PlacedAtUtc, DateTime? ConfirmedAtUtc,
     DateTime? PaymentDueAtUtc, DateTime? LegalDeliveryDeadlineUtc, DateTime? CourierHandoverDeadlineUtc, bool? DeadlineSameCity,
     string? PurchaseOrderNumber, long SubtotalMinor, long DiscountMinor, long TaxMinor, long ShippingMinor, long GrandTotalMinor,
     string Source, StaffOrderQuoteDto? Quote, Guid? CompanyId, string? CompanyName, StaffOrderBuyerDto Buyer, OrderShipToDto? ShipTo,
     string PaymentState, bool PaysOnCredit, StaffOrderCreditDto? Credit,
-    IReadOnlyList<StaffSubOrderDto> SubOrders, IReadOnlyList<StaffOrderEventDto> Events, IReadOnlyList<StaffPaymentDto> Payments);
+    IReadOnlyList<StaffSubOrderDto> SubOrders, IReadOnlyList<StaffOrderEventDto> Events, IReadOnlyList<StaffPaymentDto> Payments,
+    uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments);
+
+/// <summary>A fulfilment move: the order's <c>rowVersion</c> from the last read (required).</summary>
+public sealed record OrderStepRequest(uint? RowVersion);
+
+/// <summary>Ship: courier name (2-80, plain text), tracking number (1-60 letters, digits, dashes), optional https link on a known courier site.</summary>
+public sealed record ShipOrderRequest(uint? RowVersion, string? CourierName, string? TrackingNumber, string? TrackingUrl);
+
+/// <summary>The order after a fulfilment move: its new status and version, and its shipments.</summary>
+public sealed record OrderFulfilmentDto(Guid Id, string OrderNumber, string Status, uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments);
+
+/// <summary>
+/// Manual fulfilment (F1.1): confirmed → processing → packed → shipped → delivered. Each move locks the order, checks the
+/// <c>rowVersion</c> (409 <c>ORDER_CHANGED</c>) and the status (409 <c>ORDER_INVALID_TRANSITION</c>), writes an audit row and an outbox event.
+/// </summary>
+public interface IOrderFulfilmentService
+{
+    Task<OrderFulfilmentDto> StartProcessingAsync(Guid orderId, OrderStepRequest request, CancellationToken ct = default);
+    Task<OrderFulfilmentDto> MarkPackedAsync(Guid orderId, OrderStepRequest request, CancellationToken ct = default);
+    Task<OrderFulfilmentDto> ShipAsync(Guid orderId, ShipOrderRequest request, CancellationToken ct = default);
+    Task<OrderFulfilmentDto> MarkDeliveredAsync(Guid orderId, OrderStepRequest request, CancellationToken ct = default);
+}
 
 public interface IStaffOrderReadService
 {

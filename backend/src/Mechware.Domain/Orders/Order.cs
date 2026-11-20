@@ -326,6 +326,43 @@ public sealed class Order : AggregateRoot<Guid>
         AddDomainEvent(new ConfirmedOrderCancelledEvent(Id, OrderNumber, UserId, CompanyId, from.ToString(), actorId, why));
     }
 
+    // Manual fulfilment (F1.1). Each step goes through the state machine (409 ORDER_INVALID_TRANSITION from the wrong status), so it
+    // inherits the payment rule: only Confirm (captured payment or accepted credit) reaches Confirmed, the only way into Processing.
+
+    /// <summary>Confirmed → Processing.</summary>
+    public void StartProcessing(Guid actorId, DateTime nowUtc)
+    {
+        Apply(OrderStatus.Processing, actorId, null, nowUtc);
+        AddDomainEvent(new OrderProcessingStartedEvent(Id, OrderNumber, UserId, actorId));
+    }
+
+    /// <summary>Processing → Packed.</summary>
+    public void MarkPacked(Guid actorId, DateTime nowUtc)
+    {
+        Apply(OrderStatus.Packed, actorId, null, nowUtc);
+        AddDomainEvent(new OrderPackedEvent(Id, OrderNumber, UserId, actorId));
+    }
+
+    /// <summary>Packed → Shipped with the courier and tracking number typed in by staff (validated first: 400 before any state check).</summary>
+    public Shipment Ship(string? courierName, string? trackingNumber, string? trackingUrl, Guid actorId, DateTime nowUtc)
+    {
+        var shipment = new Shipment(Id, Shipment.NormaliseCourierName(courierName), Shipment.NormaliseTrackingNumber(trackingNumber),
+            Shipment.NormaliseTrackingUrl(trackingUrl), actorId, nowUtc);
+        Apply(OrderStatus.Shipped, actorId, $"Shipped with {shipment.CourierName}, tracking {shipment.TrackingNumber}", nowUtc);
+        AddDomainEvent(new OrderShippedEvent(Id, OrderNumber, UserId, shipment.Id, shipment.CourierName, shipment.TrackingNumber,
+            shipment.TrackingUrl, actorId));
+        return shipment;
+    }
+
+    /// <summary>Shipped (or OutForDelivery) → Delivered; the order's shipment, if any, gets its delivery time.</summary>
+    public void MarkDelivered(Shipment? shipment, Guid actorId, DateTime nowUtc)
+    {
+        if (shipment is not null && shipment.OrderId != Id) throw new InvalidOperationException("The shipment belongs to another order.");
+        Apply(OrderStatus.Delivered, actorId, null, nowUtc);
+        shipment?.MarkDelivered(nowUtc);
+        AddDomainEvent(new OrderDeliveredEvent(Id, OrderNumber, UserId, shipment?.Id, actorId));
+    }
+
     /// <summary>The approval was given: the order can now be paid, and the time to pay starts now.</summary>
     public void Approve(Guid? actorId, DateTime paymentDueAtUtc, DateTime nowUtc)
     {

@@ -19,6 +19,8 @@ public class OrderStateMachineTests
         (OrderStatus.Processing, OrderStatus.Packed), (OrderStatus.Processing, OrderStatus.Cancelled),
         (OrderStatus.Packed, OrderStatus.Shipped), (OrderStatus.Packed, OrderStatus.Cancelled),
         (OrderStatus.Shipped, OrderStatus.OutForDelivery), (OrderStatus.Shipped, OrderStatus.DeliveryFailed),
+        (OrderStatus.Shipped, OrderStatus.Delivered), // F1.1 manual fulfilment: no courier "out for delivery" scan
+
         (OrderStatus.OutForDelivery, OrderStatus.Delivered), (OrderStatus.OutForDelivery, OrderStatus.DeliveryFailed),
         (OrderStatus.Delivered, OrderStatus.Completed), (OrderStatus.Delivered, OrderStatus.ReturnRequested),
         (OrderStatus.DeliveryFailed, OrderStatus.OutForDelivery), (OrderStatus.DeliveryFailed, OrderStatus.Returned),

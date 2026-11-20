@@ -76,6 +76,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Quotes.IQuotePdfService, Quotes.QuotePdfService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
+        services.TryAddScoped<Mechware.Application.Orders.IOrderFulfilmentService, Orders.OrderFulfilmentService>();
         services.TryAddScoped<Mechware.Application.Orders.IQuickOrderValidator, Orders.QuickOrderValidator>();
         services.TryAddScoped<Mechware.Application.Shipping.IShippingRateProvider, Shipping.ShippingRateProvider>();
         // Fail closed unless the host registered its own options first (the API does, from Shipping:AllowFreeWhenNoZones).

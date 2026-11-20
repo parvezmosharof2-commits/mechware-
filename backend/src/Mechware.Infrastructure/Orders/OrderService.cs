@@ -556,6 +556,9 @@ public sealed partial class OrderService(
         var sellerIds = order.SubOrders.Select(s => s.SellerId).Distinct().ToList();
         var storeNames = await db.Sellers.AsNoTracking().Where(s => sellerIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.StoreName, ct);
         var payments = await db.Payments.AsNoTracking().Where(p => p.OrderId == order.Id).ToListAsync(ct);
+        // F1.1: a field whitelist; the shipment id and the staff member who shipped it never reach the buyer.
+        var shipments = await db.Set<Shipment>().AsNoTracking().Where(s => s.OrderId == order.Id).OrderBy(s => s.ShippedAtUtc)
+            .Select(s => new OrderShipmentDto(s.CourierName, s.TrackingNumber, s.TrackingUrl, s.ShippedAtUtc, s.DeliveredAtUtc)).ToListAsync(ct);
 
         return new OrderDto(order.Id, order.OrderNumber, ToWire(order.Status), order.Currency, order.SubtotalMinor, order.DiscountMinor,
             order.TaxMinor, order.ShippingMinor, order.GrandTotalMinor, order.PlacedAtUtc,
@@ -566,7 +569,8 @@ public sealed partial class OrderService(
                 storeNames.GetValueOrDefault(s.SellerId))).ToList(),
             order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments),
             await CreditForBuyerAsync(order, ct),
-            order.QuoteId is { } quoteId ? await db.Quotes.AsNoTracking().Where(q => q.Id == quoteId).Select(q => q.Number).FirstOrDefaultAsync(ct) : null);
+            order.QuoteId is { } quoteId ? await db.Quotes.AsNoTracking().Where(q => q.Id == quoteId).Select(q => q.Number).FirstOrDefaultAsync(ct) : null,
+            shipments);
     }
 
     /// <summary>

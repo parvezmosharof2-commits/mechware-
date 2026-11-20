@@ -12,6 +12,9 @@ public static class Permissions
     /// <summary>Cancel a confirmed order that has not shipped (E7.2, always with step-up): restocks, releases credit, flags paid money for refund.</summary>
     public const string OrdersCancel = "orders.cancel";
 
+    /// <summary>Move a confirmed order through processing, packed, shipped (courier + tracking number) and delivered (F1.1; Support, Admin).</summary>
+    public const string OrdersFulfil = "orders.fulfil";
+
     /// <summary>Approves a refund someone else asked for (four eyes, threat model v2 P3).</summary>
     public const string PaymentsRefundApprove = "payments.refund_approve";
 
@@ -99,7 +102,7 @@ public static class Permissions
             // Support is the sales-facing staff role: it prepares price lists but never approves them.
             Roles.Support =>
             [
-                OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, CompaniesView, PriceListsView, PriceListsEdit, ShippingView,
+                OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, OrdersFulfil, CompaniesView, PriceListsView, PriceListsEdit, ShippingView,
                 QuotesView, QuotesEdit
             ],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
@@ -115,6 +118,7 @@ public static class Permissions
                 OrdersViewAll,
                 OrdersRefund,
                 OrdersCancel,
+                OrdersFulfil,
                 PaymentsRefundApprove,
                 CatalogCreate,
                 CatalogUpdateOwn,

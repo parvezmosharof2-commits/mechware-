@@ -82,12 +82,16 @@ public sealed record OrderShipToDto(
 /// </summary>
 public sealed record OrderPaymentDto(string Status, string? Method, long AmountMinor, DateTime? PaidAt, int Attempts);
 
+/// <summary>A parcel on its way (F1.1, typed in by staff): courier, tracking number, optional https link to the courier's page, dates. No ids.</summary>
+public sealed record OrderShipmentDto(string CourierName, string TrackingNumber, string? TrackingUrl, DateTime ShippedAtUtc, DateTime? DeliveredAtUtc);
+
 /// <param name="QuoteNumber">The number of the quote this order accepted (ADR-0011 §11); null for an order placed from the cart.</param>
+/// <param name="Shipments">Oldest first; empty until the order ships (one per order until partial shipments, F1.4).</param>
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
     long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null,
     DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null, OrderCreditDto? Credit = null,
-    string? QuoteNumber = null);
+    string? QuoteNumber = null, IReadOnlyList<OrderShipmentDto>? Shipments = null);
 
 /// <summary>
 /// Where a credit order stands in the ledger (ADR-0010 §10, B3.9): <paramref name="Status"/> = <c>open</c>, <c>partially_paid</c>, <c>paid</c>,

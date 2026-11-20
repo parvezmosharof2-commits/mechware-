@@ -40,7 +40,8 @@ public static class OrderStateMachine
         [OrderStatus.Confirmed] = [OrderStatus.Processing, OrderStatus.Cancelled],
         [OrderStatus.Processing] = [OrderStatus.Packed, OrderStatus.Cancelled],
         [OrderStatus.Packed] = [OrderStatus.Shipped, OrderStatus.Cancelled],
-        [OrderStatus.Shipped] = [OrderStatus.OutForDelivery, OrderStatus.DeliveryFailed],
+        // Shipped → Delivered: manual fulfilment (F1.1) has no courier scan for "out for delivery"; courier adapters (F1.2) use that step.
+        [OrderStatus.Shipped] = [OrderStatus.OutForDelivery, OrderStatus.Delivered, OrderStatus.DeliveryFailed],
         [OrderStatus.OutForDelivery] = [OrderStatus.Delivered, OrderStatus.DeliveryFailed],
         [OrderStatus.Delivered] = [OrderStatus.Completed, OrderStatus.ReturnRequested],
         [OrderStatus.DeliveryFailed] = [OrderStatus.OutForDelivery, OrderStatus.Returned],
