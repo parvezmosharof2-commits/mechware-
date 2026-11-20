@@ -55,6 +55,8 @@ export interface OrderDetail {
   placedAtUtc: string;
   subOrders: SubOrder[];
   purchaseOrderNumber?: string | null;
+  /** The quote this order was accepted from (D4.9), or null for a cart order. */
+  quoteNumber?: string | null;
   estimatedDeliveryBy?: string | null;
   /** Credit position of a charged credit order, only for a member who may see the company's credit (B3.9); otherwise null or absent. */
   credit?: { status: string; dueOn: string; outstandingMinor: number } | null;

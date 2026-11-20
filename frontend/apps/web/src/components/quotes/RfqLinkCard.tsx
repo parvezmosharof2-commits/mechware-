@@ -16,6 +16,7 @@ export function RfqLinkCard({ companyId }: { companyId: string }) {
       </div>
       <div className="flex flex-wrap gap-3 text-sm font-semibold">
         <Link prefetch={false} href={toPath(`/account/company/${encodeURIComponent(companyId)}/rfqs`)} className="text-accent hover:underline" data-testid="rfq-card-list">{t('openList')}</Link>
+        <Link prefetch={false} href={toPath(`/account/company/${encodeURIComponent(companyId)}/quotes`)} className="text-accent hover:underline" data-testid="quote-card-list">{t('openQuotes')}</Link>
         <Link prefetch={false} href={toPath('/request-quote?source=text')} className="text-accent hover:underline">{t('askNew')}</Link>
       </div>
     </section>

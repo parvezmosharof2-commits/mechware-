@@ -137,6 +137,9 @@ export function OrderDetailView({ locale, orderNumber }: { locale: 'en' | 'bn'; 
         <div className="min-w-0">
           <p data-testid="order-number" className="break-all font-mono text-xl font-bold text-text">{o.orderNumber}</p>
           <p className="text-sm text-text-muted">{t('placedAt', { date: formatOrderDate(o.placedAtUtc, locale) })}</p>
+          {o.quoteNumber && (
+            <p className="break-all text-sm text-text-muted" data-testid="order-source">{t('sourceQuote', { number: o.quoteNumber })}</p>
+          )}
           {o.purchaseOrderNumber && (
             <p className="break-all text-sm text-text-muted">{t('poNumber')}: <span data-testid="po-number" className="font-mono text-text">{o.purchaseOrderNumber}</span></p>
           )}
