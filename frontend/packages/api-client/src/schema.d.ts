@@ -2741,6 +2741,256 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sends a Draft (D4.8): the server checks every line now (catalogue, the buyer's own price, cost and floor) and freezes the version.
+         *     No flag: `sent`, valid from now, the live version superseded. Flags (below floor, over the discount authority, long validity):
+         *     `pending_approval` for a second person. A fixed delivery takes the site's address of now; a removed site is 409
+         *     `QUOTE_DELIVERY_SITE_GONE`, a line below cost 409 `QUOTE_BELOW_COST`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approves a pending version, which sends it (valid from now). Needs `quotes.approve` (and `quotes.approve_below_floor` for a
+         *     below-floor line) and a fresh authenticator code in `X-Step-Up-Code`; the approver did not create, change or submit the version;
+         *     `contentHash` is the one reviewed (409 `QUOTE_CHANGED`) and both line lists equal the flags checked again now (409
+         *     `QUOTE_FLAGS_NOT_ACKNOWLEDGED`, whose message names the lines).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ApproveQuoteRequest"];
+                    "text/json": components["schemas"]["ApproveQuoteRequest"];
+                    "application/*+json": components["schemas"]["ApproveQuoteRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/reject-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sends a pending version back to Draft with a comment (5-500) for the author; nothing becomes binding, so no code. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StaffCommentRequest"];
+                    "text/json": components["schemas"]["StaffCommentRequest"];
+                    "application/*+json": components["schemas"]["StaffCommentRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/recall": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Takes a pending version back to Draft before anyone approves it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraws a Sent version with a reason (5-500): the buyer can no longer accept it. It cannot lower a price, so no code. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    quoteId: string;
+                    versionNo: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["StaffReasonRequest"];
+                    "text/json": components["schemas"]["StaffReasonRequest"];
+                    "application/*+json": components["schemas"]["StaffReasonRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/quotes/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The approval queue: versions waiting for a second person, oldest first, with the send's flags and whether the caller may approve. */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/quotes/{quoteId}/close": {
         parameters: {
             query?: never;
@@ -6255,6 +6505,12 @@ export interface components {
             expectedContentHash?: string | null;
             acknowledgedBelowFloorEntryIds?: string[] | null;
         };
+        ApproveQuoteRequest: {
+            contentHash?: string | null;
+            belowFloorLineIds?: string[] | null;
+            overAuthorityLineIds?: string[] | null;
+            comment?: string | null;
+        };
         AssignRfqRequest: {
             /** Format: uuid */
             assigneeId?: string | null;
@@ -6693,6 +6949,9 @@ export interface components {
             division?: string | null;
             postalCode?: string | null;
             isDefaultDelivery?: boolean;
+        };
+        StaffCommentRequest: {
+            comment?: string | null;
         };
         StaffReasonRequest: {
             reason?: string | null;

@@ -80,8 +80,11 @@ public sealed record QuoteFlags(IReadOnlyList<Guid> BelowFloorLineIds, IReadOnly
 /// <summary>
 /// What the server fixes when a version leaves Draft (§4, §6): fresh line facts, company snapshot, preparer, and the policy run
 /// of that moment. The content hash is not an input: the domain computes it (<see cref="QuoteContentHash"/>).
+/// <paramref name="ShipTo"/>: a fixed delivery's site as it is at this instant (it replaces the draft's copy; null when the site is gone,
+/// which refuses the send with <c>QUOTE_DELIVERY_SITE_GONE</c>); always null for calculated delivery.
 /// </summary>
-public sealed record QuoteIssue(QuoteCompanySnapshot Company, string PreparerName, IReadOnlyList<QuoteLineFacts> Facts, QuoteApprovalCheck Check);
+public sealed record QuoteIssue(QuoteCompanySnapshot Company, string PreparerName, IReadOnlyList<QuoteLineFacts> Facts, QuoteApprovalCheck Check,
+    QuoteShipTo? ShipTo = null);
 
 /// <summary>
 /// A staff user acting on a quote, with the companies they are an effective member of, read from <c>company_members</c> in the

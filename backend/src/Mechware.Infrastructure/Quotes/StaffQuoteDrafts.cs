@@ -84,12 +84,7 @@ public sealed partial class StaffQuoteService
         if (lines.Count > QuoteLimits.MaxLinesPerVersion)
             throw new ValidationException("lines", $"A quote has at most {QuoteLimits.MaxLinesPerVersion} lines; split a larger one.");
         if (lines.Any(l => l is null) || r.ShippingFees?.Any(f => f is null) == true) throw new ValidationException("lines", "A line or a fee is empty.");
-        var ids = lines.Select(l => l.VariantId).Distinct().ToList();
-        var catalogue = await (from v in db.ProductVariants.AsNoTracking()
-                               join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
-                               join c in db.Categories.AsNoTracking() on p.CategoryId equals c.Id
-                               where ids.Contains(v.Id)
-                               select new { Variant = v, Product = p, c.VatRate }).ToDictionaryAsync(x => x.Variant.Id, ct);
+        var catalogue = await CatalogueAsync(lines.Select(l => l.VariantId), ct);
         for (var i = 0; i < lines.Count; i++)
             if (!catalogue.ContainsKey(lines[i].VariantId)) throw new ValidationException($"lines[{i + 1}]", "Choose a catalogue item.");
         var asked = lines.Where(l => l.RfqLineId is not null).Select(l => l.RfqLineId!.Value).Distinct().ToList();
@@ -97,31 +92,18 @@ public sealed partial class StaffQuoteService
             throw new ValidationException("rfqLineId", "A line can answer only a line of this quote's own request.");
 
         // Only lines the domain could accept are priced (an inactive item or a quantity out of range is refused by the domain first).
-        bool Active(Guid variant) => catalogue[variant] is var c && c.Variant.Status == VariantStatus.Active && c.Product.Status == ProductStatus.Active
-                                     && c.Product.DeletedAtUtc == null;
-        var priced = lines.Where(l => Active(l.VariantId) && l.Quantity is >= 1 and <= QuoteLimits.MaxQuantityPerLine).DistinctBy(l => l.VariantId).ToList();
+        var priced = lines.Where(l => catalogue[l.VariantId].Active && l.Quantity is >= 1 and <= QuoteLimits.MaxQuantityPerLine).DistinctBy(l => l.VariantId).ToList();
         var resolved = priced.Count == 0 ? [] : await prices.ResolveAsync(companyId, [.. priced.Select(l => new PriceRequestLine(l.VariantId, l.Quantity,
             PricingInput.From(catalogue[l.VariantId].Variant, catalogue[l.VariantId].VatRate)))], TaxMode.Exclusive, now, ct);
         var price = priced.Zip(resolved).ToDictionary(x => x.First.VariantId, x => x.Second.Price);
 
-        var drafts = lines.Select(l =>
-        {
-            var c = catalogue[l.VariantId];
-            var facts = new QuoteLineFacts(l.VariantId, Active(l.VariantId), c.Product.SellerId, c.Variant.Sku, c.Variant.ManufacturerPartNumber,
-                c.Product.TitleEn, string.IsNullOrWhiteSpace(c.Product.TitleBn) ? c.Product.TitleEn : c.Product.TitleBn, c.VatRate,
-                price.TryGetValue(l.VariantId, out var p) ? p.PublicUnitPriceMinor : 0,
-                l.Quantity is >= 1 and <= QuoteLimits.MaxQuantityPerLine ? c.Variant.QuantityProblem(l.Quantity) : null);
-            return new QuoteLineDraft(l.VariantId, l.Quantity, l.UnitPriceMinor, facts, l.LineNote, l.BelowFloorReason, l.RfqLineId);
-        }).ToList();
+        var drafts = lines.Select(l => new QuoteLineDraft(l.VariantId, l.Quantity, l.UnitPriceMinor,
+            catalogue[l.VariantId].Facts(l.Quantity, price.TryGetValue(l.VariantId, out var p) ? p.PublicUnitPriceMinor : 0), l.LineNote, l.BelowFloorReason,
+            l.RfqLineId)).ToList();
 
         QuoteShipTo? shipTo = null;
         if (r.ShipToSiteId is { } siteId)
-        {
-            var site = await db.CompanySites.AsNoTracking().FirstOrDefaultAsync(s => s.Id == siteId && s.CompanyId == companyId, ct)
-                       ?? throw new ValidationException("shipToSiteId", "Choose a delivery site of this company.");
-            shipTo = new QuoteShipTo(site.Name, site.ContactName, site.ContactPhone, site.Line1, site.Line2, site.Upazila, site.District, site.Division,
-                site.PostalCode);
-        }
+            shipTo = await ShipToAsync(companyId, siteId, ct) ?? throw new ValidationException("shipToSiteId", "Choose a delivery site of this company.");
 
         var draft = new QuoteDraft(r.ValidityDays,
             string.IsNullOrWhiteSpace(r.PaymentTerms) ? QuotePaymentTerms.AsAccount : Parse<QuotePaymentTerms>(r.PaymentTerms.Trim(), "paymentTerms"),
@@ -130,4 +112,30 @@ public sealed partial class StaffQuoteService
             drafts, shipTo);
         return (draft, [.. price.Values]);
     }
+
+    /// <summary>A catalogue item with its category's VAT rate, and the line facts the domain snapshots from it (§4).</summary>
+    private sealed record CatalogueItem(ProductVariant Variant, Product Product, decimal VatRate)
+    {
+        public bool Active => Variant.Status == VariantStatus.Active && Product.Status == ProductStatus.Active && Product.DeletedAtUtc == null;
+
+        public QuoteLineFacts Facts(int quantity, long publicUnitPriceMinor) => new(Variant.Id, Active, Product.SellerId, Variant.Sku,
+            Variant.ManufacturerPartNumber, Product.TitleEn, string.IsNullOrWhiteSpace(Product.TitleBn) ? Product.TitleEn : Product.TitleBn, VatRate,
+            publicUnitPriceMinor, quantity is >= 1 and <= QuoteLimits.MaxQuantityPerLine ? Variant.QuantityProblem(quantity) : null);
+    }
+
+    private async Task<Dictionary<Guid, CatalogueItem>> CatalogueAsync(IEnumerable<Guid> variantIds, CancellationToken ct)
+    {
+        var ids = variantIds.Distinct().ToList();
+        return await (from v in db.ProductVariants.AsNoTracking()
+                      join p in db.Products.AsNoTracking() on v.ProductId equals p.Id
+                      join c in db.Categories.AsNoTracking() on p.CategoryId equals c.Id
+                      where ids.Contains(v.Id)
+                      select new CatalogueItem(v, p, c.VatRate)).ToDictionaryAsync(x => x.Variant.Id, ct);
+    }
+
+    /// <summary>The address of the company's site as it is now (plain values; the domain cleans and limits them), or null when there is no such site.</summary>
+    private async Task<QuoteShipTo?> ShipToAsync(Guid companyId, Guid siteId, CancellationToken ct) =>
+        await db.CompanySites.AsNoTracking().Where(s => s.Id == siteId && s.CompanyId == companyId)
+            .Select(s => new QuoteShipTo(s.Name, s.ContactName, s.ContactPhone, s.Line1, s.Line2, s.Upazila, s.District, s.Division, s.PostalCode))
+            .FirstOrDefaultAsync(ct);
 }

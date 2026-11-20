@@ -10,7 +10,8 @@ namespace Mechware.Api.Controllers;
 /// RFQs, and quotes around their drafts: create (from an RFQ with its matched lines, or for a company), list, read every version,
 /// revise and close. Reads need <c>quotes.view</c>, commands <c>quotes.edit</c>; cost figures need <c>pricing.view_cost</c> as well.
 /// A staff member of the buyer's company may not create or revise its quote (403 <c>QUOTE_CONFLICT_OF_INTEREST</c>). Answers carry
-/// negotiated prices, so none is stored by a cache. The draft editor and its price preview are D4.7; sending and approving are D4.8.
+/// negotiated prices, so none is stored by a cache. The draft editor and its price preview are D4.7; send, approve (with an authenticator
+/// code), reject approval, recall, withdraw and the approval queue are D4.8.
 /// </summary>
 [ApiController]
 [Route("api/v1/admin")]
@@ -120,6 +121,71 @@ public sealed class AdminQuotesController(IStaffQuoteService desk) : ControllerB
     {
         Private();
         return Ok(new { data = await desk.PreviewAsync(quoteId, versionNo, body, ct) });
+    }
+
+    /// <summary>
+    /// Sends a Draft (D4.8): the server checks every line now (catalogue, the buyer's own price, cost and floor) and freezes the version.
+    /// No flag: <c>sent</c>, valid from now, the live version superseded. Flags (below floor, over the discount authority, long validity):
+    /// <c>pending_approval</c> for a second person. A fixed delivery takes the site's address of now; a removed site is 409
+    /// <c>QUOTE_DELIVERY_SITE_GONE</c>, a line below cost 409 <c>QUOTE_BELOW_COST</c>.
+    /// </summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/send")]
+    [RequirePermission(Permissions.QuotesEdit)]
+    public async Task<IActionResult> Send(Guid quoteId, int versionNo, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.SendAsync(quoteId, versionNo, ct) });
+    }
+
+    /// <summary>
+    /// Approves a pending version, which sends it (valid from now). Needs <c>quotes.approve</c> (and <c>quotes.approve_below_floor</c> for a
+    /// below-floor line) and a fresh authenticator code in <c>X-Step-Up-Code</c>; the approver did not create, change or submit the version;
+    /// <c>contentHash</c> is the one reviewed (409 <c>QUOTE_CHANGED</c>) and both line lists equal the flags checked again now (409
+    /// <c>QUOTE_FLAGS_NOT_ACKNOWLEDGED</c>, whose message names the lines).
+    /// </summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/approve")]
+    [RequirePermission(Permissions.QuotesApprove)]
+    [RequireStepUp("quote.approve")]
+    public async Task<IActionResult> Approve(Guid quoteId, int versionNo, [FromBody] ApproveQuoteRequest body, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.ApproveAsync(quoteId, versionNo, body, ct) });
+    }
+
+    /// <summary>Sends a pending version back to Draft with a comment (5-500) for the author; nothing becomes binding, so no code.</summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/reject-approval")]
+    [RequirePermission(Permissions.QuotesApprove)]
+    public async Task<IActionResult> RejectApproval(Guid quoteId, int versionNo, [FromBody] StaffCommentRequest body, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.RejectApprovalAsync(quoteId, versionNo, body, ct) });
+    }
+
+    /// <summary>Takes a pending version back to Draft before anyone approves it.</summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/recall")]
+    [RequirePermission(Permissions.QuotesEdit)]
+    public async Task<IActionResult> Recall(Guid quoteId, int versionNo, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.RecallAsync(quoteId, versionNo, ct) });
+    }
+
+    /// <summary>Withdraws a Sent version with a reason (5-500): the buyer can no longer accept it. It cannot lower a price, so no code.</summary>
+    [HttpPost("quotes/{quoteId:guid}/versions/{versionNo:int}/withdraw")]
+    [RequirePermission(Permissions.QuotesEdit)]
+    public async Task<IActionResult> Withdraw(Guid quoteId, int versionNo, [FromBody] StaffReasonRequest body, CancellationToken ct)
+    {
+        Private();
+        return Ok(new { data = await desk.WithdrawAsync(quoteId, versionNo, body, ct) });
+    }
+
+    /// <summary>The approval queue: versions waiting for a second person, oldest first, with the send's flags and whether the caller may approve.</summary>
+    [HttpGet("quotes/approvals")]
+    [RequirePermission(Permissions.QuotesApprove)]
+    public async Task<IActionResult> Approvals([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        Private();
+        return Ok(new { data = await desk.ListApprovalsAsync(page, pageSize, ct) });
     }
 
     /// <summary>Ends the quote with a reason: its Sent version is withdrawn and a pending one recalled, in the same transaction.</summary>

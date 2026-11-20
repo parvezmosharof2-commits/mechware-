@@ -67,7 +67,7 @@ public sealed class StaffQuoteKit(DbBackedFactory factory)
             [.. v.Lines.Select(l => new PriceResolution(l.VariantId, l.UnitPriceMinor, PriceSource.List, PriceBasis.NetOfVat, null, null, null, null, l.PublicUnitPriceMinor))],
             new QuoteOptions(), false);
         var facts = v.Lines.Select(l => new QuoteLineFacts(l.VariantId, true, l.SellerId, l.Sku, l.PartNumber, l.TitleEn, l.TitleBn, l.VatRate, l.PublicUnitPriceMinor, null)).ToList();
-        quote.Send(versionNo, new QuoteIssue(new QuoteCompanySnapshot("Desk Buyer Ltd", null, "Dhaka"), "Rahim Uddin", facts, check),
+        quote.Send(versionNo, new QuoteIssue(new QuoteCompanySnapshot("Desk Buyer Ltd", null, "Dhaka"), "Rahim Uddin", facts, check, v.ShipTo),
             new QuoteActor(Guid.NewGuid(), []), false, new QuoteOptions(), at ?? DateTime.UtcNow).Should().Be(QuoteVersionStatus.Sent);
         await db.SaveChangesAsync();
     }

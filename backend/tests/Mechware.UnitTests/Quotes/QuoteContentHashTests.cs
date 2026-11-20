@@ -164,7 +164,7 @@ public class QuoteContentHashTests
         var v = quote.Version(1);
         var check = QuoteApprovalPolicy.Evaluate(v, v.Lines.Select(l => Cost(l.VariantId, s.Cost)).ToList(), ZeroFloor,
             v.Lines.Select(l => Reference(l.VariantId, s.OverAuthority ? l.UnitPriceMinor * 2 : l.UnitPriceMinor)).ToList(), Options, false);
-        quote.Send(1, new QuoteIssue(s.Company, s.Preparer, s.Lines.Select(FactsOf).ToList(), check), Staff(s.SenderId), false, Options, s.SentAt);
+        quote.Send(1, new QuoteIssue(s.Company, s.Preparer, s.Lines.Select(FactsOf).ToList(), check, s.ShipTo), Staff(s.SenderId), false, Options, s.SentAt);
         v.ContentHash.Should().Be(QuoteContentHash.Compute(quote, v));
         return v.ContentHash!;
     }

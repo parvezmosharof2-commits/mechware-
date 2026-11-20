@@ -480,7 +480,7 @@ public sealed class QuotePersistenceTests(PostgresDatabaseFixture db) : IClassFi
     {
         var v = quote.Version(versionNo);
         return new(new QuoteCompanySnapshot("Acme ইঞ্জিনিয়ারিং Ltd", "000123456-0101", "12 Tejgaon I/A, Dhaka 1208"), "Rahim Uddin",
-            v.Lines.Select(l => Facts(l.VariantId, l.SellerId, l.VatRate)).ToList(), CheckOf(v, overAuthority));
+            v.Lines.Select(l => Facts(l.VariantId, l.SellerId, l.VatRate)).ToList(), CheckOf(v, overAuthority), v.ShipTo);
     }
 
     /// <summary>Approves with the policy run of the approval: the cost moved to 2 since the send, so every line's check figures are rewritten.</summary>

@@ -151,13 +151,18 @@ public sealed class QuoteVersion : Entity<Guid>
             throw new ValidationException("shipToSiteId", "Fixed delivery needs the site's address. Save the draft again.");
         if (ShippingMode == QuoteShippingMode.Fixed && !ShippingFees!.Select(f => f.SellerId).ToHashSet().SetEquals(facts.Values.Select(f => f.SellerId)))
             throw new ValidationException("shippingFees", "Fixed delivery needs one fee for each seller of the lines.");
+        // The site as it is now (§8.3): its address is what the buyer is offered, so a change since the draft is sent, and a removed site stops the send.
+        var shipTo = ShippingMode == QuoteShippingMode.Calculated
+            ? issue.ShipTo is null ? null : throw new ValidationException("shipTo", "Calculated delivery has no delivery address.")
+            : ValidShipTo(issue.ShipTo ?? throw new ConflictException("QUOTE_DELIVERY_SITE_GONE",
+                "The delivery site of this quote was removed. Choose another site in the draft and save it again."));
         var totals = Totals(_lines, l => (facts[l.VariantId].SellerId, facts[l.VariantId].VatRate), ShippingMode, ShippingFees);
         var check = Matching(issue.Check, atApproval: false);
 
         foreach (var l in _lines) l.Apply(facts[l.VariantId]);
         ApplyTotals(totals);
         RecordCheck(check);
-        (SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, UpdatedAtUtc) = (submitterId, nowUtc, issue.Company, preparer, nowUtc);
+        (SubmittedBy, SubmittedAtUtc, CompanySnapshot, PreparerName, ShipTo, UpdatedAtUtc) = (submitterId, nowUtc, issue.Company, preparer, shipTo, nowUtc);
         ContentHash = QuoteContentHash.Compute(quote, this);
     }
 

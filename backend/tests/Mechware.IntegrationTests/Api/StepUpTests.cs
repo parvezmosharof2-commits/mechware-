@@ -150,6 +150,9 @@ public sealed class StepUpTests : IDisposable
         actions.Should().NotContainKey("AdminPriceListsController.Reject", "a rejection never makes a price apply (D2.8 decision)");
         actions.Should().Contain("AdminMarginFloorsController.Upsert", "margin-floor.change");
         actions.Should().Contain("AdminMarginFloorsController.Delete", "margin-floor.delete");
+        actions.Should().Contain("AdminQuotesController.Approve", "quote.approve");
+        foreach (var notBinding in new[] { "Send", "RejectApproval", "Recall", "Withdraw" })
+            actions.Should().NotContainKey($"AdminQuotesController.{notBinding}", "only the approval makes a price beyond the limits binding (D4.8)");
     }
 
     [PostgresFact]

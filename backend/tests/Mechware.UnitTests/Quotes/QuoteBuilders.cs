@@ -87,9 +87,10 @@ internal static class QuoteBuilders
             v.Lines.Select(l => Reference(l.VariantId, l.ReferenceUnitPriceMinor ?? l.UnitPriceMinor)).ToList(), Options, false);
     }
 
+    /// <summary>The send's facts; a fixed delivery's site is read again and is unchanged since the draft (its copy is passed on).</summary>
     public static QuoteIssue Issue(Quote quote, int versionNo = 1, bool overAuthority = false) =>
         new(Company, "Rahim Uddin", quote.Version(versionNo).Lines.Select(l => Facts(l.VariantId, l.SellerId)).ToList(),
-            Check(quote, versionNo, overAuthority));
+            Check(quote, versionNo, overAuthority), quote.Version(versionNo).ShipTo);
 
     /// <summary>An approval that acknowledges exactly the flags of <paramref name="check"/> and returns the stored hash.</summary>
     public static QuoteApproval Ack(Quote quote, QuoteApprovalCheck check, int versionNo = 1, string? hash = null, bool belowFloorPermission = false,

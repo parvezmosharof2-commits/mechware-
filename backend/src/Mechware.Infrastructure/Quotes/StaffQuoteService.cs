@@ -193,9 +193,7 @@ public sealed partial class StaffQuoteService(MechwareDbContext db, IPriceResolv
         var staff = await StaffAsync(actor, ct);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var quote = await LockQuoteAsync(quoteId, ct);
-        var lapsed = quote.Versions.FirstOrDefault(v => v.Status == S.Accepted)?.AcceptedOrderId is { } orderId
-                     && await db.Orders.AnyAsync(o => o.Id == orderId && o.Status == OrderStatus.Cancelled && o.ConfirmedAtUtc == null, ct);
-        var next = quote.Revise(Guid.NewGuid(), staff, lapsed, now);   // QT6, one open version, no live or confirmed order
+        var next = quote.Revise(Guid.NewGuid(), staff, await LapsedAsync(quote, ct), now);   // QT6, one open version, no live or confirmed order
         Audit("quote.revised", "quotes", quote.Id, new { LatestVersionNo = next.VersionNo - 1 }, new { quote.Number, LatestVersionNo = next.VersionNo }, actor, now);
         await SaveAsync(tx, ct);
         return await GetQuoteAsync(quoteId, ct);

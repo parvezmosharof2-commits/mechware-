@@ -2770,6 +2770,261 @@
         }
       }
     },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/send": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Sends a Draft (D4.8): the server checks every line now (catalogue, the buyer's own price, cost and floor) and freezes the version.\r\nNo flag: `sent`, valid from now, the live version superseded. Flags (below floor, over the discount authority, long validity):\r\n`pending_approval` for a second person. A fixed delivery takes the site's address of now; a removed site is 409\r\n`QUOTE_DELIVERY_SITE_GONE`, a line below cost 409 `QUOTE_BELOW_COST`.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/approve": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Approves a pending version, which sends it (valid from now). Needs `quotes.approve` (and `quotes.approve_below_floor` for a\r\nbelow-floor line) and a fresh authenticator code in `X-Step-Up-Code`; the approver did not create, change or submit the version;\r\n`contentHash` is the one reviewed (409 `QUOTE_CHANGED`) and both line lists equal the flags checked again now (409\r\n`QUOTE_FLAGS_NOT_ACKNOWLEDGED`, whose message names the lines).",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveQuoteRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveQuoteRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/reject-approval": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Sends a pending version back to Draft with a comment (5-500) for the author; nothing becomes binding, so no code.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffCommentRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffCommentRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffCommentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/recall": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Takes a pending version back to Draft before anyone approves it.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/{quoteId}/versions/{versionNo}/withdraw": {
+      "post": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "Withdraws a Sent version with a reason (5-500): the buyer can no longer accept it. It cannot lower a price, so no code.",
+        "parameters": [
+          {
+            "name": "quoteId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "versionNo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/StaffReasonRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/quotes/approvals": {
+      "get": {
+        "tags": [
+          "AdminQuotes"
+        ],
+        "summary": "The approval queue: versions waiting for a second person, oldest first, with the send's flags and whether the caller may approve.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/quotes/{quoteId}/close": {
       "post": {
         "tags": [
@@ -6003,6 +6258,36 @@
         },
         "additionalProperties": false
       },
+      "ApproveQuoteRequest": {
+        "type": "object",
+        "properties": {
+          "contentHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "belowFloorLineIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "overAuthorityLineIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nullable": true
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AssignRfqRequest": {
         "type": "object",
         "properties": {
@@ -7326,6 +7611,16 @@
           },
           "isDefaultDelivery": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "StaffCommentRequest": {
+        "type": "object",
+        "properties": {
+          "comment": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false

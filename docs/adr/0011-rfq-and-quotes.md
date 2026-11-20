@@ -263,13 +263,17 @@ next to the company, so sales knows before quoting "on account".
 `POST …/quotes/{quoteId}/reject` `{versionNo, reason?}` → Rejected, then staff are told. The quote stays open for a revision.
 
 ### 9. Concurrency and the global lock order
-**Extended order:** `quotes` → `quote_versions` → gateway `payments` → `orders` → `credit_payments | credit_adjustments` →
+**Extended order:** `quotes` → `quote_versions` → `rfqs` → gateway `payments` → `orders` → `credit_payments | credit_adjustments` →
 `companies` → `promotions`.
 - **Accept:** advisory locks (buyer, cost centre; session level, before any row) → stock reservation in its own transaction
   (as today) → `SaveAsync`: `quotes` NO KEY UPDATE → `quote_versions` NO KEY UPDATE → `companies` FOR UPDATE (credit only) →
   inserts (no promotions for quote lines).
-- **Send, approve, reject approval, withdraw, revise, close, buyer reject:** `quotes` NO KEY UPDATE → `quote_versions`
-  NO KEY UPDATE, nothing else. Inside the quote tier: the quote row first, then its versions by version number.
+- **Send, approve, reject approval, recall, withdraw, revise, close, buyer reject:** `quotes` NO KEY UPDATE → `quote_versions`
+  NO KEY UPDATE; a send or an approval that sends the version then locks the quote's `rfqs` row NO KEY UPDATE (to mark it
+  Answered, D4.8); nothing else. Inside the quote tier: the quote row first, then its versions by version number. The policy
+  facts (catalogue, resolver prices, cost, floors) are plain reads inside that transaction.
+- **RFQ commands** (assign, close, buyer withdraw) lock only the `rfqs` row; **create a quote from an RFQ** locks the `rfqs` row
+  and inserts the new quote (no existing quote row is locked), so no path locks an RFQ before a quote.
 - **Rule:** no path that holds a payments, orders, credit or companies row lock may lock a quote row. Cancel, approval,
   payment and credit paths never touch quotes (§8.6), so the new tier adds no cycle.
 - `FOR NO KEY UPDATE`, not `FOR UPDATE`: `orders.quote_version_id` and `order_items.quote_line_id` are foreign keys whose
@@ -277,6 +281,8 @@ next to the company, so sales knows before quoting "on account".
 - Two parallel accepts serialise on the quote row. The second sees `Accepted` → 409 `QUOTE_ALREADY_ACCEPTED`, or its own
   replay. The partial unique index is the backstop (23505 → the same 409). A newer version, a withdrawal and an acceptance
   serialise on the same row. The status check decides, so exactly one wins.
+- Staff commands map a unique violation (23505) and the deferred one-live exclusion constraint (23P01, raised at commit) to 409
+  `QUOTE_VERSION_CHANGED` (`ux_quotes_number` → 409 `QUOTE_NUMBER_CLASH`), never a 500 (D4.6, D4.8).
 - Drafts: optimistic `xmin` token (two editors; an edit against a send → 409 `QUOTE_VERSION_CHANGED`).
 - RFQ caps: transaction advisory lock `rfq:{companyId}` around count + insert.
 
@@ -376,7 +382,7 @@ refuses an approval by a contributor.
 | `GET admin/quotes?status&companyId&assigned&q&page` · `GET admin/quotes/{id}` (all versions) | `quotes.view` (cost with `pricing.view_cost`) |
 | `PUT admin/quotes/{id}/versions/{n}` (header + all lines, `rowVersion`) | `quotes.edit` |
 | `POST admin/quotes/{id}/versions/{n}/price-preview` (lines → reference, public, flags; nothing saved) | `quotes.edit` |
-| `POST …/versions/{n}/send` → `{status: Sent \| PendingApproval, flags}` | `quotes.edit` |
+| `POST …/versions/{n}/send` → `{status: sent \| pending_approval, flags, quote}` | `quotes.edit` |
 | `POST …/versions/{n}/approve` `{contentHash, belowFloorLineIds, overAuthorityLineIds, comment?}` | `quotes.approve` (+ below floor), step-up `quote.approve` |
 | `POST …/versions/{n}/reject-approval` `{comment}` · `POST …/versions/{n}/recall` | `quotes.approve` · `quotes.edit` |
 | `POST admin/quotes/{id}/revise` · `POST …/versions/{n}/withdraw` `{reason}` · `POST admin/quotes/{id}/close` `{reason}` | `quotes.edit` |
@@ -389,6 +395,18 @@ rejected, superseded, closed; one code, the message says which), `QUOTE_ALREADY_
 `QUOTE_DELIVERY_SITE_GONE`, `QUOTE_REQUIRES_ADVANCE_PAYMENT`, `QUOTE_PDF_UNAVAILABLE`. Reused: `PRICE_CHANGED`,
 `INSUFFICIENT_STOCK`, `VARIANT_UNAVAILABLE`, `SHIPPING_QUOTE_ONLY`, `CREDIT_HOLD_OVERDUE`, `IDEMPOTENCY_KEY_REUSED`,
 `COMPANY_ROLE_REQUIRED`.
+
+Codes added while building (D4.2–D4.8), with their HTTP status: 409 `QUOTE_INVALID_TRANSITION` (a step outside §3, e.g. a
+second send, approval or withdrawal, or a recall of a version that is not pending), 409 `QUOTE_NOT_EDITABLE` (a draft edit or
+preview of a version that left Draft), 409 `QUOTE_CLOSED`, 409 `QUOTE_OPEN_VERSION_EXISTS`, 409 `RFQ_INVALID_TRANSITION`,
+409 `QUOTE_FOUR_EYES` (the approver created, changed or submitted the version), 409 `QUOTE_CONTACT_LOCKED` (D4.7), 409
+`QUOTE_NUMBER_CLASH` (D4.6), 409 `QUOTE_VERSION_CHANGED` also for 23505 / 23P01 (§9). A below-floor line without its reason is
+400 `VALIDATION_ERROR` (field `belowFloorReason`) at the send. Reused from price lists: 409 `BELOW_FLOOR_REASON_REQUIRED` at an
+approval (a line fell below the floor since the send and has no reason: reject it), 403 `BELOW_FLOOR_PERMISSION_REQUIRED`; and 409
+`COMPANY_NOT_ACTIVE` (create, send, approve), 403 `STEP_UP_REQUIRED` / `STEP_UP_FAILED` (approve). The other statuses: 403
+`QUOTE_CONFLICT_OF_INTEREST`, 409 `QUOTE_CHANGED`, `QUOTE_FLAGS_NOT_ACKNOWLEDGED` (its message names the line ids flagged now,
+never an amount), `QUOTE_BELOW_COST`, `QUOTE_DELIVERY_SITE_GONE` (a send whose fixed-delivery site was removed; a site that
+still exists is copied again at the send, so the buyer is offered its address of that moment).
 
 ### 13. Permissions and access
 | Permission (new) | Support | Finance | Admin | Allows |

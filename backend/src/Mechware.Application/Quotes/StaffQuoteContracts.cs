@@ -96,6 +96,32 @@ public sealed record QuotePricePreviewDto(int VersionNo, string Outcome, IReadOn
     long GoodsNetMinor, long TaxMinor, long GoodsTotalMinor, long? ShippingTotalMinor, long? GrandTotalMinor, IReadOnlyList<QuotePreviewLineDto> Lines);
 
 /// <summary>
+/// What a send did (§5, §12): <c>Status</c> <c>sent</c> (no flag: valid from now, the live version superseded) or <c>pending_approval</c>
+/// (the flags of this moment: a second person approves, and the approval sends it); and the quote as it is now.
+/// </summary>
+public sealed record StaffQuoteSendDto(string Status, StaffQuoteFlagsDto Flags, StaffQuoteDetailDto Quote);
+
+/// <summary>
+/// An approval (§5, §12): the <c>ContentHash</c> of the version the approver reviewed and exactly the line ids that are below the floor and
+/// over the discount authority now (both lists may be empty). The approver is the caller, never the body; the authenticator code travels in
+/// the <c>X-Step-Up-Code</c> header. <c>Comment</c> ≤ 500 is optional.
+/// </summary>
+public sealed record ApproveQuoteRequest(string? ContentHash, IReadOnlyList<Guid>? BelowFloorLineIds, IReadOnlyList<Guid>? OverAuthorityLineIds, string? Comment);
+
+/// <summary>Rejecting an approval: a comment of 5 to 500 characters for the author.</summary>
+public sealed record StaffCommentRequest(string? Comment);
+
+/// <summary>
+/// One version waiting for approval (§12 <c>GET admin/quotes/approvals</c>), oldest submission first. <c>Flags</c> are those of the send (the
+/// approval checks them again). <c>CanApprove</c>: the caller did not create, change or submit it, is not a member of the company, and holds
+/// <c>quotes.approve_below_floor</c> when a line is below the floor; the approve endpoint decides.
+/// </summary>
+public sealed record StaffApprovalItemDto(Guid QuoteId, string Number, int VersionNo, Guid CompanyId, string CompanyName, Guid SubmittedBy, string SubmitterName,
+    DateTime SubmittedAt, int LineCount, int ValidityDays, long GoodsNetMinor, long GoodsTotalMinor, long? GrandTotalMinor, StaffQuoteFlagsDto Flags, bool CanApprove);
+
+public sealed record StaffApprovalPage(IReadOnlyList<StaffApprovalItemDto> Items, int Page, int PageSize, int Total);
+
+/// <summary>
 /// The staff quote desk (ADR-0011 §3, §9, §12-§14; D4.6): the RFQ inbox, assignment and closing, and the quote lifecycle around
 /// drafts (create, revise, close; reads of every version). Permissions are the API's (<c>quotes.view</c>, <c>quotes.edit</c>); the
 /// conflict-of-interest refusal, the row locks (quotes → quote_versions, FOR NO KEY UPDATE), audit and outbox are here.
@@ -117,4 +143,18 @@ public interface IStaffQuoteService
 
     /// <summary>Totals, check figures and the flags a send of this content would raise now; nothing is saved (D4.7).</summary>
     Task<QuotePricePreviewDto> PreviewAsync(Guid quoteId, int versionNo, EditQuoteDraftRequest request, CancellationToken ct = default);
+
+    /// <summary>Freezes a Draft with the facts of now (D4.8): no flag → Sent (the live version superseded, the RFQ answered), flags → PendingApproval.</summary>
+    Task<StaffQuoteSendDto> SendAsync(Guid quoteId, int versionNo, CancellationToken ct = default);
+
+    /// <summary>Approves and so sends a pending version (D4.8): flags checked again now, four-eyes, hash and exact acknowledgement.</summary>
+    Task<StaffQuoteDetailDto> ApproveAsync(Guid quoteId, int versionNo, ApproveQuoteRequest request, CancellationToken ct = default);
+
+    Task<StaffQuoteDetailDto> RejectApprovalAsync(Guid quoteId, int versionNo, StaffCommentRequest request, CancellationToken ct = default);
+
+    Task<StaffQuoteDetailDto> RecallAsync(Guid quoteId, int versionNo, CancellationToken ct = default);
+
+    Task<StaffQuoteDetailDto> WithdrawAsync(Guid quoteId, int versionNo, StaffReasonRequest request, CancellationToken ct = default);
+
+    Task<StaffApprovalPage> ListApprovalsAsync(int page, int pageSize, CancellationToken ct = default);
 }
