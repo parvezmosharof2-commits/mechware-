@@ -505,3 +505,5 @@ export * from "./quote-approval-model";
 export * from "./quotes-desk";
 export * from "./quote-terms-model";
 export * from "./quote-terms";
+export * from "./returns-model";
+export * from "./returns";

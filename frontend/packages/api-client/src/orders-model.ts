@@ -21,6 +21,8 @@ export interface OrderPage {
 }
 
 export interface OrderLine {
+  /** The order line id (F2.4): a return request names its lines by it. */
+  id?: string;
   variantId: string;
   sku: string;
   title: string;
@@ -159,20 +161,24 @@ export function isOrderId(value: string | null | undefined): value is string {
  * `maxPages` pages. Null when it is not in those pages: the page then shows the same "not found" as another buyer's order.
  * Errors from `fetchPage` propagate (a failed lookup is not "not found").
  */
-export async function findOrderIdByNumber(
+export async function findOrderByNumber(
   orderNumber: string,
   fetchPage: (page: number, pageSize: number) => Promise<OrderPage>,
   maxPages: number = ORDER_LOOKUP_MAX_PAGES,
   pageSize: number = ORDER_PAGE_SIZE
-): Promise<string | null> {
+): Promise<OrderListItem | null> {
   const wanted = orderNumber.trim().toLowerCase();
   for (let page = 1; page <= maxPages; page++) {
     const result = await fetchPage(page, pageSize);
     const hit = result.items.find((o) => o.orderNumber.toLowerCase() === wanted);
-    if (hit) return hit.id;
+    if (hit) return hit;
     if (page >= totalPages(result.totalCount, result.pageSize || pageSize) || result.items.length === 0) return null;
   }
   return null;
+}
+
+export async function findOrderIdByNumber(orderNumber: string, fetchPage: (page: number, pageSize: number) => Promise<OrderPage>, maxPages?: number, pageSize?: number): Promise<string | null> {
+  return (await findOrderByNumber(orderNumber, fetchPage, maxPages, pageSize))?.id ?? null;
 }
 
 /** "Your contract price (ref X)" applies to contract prices only. */

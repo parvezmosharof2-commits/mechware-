@@ -92,6 +92,12 @@ export function HeaderAccountMenu({
               {locale === 'bn' ? 'আমার অর্ডার' : 'My orders'}
             </a>
             <a
+              href={locale === 'bn' ? '/bn/account/returns' : '/account/returns'}
+              className="block rounded-sm px-2 py-1.5 text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary"
+            >
+              {locale === 'bn' ? 'আমার রিটার্ন' : 'My returns'}
+            </a>
+            <a
               href={`/${locale}/account/addresses`}
               className="block rounded-sm px-2 py-1.5 text-fg-secondary hover:bg-bg-elevated hover:text-fg-primary"
             >

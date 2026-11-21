@@ -37,6 +37,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'returns',
+    label: 'Returns',
+    requiredPermission: 'orders.view_all',
+    href: '/returns',
+    group: 'Orders'
+  },
+  {
     id: 'orders-refund',
     label: 'Refunds',
     requiredPermission: 'orders.refund',

@@ -239,6 +239,26 @@ public sealed class ReturnDecisionTests(DefaultApiFactory factory) : IClassFixtu
     }
 
     [PostgresFact]
+    public async Task TheBuyersOrderDetail_CarriesTheOrderLineId_ThatOpensAReturn_AndTheLineFieldsStayWhitelisted()
+    {
+        var buyer = await LoginAsync(Permissions.Roles.Buyer);
+        var order = await OrderAsync(buyer.UserId);
+        var detail = await DataAsync(await buyer.Client.GetAsync($"/api/v1/orders/{order.Id}"));
+        var items = detail.GetProperty("subOrders").EnumerateArray().SelectMany(s => s.GetProperty("items").EnumerateArray()).ToList();
+        items.Select(i => i.GetProperty("id").GetGuid()).Should().BeEquivalentTo([order.Line1, order.Line2]);
+        string[] allowed = ["id", "variantId", "sku", "title", "quantity", "unitPriceMinor", "discountMinor", "taxMinor", "totalMinor", "priceSource", "contractRef"];
+        foreach (var item in items) item.EnumerateObject().Select(p => p.Name).Should().BeSubsetOf(allowed);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orders/{order.Number}/returns")
+        {
+            Content = JsonContent.Create(new { lines = new[] { new { orderItemId = items[0].GetProperty("id").GetGuid(), quantity = 1 } }, reasonCode = "damaged" })
+        };
+        request.Headers.Add("Idempotency-Key", "f24-" + Guid.NewGuid().ToString("N"));
+        var created = await DataAsync(await buyer.Client.SendAsync(request), HttpStatusCode.Created);
+        created.GetProperty("lines")[0].GetProperty("orderItemId").GetGuid().Should().Be(items[0].GetProperty("id").GetGuid());
+    }
+
+    [PostgresFact]
     public async Task Reject_NeedsAReason_FreesTheUnits_AndTheBuyerSeesTheReason()
     {
         var buyer = await LoginAsync(Permissions.Roles.Buyer);

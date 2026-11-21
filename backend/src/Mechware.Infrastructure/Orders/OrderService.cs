@@ -564,7 +564,7 @@ public sealed partial class OrderService(
             order.TaxMinor, order.ShippingMinor, order.GrandTotalMinor, order.PlacedAtUtc,
             order.SubOrders.OrderBy(s => s.SubOrderNumber).Select(s => new SubOrderDto(s.Id, s.SubOrderNumber, s.SellerId, ToWire(s.Status),
                 s.ShippingMinor, s.TotalMinor,
-                s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
+                s.Items.OrderBy(i => i.Sku).Select(i => new OrderItemDto(i.Id, i.VariantId, i.Sku, i.Title, i.Quantity, i.UnitPriceMinor,
                     i.DiscountMinor, i.TaxMinor, i.TotalMinor, i.PriceSource is { } source ? ToWire(source) : null, i.ContractRef)).ToList(),
                 storeNames.GetValueOrDefault(s.SellerId))).ToList(),
             order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments),

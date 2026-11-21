@@ -3,6 +3,8 @@ import {
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
+import { createStaffReturnsApi, shouldReloadReturn, staffReturnErrorText } from '@mechware/api-client';
+
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
 
 export const api = new MechWareApiClient({ baseUrl: API_BASE_URL });
@@ -19,6 +21,7 @@ export const creditPaymentsApi = createCreditPaymentsApi(api);
 export const staffOrdersApi = createStaffOrdersApi(api);
 export const staffQuotesApi = createStaffQuotesApi(api);
 export const quoteTermsApi = createQuoteTermsApi(api);
+export const staffReturnsApi = createStaffReturnsApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus };
 
@@ -106,4 +109,11 @@ export function termsError(err: unknown): { text: string; code: string | null; s
   const status = problemStatus(err);
   const code = problemCode(err);
   return { text: termsErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) }), code, status, retry: status === null || status >= 500 };
+}
+
+/** Plain words for a failed return-desk call; `reload` says the return changed under the screen (RETURN_CHANGED, RETURN_INVALID_TRANSITION). */
+export function staffReturnError(err: unknown): { text: string; code: string | null; status: number | null; reload: boolean; retry: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  return { text: staffReturnErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) }), code, status, reload: shouldReloadReturn(code), retry: status === null || status >= 500 };
 }

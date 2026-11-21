@@ -7,7 +7,7 @@ import { Button } from '@mechware/ui/src/components/Button';
 import { Skeleton } from '@mechware/ui/src/components/Skeleton';
 import {
   TIMELINE_STAGES,
-  findOrderIdByNumber,
+  findOrderByNumber,
   formatPriceMinor,
   isContractPrice,
   isValidOrderNumber,
@@ -22,6 +22,7 @@ import { classifyOrderError, formatOrderDate } from '../../lib/orders-ui';
 import { useResource } from '../../lib/useResource';
 import { OrderCreditNote, OrderStatusChip, OrderTotals } from './OrderParts';
 import { ReorderPanel } from './ReorderPanel';
+import { ReturnPanel } from '../returns/ReturnPanel';
 import { ShipmentPanel } from './ShipmentPanel';
 
 type Translate = ReturnType<typeof useTranslations>;
@@ -31,11 +32,11 @@ class OrderNotFound extends Error {
 }
 
 /** The email link carries the order number; the API takes the order id, so the id is found through the buyer's own list. */
-async function loadByNumber(orderNumber: string): Promise<OrderDetail> {
+async function loadByNumber(orderNumber: string): Promise<OrderDetail & { companyId: string | null }> {
   if (!isValidOrderNumber(orderNumber)) throw new OrderNotFound();
-  const id = await findOrderIdByNumber(orderNumber, ordersApi.list);
-  if (!id) throw new OrderNotFound();
-  return ordersApi.get(id);
+  const found = await findOrderByNumber(orderNumber, ordersApi.list);
+  if (!found) throw new OrderNotFound();
+  return { ...(await ordersApi.get(found.id)), companyId: found.companyId ?? null };
 }
 
 function Timeline({ status, t }: { status: string; t: Translate }) {
@@ -160,6 +161,7 @@ export function OrderDetailView({ locale, orderNumber }: { locale: 'en' | 'bn'; 
       ))}
       <OrderTotals order={o} locale={locale} />
       <OrderCreditNote order={o} locale={locale} />
+      <ReturnPanel order={o} companyId={o.companyId} locale={locale} />
       <ReorderPanel order={o} locale={locale} />
       {backLink}
     </div>

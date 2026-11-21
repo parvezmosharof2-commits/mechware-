@@ -60,7 +60,8 @@ public sealed record PlacedOrder(
 /// <c>contract</c> or <c>quote</c>; null for lines placed before price sources were recorded. No cost, floor or margin.
 /// </param>
 /// <param name="ContractRef">The buyer's contract number when the price is a contract price.</param>
-public sealed record OrderItemDto(Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor,
+/// <param name="Id">The order line id (F2.4): a return request names its lines by it.</param>
+public sealed record OrderItemDto(Guid Id, Guid VariantId, string Sku, string Title, int Quantity, long UnitPriceMinor, long DiscountMinor, long TaxMinor, long TotalMinor,
     string? PriceSource = null, string? ContractRef = null);
 
 /// <param name="StoreName">The seller's storefront name.</param>

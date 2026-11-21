@@ -755,6 +755,107 @@
       "wait_packed": "Not shipped yet. Your order is packed and waiting for the courier."
     }
   },
+  "Returns": {
+    "metaTitle": "My returns",
+    "title": "My returns",
+    "detailMetaTitle": "Return details",
+    "empty": "No returns yet",
+    "emptyBody": "When you ask to return items from a delivered order, the request shows up here.",
+    "loadError": "We could not load your returns. Please try again.",
+    "retry": "Try again",
+    "listLabel": "Your returns",
+    "pagesLabel": "Return pages",
+    "prev": "Previous",
+    "next": "Next",
+    "pageOf": "Page {page} of {total}",
+    "items": "{count, plural, one {# item} other {# items}}",
+    "toOrders": "Back to my orders",
+    "backToReturns": "Back to my returns",
+    "viewOrder": "View the order",
+    "viewReturn": "See this return",
+    "notFoundTitle": "Return not found",
+    "notFoundBody": "This return does not exist or is not yours.",
+    "status": {
+      "requested": "Waiting for a decision",
+      "approved": "Approved, please send the goods back",
+      "rejected": "Rejected",
+      "received": "Goods received, being inspected",
+      "inspected": "Inspected, refund or credit note to follow",
+      "refunded": "Refunded",
+      "credit_noted": "Credit note issued",
+      "withdrawn": "Withdrawn",
+      "unknown": "Status not available"
+    },
+    "reason": {
+      "damaged": "Damaged or faulty",
+      "wrong_item": "Wrong item delivered",
+      "not_as_described": "Not as described",
+      "other": "Other"
+    },
+    "panel": {
+      "title": "Return items",
+      "open": "Return items",
+      "existing": "Your returns for this order",
+      "requestedOn": "Requested {date}",
+      "window": "You can return items up to {days} days after delivery.",
+      "delivered": "Delivered {date}.",
+      "nothingLeft": "Every item of this order already has a return request."
+    },
+    "form": {
+      "legend": "Items to return",
+      "ordered": "Ordered {ordered}, you can return up to {max}",
+      "qty": "Quantity",
+      "qtyFor": "Quantity to return of {title}",
+      "reason": "Reason",
+      "note": "Note",
+      "noteRequired": "Required when the reason is Other. Say what is wrong.",
+      "noteOptional": "Optional. Up to 1,000 characters.",
+      "submit": "Send return request",
+      "sending": "Sending",
+      "cancel": "Cancel",
+      "sent": "Your return request was sent. We will answer it here.",
+      "problem": {
+        "noLines": "Choose at least one item to return.",
+        "quantity": "A quantity is higher than you can still return.",
+        "reason": "Choose a reason.",
+        "noteRequired": "Describe the problem in the note.",
+        "noteTooLong": "The note is too long (1,000 characters at most)."
+      }
+    },
+    "detail": {
+      "requestedAt": "Requested",
+      "decidedAt": "Decided",
+      "receivedAt": "Goods received",
+      "inspectedAt": "Inspected",
+      "withdrawnAt": "Withdrawn",
+      "reason": "Reason",
+      "note": "Your note",
+      "rejectionReason": "Why it was rejected:",
+      "lines": "Items",
+      "asked": "Asked: {count}",
+      "accepted": "Accepted: {count}",
+      "notInspected": "Not inspected yet"
+    },
+    "withdraw": {
+      "title": "Withdraw this request",
+      "help": "You can withdraw it until we approve or reject it.",
+      "confirm": "Withdraw this return request? The items can then be requested again.",
+      "yes": "Yes, withdraw it",
+      "no": "Keep it"
+    },
+    "error": {
+      "windowClosed": "The return period for this order has ended, so it can no longer be returned here.",
+      "notDelivered": "Only delivered orders can be returned.",
+      "notReturnable": "One of these items cannot be returned here (for example electrical parts that were opened or installed). Please contact support.",
+      "quantity": "You asked for more than can still be returned. Reload the page and check the numbers.",
+      "notWithdrawable": "We already decided on this request, so it can no longer be withdrawn.",
+      "keyReused": "This request was already sent with different details. Reload the page and start again.",
+      "notFound": "We could not find this order for you. On a company order only the person who placed it can return it.",
+      "invalid": "Some of what you entered is not accepted. Check the items, reason and note.",
+      "signedOut": "Please sign in again.",
+      "unavailable": "The service did not answer. Press send again: we will not create a second request."
+    }
+  },
   "QuickOrder": {
     "metaTitle": "Quick order",
     "title": "Quick order",

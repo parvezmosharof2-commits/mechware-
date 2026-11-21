@@ -30,6 +30,8 @@
     "test:company-prices": "node tests/company-prices.mjs",
     "test:orders": "node tests/orders.mjs",
     "test:reorder": "node tests/reorder.mjs",
+    "test:returns": "node tests/returns.mjs",
+    "test:console-returns": "node tests/console-returns.mjs",
     "test:quick-order": "node tests/quick-order.mjs"
   },
   "devDependencies": {
