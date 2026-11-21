@@ -4,7 +4,6 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
   ADJUSTMENT_STATUS_LABEL, adjustmentSummary, approveAdjustmentHint, approvedText, canViewCredit, creditReasonProblem, formatBdt, isCreditStepUpFailure, kindLabel,
@@ -17,6 +16,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, Notice, useFocusOn } from './CreditShared';
 import { StepUpDialog } from './StepUpDialog';
+import { Modal, ModalFooter } from './Modal';
 
 type Flow = 'approve' | 'reject' | null;
 
@@ -147,19 +147,13 @@ function Detail({ detail, me, onChanged }: { detail: CreditAdjustmentDetail; me:
         onSubmit={doApprove}
       />
 
-      <Dialog open={flow === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{reject.withdraw ? 'Withdraw this request?' : 'Reject this adjustment?'}</DialogTitle>
-            <DialogDescription>Nothing moves and no authenticator code is needed. The reason is kept with the request.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>{reject.withdraw ? 'Withdraw this request?' : 'Reject this adjustment?'}</>} description="Nothing moves and no authenticator code is needed. The reason is kept with the request.">
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problem ?? undefined} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={doReject} isLoading={busy} disabled={busy}>{reject.withdraw ? 'Withdraw request' : 'Reject adjustment'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
     </section>
   );
 }

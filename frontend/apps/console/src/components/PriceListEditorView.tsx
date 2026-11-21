@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Skeleton } from '@mechware/ui';
+import { Badge, Button, Input, Skeleton } from '@mechware/ui';
 import {
   PRICE_TEXT, actorName, breaksOutOfOrder, canRevise, chunkEntries, dateToUtcIso, entriesNeedingReason, entryFieldErrors, formatTaka, isEditable,
   isoToDateInput, minQtyProblem, parsePaste, priceProblem, reasonProblem, takaToMinor, validateHeader,
@@ -16,6 +16,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { PriceListDecisionPanel } from './PriceListDecisionPanel';
 import { StateBadges, fmtDate } from './PriceListsView';
+import { Modal, ModalFooter } from './Modal';
 
 interface Notice { text: string; retry: boolean }
 
@@ -442,35 +443,23 @@ function Editor({ id, canEdit }: { id: string; canEdit: boolean }) {
         </div>
       )}
 
-      <Dialog open={dialog === 'submit'} onOpenChange={(next) => { if (!next && !busy) setDialog(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Submit this list for approval?</DialogTitle>
-            <DialogDescription>
+      <Modal open={dialog === 'submit'} onOpenChange={(next) => { if (!next && !busy) setDialog(null); }} title="Submit this list for approval?" description={<>
               {entries.length} entries will be locked and sent to an approver. Someone else must approve it (four eyes): you and everyone who edited the list are excluded.
               While it waits, nobody can edit it. If it is sent back, it returns to draft.
-            </DialogDescription>
-          </DialogHeader>
+            </>}>
           {issues.length > 0 && <ul role="alert" className="list-disc space-y-1 pl-5 text-sm font-medium text-fault" data-testid="submit-issues">{issues.map((i) => <li key={i}>{i}</li>)}</ul>}
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={submit} isLoading={busy} disabled={busy || issues.length > 0}>Confirm submit</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
-      <Dialog open={dialog === 'delete'} onOpenChange={(next) => { if (!next && !busy) setDialog(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this draft?</DialogTitle>
-            <DialogDescription>The draft and its {entries.length} entries are removed for good. Approved lists are never affected.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+      <Modal open={dialog === 'delete'} onOpenChange={(next) => { if (!next && !busy) setDialog(null); }} title="Delete this draft?" description={<>The draft and its {entries.length} entries are removed for good. Approved lists are never affected.</>}>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setDialog(null)} disabled={busy}>Cancel</Button>
             <Button type="button" variant="destructive" onClick={remove} isLoading={busy} disabled={busy}>Delete draft</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Skeleton } from '@mechware/ui';
+import { Badge, Button, Input, Skeleton } from '@mechware/ui';
 import {
   SHIPPING_MAX_BANDS, SHIPPING_MAX_DISTRICTS, detailToForm, emptyZoneForm, formToBody, groupByDivision, otherZoneOwner,
   type CoverageDistrict, type ShippingZoneDetail, type ZoneErrors, type ZoneForm
@@ -14,6 +14,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { LoadFailure, NoAccess } from './ShippingZonesView';
 import { TariffPreview } from './TariffPreview';
+import { Modal, ModalFooter } from './Modal';
 
 const CELL = 'block w-full rounded-md border border-surface-border bg-surface p-2 text-sm';
 const FieldError = ({ text }: { text?: string }) => (text ? <p role="alert" className="mt-1 text-xs font-medium text-fault">{text}</p> : null);
@@ -193,18 +194,12 @@ function ZoneFormView({ zone: initial, coverage, canManage, onChanged, onReload 
 
       {!isNew && <TariffPreview districts={coverage} />}
 
-      <Dialog open={confirmDelete} onOpenChange={(next) => { if (!next && !busy) setConfirmDelete(false); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete zone {zone?.code}?</DialogTitle>
-            <DialogDescription>The zone, its weight bands and its district assignments are removed for good. Its districts become uncovered.</DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+      <Modal open={confirmDelete} onOpenChange={(next) => { if (!next && !busy) setConfirmDelete(false); }} title={<>Delete zone {zone?.code}?</>} description="The zone, its weight bands and its district assignments are removed for good. Its districts become uncovered.">
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)} disabled={busy}>Cancel</Button>
             <Button type="button" variant="destructive" onClick={remove} isLoading={busy} disabled={busy}>Delete zone</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
     </div>
   );
 }

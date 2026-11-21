@@ -16,9 +16,9 @@ import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, useFocusOn } fro
 import { QuoteStatusBadge } from './QuoteStatusBadge';
 import { VersionView } from './QuoteVersionView';
 
-const ReasonDialog = React.lazy(() => import('./ReasonDialog').then((m) => ({ default: m.ReasonDialog })));
+import { ReasonDialog } from './ReasonDialog';
 const SendResultPanel = React.lazy(() => import('./QuoteIssueShared').then((m) => ({ default: m.SendResultPanel })));
-const StepUpDialog = React.lazy(() => import('./StepUpDialog').then((m) => ({ default: m.StepUpDialog })));
+import { StepUpDialog } from './StepUpDialog';
 
 function RefLabel({ r }: { r: LineRef }) {
   return <>Line {r.lineNo ?? '?'}: <span className="font-mono text-xs">{r.sku}</span> {r.title}{r.unitPriceMinor !== null && <> at BDT {quoteMoney(r.unitPriceMinor)}</>}{r.reason ? <span className="block text-xs text-text-muted">Reason given: {r.reason}</span> : null}</>;

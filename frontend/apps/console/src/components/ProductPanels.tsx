@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Textarea } from '@mechware/ui';
+import { Badge, Button, Input, Textarea } from '@mechware/ui';
 import {
   ALLOWED_MARKUP_HINT, MAX_DESCRIPTION_HTML, MAX_SHORT_DESCRIPTION, MAX_TITLE, basicsToForm, formatTaka, lifecycleButtons, minorToTakaText, productStatusLabel, statusBadgeVariant,
   validateBasics, validateVariantEdit, weightToText,
@@ -9,6 +9,7 @@ import {
 } from '@mechware/api-client';
 import { catalogAdminApi, catalogError } from '../lib/api';
 import { BrandLookupPicker, CategoryLookupPicker } from './LookupPicker';
+import { Modal, ModalFooter } from './Modal';
 
 const SELECT = 'block w-full rounded-md border border-surface-border bg-surface p-2 text-sm';
 export const SECTION = 'space-y-4 rounded-xl border border-surface-border bg-surface p-4';
@@ -53,18 +54,12 @@ export function SaveBar({ state, label, onReload, testId, hideButton }: { state:
 
 function ConfirmDialog(props: { open: boolean; title: string; body: React.ReactNode; confirmLabel: string; busy: boolean; onConfirm: () => void; onCancel: () => void; testId: string }) {
   return (
-    <Dialog open={props.open} onOpenChange={(next) => { if (!next && !props.busy) props.onCancel(); }}>
-      <DialogContent data-testid={props.testId}>
-        <DialogHeader>
-          <DialogTitle>{props.title}</DialogTitle>
-          <DialogDescription>{props.body}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
+    <Modal open={props.open} onOpenChange={(next) => { if (!next && !props.busy) props.onCancel(); }} title={<>{props.title}</>} description={<>{props.body}</>} contentTestId={props.testId}>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={props.onCancel} disabled={props.busy}>Cancel</Button>
           <Button type="button" onClick={props.onConfirm} isLoading={props.busy} disabled={props.busy}>{props.confirmLabel}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ModalFooter>
+    </Modal>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import {
-  Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Badge, Button,
   EmptyState, ErrorState, Input, Progress, Skeleton, formatCurrency, useToast
 } from '@mechware/ui';
 import {
@@ -13,6 +13,7 @@ import { companiesApi, problemCode, problemMessage, problemStatus } from '../lib
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
+import { Modal, ModalFooter } from './Modal';
 
 const PAGE_SIZE = 20;
 const STATUS_LABEL: Record<CompanyStatus, string> = { pending: 'Awaiting verification', active: 'Active', suspended: 'Suspended' };
@@ -68,23 +69,17 @@ function ConfirmDialog({ action, onClose, onDone }: { action: Extract<NonNullabl
 
   const activating = action?.kind === 'activate';
   return (
-    <Dialog open={action !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{activating ? 'Verify and activate this company?' : 'Suspend this company?'}</DialogTitle>
-          <DialogDescription>
+    <Modal open={action !== null} onOpenChange={(next) => !next && onClose()} title={<>{activating ? 'Verify and activate this company?' : 'Suspend this company?'}</>} description={<>
             {activating
               ? `Confirm that the trade licence ${action?.company.tradeLicenceNo} and BIN ${action?.company.bin} of ${action?.company.legalName} have been checked.`
               : `${action?.company.legalName} will keep read access but its admins can no longer change sites, cost centres or members, and credit cannot be used.`}
-          </DialogDescription>
-        </DialogHeader>
+          </>}>
         {error && <div role="alert" className="rounded-md border border-fault bg-bg-subtle p-3 text-xs font-medium text-fault">{error}</div>}
-        <DialogFooter>
+        <ModalFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
           <Button variant={activating ? 'primary' : 'destructive'} onClick={run} isLoading={busy}>{activating ? 'Activate' : 'Suspend'}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ModalFooter>
+    </Modal>
   );
 }
 
@@ -141,14 +136,9 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
   };
 
   return (
-    <Dialog open={company !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Credit terms</DialogTitle>
-          <DialogDescription>
+    <Modal open={company !== null} onOpenChange={(next) => !next && onClose()} title="Credit terms" description={<>
             {company?.legalName}. Used so far: {company?.creditUsed ? money(company.creditUsed.minorUnits, company.creditUsed.currency) : ''}. The limit cannot go below the amount already used.
-          </DialogDescription>
-        </DialogHeader>
+          </>}>
         <form onSubmit={save} noValidate className="space-y-3">
           {error && <div role="alert" className="rounded-md border border-fault bg-bg-subtle p-3 text-xs font-medium text-fault">{error}</div>}
           <div>
@@ -174,13 +164,12 @@ function CreditDialog({ company, onClose, onDone }: { company: CompanyDto | null
             inputMode="numeric"
             autoComplete="one-time-code"
           />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
             <Button type="submit" isLoading={busy}>Save</Button>
-          </DialogFooter>
+          </ModalFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+    </Modal>
   );
 }
 

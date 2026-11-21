@@ -1,13 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Textarea } from '@mechware/ui';
+import { Button, Textarea } from '@mechware/ui';
 import {
   PRICE_LIST_PERMISSIONS, actorName, belowFloorSummary, canApprove, canReject, canWithdraw, decisionReasonProblem, preparers, shortHash,
   type PriceListDetail
 } from '@mechware/api-client';
 import { decisionError, priceListsApi } from '../lib/api';
 import { StepUpDialog } from './StepUpDialog';
+import { Modal, ModalFooter } from './Modal';
 
 const when = (iso: string | null | undefined) => (iso ? `${iso.replace('T', ' ').slice(0, 16)} UTC` : '');
 const day = (iso: string) => iso.slice(0, 10);
@@ -196,14 +197,9 @@ export function PriceListDecisionPanel(props: {
         </div>
       )}
 
-      <Dialog open={flow?.kind === 'approve-confirm'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve this price list?</DialogTitle>
-            <DialogDescription data-testid="approve-statement">
+      <Modal open={flow?.kind === 'approve-confirm'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }} title="Approve this price list?" description={<>
               {flow?.kind === 'approve-confirm' && `You are approving version ${flow.snap.version}, hash ${shortHash(flow.snap.hash, 12)}, valid from ${day(flow.snap.validFromUtc)} to ${day(flow.snap.validToUtc)}, ${flow.snap.target}.`}
-            </DialogDescription>
-          </DialogHeader>
+            </>} descriptionTestId="approve-statement">
           {flow?.kind === 'approve-confirm' && flow.snap.belowFloorIds.length > 0 && (
             <div className="space-y-2 rounded-md border border-surface-border bg-bg-subtle p-3 text-sm" data-testid="ack-box">
               <p className="font-semibold">{flow.snap.belowFloorIds.length === 1 ? '1 entry is' : `${flow.snap.belowFloorIds.length} entries are`} below the margin floor</p>
@@ -220,7 +216,7 @@ export function PriceListDecisionPanel(props: {
               )}
             </div>
           )}
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setFlow(null)}>Cancel</Button>
             <Button
               type="button"
@@ -230,9 +226,8 @@ export function PriceListDecisionPanel(props: {
             >
               Continue to the authenticator code
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.kind === 'approve-code'}
@@ -245,33 +240,21 @@ export function PriceListDecisionPanel(props: {
         onSubmit={async (code) => { if (flow?.kind === 'approve-code') await approve(flow.snap, code); }}
       />
 
-      <Dialog open={flow?.kind === 'reject'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Send this list back?</DialogTitle>
-            <DialogDescription>The list returns to draft so the author can correct it. No price changes. No authenticator code is needed.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.kind === 'reject'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }} title="Send this list back?" description="The list returns to draft so the author can correct it. No price changes. No authenticator code is needed.">
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={reasonError ?? undefined} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setFlow(null)} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={reject} isLoading={busy} disabled={busy}>Send back</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
-      <Dialog open={flow?.kind === 'withdraw-reason'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Withdraw this price list?</DialogTitle>
-            <DialogDescription>New orders will no longer get this price; placed orders keep theirs. You will be asked for your authenticator code next.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.kind === 'withdraw-reason'} onOpenChange={(next) => { if (!next && !busy) setFlow(null); }} title="Withdraw this price list?" description="New orders will no longer get this price; placed orders keep theirs. You will be asked for your authenticator code next.">
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={reasonError ?? undefined} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setFlow(null)}>Cancel</Button>
             <Button type="button" variant="destructive" onClick={toWithdrawCode}>Continue to the authenticator code</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.kind === 'withdraw-code'}

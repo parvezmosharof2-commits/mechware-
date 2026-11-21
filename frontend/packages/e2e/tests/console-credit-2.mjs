@@ -356,6 +356,7 @@ const key = (what) => `e2e-b312-${tag}-${what}-${++keySeq}`;
   await axeCheck(admin, 'withdraw dialog');
   await admin.getByRole('dialog').getByRole('button', { name: 'Withdraw request' }).click();
   await admin.getByTestId('adjust-decision-notice').filter({ hasText: 'Withdrawn' }).waitFor();
+  await admin.getByTestId('adjust-status-badge').filter({ hasText: 'Rejected' }).waitFor(); // the notice shows before the reload lands
   r.check('withdrawn without a code: status Rejected, reason shown, nothing moved', (await admin.getByTestId('adjust-status-badge').innerText()) === 'Rejected' && (await admin.getByTestId('arow-rejected').innerText()).includes('Entered by mistake') && (await books()).currentReceivableMinor === owed1 + owed2 - 10000);
 
   // #2 rejected by Finance B (credit.adjust, not the requester)
@@ -368,6 +369,7 @@ const key = (what) => `e2e-b312-${tag}-${what}-${++keySeq}`;
   await b.getByRole('dialog').getByLabel(/Reason/).fill('Not agreed with the buyer (E2E)');
   await b.getByRole('dialog').getByRole('button', { name: 'Reject adjustment' }).click();
   await b.getByTestId('adjust-decision-notice').filter({ hasText: 'Rejected' }).waitFor();
+  await b.getByTestId('adjust-status-badge').filter({ hasText: 'Rejected' }).waitFor(); // the notice shows before the reload lands
   r.check('rejected by another Finance user: status Rejected', (await b.getByTestId('adjust-status-badge').innerText()) === 'Rejected');
   await b.goto(`${WEB}/credit/adjustments`);
   await b.getByTestId('adjust-status-filter').selectOption('approved');

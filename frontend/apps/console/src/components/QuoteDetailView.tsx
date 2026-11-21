@@ -17,7 +17,7 @@ import { VersionView } from './QuoteVersionView';
 import { CreditCell } from './QuotesListView';
 
 // Loaded when first needed, so the page's first load stays small (the dialog library is heavy).
-const ReasonDialog = React.lazy(() => import('./ReasonDialog').then((m) => ({ default: m.ReasonDialog })));
+import { ReasonDialog } from './ReasonDialog';
 const IssueActions = React.lazy(() => import('./QuoteIssueActions'));
 
 function Detail({ id, permissions }: { id: string; permissions: readonly string[] }) {
