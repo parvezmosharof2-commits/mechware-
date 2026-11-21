@@ -432,6 +432,9 @@ internal sealed class StockMovementConfiguration : IEntityTypeConfiguration<Stoc
         b.Property(m => m.ReferenceType).HasColumnName("reference_type").HasMaxLength(40).IsRequired();
         b.Property(m => m.ReferenceId).HasColumnName("reference_id");
         b.Property(m => m.ActorId).HasColumnName("actor_id");
+        // No foreign key on purpose: a restock runs after the order's transaction and must never wait on (or lock) the order row.
+        b.Property(m => m.OrderId).HasColumnName("order_id");
+        b.HasIndex(m => m.OrderId).HasDatabaseName("ix_stock_movements_order").HasFilter("order_id IS NOT NULL");
         // The idempotency backstop: one movement per balance for one (reference, reason).
         b.HasIndex(m => new { m.ReferenceType, m.ReferenceId, m.Reason, m.InventoryItemId }).IsUnique()
             .HasDatabaseName("ux_stock_movements_reference");

@@ -371,11 +371,12 @@ public sealed class InventoryService : IInventoryService
             }
 
             lines = [];
-            foreach (var (item, quantity) in await PlanRestockAsync(request, items, ct))
+            var againstOrder = request.ReferenceType == RestockRequest.OrderReference ? request.ReferenceId : request.AgainstOrderId;
+            foreach (var (item, quantity) in await PlanRestockAsync(request, againstOrder, items, ct))
             {
                 item.Restock(quantity);
                 _db.StockMovements.Add(new StockMovement(Guid.NewGuid(), item.Id, quantity, request.Reason, request.ReferenceType,
-                    request.ReferenceId, request.ActorUserId, now));
+                    request.ReferenceId, request.ActorUserId, now, againstOrder));
                 lines.Add(new RestockedLine(item.WarehouseId, quantity, item.OnHand));
             }
 
@@ -387,6 +388,7 @@ public sealed class InventoryService : IInventoryService
                     Reason = request.Reason.ToString(),
                     request.ReferenceType,
                     request.ReferenceId,
+                    request.AgainstOrderId,
                     Actor = request.ActorUserId?.ToString() ?? "system",
                     Lines = lines
                 }), _user?.CorrelationId, now));
@@ -414,15 +416,19 @@ public sealed class InventoryService : IInventoryService
         if (r.Reason == RestockReason.OrderCancelled && r.ReferenceType != RestockRequest.OrderReference)
             throw new ValidationException("referenceType", "Stock of a cancelled order is put back against that order.");
         if (r.WarehouseId == Guid.Empty) throw new ValidationException("warehouseId", "Leave the warehouse out or name a real one.");
+        if (r.AgainstOrderId == Guid.Empty
+            || (r.AgainstOrderId is { } order && r.ReferenceType == RestockRequest.OrderReference && order != r.ReferenceId))
+            throw new ValidationException("againstOrderId", "Leave the order out or name the order whose stock goes back.");
     }
 
     /// <summary>Which balances receive the stock; see the warehouse rule on <see cref="RestockRequest"/>.</summary>
-    private async Task<List<(InventoryItem Item, int Quantity)>> PlanRestockAsync(RestockRequest request, List<InventoryItem> items, CancellationToken ct)
+    private async Task<List<(InventoryItem Item, int Quantity)>> PlanRestockAsync(
+        RestockRequest request, Guid? againstOrder, List<InventoryItem> items, CancellationToken ct)
     {
         if (request.WarehouseId is { } warehouse) items = items.Where(i => i.WarehouseId == warehouse).ToList();
         if (items.Count == 0) throw new KeyNotFoundException("This variant has no stock record in that warehouse.");
 
-        if (request.ReferenceType != RestockRequest.OrderReference)
+        if (againstOrder is not { } orderId)
         {
             if (items.Count == 1) return [(items[0], request.Quantity)];
             var ids = items.Select(i => i.WarehouseId).ToArray();
@@ -434,14 +440,16 @@ public sealed class InventoryService : IInventoryService
         }
 
         // An order's stock goes back where its committed holds took it from, and never more than they took minus what was
-        // already put back for this order (any reason). Reservations are never deleted, so they are the deduction record.
+        // already put back against this order (any reason, any reference: a cancel or every return). Reservations are never
+        // deleted, so they are the deduction record. Read under the balance locks, so parallel returns cannot both pass.
         var deducted = await _db.StockReservations.AsNoTracking()
-            .Where(r => r.ReferenceId == request.ReferenceId && r.VariantId == request.VariantId && r.Status == ReservationStatus.Fulfilled)
+            .Where(r => r.ReferenceId == orderId && r.VariantId == request.VariantId && r.Status == ReservationStatus.Fulfilled)
             .GroupBy(r => r.WarehouseId).Select(g => new { g.Key, Quantity = g.Sum(r => r.Quantity) })
             .ToDictionaryAsync(x => x.Key, x => x.Quantity, ct);
         var itemIds = items.Select(i => i.Id).ToArray();
         var returned = await _db.StockMovements.AsNoTracking()
-            .Where(m => m.ReferenceType == RestockRequest.OrderReference && m.ReferenceId == request.ReferenceId && itemIds.Contains(m.InventoryItemId))
+            .Where(m => ((m.ReferenceType == RestockRequest.OrderReference && m.ReferenceId == orderId) || m.OrderId == orderId)
+                && itemIds.Contains(m.InventoryItemId))
             .GroupBy(m => m.InventoryItemId).Select(g => new { g.Key, Delta = g.Sum(m => m.Delta) })
             .ToDictionaryAsync(x => x.Key, x => x.Delta, ct);
 

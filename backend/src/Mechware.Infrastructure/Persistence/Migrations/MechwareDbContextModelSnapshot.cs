@@ -2465,6 +2465,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("inventory_item_id");
 
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
                     b.Property<string>("Reason")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -2482,6 +2486,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnName("reference_type");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_stock_movements_order")
+                        .HasFilter("order_id IS NOT NULL");
 
                     b.HasIndex("InventoryItemId", "CreatedAtUtc")
                         .HasDatabaseName("ix_stock_movements_item");
@@ -4742,11 +4750,27 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("idempotency_key");
+
+                    b.Property<DateTime?>("InspectedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("inspected_at");
+
+                    b.Property<Guid?>("InspectedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("inspected_by");
 
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
@@ -4762,6 +4786,19 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("reason");
+
+                    b.Property<DateTime?>("ReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<Guid?>("ReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("received_by");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rejection_reason");
 
                     b.Property<string>("RequestHash")
                         .IsRequired()
@@ -4791,12 +4828,24 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("withdrawn_at");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId");
 
+                    b.HasIndex("DecidedBy");
+
+                    b.HasIndex("InspectedBy");
+
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_return_requests_order");
+
+                    b.HasIndex("ReceivedBy");
 
                     b.HasIndex("RequestedBy", "IdempotencyKey")
                         .IsUnique()
@@ -4810,13 +4859,21 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.ToTable("return_requests", null, t =>
                         {
+                            t.HasCheckConstraint("ck_return_requests_decided", "(decided_by IS NULL) = (decided_at IS NULL) AND (decided_at IS NULL) = (status IN ('Requested', 'Withdrawn'))");
+
+                            t.HasCheckConstraint("ck_return_requests_inspected", "(inspected_by IS NULL) = (inspected_at IS NULL) AND (inspected_at IS NULL) = (status NOT IN ('Inspected', 'Refunded', 'CreditNoted'))");
+
                             t.HasCheckConstraint("ck_return_requests_key", "idempotency_key ~ '^[A-Za-z0-9_-]{8,100}$' AND char_length(request_hash) = 64");
 
                             t.HasCheckConstraint("ck_return_requests_note", "note IS NULL OR (char_length(note) BETWEEN 1 AND 1000 AND note = btrim(note))");
 
                             t.HasCheckConstraint("ck_return_requests_reason", "reason IN ('Damaged', 'WrongItem', 'NotAsDescribed', 'Other') AND (reason <> 'Other' OR note IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_return_requests_status", "status IN ('Requested', 'Approved', 'Rejected', 'Received', 'Refunded', 'CreditNoted', 'Withdrawn')");
+                            t.HasCheckConstraint("ck_return_requests_received", "(received_by IS NULL) = (received_at IS NULL) AND (received_at IS NULL) = (status IN ('Requested', 'Withdrawn', 'Approved', 'Rejected'))");
+
+                            t.HasCheckConstraint("ck_return_requests_rejection", "(status = 'Rejected') = (rejection_reason IS NOT NULL) AND (rejection_reason IS NULL OR (char_length(rejection_reason) BETWEEN 5 AND 500 AND rejection_reason = btrim(rejection_reason)))");
+
+                            t.HasCheckConstraint("ck_return_requests_status", "status IN ('Requested', 'Approved', 'Rejected', 'Received', 'Inspected', 'Refunded', 'CreditNoted', 'Withdrawn')");
 
                             t.HasCheckConstraint("ck_return_requests_withdrawn", "(status = 'Withdrawn') = (withdrawn_at IS NOT NULL)");
                         });
@@ -4828,9 +4885,18 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int?>("AcceptedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("accepted_quantity");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("InspectionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("inspection_note");
 
                     b.Property<Guid>("OrderItemId")
                         .HasColumnType("uuid")
@@ -4839,6 +4905,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
+
+                    b.Property<int?>("RestockQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("restock_quantity");
 
                     b.Property<Guid>("ReturnRequestId")
                         .HasColumnType("uuid")
@@ -4855,6 +4925,8 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.ToTable("return_request_lines", null, t =>
                         {
+                            t.HasCheckConstraint("ck_return_request_lines_inspection", "(accepted_quantity IS NULL AND restock_quantity IS NULL AND inspection_note IS NULL) OR (accepted_quantity BETWEEN 0 AND quantity AND restock_quantity BETWEEN 0 AND accepted_quantity AND (inspection_note IS NULL OR (char_length(inspection_note) BETWEEN 1 AND 500 AND inspection_note = btrim(inspection_note))))");
+
                             t.HasCheckConstraint("ck_return_request_lines_qty", "quantity BETWEEN 1 AND 10000");
                         });
                 });
@@ -6005,11 +6077,26 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("InspectedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Mechware.Domain.Orders.Order", null)
                         .WithMany()
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ReceivedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Mechware.Domain.Identity.User", null)
                         .WithMany()

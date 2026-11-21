@@ -68,14 +68,12 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceNumberAllocator, Invoicing.InvoiceNumberAllocator>();
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
-        services.TryAddScoped<Mechware.Application.Quotes.IBuyerRfqService, Quotes.BuyerRfqService>();
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteLookups, Quotes.StaffQuoteLookups>();
         services.TryAddScoped<Mechware.Application.Quotes.IQuoteAcceptanceGate, Quotes.QuoteAcceptanceGate>();
         services.TryAddScoped<Mechware.Application.Quotes.IBuyerQuoteService, Quotes.BuyerQuoteService>();
         services.TryAddSingleton(new Mechware.Application.Quotes.QuotePdfOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IQuoteTermsService, Quotes.QuoteTermsService>();
-        services.TryAddScoped<Mechware.Application.Quotes.IQuotePdfService, Quotes.QuotePdfService>();
         services.TryAddScoped<IOrderService, OrderService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderCancellationService, Orders.OrderCancellationService>();
         services.TryAddScoped<Mechware.Application.Orders.IOrderFulfilmentService, Orders.OrderFulfilmentService>();
@@ -189,6 +187,8 @@ public static class DependencyInjection
     public static IServiceCollection AddPdfRendering(this IServiceCollection services)
     {
         services.TryAddSingleton<IPdfRenderer, SkiaPdfRenderer>();
+        // Quote PDFs (D4.11) need the renderer and the object store (AddProductDocuments): API host only, the Worker renders nothing yet.
+        services.TryAddScoped<Mechware.Application.Quotes.IQuotePdfService, Quotes.QuotePdfService>();
         return services;
     }
 
@@ -209,6 +209,8 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Cart.ICartCatalogReader, Cart.CartCatalogReader>();
         services.TryAddScoped<Mechware.Application.Cart.ICartService, Mechware.Application.Cart.CartService>();
         services.TryAddScoped<Mechware.Application.Cart.ICartMergeService, Mechware.Application.Cart.CartMergeService>();
+        // Buyer RFQs (D4.5) read the cart, so they live with the cart: the Worker host has no cart and never takes RFQs.
+        services.TryAddScoped<Mechware.Application.Quotes.IBuyerRfqService, Quotes.BuyerRfqService>();
         return services;
     }
 

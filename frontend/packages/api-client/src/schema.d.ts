@@ -3679,6 +3679,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/returns/{returnId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Requested → approved; the buyer can no longer withdraw it. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReturnStepRequest"];
+                    "text/json": components["schemas"]["ReturnStepRequest"];
+                    "application/*+json": components["schemas"]["ReturnStepRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns/{returnId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Requested → rejected with a reason (5-500, shown to the buyer); the units are free for a new return. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RejectReturnRequest"];
+                    "text/json": components["schemas"]["RejectReturnRequest"];
+                    "application/*+json": components["schemas"]["RejectReturnRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns/{returnId}/received": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approved → received: the goods arrived. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ReturnStepRequest"];
+                    "text/json": components["schemas"]["ReturnStepRequest"];
+                    "application/*+json": components["schemas"]["ReturnStepRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns/{returnId}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Received → inspected: every line once, `acceptedQty` 0..asked, `restockQty` 0..accepted (the rest is scrapped), an internal
+         *     `note` (≤ 500). The restocked units go back to the warehouses the order took them from, after the commit; `restockPending`
+         *     says the stock step has not finished (the stock sweep finishes it). The return then awaits its refund or credit note.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["InspectReturnRequest"];
+                    "text/json": components["schemas"]["InspectReturnRequest"];
+                    "application/*+json": components["schemas"]["InspectReturnRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/returns": {
         parameters: {
             query?: never;
@@ -7687,6 +7859,11 @@ export interface components {
         GoogleLoginRequestDto: {
             idToken?: string | null;
         };
+        InspectReturnRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
+            lines?: components["schemas"]["ReturnInspectionInput"][] | null;
+        };
         LoginRequestDto: {
             identifier?: string | null;
             password?: string | null;
@@ -7895,6 +8072,11 @@ export interface components {
         RejectRefund: {
             reason?: string | null;
         };
+        RejectReturnRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
+            reason?: string | null;
+        };
         RequestCreditAdjustmentRequest: {
             kind?: string | null;
             /** Format: int64 */
@@ -7920,11 +8102,24 @@ export interface components {
             otpCode?: string | null;
             newPassword?: string | null;
         };
+        ReturnInspectionInput: {
+            /** Format: uuid */
+            returnLineId?: string;
+            /** Format: int32 */
+            acceptedQty?: number;
+            /** Format: int32 */
+            restockQty?: number;
+            note?: string | null;
+        };
         ReturnLineInput: {
             /** Format: uuid */
             orderItemId?: string;
             /** Format: int32 */
             quantity?: number;
+        };
+        ReturnStepRequest: {
+            /** Format: int32 */
+            rowVersion?: number | null;
         };
         RevokeSessionsRequestDto: {
             /** Format: uuid */

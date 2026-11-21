@@ -44,10 +44,13 @@ public sealed record ReserveStockResult(
 /// <para>Warehouse rule: with <see cref="OrderReference"/> the stock goes back to the warehouses the order's committed holds
 /// took it from, and never more than they took minus what was already put back for that order; otherwise to
 /// <paramref name="WarehouseId"/>, or to the variant's only active warehouse when none is given.</para>
+/// <para><paramref name="AgainstOrderId"/> (F2.3a returns): stock that order deducted, put back under a reference of its own (one key per
+/// return, so two partial returns of one variant never collide). The order's warehouse rule and cap apply exactly as for
+/// <see cref="OrderReference"/>, counting everything put back against that order under any reference. Implied for an order reference.</para>
 /// </summary>
 public sealed record RestockRequest(
     Guid VariantId, int Quantity, RestockReason Reason, string ReferenceType, Guid ReferenceId,
-    Guid? WarehouseId = null, Guid? ActorUserId = null)
+    Guid? WarehouseId = null, Guid? ActorUserId = null, Guid? AgainstOrderId = null)
 {
     public const int MaxQuantity = ReserveStockRequest.MaxQuantityPerLine;
     public const int MaxReferenceTypeLength = 40;

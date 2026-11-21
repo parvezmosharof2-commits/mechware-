@@ -70,11 +70,55 @@ public sealed class ReturnsController(IReturnRequestService returns, ICurrentUse
     private void Private() => Response.Headers.CacheControl = "private, no-store";
 }
 
-/// <summary>F2.1 staff reads of every return (<c>orders.view_all</c>: Support, Finance, Admin). Decisions come with F2.3. <c>private, no-store</c>.</summary>
+/// <summary>
+/// Staff returns: reads of every return (F2.1, <c>orders.view_all</c>: Support, Finance, Admin) and the F2.3a moves (<c>returns.manage</c>:
+/// Support, Admin). A move sends the return's <c>rowVersion</c> (stale: 409 <c>RETURN_CHANGED</c>); from the wrong status it is 409
+/// <c>RETURN_INVALID_TRANSITION</c>; each writes an audit row and an outbox event. No money moves here. Every answer is <c>private, no-store</c>.
+/// </summary>
 [ApiController]
 [Route("api/v1/admin/returns")]
 public sealed class AdminReturnsController(IReturnRequestService returns) : ControllerBase
 {
+    /// <summary>Requested → approved; the buyer can no longer withdraw it.</summary>
+    [HttpPost("{returnId:guid}/approve")]
+    [RequirePermission(Permissions.ReturnsManage)]
+    public async Task<IActionResult> Approve(Guid returnId, [FromBody] ReturnStepRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.ApproveAsync(returnId, body, ct) });
+    }
+
+    /// <summary>Requested → rejected with a reason (5-500, shown to the buyer); the units are free for a new return.</summary>
+    [HttpPost("{returnId:guid}/reject")]
+    [RequirePermission(Permissions.ReturnsManage)]
+    public async Task<IActionResult> Reject(Guid returnId, [FromBody] RejectReturnRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.RejectAsync(returnId, body, ct) });
+    }
+
+    /// <summary>Approved → received: the goods arrived.</summary>
+    [HttpPost("{returnId:guid}/received")]
+    [RequirePermission(Permissions.ReturnsManage)]
+    public async Task<IActionResult> Received(Guid returnId, [FromBody] ReturnStepRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.MarkReceivedAsync(returnId, body, ct) });
+    }
+
+    /// <summary>
+    /// Received → inspected: every line once, <c>acceptedQty</c> 0..asked, <c>restockQty</c> 0..accepted (the rest is scrapped), an internal
+    /// <c>note</c> (≤ 500). The restocked units go back to the warehouses the order took them from, after the commit; <c>restockPending</c>
+    /// says the stock step has not finished (the stock sweep finishes it). The return then awaits its refund or credit note.
+    /// </summary>
+    [HttpPost("{returnId:guid}/inspect")]
+    [RequirePermission(Permissions.ReturnsManage)]
+    public async Task<IActionResult> Inspect(Guid returnId, [FromBody] InspectReturnRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.InspectAsync(returnId, body, ct) });
+    }
+
     /// <summary>Newest first. Filters: <c>status</c> (wire name), <c>orderNumber</c> (prefix), <c>companyId</c>. <c>pageSize</c> at most 50; a bad filter is 400.</summary>
     [HttpGet]
     [RequirePermission(Permissions.OrdersViewAll)]

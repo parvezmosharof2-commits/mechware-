@@ -6,8 +6,11 @@ using Mechware.Domain.Quotes;
 
 namespace Mechware.Domain.Returns;
 
-/// <summary>F2.1 opens <see cref="Requested"/> and the buyer may withdraw it; F2.3 decides, receives and settles (refund or credit note).</summary>
-public enum ReturnStatus { Requested = 1, Approved = 2, Rejected = 3, Received = 4, Refunded = 5, CreditNoted = 6, Withdrawn = 7 }
+/// <summary>
+/// F2.1 opens <see cref="Requested"/> and the buyer may withdraw it until staff decide. F2.3a: Requested → Approved | Rejected,
+/// Approved → Received → Inspected (awaiting the refund or credit note of F2.3b: Inspected → Refunded | CreditNoted).
+/// </summary>
+public enum ReturnStatus { Requested = 1, Approved = 2, Rejected = 3, Received = 4, Refunded = 5, CreditNoted = 6, Withdrawn = 7, Inspected = 8 }
 
 public enum ReturnReason { Damaged = 1, WrongItem = 2, NotAsDescribed = 3, Other = 4 }
 
@@ -16,6 +19,19 @@ public sealed record ReturnRequestedEvent(Guid ReturnId, Guid OrderId, string Or
 
 /// <summary>The buyer withdrew an open return request; its quantities are free again.</summary>
 public sealed record ReturnWithdrawnEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy) : DomainEventBase;
+
+public sealed record ReturnApprovedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy) : DomainEventBase;
+
+/// <summary>Staff refused the return; its quantities are free again (as after a withdrawal).</summary>
+public sealed record ReturnRejectedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy) : DomainEventBase;
+
+public sealed record ReturnReceivedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy) : DomainEventBase;
+
+/// <summary>Inspected: what was accepted (to refund or credit, F2.3b) and how much of it goes back on the shelf.</summary>
+public sealed record ReturnInspectedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy, int AcceptedQuantity, int RestockQuantity) : DomainEventBase;
+
+/// <summary>The inspection of one return line: accepted 0..asked, restocked 0..accepted (the rest is scrapped), an internal note.</summary>
+public sealed record ReturnInspection(Guid ReturnLineId, int AcceptedQuantity, int RestockQuantity, string? Note);
 
 /// <summary>One asked line: an order line id and how many of it.</summary>
 public sealed record ReturnLineRequest(Guid OrderItemId, int Quantity);
@@ -31,8 +47,21 @@ public sealed class ReturnRequestLine : Entity<Guid>
     public Guid ReturnRequestId { get; private set; }
     public Guid OrderItemId { get; private set; }
     public int Quantity { get; private set; }
+    /// <summary>Null until inspected (F2.3a); then 0..<see cref="Quantity"/>.</summary>
+    public int? AcceptedQuantity { get; private set; }
+    /// <summary>Null until inspected; then 0..<see cref="AcceptedQuantity"/> (accepted but not restocked = scrapped).</summary>
+    public int? RestockQuantity { get; private set; }
+    /// <summary>Internal inspection note; never shown to the buyer.</summary>
+    public string? InspectionNote { get; private set; }
 
     private ReturnRequestLine() { }
+
+    internal void Inspect(int accepted, int restock, string? note)
+    {
+        AcceptedQuantity = accepted;
+        RestockQuantity = restock;
+        InspectionNote = note;
+    }
 
     internal ReturnRequestLine(Guid returnRequestId, Guid orderItemId, int quantity, DateTime nowUtc) : base(Guid.NewGuid())
     {
@@ -67,7 +96,20 @@ public sealed class ReturnRequest : AggregateRoot<Guid>
     public string RequestHash { get; private set; } = string.Empty;
     public DateTime RequestedAtUtc { get; private set; }
     public DateTime? WithdrawnAtUtc { get; private set; }
+    /// <summary>The staff member who approved or rejected it, and when.</summary>
+    public Guid? DecidedBy { get; private set; }
+    public DateTime? DecidedAtUtc { get; private set; }
+    /// <summary>Why it was rejected (5-500 plain text); the buyer sees it.</summary>
+    public string? RejectionReason { get; private set; }
+    public Guid? ReceivedBy { get; private set; }
+    public DateTime? ReceivedAtUtc { get; private set; }
+    public Guid? InspectedBy { get; private set; }
+    public DateTime? InspectedAtUtc { get; private set; }
     public IReadOnlyList<ReturnRequestLine> Lines => _lines;
+
+    public const int ReasonMinLength = 5;
+    public const int ReasonMaxLength = 500;
+    public const int InspectionNoteMaxLength = 500;
 
     private ReturnRequest() { }
 
@@ -166,5 +208,91 @@ public sealed class ReturnRequest : AggregateRoot<Guid>
         UpdatedAtUtc = nowUtc;
         AddDomainEvent(new ReturnWithdrawnEvent(Id, OrderId, orderNumber, RequestedBy));
         return true;
+    }
+
+    /// <summary>Plain text, trimmed, 5 to 500 characters.</summary>
+    public static string NormaliseRejectionReason(string? value)
+    {
+        var reason = PlainText.Clean(value)?.Trim();
+        if (reason is not { Length: >= ReasonMinLength and <= ReasonMaxLength })
+            throw new ValidationException("reason", $"Give a reason of {ReasonMinLength} to {ReasonMaxLength} characters.");
+        return reason;
+    }
+
+    /// <summary>
+    /// The shape of an inspection, before anything is looked up: 1 to 100 lines, each return line once, accepted ≥ 0, restocked 0..accepted,
+    /// note plain text ≤ 500 (blank = none). Whether accepted ≤ asked is checked against the return in <see cref="Inspect"/>.
+    /// </summary>
+    public static IReadOnlyList<ReturnInspection> NormaliseInspection(IReadOnlyList<ReturnInspection>? lines)
+    {
+        if (lines is not { Count: > 0 and <= MaxLines }) throw new ValidationException("lines", "Inspect every line of this return once.");
+        var result = new List<ReturnInspection>(lines.Count);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var l = lines[i];
+            if (l.ReturnLineId == Guid.Empty) throw new ValidationException($"lines[{i}].returnLineId", "Name the return line.");
+            if (l.AcceptedQuantity is < 0 or > MaxQuantity) throw new ValidationException($"lines[{i}].acceptedQty", "Accept 0 up to the quantity asked.");
+            if (l.RestockQuantity < 0 || l.RestockQuantity > l.AcceptedQuantity)
+                throw new ValidationException($"lines[{i}].restockQty", "Restock 0 up to the accepted quantity.");
+            var note = PlainText.Clean(l.Note)?.Trim();
+            if (string.IsNullOrEmpty(note)) note = null;
+            if (note is { Length: > InspectionNoteMaxLength })
+                throw new ValidationException($"lines[{i}].note", $"A note has at most {InspectionNoteMaxLength} characters.");
+            result.Add(l with { Note = note });
+        }
+        if (result.Select(l => l.ReturnLineId).Distinct().Count() != result.Count) throw new ValidationException("lines", "Name each return line once.");
+        return result;
+    }
+
+    /// <summary>Requested → approved: the buyer may no longer withdraw it.</summary>
+    public void Approve(Guid actor, string orderNumber, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Requested, "approved");
+        Status = ReturnStatus.Approved;
+        (DecidedBy, DecidedAtUtc, UpdatedAtUtc) = (actor, nowUtc, nowUtc);
+        AddDomainEvent(new ReturnApprovedEvent(Id, OrderId, orderNumber, RequestedBy));
+    }
+
+    /// <summary>Requested → rejected with a reason (<see cref="NormaliseRejectionReason"/>); its quantities are free again.</summary>
+    public void Reject(Guid actor, string reason, string orderNumber, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Requested, "rejected");
+        Status = ReturnStatus.Rejected;
+        (DecidedBy, DecidedAtUtc, RejectionReason, UpdatedAtUtc) = (actor, nowUtc, reason, nowUtc);
+        AddDomainEvent(new ReturnRejectedEvent(Id, OrderId, orderNumber, RequestedBy));
+    }
+
+    /// <summary>Approved → received: the goods arrived.</summary>
+    public void MarkReceived(Guid actor, string orderNumber, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Approved, "marked received");
+        Status = ReturnStatus.Received;
+        (ReceivedBy, ReceivedAtUtc, UpdatedAtUtc) = (actor, nowUtc, nowUtc);
+        AddDomainEvent(new ReturnReceivedEvent(Id, OrderId, orderNumber, RequestedBy));
+    }
+
+    /// <summary>
+    /// Received → inspected. <paramref name="lines"/> (already normalised) name every line of this return exactly once; each accepts at most
+    /// what it asked and restocks at most what it accepted. The restock itself happens after the commit (the service).
+    /// </summary>
+    public void Inspect(Guid actor, IReadOnlyList<ReturnInspection> lines, string orderNumber, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Received, "inspected");
+        var byId = _lines.ToDictionary(l => l.Id);
+        if (lines.Count != _lines.Count || lines.Any(l => !byId.ContainsKey(l.ReturnLineId)))
+            throw new ValidationException("lines", "Inspect every line of this return once.");
+        for (var i = 0; i < lines.Count; i++)
+            if (lines[i].AcceptedQuantity > byId[lines[i].ReturnLineId].Quantity)
+                throw new ValidationException($"lines[{i}].acceptedQty", "Accept 0 up to the quantity asked.");
+        foreach (var l in lines) byId[l.ReturnLineId].Inspect(l.AcceptedQuantity, l.RestockQuantity, l.Note);
+        Status = ReturnStatus.Inspected;
+        (InspectedBy, InspectedAtUtc, UpdatedAtUtc) = (actor, nowUtc, nowUtc);
+        AddDomainEvent(new ReturnInspectedEvent(Id, OrderId, orderNumber, RequestedBy, lines.Sum(l => l.AcceptedQuantity), lines.Sum(l => l.RestockQuantity)));
+    }
+
+    private void Ensure(ReturnStatus from, string action)
+    {
+        if (Status != from)
+            throw new ConflictException("RETURN_INVALID_TRANSITION", $"A return that is {Status.ToString().ToLowerInvariant()} cannot be {action}.");
     }
 }

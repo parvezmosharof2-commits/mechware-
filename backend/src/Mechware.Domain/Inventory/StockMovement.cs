@@ -22,11 +22,13 @@ public sealed class StockMovement : Entity<Guid>
     public Guid ReferenceId { get; private set; }
     /// <summary>Null when the system did it (e.g. a sweep).</summary>
     public Guid? ActorId { get; private set; }
+    /// <summary>The order whose deduction this movement gives back (a cancel or a return, F2.3a); null for receipts and corrections.</summary>
+    public Guid? OrderId { get; private set; }
 
     private StockMovement() { }
 
     public StockMovement(Guid id, Guid inventoryItemId, int delta, RestockReason reason, string referenceType, Guid referenceId,
-        Guid? actorId, DateTime nowUtc) : base(id)
+        Guid? actorId, DateTime nowUtc, Guid? orderId = null) : base(id)
     {
         if (delta == 0) throw new ValidationException("quantity", "A stock movement moves at least one unit.");
         if (!Enum.IsDefined(reason)) throw new ValidationException("reason", "A known reason is required.");
@@ -38,6 +40,7 @@ public sealed class StockMovement : Entity<Guid>
         ReferenceType = referenceType;
         ReferenceId = referenceId;
         ActorId = actorId;
+        OrderId = orderId;
         CreatedAtUtc = nowUtc;
     }
 }

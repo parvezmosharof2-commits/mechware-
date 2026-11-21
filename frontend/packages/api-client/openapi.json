@@ -3645,6 +3645,178 @@
         }
       }
     },
+    "/api/v1/admin/returns/{returnId}/approve": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Requested → approved; the buyer can no longer withdraw it.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}/reject": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Requested → rejected with a reason (5-500, shown to the buyer); the units are free for a new return.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectReturnRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectReturnRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectReturnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}/received": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Approved → received: the goods arrived.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}/inspect": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Received → inspected: every line once, `acceptedQty` 0..asked, `restockQty` 0..accepted (the rest is scrapped), an internal\r\n`note` (≤ 500). The restocked units go back to the warehouses the order took them from, after the commit; `restockPending`\r\nsays the stock step has not finished (the stock sweep finishes it). The return then awaits its refund or credit note.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectReturnRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectReturnRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectReturnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/returns": {
       "get": {
         "tags": [
@@ -7685,6 +7857,24 @@
         },
         "additionalProperties": false
       },
+      "InspectReturnRequest": {
+        "type": "object",
+        "properties": {
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnInspectionInput"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "LoginRequestDto": {
         "type": "object",
         "properties": {
@@ -8308,6 +8498,21 @@
         },
         "additionalProperties": false
       },
+      "RejectReturnRequest": {
+        "type": "object",
+        "properties": {
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "RequestCreditAdjustmentRequest": {
         "type": "object",
         "properties": {
@@ -8385,6 +8590,28 @@
         },
         "additionalProperties": false
       },
+      "ReturnInspectionInput": {
+        "type": "object",
+        "properties": {
+          "returnLineId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "acceptedQty": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "restockQty": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "ReturnLineInput": {
         "type": "object",
         "properties": {
@@ -8395,6 +8622,17 @@
           "quantity": {
             "type": "integer",
             "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReturnStepRequest": {
+        "type": "object",
+        "properties": {
+          "rowVersion": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false

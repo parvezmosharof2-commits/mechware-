@@ -49,6 +49,8 @@ public sealed record StockReconciliationPass(bool Skipped, int Fixed, int Failed
 /// <item><b>return_stock</b> (B): a cancelled order with fulfilled holds of a variant that has no <c>OrderCancelled</c> stock movement →
 /// the same post-commit step as the staff cancel (<see cref="OrderCancellationService.ReturnStockAsync"/>), actor system. RestockAsync's
 /// key (order, variant, reason) and its cap (never more than the order's holds deducted) make a replay change nothing.</item>
+/// <item><b>return_restock</b> (D, F2.3a): an inspected return whose restock did not finish → <see cref="ReturnRequestService.RestockAsync"/>
+/// (key (return, variant), the order's cap). Case B does not cover it: B looks only at cancelled orders and OrderCancelled movements.</item>
 /// </list>
 /// Locks: a session advisory lock (one sweeper at a time; another worker skips the pass), then only the inventory service's own
 /// transactions (inventory rows FOR UPDATE in (variant, warehouse) order, then the holds re-read under them). The sweep never locks an
@@ -146,12 +148,38 @@ public sealed class StockReconciliationService(MechwareDbContext db, IInventoryS
                 if (returned.Count > 0) await TryAuditAsync(c.Id, "return_stock", new { Returned = returned, Partial = true });
             }
         }
+
+        // return_restock (D, F2.3a): an inspected return with units to restock of a variant that has no ReturnRestocked movement of that
+        // return (a crash or a failure after the inspection committed) → the same post-commit step as the inspection, actor system.
+        var returns = await db.ReturnRequests.AsNoTracking()
+            .Where(r => r.InspectedAtUtc != null && r.InspectedAtUtc <= cutoff && r.Lines.Any(l => l.RestockQuantity > 0
+                && !db.StockMovements.Any(m => m.ReferenceType == ReturnRequestService.ReturnReference && m.ReferenceId == r.Id
+                    && m.Reason == RestockReason.ReturnRestocked
+                    && db.InventoryItems.Any(i => i.Id == m.InventoryItemId && db.OrderItems.Any(o => o.Id == l.OrderItemId && o.VariantId == i.VariantId)))))
+            .OrderBy(r => r.InspectedAtUtc).ThenBy(r => r.Id).Select(r => r.Id).Take(options.BatchSize).ToListAsync(ct);
+        foreach (var returnId in returns)
+        {
+            ct.ThrowIfCancellationRequested();
+            var restocked = new List<ReturnedStockDto>();
+            try
+            {
+                await ReturnRequestService.RestockAsync(db, inventory, returnId, null, restocked);
+                if (restocked.Count > 0 && await AuditAsync(returnId, "return_restock", new { Restocked = restocked }, "return_requests")) done++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failed++;
+                db.ChangeTracker.Clear();
+                log?.LogError(ex, "Stock reconciliation: return {ReturnId}, case return_restock failed; retried on the next pass", returnId);
+                if (restocked.Count > 0) await TryAuditAsync(returnId, "return_restock", new { Restocked = restocked, Partial = true }, "return_requests");
+            }
+        }
         return new StockReconciliationPass(false, done, failed);
     }
 
-    private async Task TryAuditAsync(Guid orderId, string step, object detail)
+    private async Task TryAuditAsync(Guid orderId, string step, object detail, string entity = "orders")
     {
-        try { await AuditAsync(orderId, step, detail); }
+        try { await AuditAsync(orderId, step, detail, entity); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             db.ChangeTracker.Clear();
@@ -159,13 +187,13 @@ public sealed class StockReconciliationService(MechwareDbContext db, IInventoryS
         }
     }
 
-    private async Task<bool> AuditAsync(Guid orderId, string step, object detail)
+    private async Task<bool> AuditAsync(Guid entityId, string step, object detail, string entity = "orders")
     {
-        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), null, null, AuditAction, "orders", orderId.ToString(), null,
+        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), null, null, AuditAction, entity, entityId.ToString(), null,
             JsonSerializer.Serialize(new { Case = step, Actor = "system", Detail = detail }, Json), null, clock.GetUtcNow().UtcDateTime));
         await db.SaveChangesAsync(CancellationToken.None);
         db.ChangeTracker.Clear();
-        log?.LogWarning("Stock reconciliation: order {OrderId}, case {Case} fixed", orderId, step);
+        log?.LogWarning("Stock reconciliation: {Entity} {EntityId}, case {Case} fixed", entity, entityId, step);
         return true;
     }
 }
