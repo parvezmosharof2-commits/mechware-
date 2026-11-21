@@ -16,7 +16,7 @@ namespace Mechware.IntegrationTests.Quotes;
 /// the first one's result: exactly one approval sends, the other gets the domain's own 409, and nothing is ever a 500. Its own class, so its
 /// own login budget.
 /// </summary>
-[Collection(nameof(ExclusiveTimingCollection))]
+[Collection(ExclusiveTimingCollection.Name)]
 public sealed class QuoteIssueConcurrencyTests(QuoteIssueFactory factory) : IClassFixture<QuoteIssueFactory>
 {
     private const int Rounds = 6;

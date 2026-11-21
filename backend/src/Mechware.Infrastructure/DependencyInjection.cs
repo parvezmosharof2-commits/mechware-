@@ -64,6 +64,8 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Credit.ICreditReadService, Credit.CreditReadService>();
         services.TryAddScoped<Mechware.Application.Credit.IBuyerCreditService, Credit.BuyerCreditService>();
         services.TryAddScoped<Mechware.Application.Credit.ICreditReconciliationService, Credit.CreditReconciliationService>();
+        // Invoicing (E6.2): gap-free numbers, taken inside the issuing transaction as its last lock.
+        services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceNumberAllocator, Invoicing.InvoiceNumberAllocator>();
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IBuyerRfqService, Quotes.BuyerRfqService>();

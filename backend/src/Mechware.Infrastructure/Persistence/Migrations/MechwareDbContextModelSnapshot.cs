@@ -2621,6 +2621,39 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceNumberCounter", b =>
+                {
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_id");
+
+                    b.Property<string>("Series")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("series");
+
+                    b.Property<DateTime?>("LastIssuedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_issued_at");
+
+                    b.Property<long>("NextSerial")
+                        .HasColumnType("bigint")
+                        .HasColumnName("next_serial");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("fiscal_year");
+
+                    b.HasKey("SellerId", "Series");
+
+                    b.ToTable("invoice_number_counters", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_invoice_number_counters_series", "series IN ('TaxInvoice', 'CreditNote', 'SpecimenTaxInvoice', 'SpecimenCreditNote')");
+
+                            t.HasCheckConstraint("ck_invoice_number_counters_state", "(fiscal_year = 0 AND next_serial = 1 AND last_issued_at IS NULL) OR (fiscal_year BETWEEN 2000 AND 9998 AND next_serial >= 2 AND last_issued_at IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Orders.IdempotencyRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5640,6 +5673,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SellerId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceNumberCounter", b =>
+                {
+                    b.HasOne("Mechware.Domain.Sellers.Seller", null)
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Mechware.Domain.Orders.IdempotencyRecord", b =>

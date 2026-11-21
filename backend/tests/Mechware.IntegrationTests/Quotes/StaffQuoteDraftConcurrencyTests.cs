@@ -15,7 +15,7 @@ namespace Mechware.IntegrationTests.Quotes;
 /// close. The quote and version rows are locked FOR NO KEY UPDATE and the token is compared under the lock, so exactly one save wins, the
 /// other gets 409 <c>QUOTE_VERSION_CHANGED</c> (never a lost update, never a 500). Its own class, so its own login budget.
 /// </summary>
-[Collection(nameof(ExclusiveTimingCollection))]
+[Collection(ExclusiveTimingCollection.Name)]
 public sealed class StaffQuoteDraftConcurrencyTests(RfqApiFactory factory) : IClassFixture<RfqApiFactory>
 {
     private const int Rounds = 6;

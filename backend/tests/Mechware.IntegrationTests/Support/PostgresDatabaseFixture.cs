@@ -91,6 +91,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync(CreditLedgerSql.InstallLimitGuard);
         await db.Database.ExecuteSqlRawAsync(QuoteSql.Install);
         await db.Database.ExecuteSqlRawAsync(ReturnSql.Install);
+        await db.Database.ExecuteSqlRawAsync(InvoiceNumberingSql.Install);
     }
 
     public MechwareDbContext CreateContext()

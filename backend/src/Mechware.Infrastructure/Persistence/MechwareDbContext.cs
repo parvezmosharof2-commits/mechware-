@@ -114,6 +114,9 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Mechware.Domain.Quotes.Quote> Quotes => Set<Mechware.Domain.Quotes.Quote>();
     public DbSet<Mechware.Domain.Quotes.QuoteVersion> QuoteVersions => Set<Mechware.Domain.Quotes.QuoteVersion>();
 
+    /// <summary>E6.2 gap-free numbering counters; written only by InvoiceNumberAllocator's raw SQL, guard in InvoiceNumberingSql.</summary>
+    public DbSet<Mechware.Domain.Invoicing.InvoiceNumberCounter> InvoiceNumberCounters => Set<Mechware.Domain.Invoicing.InvoiceNumberCounter>();
+
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 

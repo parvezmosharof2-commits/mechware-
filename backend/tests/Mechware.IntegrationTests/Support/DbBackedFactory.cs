@@ -51,6 +51,7 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         db.Database.ExecuteSqlRaw(CreditLedgerSql.InstallLimitGuard);
         db.Database.ExecuteSqlRaw(QuoteSql.Install);
         db.Database.ExecuteSqlRaw(ReturnSql.Install);
+        db.Database.ExecuteSqlRaw(InvoiceNumberingSql.Install);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

@@ -14,7 +14,7 @@ namespace Mechware.IntegrationTests.Quotes;
 /// FOR NO KEY UPDATE, so the second request waits, then sees the first one's result: exactly one wins, the other gets the domain's
 /// own 409 (not a concurrency or database error), and nothing is ever a 500. Its own class, so its own login budget.
 /// </summary>
-[Collection(nameof(ExclusiveTimingCollection))]
+[Collection(ExclusiveTimingCollection.Name)]
 public sealed class StaffQuoteConcurrencyTests(RfqApiFactory factory) : IClassFixture<RfqApiFactory>
 {
     private const int Rounds = 6;
