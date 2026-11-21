@@ -2629,6 +2629,383 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Invoicing.Invoice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Buyer")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("buyer_snapshot");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<bool>("ConsultantChecked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consultant_checked");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("content_hash")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .IsFixedLength();
+
+                    b.Property<string>("Delivery")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("delivery_snapshot");
+
+                    b.Property<int>("FiscalYear")
+                        .HasColumnType("integer")
+                        .HasColumnName("fiscal_year");
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at");
+
+                    b.Property<Guid>("IssuedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_by");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mode");
+
+                    b.Property<long>("NetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("net_minor");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("OrderNumber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("order_number");
+
+                    b.Property<Guid?>("OriginalInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_invoice_id");
+
+                    b.Property<string>("PdfBnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pdf_bn_key");
+
+                    b.Property<string>("PdfBnSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("pdf_bn_sha256")
+                        .IsFixedLength();
+
+                    b.Property<string>("PdfEnKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pdf_en_key");
+
+                    b.Property<string>("PdfEnSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("pdf_en_sha256")
+                        .IsFixedLength();
+
+                    b.Property<string>("PurchaseOrderNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("purchase_order_number");
+
+                    b.Property<string>("QuoteNumber")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("quote_number");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("ReasonText")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason_text");
+
+                    b.Property<long?>("RefundDueMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("refund_due_minor");
+
+                    b.Property<int>("ReplacementNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("replacement_no");
+
+                    b.Property<Guid?>("ReplacesInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replaces_invoice_id");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<long>("SdMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sd_minor");
+
+                    b.Property<string>("Seller")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("seller_snapshot");
+
+                    b.Property<Guid>("SellerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_id");
+
+                    b.Property<long>("Serial")
+                        .HasColumnType("bigint")
+                        .HasColumnName("serial");
+
+                    b.Property<string>("Series")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("series");
+
+                    b.Property<Guid?>("ShipmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("shipment_id");
+
+                    b.Property<Guid>("SubOrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sub_order_id");
+
+                    b.Property<long>("TotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_minor");
+
+                    b.Property<long>("VatMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("vat_minor");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssuedBy");
+
+                    b.HasIndex("Number")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoices_number");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_invoices_order");
+
+                    b.HasIndex("OriginalInvoiceId")
+                        .HasDatabaseName("ix_invoices_original")
+                        .HasFilter("original_invoice_id IS NOT NULL");
+
+                    b.HasIndex("ReplacesInvoiceId");
+
+                    b.HasIndex("RequestedBy");
+
+                    b.HasIndex("SubOrderId");
+
+                    b.HasIndex("CompanyId", "IssuedAtUtc")
+                        .HasDatabaseName("ix_invoices_company_issued")
+                        .HasFilter("company_id IS NOT NULL");
+
+                    b.HasIndex("ShipmentId", "SellerId", "ReplacementNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoices_one_per_shipment")
+                        .HasFilter("kind = 'TaxInvoice'");
+
+                    b.HasIndex("SellerId", "Series", "FiscalYear", "Serial")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoices_serial");
+
+                    b.ToTable("invoices", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_invoices_hash", "content_hash ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_invoices_kind_series", "(kind = 'TaxInvoice' AND series IN ('TaxInvoice', 'SpecimenTaxInvoice') OR kind = 'CreditNote' AND series IN ('CreditNote', 'SpecimenCreditNote')) AND mode IN ('Live', 'Specimen') AND (mode = 'Specimen') = (series IN ('SpecimenTaxInvoice', 'SpecimenCreditNote'))");
+
+                            t.HasCheckConstraint("ck_invoices_kind_shape", "(kind = 'TaxInvoice' AND shipment_id IS NOT NULL AND original_invoice_id IS NULL AND reason IS NULL AND reason_text IS NULL AND requested_by IS NULL AND refund_due_minor IS NULL) OR (kind = 'CreditNote' AND shipment_id IS NULL AND original_invoice_id IS NOT NULL AND reason ~ '^[A-Za-z]{2,40}$' AND requested_by IS NOT NULL AND requested_by <> issued_by AND refund_due_minor IS NOT NULL AND replacement_no = 0)");
+
+                            t.HasCheckConstraint("ck_invoices_links", "replacement_no >= 0 AND (replacement_no = 0) = (replaces_invoice_id IS NULL) AND replaces_invoice_id IS DISTINCT FROM id AND original_invoice_id IS DISTINCT FROM id");
+
+                            t.HasCheckConstraint("ck_invoices_money", "net_minor >= 0 AND sd_minor >= 0 AND vat_minor >= 0 AND total_minor = net_minor + sd_minor + vat_minor AND (refund_due_minor IS NULL OR refund_due_minor BETWEEN 0 AND total_minor)");
+
+                            t.HasCheckConstraint("ck_invoices_number", "fiscal_year BETWEEN 2000 AND 9998 AND serial >= 1 AND split_part(number, '-', 1) ~ '^[A-Z]{2,6}$' AND (split_part(number, '-', 1) = 'SPEC') = (series IN ('SpecimenTaxInvoice', 'SpecimenCreditNote')) AND number = split_part(number, '-', 1) || CASE WHEN kind = 'TaxInvoice' THEN '-INV-' ELSE '-CN-' END || fiscal_year::text || '-' || lpad(((fiscal_year + 1) % 100)::text, 2, '0') || '-' || CASE WHEN serial < 1000000 THEN lpad(serial::text, 6, '0') ELSE serial::text END");
+
+                            t.HasCheckConstraint("ck_invoices_pdf", "(pdf_en_key IS NULL) = (pdf_en_sha256 IS NULL) AND (pdf_bn_key IS NULL) = (pdf_bn_sha256 IS NULL) AND (pdf_en_sha256 IS NULL OR pdf_en_sha256 ~ '^[0-9a-f]{64}$') AND (pdf_bn_sha256 IS NULL OR pdf_bn_sha256 ~ '^[0-9a-f]{64}$')");
+
+                            t.HasCheckConstraint("ck_invoices_texts", "currency ~ '^[A-Z]{3}$' AND char_length(order_number) BETWEEN 1 AND 16 AND (reason_text IS NULL OR char_length(reason_text) <= 500) AND jsonb_typeof(seller_snapshot) = 'object' AND jsonb_typeof(buyer_snapshot) = 'object' AND jsonb_typeof(delivery_snapshot) = 'object'");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DescriptionBn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("description_bn");
+
+                    b.Property<string>("DescriptionEn")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("description_en");
+
+                    b.Property<long>("DiscountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discount_minor");
+
+                    b.Property<long?>("DisplayUnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("display_unit_price_minor");
+
+                    b.Property<long>("GrossMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("gross_minor");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("LineNo")
+                        .HasColumnType("integer")
+                        .HasColumnName("line_no");
+
+                    b.Property<long>("NetMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("net_minor");
+
+                    b.Property<Guid?>("OrderItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_item_id");
+
+                    b.Property<Guid?>("OriginalLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_line_id");
+
+                    b.Property<string>("PartNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("part_number");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<long>("SdMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sd_minor");
+
+                    b.Property<decimal>("SdRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("sd_rate");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sku");
+
+                    b.Property<long>("TotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_minor");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("unit");
+
+                    b.Property<long?>("UnitPriceMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unit_price_minor");
+
+                    b.Property<long>("VatMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("vat_minor");
+
+                    b.Property<decimal>("VatRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("vat_rate");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderItemId")
+                        .HasDatabaseName("ix_invoice_lines_order_item")
+                        .HasFilter("order_item_id IS NOT NULL");
+
+                    b.HasIndex("OriginalLineId")
+                        .HasDatabaseName("ix_invoice_lines_original")
+                        .HasFilter("original_line_id IS NOT NULL");
+
+                    b.HasIndex("InvoiceId", "LineNo")
+                        .IsUnique()
+                        .HasDatabaseName("ux_invoice_lines_line_no");
+
+                    b.ToTable("invoice_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_invoice_lines_money", "gross_minor >= 0 AND discount_minor >= 0 AND net_minor >= 0 AND sd_minor >= 0 AND vat_minor >= 0 AND total_minor = net_minor + sd_minor + vat_minor AND sd_rate BETWEEN 0 AND 1 AND vat_rate BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("ck_invoice_lines_shape", "line_no >= 1 AND quantity >= 1 AND (kind = 'Goods' AND sku IS NOT NULL OR kind = 'Delivery' AND order_item_id IS NULL AND quantity = 1) AND char_length(btrim(description_en)) >= 1 AND char_length(btrim(description_bn)) >= 1 AND char_length(btrim(unit)) >= 1");
+
+                            t.HasCheckConstraint("ck_invoice_lines_unit_price", "(unit_price_minor IS NULL) <> (display_unit_price_minor IS NULL) AND COALESCE(unit_price_minor, display_unit_price_minor) >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceNumberCounter", b =>
                 {
                     b.Property<Guid>("SellerId")
@@ -5747,6 +6124,77 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Invoicing.Invoice", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("IssuedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("ReplacesInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Sellers.Seller", null)
+                        .WithMany()
+                        .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Shipment", null)
+                        .WithMany()
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Orders.SubOrder", null)
+                        .WithMany()
+                        .HasForeignKey("SubOrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceLine", b =>
+                {
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.OrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Invoicing.InvoiceLine", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalLineId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("Mechware.Domain.Invoicing.InvoiceNumberCounter", b =>
                 {
                     b.HasOne("Mechware.Domain.Sellers.Seller", null)
@@ -6235,6 +6683,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Navigation("Addresses");
 
                     b.Navigation("UserRoles");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.Invoice", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("Mechware.Domain.Orders.Order", b =>

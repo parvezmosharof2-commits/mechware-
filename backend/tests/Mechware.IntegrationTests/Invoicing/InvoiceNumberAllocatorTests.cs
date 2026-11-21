@@ -8,9 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Mechware.Application.Invoicing;
-using Mechware.Domain.Identity;
 using Mechware.Domain.Invoicing;
-using Mechware.Domain.Sellers;
 using Mechware.Infrastructure.Invoicing;
 using Mechware.Infrastructure.Persistence;
 using Mechware.IntegrationTests.Support;
@@ -34,14 +32,8 @@ public class InvoiceNumberAllocatorTests(PostgresDatabaseFixture fixture) : ICla
 
     private async Task<Guid> SellerAsync()
     {
-        var suffix = Guid.NewGuid().ToString("N")[..10];
         await using var db = fixture.CreateContext();
-        var user = User.Create($"invoicing-{suffix}@example.test", null, null, "Invoicing Seller");
-        var seller = new Seller(Guid.NewGuid(), user.Id, $"Invoicing Seller {suffix}", $"invoicing-{suffix}", null, null, null, 4.5m, 10, 99m, DateTime.UtcNow);
-        db.Users.Add(user);
-        db.Sellers.Add(seller);
-        await db.SaveChangesAsync();
-        return seller.Id;
+        return await InvoiceTestIssues.SellerAsync(db);
     }
 
     private async Task InstallTestClockAsync()
@@ -60,13 +52,15 @@ public class InvoiceNumberAllocatorTests(PostgresDatabaseFixture fixture) : ICla
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('mw_test.now', {utc.ToString("O")}, true)");
     }
 
-    /// <summary>One issue in its own transaction: take the number, then commit (or roll back).</summary>
+    /// <summary>One issue in its own transaction: prepare the order, take the number (last lock), insert its invoice, then commit (or roll back).</summary>
     private async Task<TakenInvoiceNumber> TakeAsync(Guid seller, InvoiceSeries series = InvoiceSeries.TaxInvoice, DateTime? at = null, bool commit = true)
     {
         await using var db = fixture.CreateContext();
         await using var tx = await db.Database.BeginTransactionAsync();
         if (at is { } t) await PinClockAsync(db, t);
+        var issue = await InvoiceTestIssues.PrepareAsync(db, seller, series);
         var taken = await Allocator(db).TakeAsync(seller, series);
+        await issue(taken);
         if (commit) await tx.CommitAsync();
         else await tx.RollbackAsync();
         return taken;
@@ -255,20 +249,25 @@ public class InvoiceNumberAllocatorTests(PostgresDatabaseFixture fixture) : ICla
         await using var holder = fixture.CreateContext();
         await using var holding = await holder.Database.BeginTransactionAsync();
         var series = nameof(InvoiceSeries.TaxInvoice);
+        var holderIssue = await InvoiceTestIssues.PrepareAsync(holder, seller, InvoiceSeries.TaxInvoice);
         await holder.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM invoice_number_counters WHERE seller_id = {seller} AND series = {series} FOR UPDATE");
 
         await using var waiter = fixture.CreateContext();
         await using var waiting = await waiter.Database.BeginTransactionAsync();
+        var waiterIssue = await InvoiceTestIssues.PrepareAsync(waiter, seller, InvoiceSeries.TaxInvoice);
         var waiterStarted = await DbClockAsync(waiter); // the waiter's transaction is open before the lock is free (now() = its start)
         var take = Allocator(waiter).TakeAsync(seller, InvoiceSeries.TaxInvoice);
         await Task.Delay(700);
         take.IsCompleted.Should().BeFalse("the second issuer waits for the counter row");
 
-        (await Allocator(holder).TakeAsync(seller, InvoiceSeries.TaxInvoice)).Serial.Should().Be(2);
+        var held = await Allocator(holder).TakeAsync(seller, InvoiceSeries.TaxInvoice);
+        held.Serial.Should().Be(2);
+        await holderIssue(held);
         var released = await DbClockAsync(holder);
         await holding.CommitAsync();
         var taken = await take;
+        await waiterIssue(taken);
         await waiting.CommitAsync();
 
         taken.Serial.Should().Be(3);
@@ -316,9 +315,11 @@ public class InvoiceNumberAllocatorTests(PostgresDatabaseFixture fixture) : ICla
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<MechwareDbContext>();
         await using var tx = await db.Database.BeginTransactionAsync();
+        var issue = await InvoiceTestIssues.PrepareAsync(db, seller, InvoiceSeries.TaxInvoice);
         var before = await DbClockAsync(db);
         var taken = await scope.ServiceProvider.GetRequiredService<IInvoiceNumberAllocator>().TakeAsync(seller, InvoiceSeries.TaxInvoice);
         var after = await DbClockAsync(db);
+        await issue(taken);
         await tx.CommitAsync();
 
         taken.IssuedAtUtc.Should().BeOnOrAfter(before).And.BeOnOrBefore(after, "the instant is the database's, not the app server's (+1 h)");
