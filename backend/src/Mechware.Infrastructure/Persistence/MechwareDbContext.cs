@@ -92,6 +92,8 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderEventRecord> OrderEvents => Set<OrderEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyKeys => Set<IdempotencyRecord>();
+    /// <summary>F2.1 return requests; lines load through the aggregate, quantity guard in ReturnSql.</summary>
+    public DbSet<Mechware.Domain.Returns.ReturnRequest> ReturnRequests => Set<Mechware.Domain.Returns.ReturnRequest>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<PaymentEvent> PaymentEvents => Set<PaymentEvent>();
     public DbSet<Refund> Refunds => Set<Refund>();

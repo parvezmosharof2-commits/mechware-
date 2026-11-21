@@ -136,6 +136,9 @@ builder.Services.AddSingleton(Mechware.Infrastructure.Orders.DeliveryOptions.Fro
 // Credit settlement (ADR-0010 §13): defaults pending owner confirmation, changed under Credit:*; an invalid value stops the host here.
 builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validated(
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
+// Returns (F2.1): window days and non-returnable category slugs under Returns:* (owner/lawyer defaults); an invalid value stops the host here.
+builder.Services.AddSingleton(Mechware.Application.Orders.ReturnOptions.Validated(
+    builder.Configuration.GetSection(Mechware.Application.Orders.ReturnOptions.SectionName).Get<Mechware.Application.Orders.ReturnOptions>()));
 // RFQs and quotes (ADR-0011 §2, §15): the owner defaults, changed under Quotes:*; an invalid value stops the host here.
 builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Quotes.QuoteOptions.Section).Get<Mechware.Domain.Quotes.QuoteOptions>() ?? new Mechware.Domain.Quotes.QuoteOptions()).Validated());
 // Quote PDF letterhead and terms (ADR-0011 §10, docs/COMPANY_FACTS.md): the owner's pad facts as defaults, changed under QuotePdf:*.

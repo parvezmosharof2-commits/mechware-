@@ -3645,6 +3645,84 @@
         }
       }
     },
+    "/api/v1/admin/returns": {
+      "get": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Newest first. Filters: `status` (wire name), `orderNumber` (prefix), `companyId`. `pageSize` at most 50; a bad filter is 400.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orderNumber",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}": {
+      "get": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/sellers": {
       "get": {
         "tags": [
@@ -6355,6 +6433,158 @@
         }
       }
     },
+    "/api/v1/orders/{orderNumber}/returns": {
+      "post": {
+        "tags": [
+          "Returns"
+        ],
+        "summary": "Opens a return of a delivered order within the return window (409 `RETURN_ORDER_NOT_DELIVERED`, `RETURN_WINDOW_CLOSED`,\r\n`RETURN_QUANTITY_EXCEEDED`; 422 `RETURN_LINE_NOT_RETURNABLE`). The `Idempotency-Key` header is required: the same key and\r\nbody answer 200 with the first return, another body is 409 `IDEMPOTENCY_KEY_REUSED`.",
+        "parameters": [
+          {
+            "name": "orderNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenReturnBody"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenReturnBody"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenReturnBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/returns": {
+      "get": {
+        "tags": [
+          "Returns"
+        ],
+        "summary": "The caller's own returns, newest first. `pageSize` at most 50.",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/returns/{returnId}": {
+      "get": {
+        "tags": [
+          "Returns"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/returns/{returnId}/withdraw": {
+      "post": {
+        "tags": [
+          "Returns"
+        ],
+        "summary": "Withdraws the caller's own open return; again answers it unchanged; once staff handle it, 409 `RETURN_NOT_WITHDRAWABLE`.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -7534,6 +7764,33 @@
         },
         "additionalProperties": false
       },
+      "OpenReturnBody": {
+        "type": "object",
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReturnLineInput"
+            },
+            "nullable": true
+          },
+          "reasonCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "companyId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "What the buyer asks to return: order lines and quantities, a reason (`damaged`, `wrong_item`, `not_as_described`,\r\n`other`) and an optional note (plain text, at most 1000; required for `other`). `CompanyId` names the company of a\r\ncompany order and is empty for a personal one; it is checked against the order, never stored from here."
+      },
       "OrderStepRequest": {
         "type": "object",
         "properties": {
@@ -8124,6 +8381,20 @@
           "newPassword": {
             "type": "string",
             "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReturnLineInput": {
+        "type": "object",
+        "properties": {
+          "orderItemId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false
@@ -9104,6 +9375,9 @@
       "name": "AdminRefunds"
     },
     {
+      "name": "AdminReturns"
+    },
+    {
       "name": "AdminSellers"
     },
     {
@@ -9150,6 +9424,9 @@
     },
     {
       "name": "QuickOrder"
+    },
+    {
+      "name": "Returns"
     },
     {
       "name": "Search"

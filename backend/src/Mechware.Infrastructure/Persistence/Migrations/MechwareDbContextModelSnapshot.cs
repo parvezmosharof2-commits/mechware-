@@ -4695,6 +4695,137 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_hash");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<DateTime?>("WithdrawnAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("withdrawn_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompanyId");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_return_requests_order");
+
+                    b.HasIndex("RequestedBy", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_return_requests_idempotency");
+
+                    b.HasIndex("RequestedBy", "RequestedAtUtc")
+                        .HasDatabaseName("ix_return_requests_requester");
+
+                    b.HasIndex("Status", "RequestedAtUtc")
+                        .HasDatabaseName("ix_return_requests_status");
+
+                    b.ToTable("return_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_return_requests_key", "idempotency_key ~ '^[A-Za-z0-9_-]{8,100}$' AND char_length(request_hash) = 64");
+
+                            t.HasCheckConstraint("ck_return_requests_note", "note IS NULL OR (char_length(note) BETWEEN 1 AND 1000 AND note = btrim(note))");
+
+                            t.HasCheckConstraint("ck_return_requests_reason", "reason IN ('Damaged', 'WrongItem', 'NotAsDescribed', 'Other') AND (reason <> 'Other' OR note IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_return_requests_status", "status IN ('Requested', 'Approved', 'Rejected', 'Received', 'Refunded', 'CreditNoted', 'Withdrawn')");
+
+                            t.HasCheckConstraint("ck_return_requests_withdrawn", "(status = 'Withdrawn') = (withdrawn_at IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequestLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("OrderItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_item_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("ReturnRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("return_request_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderItemId")
+                        .HasDatabaseName("ix_return_request_lines_order_item");
+
+                    b.HasIndex("ReturnRequestId", "OrderItemId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_return_request_lines_item");
+
+                    b.ToTable("return_request_lines", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_return_request_lines_qty", "quantity BETWEEN 1 AND 10000");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Reviews.Answer", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5825,6 +5956,41 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequest", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequestLine", b =>
+                {
+                    b.HasOne("Mechware.Domain.Orders.OrderItem", null)
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Returns.ReturnRequest", null)
+                        .WithMany("Lines")
+                        .HasForeignKey("ReturnRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Mechware.Domain.Reviews.Answer", b =>
                 {
                     b.HasOne("Mechware.Domain.Reviews.Question", null)
@@ -5974,6 +6140,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Mechware.Domain.Quotes.Rfq", b =>
+                {
+                    b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequest", b =>
                 {
                     b.Navigation("Lines");
                 });

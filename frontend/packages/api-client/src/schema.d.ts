@@ -3679,6 +3679,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Newest first. Filters: `status` (wire name), `orderNumber` (prefix), `companyId`. `pageSize` at most 50; a bad filter is 400. */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    orderNumber?: string;
+                    companyId?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/returns/{returnId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/sellers": {
         parameters: {
             query?: never;
@@ -6623,6 +6698,180 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{orderNumber}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Opens a return of a delivered order within the return window (409 `RETURN_ORDER_NOT_DELIVERED`, `RETURN_WINDOW_CLOSED`,
+         *     `RETURN_QUANTITY_EXCEEDED`; 422 `RETURN_LINE_NOT_RETURNABLE`). The `Idempotency-Key` header is required: the same key and
+         *     body answer 200 with the first return, another body is 409 `IDEMPOTENCY_KEY_REUSED`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    orderNumber: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["OpenReturnBody"];
+                    "text/json": components["schemas"]["OpenReturnBody"];
+                    "application/*+json": components["schemas"]["OpenReturnBody"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["ProblemDetails"];
+                        "application/json": components["schemas"]["ProblemDetails"];
+                        "text/json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's own returns, newest first. `pageSize` at most 50. */
+        get: {
+            parameters: {
+                query?: {
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/returns/{returnId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/returns/{returnId}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Withdraws the caller's own open return; again answers it unchanged; once staff handle it, 409 `RETURN_NOT_WITHDRAWABLE`. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    returnId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -7463,6 +7712,18 @@ export interface components {
             currency?: string | null;
             formatted?: string | null;
         };
+        /**
+         * @description What the buyer asks to return: order lines and quantities, a reason (`damaged`, `wrong_item`, `not_as_described`,
+         *     `other`) and an optional note (plain text, at most 1000; required for `other`). `CompanyId` names the company of a
+         *     company order and is empty for a personal one; it is checked against the order, never stored from here.
+         */
+        OpenReturnBody: {
+            lines?: components["schemas"]["ReturnLineInput"][] | null;
+            reasonCode?: string | null;
+            note?: string | null;
+            /** Format: uuid */
+            companyId?: string | null;
+        };
         OrderStepRequest: {
             /** Format: int32 */
             rowVersion?: number | null;
@@ -7658,6 +7919,12 @@ export interface components {
             referenceId?: string | null;
             otpCode?: string | null;
             newPassword?: string | null;
+        };
+        ReturnLineInput: {
+            /** Format: uuid */
+            orderItemId?: string;
+            /** Format: int32 */
+            quantity?: number;
         };
         RevokeSessionsRequestDto: {
             /** Format: uuid */
