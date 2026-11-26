@@ -1,6 +1,6 @@
 import type { MechWareApiClient } from './index';
 import type { BuyerInvoiceDetail, InvoiceLocale, InvoicePage, InvoiceSummary } from './invoices-model';
-import { invoiceListQuery, invoicePdfPath } from './invoices-model';
+import { challanPdfPath, companyInvoicePdfPath, invoiceListQuery, invoicePdfPath } from './invoices-model';
 
 type Data<T> = { data: T };
 
@@ -17,6 +17,8 @@ export function createInvoicesApi(client: MechWareApiClient) {
     orderDetail: (orderId: string, invoiceId: string) =>
       client.fetch<Data<BuyerInvoiceDetail>>(`${order(orderId)}/${encodeURIComponent(invoiceId)}`, init).then((r) => r.data),
     pdf: (orderId: string, invoiceId: string, locale: InvoiceLocale) => client.fetchBytes(invoicePdfPath(orderId, invoiceId, locale), init),
+    companyPdf: (companyId: string, invoiceId: string, locale: InvoiceLocale) => client.fetchBytes(companyInvoicePdfPath(companyId, invoiceId, locale), init),
+    challan: (orderId: string, locale: InvoiceLocale) => client.fetchBytes(challanPdfPath(orderId, locale), init),
     companyList: (companyId: string, q: { from?: string; to?: string; page?: number; pageSize?: number } = {}) =>
       client.fetch<Data<InvoicePage>>(`${company(companyId)}?${invoiceListQuery(q)}`, init).then((r) => r.data),
     companyDetail: (companyId: string, invoiceId: string) =>

@@ -40,7 +40,7 @@ export function InvoiceChips({ invoice }: { invoice: InvoiceSummary }) {
 }
 
 /** Two buttons, one per language. A failed download is said in words under the buttons. */
-export function InvoicePdfButtons({ invoice }: { invoice: InvoiceSummary }) {
+export function InvoicePdfButtons({ invoice, companyId }: { invoice: InvoiceSummary; companyId?: string }) {
   const t = useTranslations('Invoices');
   const [busy, setBusy] = React.useState<InvoiceLocale | null>(null);
   const [refusal, setRefusal] = React.useState<InvoiceRefusal | null>(null);
@@ -50,7 +50,7 @@ export function InvoicePdfButtons({ invoice }: { invoice: InvoiceSummary }) {
     setRefusal(null);
     setDone(null);
     try {
-      await downloadInvoicePdf(invoice.orderId, invoice.id, invoice.number, locale);
+      await downloadInvoicePdf(invoice.orderId, invoice.id, invoice.number, locale, companyId);
       setDone(locale);
     } catch (e) {
       setRefusal(refusalOf(e));

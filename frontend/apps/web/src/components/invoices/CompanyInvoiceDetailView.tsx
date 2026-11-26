@@ -25,7 +25,7 @@ function Party({ title, name, rows }: { title: string; name: string; rows: [stri
   );
 }
 
-function Detail({ d }: { d: BuyerInvoiceDetail }) {
+function Detail({ d, companyId }: { d: BuyerInvoiceDetail; companyId: string }) {
   const t = useTranslations('Invoices');
   const locale = useLocale() === 'bn' ? 'bn' : 'en';
   const money = (m: number) => formatPriceMinor(m, d.invoice.currency, locale);
@@ -34,8 +34,7 @@ function Detail({ d }: { d: BuyerInvoiceDetail }) {
       <section className="rounded-lg border border-surface-border p-4">
         <InvoiceFacts invoice={d.invoice} locale={locale} />
         <p className="mt-2 break-all text-sm text-text-muted">{t('forOrder', { number: d.invoice.orderNumber })}</p>
-        <div className="mt-3"><InvoicePdfButtons invoice={d.invoice} /></div>
-        <p className="mt-2 text-xs text-text-muted">{t('pdfNote')}</p>
+        <div className="mt-3"><InvoicePdfButtons invoice={d.invoice} companyId={companyId} /></div>
       </section>
       <div className="grid gap-3 sm:grid-cols-2">
         <Party title={t('seller')} name={locale === 'bn' && d.seller.legalNameBn ? d.seller.legalNameBn : d.seller.legalNameEn} rows={[['BIN', d.seller.bin], ['TIN', d.seller.tin]]} />
@@ -79,7 +78,7 @@ function Body({ companyId, invoiceId }: { companyId: string; invoiceId: string }
       </div>
     );
   }
-  return res.data ? <Detail d={res.data} /> : null;
+  return res.data ? <Detail d={res.data} companyId={companyId} /> : null;
 }
 
 export function CompanyInvoiceDetailView({ companyId, invoiceId }: { companyId: string; invoiceId: string }) {

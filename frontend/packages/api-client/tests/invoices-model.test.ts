@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   classifyInvoiceError, invoiceFilterProblem, invoiceKindKey, invoiceListQuery, invoiceModeKey, invoicePageCount, invoicePdfFileName,
-  invoicePdfPath, invoiceUrlQuery, isSpecimenInvoice, parseInvoiceUrl
+  invoicePdfPath, companyInvoicePdfPath, challanPdfPath, staffChallanPdfPath, challanFileName, hasChallan, classifyChallanError, canPrintChallan,
+  staffChallanErrorText, invoiceUrlQuery, isSpecimenInvoice, parseInvoiceUrl
 } from '../src/invoices-model.ts';
 
 test('classifyInvoiceError: the three refusals in words, everything else is a retryable outage', () => {
@@ -70,4 +71,32 @@ test('invoicePageCount never goes below 1', () => {
   assert.equal(invoicePageCount(0, 20), 1);
   assert.equal(invoicePageCount(41, 20), 3);
   assert.equal(invoicePageCount(-5, 0), 1);
+});
+
+test('PDF paths: company invoice, buyer challan, staff challan (ids encoded, language en|bn only)', () => {
+  assert.equal(companyInvoicePdfPath('c 1', 'i/2', 'bn'), '/api/v1/companies/c%201/invoices/i%2F2/pdf?locale=bn');
+  assert.equal(companyInvoicePdfPath('c', 'i', 'xx' as 'en'), '/api/v1/companies/c/invoices/i/pdf?locale=en');
+  assert.equal(challanPdfPath('o1', 'en'), '/api/v1/orders/o1/challan?locale=en');
+  assert.equal(staffChallanPdfPath('o1', 'bn'), '/api/v1/admin/orders/o1/challan?locale=bn');
+  assert.equal(challanFileName('MW-261127-ABC234', 'bn'), 'challan-MW-261127-ABC234-bn.pdf');
+  assert.equal(challanFileName('///', 'en'), 'challan-order-en.pdf');
+});
+
+test('challan: shown only once a shipment exists; 409 is words, other refusals as for invoices', () => {
+  assert.equal(hasChallan({ shipments: [] }), false);
+  assert.equal(hasChallan({}), false);
+  assert.equal(hasChallan({ shipments: [{}] }), true);
+  assert.equal(classifyChallanError(409, 'CHALLAN_NOT_AVAILABLE'), 'notShipped');
+  assert.equal(classifyChallanError(409, 'OTHER'), 'unavailable');
+  assert.equal(classifyChallanError(404), 'notFound');
+  assert.equal(classifyChallanError(429), 'rateLimited');
+  assert.match(staffChallanErrorText({ status: 409, code: 'CHALLAN_NOT_AVAILABLE' }), /not been shipped/);
+  assert.match(staffChallanErrorText({ status: 403 }), /orders\.fulfil/);
+});
+
+test('canPrintChallan: orders.fulfil OR orders.view_all, case-insensitive, nothing else', () => {
+  assert.equal(canPrintChallan(['orders.fulfil']), true);
+  assert.equal(canPrintChallan(['Orders.View_All']), true);
+  assert.equal(canPrintChallan(['orders.cancel', 'invoices.view']), false);
+  assert.equal(canPrintChallan([]), false);
 });

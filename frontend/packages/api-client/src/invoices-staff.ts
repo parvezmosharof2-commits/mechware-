@@ -1,5 +1,5 @@
 import type { MechWareApiClient } from './index';
-import type { InvoiceLocale } from './invoices-model';
+import { staffChallanPdfPath, type InvoiceLocale } from './invoices-model';
 import {
   isSha256Hex, staffInvoiceListQuery, staffInvoicePdfPath, type InvoiceDocumentMatch, type StaffInvoiceDetail, type StaffInvoiceFilters, type StaffInvoicePage
 } from './invoices-staff-model';
@@ -16,6 +16,7 @@ export function createStaffInvoicesApi(client: MechWareApiClient) {
   return {
     list: (f: StaffInvoiceFilters) => client.fetch<Data<StaffInvoicePage>>(`${base}?${staffInvoiceListQuery(f)}`, init).then((r) => r.data),
     detail: (id: string) => client.fetch<Data<StaffInvoiceDetail>>(`${base}/${encodeURIComponent(id)}`, init).then((r) => r.data),
+    challan: (orderId: string, locale: InvoiceLocale) => client.fetchBytes(staffChallanPdfPath(orderId, locale), init),
     pdf: (id: string, locale: InvoiceLocale) => client.fetchBytes(staffInvoicePdfPath(id, locale), init),
     check: async (sha256: string): Promise<InvoiceDocumentMatch | null> => {
       if (!isSha256Hex(sha256)) throw new Error('A SHA-256 is 64 hex digits.');

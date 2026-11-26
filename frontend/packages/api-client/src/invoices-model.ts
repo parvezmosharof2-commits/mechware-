@@ -147,3 +147,49 @@ export function invoiceUrlQuery(f: { from: string; to: string; page: number }): 
 export function invoicePageCount(totalCount: number, pageSize: number): number {
   return Math.max(1, Math.ceil(Math.max(0, totalCount) / Math.max(1, pageSize)));
 }
+
+/** The company route (E6.4d): any effective company Admin/Buyer gets the PDF, even of an order a colleague placed. */
+export function companyInvoicePdfPath(companyId: string, invoiceId: string, locale: InvoiceLocale): string {
+  return `/api/v1/companies/${encodeURIComponent(companyId)}/invoices/${encodeURIComponent(invoiceId)}/pdf?locale=${locale === 'bn' ? 'bn' : 'en'}`;
+}
+
+/** Delivery challan routes (E6.4d): the buyer's, and the staff one (`orders.fulfil` or `orders.view_all`). */
+export function challanPdfPath(orderId: string, locale: InvoiceLocale): string {
+  return `/api/v1/orders/${encodeURIComponent(orderId)}/challan?locale=${locale === 'bn' ? 'bn' : 'en'}`;
+}
+export function staffChallanPdfPath(orderId: string, locale: InvoiceLocale): string {
+  return `/api/v1/admin/orders/${encodeURIComponent(orderId)}/challan?locale=${locale === 'bn' ? 'bn' : 'en'}`;
+}
+export function challanFileName(orderNumber: string, locale: InvoiceLocale): string {
+  const safe = orderNumber.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '') || 'order';
+  return `challan-${safe}-${locale === 'bn' ? 'bn' : 'en'}.pdf`;
+}
+
+/** A challan exists once a shipment does (any shipment row, so Delivered and later stay printable). */
+export function hasChallan(order: { shipments?: readonly unknown[] | null }): boolean {
+  return (order.shipments?.length ?? 0) > 0;
+}
+
+export type ChallanRefusal = InvoiceRefusal | 'notShipped';
+
+/** 409 `CHALLAN_NOT_AVAILABLE` = no shipment yet; the rest is as for invoices (404 is one body for "not yours"). */
+export function classifyChallanError(status: number | null | undefined, code?: string | null): ChallanRefusal {
+  if (status === 409 && code === 'CHALLAN_NOT_AVAILABLE') return 'notShipped';
+  return classifyInvoiceError(status, code);
+}
+
+/** Staff can print a challan with `orders.fulfil` or `orders.view_all` (checked in the action, not as AND attributes). */
+export function canPrintChallan(permissions: readonly string[]): boolean {
+  return permissions.some((p) => { const k = p.toLowerCase(); return k === 'orders.fulfil' || k === 'orders.view_all'; });
+}
+
+/** Console words for a failed challan download. */
+export function staffChallanErrorText(e: { status: number | null; code?: string | null }): string {
+  if (e.status === 409 && e.code === 'CHALLAN_NOT_AVAILABLE') return 'There is no challan yet: the order has not been shipped.';
+  if (e.status === 403) return 'You need orders.fulfil or orders.view_all to print a challan.';
+  if (e.status === 404) return 'This order was not found.';
+  if (e.status === 429) return 'Too many downloads. Wait a minute and try again.';
+  if (e.status === null) return 'The server cannot be reached. Check your connection and try again.';
+  if (e.status === 401) return 'Your session ended. Sign in again.';
+  return 'The challan could not be made. Try again in a moment.';
+}

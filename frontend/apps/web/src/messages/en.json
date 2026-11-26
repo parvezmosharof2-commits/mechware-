@@ -1506,7 +1506,18 @@
     "pdfBn": "PDF (Bangla)",
     "pdfGroup": "Download invoice {number}",
     "pdfSaved": "Invoice {number} was downloaded.",
-    "pdfNote": "The PDF can be downloaded by the person who placed the order.",
+    "challan": {
+      "title": "Delivery challan",
+      "note": "A copy of what was sent to you, without prices.",
+      "en": "Challan (English)",
+      "bn": "Challan (Bangla)",
+      "saved": "The delivery challan was downloaded.",
+      "notShipped": "There is no challan yet: this order has not been shipped.",
+      "notFound": "We could not find this challan, or it is not available to you.",
+      "rateLimited": "Too many downloads in a short time. Please wait a minute and try again.",
+      "pdfUnavailable": "The challan could not be made. Please try again later.",
+      "unavailable": "We could not make the challan just now. Please try again."
+    },
     "refusal": {
       "notFound": "We could not find this invoice, or it is not available to you.",
       "rateLimited": "Too many downloads in a short time. Please wait a minute and try again.",

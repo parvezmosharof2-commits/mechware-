@@ -215,6 +215,7 @@ async function shippedOrder(staffToken, buyer, company) {
     const dpdf = await download(p, 'invoice-pdf-en');
     const dl = await lookup(dpdf.bytes);
     r.check(`${L} detail: PDF download works for the placer; SHA lookup finds invoice ${I1.number}`, dpdf.bytes.subarray(0, 4).toString() === '%PDF' && dl.status === 200 && dl.json.data.invoiceId === I1.id);
+    r.check(`${L} detail: the outdated "placer only" note is gone (company route; NOT RUN)`, (await p.getByTestId('invoice-detail').innerText()).includes('person who placed') === false);
     await axeCheck(p, `${L} company invoice detail`);
     r.check(`${L} no horizontal scroll on the detail`, await noOverflow(p));
 

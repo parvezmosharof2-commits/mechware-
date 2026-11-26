@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Button } from '@mechware/ui/src/components/Button';
-import { invoicePdfFileName, staffInvoiceErrorText, type InvoiceLocale } from '@mechware/api-client';
+import { challanFileName, invoicePdfFileName, staffChallanErrorText, staffInvoiceErrorText, type InvoiceLocale } from '@mechware/api-client';
 import { problemCode, problemStatus, staffInvoicesApi } from '../lib/api';
 import { saveFile } from '../lib/download';
 
@@ -63,6 +63,26 @@ export function PrintMushak({ orderId, orderNumber }: { orderId: string; orderNu
         <Button type="button" variant="outline" data-testid="print-mushak-bn" disabled={pdf.busy !== null} onClick={() => void print('bn')}>Print Mushak-6.3 (Bangla)</Button>
       </div>
       {none && <p role="status" className="text-sm text-text-muted">No tax invoice was found for this order.</p>}
+      {pdf.alert}
+    </div>
+  );
+}
+
+/** On a shipped order: "Print challan" (no prices), English or Bangla. Needs `orders.fulfil` or `orders.view_all`; the caller gates it. */
+export function PrintChallan({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
+  const pdf = useInvoicePdf();
+  const print = async (locale: InvoiceLocale) => {
+    pdf.setFailure(null);
+    try {
+      saveFile(challanFileName(orderNumber, locale), await staffInvoicesApi.challan(orderId, locale), 'application/pdf');
+    } catch (err) { pdf.setFailure(staffChallanErrorText({ status: problemStatus(err), code: problemCode(err) })); }
+  };
+  return (
+    <div className="space-y-2" data-testid="print-challan">
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" data-testid="print-challan-en" disabled={pdf.busy !== null} onClick={() => void print('en')}>Print challan (English)</Button>
+        <Button type="button" variant="outline" data-testid="print-challan-bn" disabled={pdf.busy !== null} onClick={() => void print('bn')}>Print challan (Bangla)</Button>
+      </div>
       {pdf.alert}
     </div>
   );

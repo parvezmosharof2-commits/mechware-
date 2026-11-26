@@ -243,6 +243,7 @@ async function shippedOrder(staff, buyer, company) {
   await s.getByTestId('print-mushak').waitFor();
   r.check('order link opens the order detail; it lists the invoice number and offers "Print Mushak-6.3"', (await s.getByTestId('invoice-numbers').innerText()).includes(I1.number) && (await s.getByTestId('print-mushak-en').innerText()).includes('Print Mushak-6.3'));
   await axeCheck(s, 'order detail with the print action');
+  r.check('shipped order: "Print challan" EN and BN download a PDF (NOT RUN)', (await download(s, 'print-challan-en')).bytes.subarray(0, 4).toString() === '%PDF' && (await download(s, 'print-challan-bn')).bytes.subarray(0, 4).toString() === '%PDF');
   const pen = await download(s, 'print-mushak-en');
   const pbn = await download(s, 'print-mushak-bn');
   const lpen = await lookup(pen.bytes), lpbn = await lookup(pbn.bytes);
@@ -255,6 +256,7 @@ async function shippedOrder(staff, buyer, company) {
   }).then((x) => x.json());
   await s.goto(`${CONSOLE}/orders/${placedOnly.data.orderId}`, { waitUntil: 'networkidle' });
   await s.getByTestId('order-number').waitFor();
+  r.check('an order that has not shipped: no challan button (NOT RUN)', (await s.getByTestId('print-challan').count()) === 0);
   r.check('an order that has not shipped: no invoice block and no print action', (await s.getByTestId('print-mushak').count()) === 0 && (await s.getByTestId('invoice-numbers').count()) === 0);
 
   // ================= real 503: the stored file of invoice 2 is changed on disk
