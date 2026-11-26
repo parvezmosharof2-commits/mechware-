@@ -1,10 +1,13 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Mechware.Application.Identity;
 using Mechware.Domain.Common.Primitives;
 using Mechware.Domain.Identity;
+using Mechware.Infrastructure.Security;
 
 namespace Mechware.Infrastructure.Persistence;
 
@@ -12,6 +15,14 @@ namespace Mechware.Infrastructure.Persistence;
 /// EF Core SaveChangesInterceptor automatically capturing ChangedEntities, OldValues, NewValues,
 /// ActorId, IP, CorrelationId, and Timestamp into the AuditLog table (03_PHASE_PROMPTS.md §Phase 3 #7).
 /// Automatically redacts sensitive secrets (PasswordHash, TwoFactorSecret, TokenHash).
+/// <para>
+/// A2.x (threat model v1, H4): a field-encrypted value is never copied out in clear, wherever it sits. The entity holds the plain
+/// value and only the column's value converter encrypts it, so serialising the entity value would undo the encryption. Each
+/// value is therefore checked in its column form: an encrypted column is written as <see cref="EncryptedMarker"/>, and a JSON
+/// column with encrypted members (the quote company snapshot, the invoice buyer snapshot) is written in its stored shape with
+/// every ciphertext replaced by the marker. Ciphertext is not copied either: the log is append-only, so a copy could never be
+/// re-encrypted on a key rotation and would keep a retired key useful.
+/// </para>
 /// </summary>
 public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
 {
@@ -28,6 +39,11 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
         nameof(Mechware.Domain.Companies.Company.TradeLicenceNo),
         CompanyBinIndex.Property
     };
+
+    /// <summary>Written instead of a field-encrypted value (the column holds ciphertext; the log keeps neither it nor the plain value).</summary>
+    public const string EncryptedMarker = "[encrypted]";
+
+    private const string Redacted = "[REDACTED]";
 
     private readonly ICurrentUserService _currentUserService;
 
@@ -82,20 +98,19 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
             foreach (PropertyEntry prop in entry.Properties)
             {
                 string propName = prop.Metadata.Name;
-                bool isSensitive = SensitiveProperties.Contains(propName);
 
                 if (entry.State == EntityState.Added)
                 {
-                    newValues[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
+                    newValues[propName] = AuditValue(prop.Metadata, prop.CurrentValue);
                 }
                 else if (entry.State == EntityState.Deleted)
                 {
-                    oldValues[propName] = isSensitive ? "[REDACTED]" : prop.OriginalValue;
+                    oldValues[propName] = AuditValue(prop.Metadata, prop.OriginalValue);
                 }
                 else if (entry.State == EntityState.Modified && prop.IsModified)
                 {
-                    oldValues[propName] = isSensitive ? "[REDACTED]" : prop.OriginalValue;
-                    newValues[propName] = isSensitive ? "[REDACTED]" : prop.CurrentValue;
+                    oldValues[propName] = AuditValue(prop.Metadata, prop.OriginalValue);
+                    newValues[propName] = AuditValue(prop.Metadata, prop.CurrentValue);
                 }
             }
 
@@ -117,6 +132,58 @@ public sealed class AuditLogSaveChangesInterceptor : SaveChangesInterceptor
             context.Set<AuditLog>().AddRange(auditLogs);
         }
     }
+
+    /// <summary>
+    /// The value the audit row records for <paramref name="property"/>: a marker for secrets and field-encrypted values, the stored
+    /// shape with each ciphertext masked for a JSON column holding encrypted members, the entity value otherwise.
+    /// </summary>
+    internal static object? AuditValue(IProperty property, object? value)
+    {
+        if (SensitiveProperties.Contains(property.Name)) return Redacted;
+        if (value is null) return null;
+        // Ciphertext held by the entity itself (the second-factor secrets): neither copied nor shown.
+        if (value is string text && FieldProtector.IsProtected(text)) return EncryptedMarker;
+
+        var converter = property.GetValueConverter() ?? property.FindTypeMapping()?.Converter;
+        if (converter is null || converter.ProviderClrType != typeof(string) || converter.ModelClrType.IsEnum) return value;
+        if (converter.ConvertToProvider(value) is not string stored || !stored.Contains(FieldProtector.Prefix, StringComparison.Ordinal))
+            return value;
+        if (FieldProtector.IsProtected(stored)) return EncryptedMarker; // an encrypted column (companies.bin, tin, trade_licence_no)
+
+        JsonNode? node;
+        try
+        {
+            node = JsonNode.Parse(stored);
+        }
+        catch (JsonException)
+        {
+            return EncryptedMarker; // ciphertext inside a value that is not JSON: fail closed
+        }
+
+        return node is null ? EncryptedMarker : MaskCiphertext(node);
+    }
+
+    /// <summary>Replaces every string that is field ciphertext, at any depth, with <see cref="EncryptedMarker"/>.</summary>
+    private static JsonNode MaskCiphertext(JsonNode node)
+    {
+        if (IsCiphertext(node)) return JsonValue.Create(EncryptedMarker);
+        if (node is JsonObject obj)
+        {
+            foreach (string key in obj.Where(p => IsCiphertext(p.Value)).Select(p => p.Key).ToList()) obj[key] = EncryptedMarker;
+            foreach (var (_, child) in obj) if (child is not null) MaskCiphertext(child);
+        }
+        else if (node is JsonArray array)
+        {
+            for (int i = 0; i < array.Count; i++)
+                if (IsCiphertext(array[i])) array[i] = EncryptedMarker;
+                else if (array[i] is { } item) MaskCiphertext(item);
+        }
+
+        return node;
+    }
+
+    private static bool IsCiphertext(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue(out string? s) && FieldProtector.IsProtected(s);
 
     private static string ExtractPrimaryKey(EntityEntry entry)
     {
