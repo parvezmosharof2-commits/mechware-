@@ -54,6 +54,8 @@ builder.Services.AddSingleton(Mechware.Application.Credit.CreditOptions.Validate
     builder.Configuration.GetSection(Mechware.Application.Credit.CreditOptions.SectionName).Get<Mechware.Application.Credit.CreditOptions>()));
 // The E7.3 stock sweep reads StockReconciliation:* (interval, grace period, batch size); bad values stop the host at start-up.
 builder.Services.AddSingleton(Mechware.Infrastructure.Orders.StockReconciliationOptions.From(builder.Configuration));
+// Invoicing (ADR-0012 §3): the same Invoicing:* rules as the API, so a bad deploy config stops both hosts (the PDF renderer, E6.4b, runs here).
+builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Invoicing.InvoicingOptions.Section).Get<Mechware.Domain.Invoicing.InvoicingOptions>() ?? new Mechware.Domain.Invoicing.InvoicingOptions()).Validated(builder.Environment.IsProduction()));
 builder.Services.AddCatalogServices();
 builder.Services.AddDbContext<MechwareDbContext>((sp, options) =>
 {

@@ -40,22 +40,38 @@ public static class InvoiceSnapshotBuilder
             throw new InvalidOperationException("A tax invoice is issued for the shipment of a shipped order.");
         var sub = order.SubOrders.SingleOrDefault(s => s.SellerId == issue.SellerId)
             ?? throw new InvalidOperationException("The order has no sub-order of this seller.");
-        if (mode == InvoicingMode.Live)
-        {
-            if (options.MissingIssuerFacts() is { Count: > 0 } missing)
-                throw new ConflictException("INVOICE_SETUP_INCOMPLETE", $"Invoicing is not set up: {string.Join(", ", missing)} missing.");
-            if (issue.SellerId != options.IssuerSellerId)
-                throw new ConflictException("INVOICE_SELLER_NOT_SUPPORTED", "MECHWARE does not issue invoices for this seller yet.");
-        }
+        if (mode == InvoicingMode.Live) EnsureLiveIssuable(options, issue.SellerId, order, issue.Company);
 
         var shipTo = ShipTo(order.ShipToJson);
         return new Invoice(issue.InvoiceId, mode, InvoiceNumber.Format(options.NumberPrefix, issue.Series, issue.FiscalYear, issue.Serial),
             issue.Series, issue.FiscalYear, issue.Serial, issue.IssuedAtUtc, issue.SellerId, order.Id, order.OrderNumber, sub.Id, issue.Shipment.Id,
-            order.CompanyId, options.SellerSnapshot(), Buyer(issue, shipTo, mode),
+            order.CompanyId, options.SellerSnapshot(), Buyer(issue, shipTo),
             new InvoiceDeliverySnapshot(shipTo, issue.Shipment.CourierName, issue.Shipment.TrackingNumber),
             order.PurchaseOrderNumber, Blank(issue.QuoteNumber), order.Currency, options.ConsultantChecked, issue.IssuedBy,
             Lines(issue.InvoiceId, order.TaxMode, sub, options.ShippingVatRate));
     }
+
+    /// <summary>
+    /// The Live refusals (ADR-0012 §2, §6), in this order: issuer facts missing → 409 <c>INVOICE_SETUP_INCOMPLETE</c>; a seller MECHWARE
+    /// does not invoice for → 409 <c>INVOICE_SELLER_NOT_SUPPORTED</c>; a company order whose company is not active or has no valid BIN →
+    /// 409 <c>INVOICE_BUYER_BIN_INVALID</c> (no silent fallback to "unregistered"). The issuer (E6.3c) calls it before the counter lock,
+    /// so a refused ship never touches the counter; <see cref="BuildTaxInvoice"/> calls it again.
+    /// </summary>
+    public static void EnsureLiveIssuable(InvoicingOptions options, Guid sellerId, Order order, Company? company)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(order);
+        if (options.MissingIssuerFacts() is { Count: > 0 } missing)
+            throw new ConflictException(SetupIncomplete, $"Invoicing is not set up: {string.Join(", ", missing)} missing.");
+        if (sellerId != options.IssuerSellerId)
+            throw new ConflictException(SellerNotSupported, "MECHWARE does not issue invoices for this seller yet.");
+        if (order.CompanyId is not null && company is not null && (!company.IsActive || !TaxIdFormat.IsBin(Blank(company.Bin))))
+            throw new ConflictException(BuyerBinInvalid, "The buyer company must be active with a valid BIN before a tax invoice is issued.");
+    }
+
+    public const string SetupIncomplete = "INVOICE_SETUP_INCOMPLETE";
+    public const string SellerNotSupported = "INVOICE_SELLER_NOT_SUPPORTED";
+    public const string BuyerBinInvalid = "INVOICE_BUYER_BIN_INVALID";
 
     /// <summary>§7: the delivery line keeps the charged amount as its total; <c>net = round_even(amount / (1 + rate))</c>, VAT = the rest.</summary>
     public static (long NetMinor, long VatMinor) SplitDelivery(long amountMinor, decimal vatRate)
@@ -69,7 +85,7 @@ public static class InvoiceSnapshotBuilder
     public static long DisplayUnitPriceMinor(long netMinor, int quantity) =>
         quantity < 1 ? throw new ArgumentOutOfRangeException(nameof(quantity)) : (long)decimal.Round((decimal)netMinor / quantity, 0, MidpointRounding.ToEven);
 
-    private static InvoiceBuyerSnapshot Buyer(InvoiceIssue issue, InvoiceAddress? shipTo, InvoicingMode mode)
+    private static InvoiceBuyerSnapshot Buyer(InvoiceIssue issue, InvoiceAddress? shipTo)
     {
         var order = issue.Order;
         if (order.CompanyId is null)
@@ -82,10 +98,7 @@ public static class InvoiceSnapshotBuilder
         var company = issue.Company;
         if (company is null || company.Id != order.CompanyId || (issue.BillingSite is { } s && s.CompanyId != company.Id))
             throw new InvalidOperationException("The company is not the order's.");
-        var bin = Blank(company.Bin);
-        // §6: no silent fallback to "unregistered"; staff fix the company first (E6.3c answers 409).
-        if (mode == InvoicingMode.Live && (!company.IsActive || !TaxIdFormat.IsBin(bin)))
-            throw new ConflictException("INVOICE_BUYER_BIN_INVALID", "The buyer company must be active with a valid BIN before a tax invoice is issued.");
+        var bin = Blank(company.Bin);   // Live: active + valid BIN checked by EnsureLiveIssuable; Specimen prints what is there
         var site = issue.BillingSite;
         var address = site is null ? shipTo?.OneLine()
             : string.Join(", ", new[] { site.Line1, site.Line2, site.Upazila, site.District, site.Division, site.PostalCode }.Where(x => !string.IsNullOrWhiteSpace(x)));

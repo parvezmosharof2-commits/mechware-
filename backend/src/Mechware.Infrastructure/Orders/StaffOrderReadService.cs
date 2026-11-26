@@ -125,7 +125,7 @@ public sealed class StaffOrderReadService(MechwareDbContext db) : IStaffOrderRea
                 payments.Select(p => new StaffPaymentDto(p.Id, p.Provider, OrderService.ToWire(p.Status), p.AmountMinor, p.Currency, p.CreatedAtUtc, p.CapturedAtUtc,
                     refunds.Where(r => r.PaymentId == p.Id).Select(r => new StaffRefundDto(r.Id, r.AmountMinor, OrderService.ToWire(r.Status), r.Reason, r.RequestedBy,
                         r.DecidedBy, r.DecidedAtUtc, r.CreatedAtUtc)).ToList())).ToList(),
-                rowVersion, shipments.Select(OrderFulfilmentService.ToStaff).ToList());
+                rowVersion, shipments.Select(OrderFulfilmentService.ToStaff).ToList(), await db.NumbersOfAsync(orderId, ct));
         }, ct);
 
     private async Task<StaffOrderCreditDto?> CreditAsync(Order order, DateTime nowUtc, CancellationToken ct)

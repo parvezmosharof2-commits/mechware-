@@ -35,6 +35,10 @@ x-api-env: &api-env
   DataProtection__CertificatePassword: ${DATA_PROTECTION_CERT_PASSWORD:-}
   Antivirus__Host: clamav
   Antivirus__Port: "3310"
+  # Invoicing (ADR-0012 §3): Production has no default mode, so it is written here. Off = no Mushak-6.3 is issued; Specimen is
+  # refused in Production; Live needs Invoicing__IssuerSellerId, __LegalNameEn/Bn, __Bin, __RegisteredAddressEn/Bn and
+  # __ResponsiblePersonName/Designation or the API and Worker do not start (owner decision O1 picks the production mode).
+  Invoicing__Mode: ${INVOICING_MODE:-Off}
 
 services:
   # Deploy step: applies pending migrations and exits (non-zero on failure, which keeps api/worker from starting).

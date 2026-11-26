@@ -401,6 +401,7 @@ public class OrderShippingStartupTests
             ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Storefront:BaseUrl"] = "https://shop.mechware.test",
             ["Search:ApiKey"] = "test-search-key",
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
         };
         if (allowFree is not null) settings["Shipping:AllowFreeWhenNoZones"] = allowFree;
         return settings;

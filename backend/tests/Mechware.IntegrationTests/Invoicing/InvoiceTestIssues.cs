@@ -70,23 +70,40 @@ internal static class InvoiceTestIssues
     /// <summary>A shipped order of the seller (personal, or of <paramref name="company"/> on net basis), placed by the seller's user.</summary>
     public static async Task<(Order Order, Shipment Shipment)> ShippedOrderAsync(MechwareDbContext db, Guid sellerId, Company? company = null, long shippingMinor = 12_000)
     {
-        var userId = await db.Sellers.Where(s => s.Id == sellerId).Select(s => s.UserId).SingleAsync();
+        var order = Packed(await db.Sellers.Where(s => s.Id == sellerId).Select(s => s.UserId).SingleAsync(), [sellerId], company, shippingMinor);
+        var shipment = order.Ship("Steadfast", $"SF-{Guid.NewGuid():N}"[..20], null, order.UserId, DateTime.UtcNow);
+        db.Orders.Add(order);
+        db.Set<Shipment>().Add(shipment);
+        await db.SaveChangesAsync();
+        return (order, shipment);
+    }
+
+    /// <summary>E6.3c: a packed order (ready to ship) placed by <paramref name="buyerId"/> with one sub-order per seller.</summary>
+    public static async Task<Order> PackedOrderAsync(MechwareDbContext db, Guid buyerId, IReadOnlyList<Guid> sellerIds, Company? company = null, long shippingMinor = 12_000)
+    {
+        var order = Packed(buyerId, sellerIds, company, shippingMinor);
+        db.Orders.Add(order);
+        await db.SaveChangesAsync();
+        return order;
+    }
+
+    private static Order Packed(Guid userId, IReadOnlyList<Guid> sellerIds, Company? company, long shippingMinor)
+    {
         var now = DateTime.UtcNow;
         var mode = company is null ? TaxMode.Inclusive : TaxMode.Exclusive;
         var priced = OrderPricing.Price(
-            [new(Guid.NewGuid(), Guid.NewGuid(), sellerId, "PLC-1200", "PLC controller", 2, 4_550_000, 0.15m, 100_000),
-             new(Guid.NewGuid(), Guid.NewGuid(), sellerId, "CBL-10", "Cable 10 m", 25, 12_345, 0.075m, 0)],
-            [new SellerTerms(sellerId, shippingMinor, 0.05m)], mode);
+            [.. sellerIds.SelectMany(sellerId => new OrderLineDraft[]
+            {
+                new(Guid.NewGuid(), Guid.NewGuid(), sellerId, "PLC-1200", "PLC controller", 2, 4_550_000, 0.15m, 100_000),
+                new(Guid.NewGuid(), Guid.NewGuid(), sellerId, "CBL-10", "Cable 10 m", 25, 12_345, 0.075m, 0)
+            })],
+            [.. sellerIds.Select(sellerId => new SellerTerms(sellerId, shippingMinor, 0.05m))], mode);
         var order = Order.Place(Guid.NewGuid(), OrderNumber.Generate(now), userId, company?.Id, priced, mode, ShipToJson, OrderStatus.PendingPayment, now,
             paymentDueAtUtc: now.AddMinutes(30), purchaseOrderNumber: company is null ? null : "PO-2026/77");
         order.Confirm(new DeliveryDeadlines(now.AddDays(5), now.AddDays(2), true), null, "paid", now);
         order.StartProcessing(userId, now);
         order.MarkPacked(userId, now);
-        var shipment = order.Ship("Steadfast", $"SF-{Guid.NewGuid():N}"[..20], null, userId, now);
-        db.Orders.Add(order);
-        db.Set<Shipment>().Add(shipment);
-        await db.SaveChangesAsync();
-        return (order, shipment);
+        return order;
     }
 
     public static Invoice Build(Order order, Shipment shipment, Guid sellerId, TakenInvoiceNumber taken, Company? company = null, string? prefix = null) =>

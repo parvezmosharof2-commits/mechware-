@@ -37,6 +37,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit rows, newest first (G5.2b). Filters (exact matches): `actorId`, `action`, `entityName`, `entityId`,
+         *     `correlationId`; `from`/`to` are Dhaka dates (yyyy-MM-dd, inclusive). `pageSize` at most 50. No values (see the
+         *     detail). A bad filter is 400. The read is itself audited (`audit.searched`). `private, no-store`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    actorId?: string;
+                    action?: string;
+                    entityName?: string;
+                    entityId?: string;
+                    correlationId?: string;
+                    from?: string;
+                    to?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One audit row with `oldValues`/`newValues` as JSON, redacted on the server: secrets, codes, hashes, tokens, encrypted business
+         *     numbers and bank references read "[hidden]"; nothing is decrypted. 404 for an unknown id. Audited (`audit.viewed`). `private, no-store`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/catalog/import/dry-run": {
         parameters: {
             query?: never;

@@ -23,6 +23,113 @@
         }
       }
     },
+    "/api/v1/admin/audit": {
+      "get": {
+        "tags": [
+          "AdminAudit"
+        ],
+        "summary": "Audit rows, newest first (G5.2b). Filters (exact matches): `actorId`, `action`, `entityName`, `entityId`,\r\n`correlationId`; `from`/`to` are Dhaka dates (yyyy-MM-dd, inclusive). `pageSize` at most 50. No values (see the\r\ndetail). A bad filter is 400. The read is itself audited (`audit.searched`). `private, no-store`.",
+        "parameters": [
+          {
+            "name": "actorId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "correlationId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/audit/{id}": {
+      "get": {
+        "tags": [
+          "AdminAudit"
+        ],
+        "summary": "One audit row with `oldValues`/`newValues` as JSON, redacted on the server: secrets, codes, hashes, tokens, encrypted business\r\nnumbers and bank references read \"[hidden]\"; nothing is decrypted. 404 for an unknown id. Audited (`audit.viewed`). `private, no-store`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/catalog/import/dry-run": {
       "post": {
         "tags": [

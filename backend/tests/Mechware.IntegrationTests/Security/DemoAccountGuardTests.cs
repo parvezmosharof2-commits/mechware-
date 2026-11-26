@@ -17,6 +17,7 @@ public sealed class DemoAccountGuardTests
         new(environment, new Dictionary<string, string>
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestEncryption.KeyBase64,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,

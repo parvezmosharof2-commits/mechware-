@@ -61,7 +61,7 @@ public sealed record StaffOrderDetailDto(
     string Source, StaffOrderQuoteDto? Quote, Guid? CompanyId, string? CompanyName, StaffOrderBuyerDto Buyer, OrderShipToDto? ShipTo,
     string PaymentState, bool PaysOnCredit, StaffOrderCreditDto? Credit,
     IReadOnlyList<StaffSubOrderDto> SubOrders, IReadOnlyList<StaffOrderEventDto> Events, IReadOnlyList<StaffPaymentDto> Payments,
-    uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments);
+    uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments, IReadOnlyList<string> InvoiceNumbers);
 
 /// <summary>A fulfilment move: the order's <c>rowVersion</c> from the last read (required).</summary>
 public sealed record OrderStepRequest(uint? RowVersion);
@@ -70,7 +70,8 @@ public sealed record OrderStepRequest(uint? RowVersion);
 public sealed record ShipOrderRequest(uint? RowVersion, string? CourierName, string? TrackingNumber, string? TrackingUrl);
 
 /// <summary>The order after a fulfilment move: its new status and version, and its shipments.</summary>
-public sealed record OrderFulfilmentDto(Guid Id, string OrderNumber, string Status, uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments);
+public sealed record OrderFulfilmentDto(Guid Id, string OrderNumber, string Status, uint RowVersion, IReadOnlyList<StaffShipmentDto> Shipments,
+    IReadOnlyList<string> InvoiceNumbers);
 
 /// <summary>
 /// Manual fulfilment (F1.1): confirmed → processing → packed → shipped → delivered. Each move locks the order, checks the

@@ -462,6 +462,7 @@ public class GuestCartKeyStartupTests
             ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Storefront:BaseUrl"] = "https://shop.mechware.test",
             ["Search:ApiKey"] = "test-search-key",
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["GuestCart:TokenKey"] = key switch
             {
                 "development" => Convert.ToBase64String(GuestCartTokenOptions.DevelopmentKey),
@@ -489,6 +490,7 @@ public class GuestCartKeyStartupTests
             ["Email:FromAddress"] = "no-reply@mechware.test",
             ["Storefront:BaseUrl"] = "https://shop.mechware.test",
             ["Search:ApiKey"] = "test-search-key",
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
         });
         using var client = factory.CreateClient();
         var tokens = factory.Services.GetService(typeof(IGuestCartTokenService)) as IGuestCartTokenService;

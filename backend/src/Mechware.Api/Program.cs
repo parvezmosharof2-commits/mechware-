@@ -141,6 +141,8 @@ builder.Services.AddSingleton(Mechware.Application.Orders.ReturnOptions.Validate
     builder.Configuration.GetSection(Mechware.Application.Orders.ReturnOptions.SectionName).Get<Mechware.Application.Orders.ReturnOptions>()));
 // RFQs and quotes (ADR-0011 §2, §15): the owner defaults, changed under Quotes:*; an invalid value stops the host here.
 builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Quotes.QuoteOptions.Section).Get<Mechware.Domain.Quotes.QuoteOptions>() ?? new Mechware.Domain.Quotes.QuoteOptions()).Validated());
+// Invoicing (ADR-0012 §3, E6.3c): Production must name Invoicing:Mode; Specimen in Production or Live without the issuer facts stops the host here.
+builder.Services.AddSingleton((builder.Configuration.GetSection(Mechware.Domain.Invoicing.InvoicingOptions.Section).Get<Mechware.Domain.Invoicing.InvoicingOptions>() ?? new Mechware.Domain.Invoicing.InvoicingOptions()).Validated(builder.Environment.IsProduction()));
 // Quote PDF letterhead and terms (ADR-0011 §10, docs/COMPANY_FACTS.md): the owner's pad facts as defaults, changed under QuotePdf:*.
 builder.Services.AddSingleton(builder.Configuration.GetSection(Mechware.Application.Quotes.QuotePdfOptions.Section).Get<Mechware.Application.Quotes.QuotePdfOptions>() ?? new Mechware.Application.Quotes.QuotePdfOptions());
 // Price lists (D2.4): below-cost prices are refused; Pricing:AllowBelowCost=true outside Development/Testing stops the host here.
@@ -376,6 +378,20 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1)
             })
         : RateLimitPartition.GetNoLimiter("credit-export-anonymous"));
+
+    // Audit log reads (G5.2b): 60 a minute per signed-in staff member, so the log cannot be scraped at speed; each read is audited too.
+    options.AddPolicy("AuditRead", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "audit-read:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:AuditReadPermitPerMinute") ?? 60,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("audit-read-anonymous"));
 
     // Payment-provider webhooks get their own bucket per IP (threat model v2, P6): a provider delivers bursts from a few
     // addresses, and a 429 makes it retry later, which delays confirming paid orders. They never share the budget that

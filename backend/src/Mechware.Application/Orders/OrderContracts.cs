@@ -88,11 +88,12 @@ public sealed record OrderShipmentDto(string CourierName, string TrackingNumber,
 
 /// <param name="QuoteNumber">The number of the quote this order accepted (ADR-0011 §11); null for an order placed from the cart.</param>
 /// <param name="Shipments">Oldest first; empty until the order ships (one per order until partial shipments, F1.4).</param>
+/// <param name="InvoiceNumbers">The Mushak-6.3 numbers of the order, oldest first (E6.3c); empty before shipping or when invoicing is Off.</param>
 public sealed record OrderDto(
     Guid Id, string OrderNumber, string Status, string Currency, long SubtotalMinor, long DiscountMinor, long TaxMinor,
     long ShippingMinor, long GrandTotalMinor, DateTime PlacedAtUtc, IReadOnlyList<SubOrderDto> SubOrders, string? PurchaseOrderNumber = null,
     DateTime? EstimatedDeliveryBy = null, OrderShipToDto? ShipTo = null, OrderPaymentDto? Payment = null, OrderCreditDto? Credit = null,
-    string? QuoteNumber = null, IReadOnlyList<OrderShipmentDto>? Shipments = null);
+    string? QuoteNumber = null, IReadOnlyList<OrderShipmentDto>? Shipments = null, IReadOnlyList<string>? InvoiceNumbers = null);
 
 /// <summary>
 /// Where a credit order stands in the ledger (ADR-0010 §10, B3.9): <paramref name="Status"/> = <c>open</c>, <c>partially_paid</c>, <c>paid</c>,

@@ -54,6 +54,7 @@ public static class DependencyInjection
         services.TryAddSingleton(new Orders.DeliveryOptions());
         services.TryAddScoped<Mechware.Application.Orders.IOrderDeadlineService, Orders.OrderDeadlineService>();
         services.TryAddScoped<Mechware.Application.Orders.IStaffOrderReadService, Orders.StaffOrderReadService>();
+        services.TryAddScoped<Mechware.Application.Audit.IAuditLogReadService, Persistence.AuditLogReadService>();
         services.TryAddScoped<Mechware.Application.Orders.IDeliveryDeadlineCalculator, Orders.DeliveryDeadlineCalculator>();
         // Credit settlement defaults pending owner confirmation, unless the host registered options read from Credit:* first.
         services.TryAddSingleton(new Mechware.Application.Credit.CreditOptions());
@@ -66,6 +67,9 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Credit.ICreditReconciliationService, Credit.CreditReconciliationService>();
         // Invoicing (E6.2): gap-free numbers, taken inside the issuing transaction as its last lock.
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceNumberAllocator, Invoicing.InvoiceNumberAllocator>();
+        // E6.3c: the 6.3 issued at shipment. Off unless the host registered validated Invoicing:* options first (Api, Worker).
+        services.TryAddSingleton(new Mechware.Domain.Invoicing.InvoicingOptions());
+        services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceIssuer, Invoicing.InvoiceIssuer>();
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();

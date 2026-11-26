@@ -570,7 +570,7 @@ public sealed partial class OrderService(
             order.PurchaseOrderNumber, order.LegalDeliveryDeadlineUtc, ShipToForBuyer(order.ShipToJson), PaymentForBuyer(payments),
             await CreditForBuyerAsync(order, ct),
             order.QuoteId is { } quoteId ? await db.Quotes.AsNoTracking().Where(q => q.Id == quoteId).Select(q => q.Number).FirstOrDefaultAsync(ct) : null,
-            shipments);
+            shipments, await db.NumbersOfAsync(order.Id, ct));
     }
 
     /// <summary>

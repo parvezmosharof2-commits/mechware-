@@ -255,6 +255,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         await using var factory = new DbBackedFactory("Production", new Dictionary<string, string>
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Storage:SecretKey"] = "test-secret-key",
             ["Documents:LocalPath"] = TestEncryption.DocumentsPath,
@@ -279,6 +280,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         var settings = new Dictionary<string, string>
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Storage:SecretKey"] = "test-secret-key",
             ["Encryption:FieldKey"] = TestFieldKey,
@@ -358,6 +360,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         await using var factory = new DbBackedFactory("Staging", new Dictionary<string, string>
         {
             ["Jwt:Secret"] = "staging-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
@@ -400,6 +403,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         await using var factory = new DbBackedFactory("Production", new Dictionary<string, string>
         {
             ["Jwt:Secret"] = "prod-like-secret-" + Guid.NewGuid().ToString("N"),
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
@@ -437,6 +441,7 @@ public class ApiSecurityRegressionTests : IClassFixture<ApiSecurityRegressionTes
         new("Production", new Dictionary<string, string>
         {
             ["Jwt:Secret"] = jwtSecret,
+            ["Invoicing:Mode"] = "Off",   // Production names the invoicing mode (ADR-0012 §3, E6.3c)
             ["Storage:AccessKey"] = "test-access-key",
             ["Encryption:FieldKey"] = TestFieldKey,
             ["Encryption:PreviousFieldKeys"] = TestEncryption.PreviousKeyBase64,
