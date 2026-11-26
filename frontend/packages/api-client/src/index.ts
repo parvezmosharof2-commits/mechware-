@@ -514,3 +514,5 @@ export * from "./invoices-staff-model";
 export * from "./invoices-staff";
 export * from "./credit-notes-staff-model";
 export * from "./credit-notes-staff";
+export * from "./vat-month-model";
+export * from "./vat-month";

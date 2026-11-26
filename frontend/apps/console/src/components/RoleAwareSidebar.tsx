@@ -65,6 +65,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'vat-month',
+    label: 'Monthly VAT file',
+    requiredPermission: 'invoices.export',
+    href: '/invoices/vat-month',
+    group: 'Orders'
+  },
+  {
     id: 'quotes-rfqs',
     label: 'RFQ inbox',
     requiredPermission: 'quotes.view',
