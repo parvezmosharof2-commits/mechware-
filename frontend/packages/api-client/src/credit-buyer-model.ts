@@ -52,6 +52,8 @@ export interface BuyerStatementLine {
   receivableAfterMinor: number;
   onAccountAfterMinor: number;
   dueOn: string | null;
+  /** Tax invoices of the line's order, oldest first (E6.8a); absent on an older API. */
+  invoiceNumbers?: string[];
 }
 
 export interface BuyerStatement {

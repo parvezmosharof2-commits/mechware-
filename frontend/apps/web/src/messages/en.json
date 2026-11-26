@@ -1208,7 +1208,8 @@
       "dueOn": "Due {date}",
       "range": "Showing {from} to {to}",
       "rangeFrom": "Showing from {from}",
-      "rangeTo": "Showing up to {to}"
+      "rangeTo": "Showing up to {to}",
+      "invoices": "{count, plural, one {Invoice} other {Invoices}}"
     },
     "kind": {
       "charge": "Order charged to credit",
@@ -1477,5 +1478,68 @@
     "goodsTotal": "Goods total (incl. VAT)",
     "noCreditNote": "Your company has no credit account, so this order is paid in advance.",
     "err_noCreditTerms": "Your company has no credit account yet. Choose pay in advance."
+  },
+  "Invoices": {
+    "companyMetaTitle": "Company invoices",
+    "detailMetaTitle": "Invoice",
+    "companyTitle": "Company invoices",
+    "detailTitle": "Invoice",
+    "cardBody": "Tax invoices and credit notes issued to this company.",
+    "openList": "Open invoices",
+    "orderHeading": "Invoices",
+    "orderEmpty": "No invoice yet. Your invoice is issued when the order ships.",
+    "orderListLabel": "Invoices of this order",
+    "companyEmpty": "No invoices for these dates.",
+    "companyListLabel": "Company invoices",
+    "count": "{count, plural, one {# invoice} other {# invoices}}",
+    "forOrder": "Order {number}",
+    "date": "Date (Bangladesh time)",
+    "total": "Total",
+    "originalInvoice": "Corrects invoice",
+    "kind": {
+      "tax_invoice": "Tax invoice",
+      "credit_note": "Credit note",
+      "other": "Document"
+    },
+    "specimen": "Specimen, not a tax invoice",
+    "pdfEn": "PDF (English)",
+    "pdfBn": "PDF (Bangla)",
+    "pdfGroup": "Download invoice {number}",
+    "pdfSaved": "Invoice {number} was downloaded.",
+    "pdfNote": "The PDF can be downloaded by the person who placed the order.",
+    "refusal": {
+      "notFound": "We could not find this invoice, or it is not available to you.",
+      "rateLimited": "Too many downloads in a short time. Please wait a minute and try again.",
+      "pdfUnavailable": "This PDF could not be verified, so it was not given out. Our staff have been told. Please try again later.",
+      "unavailable": "We could not reach the invoices just now. Please try again."
+    },
+    "retry": "Try again",
+    "notAvailableTitle": "Not available to you",
+    "notAvailableBody": "Company invoices are shown to the company Admin and Buyer roles only. If you think you should see them, ask your company admin.",
+    "backToCompany": "Back to company",
+    "backToList": "All company invoices",
+    "filter": {
+      "label": "Choose dates for the invoices",
+      "from": "From (year-month-day)",
+      "to": "To (year-month-day)",
+      "apply": "Show",
+      "clear": "Clear dates",
+      "fromFormat": "Enter the From date as year-month-day, for example 2026-11-01.",
+      "toFormat": "Enter the To date as year-month-day, for example 2026-11-30.",
+      "order": "The From date must not be after the To date."
+    },
+    "prev": "Previous",
+    "next": "Next",
+    "pageOf": "Page {page} of {total}",
+    "pagesLabel": "Invoice pages",
+    "seller": "Seller",
+    "buyer": "Buyer",
+    "address": "Address",
+    "linesLabel": "Items",
+    "sku": "SKU",
+    "qty": "Qty {count} {unit}",
+    "vat": "VAT {amount}",
+    "net": "Subtotal",
+    "vatTotal": "VAT"
   }
 }

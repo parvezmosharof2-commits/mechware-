@@ -224,6 +224,11 @@ function StatementCard({ line, currency }: { line: BuyerStatementLine; currency:
         {line.referenceTail && <span className="mr-3 font-mono">{tk('pending.reference', { tail: line.referenceTail })}</span>}
         {line.dueOn && <span>{t('dueOn', { date: day(line.dueOn) })}</span>}
       </p>
+      {line.invoiceNumbers && line.invoiceNumbers.length > 0 && (
+        <p className="mt-1 break-all text-sm text-fg-secondary" data-testid="statement-invoices">
+          {t('invoices', { count: line.invoiceNumbers.length })}: <span className="font-mono">{line.invoiceNumbers.join(', ')}</span>
+        </p>
+      )}
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
         {line.receivableDeltaMinor !== 0 && <Figure label={t('owedChange')} value={`${creditSignOf(line.receivableDeltaMinor) === '+' ? '+' : ''}${money(line.receivableDeltaMinor, currency)}`} />}
         {line.onAccountDeltaMinor !== 0 && <Figure label={t('onAccountChange')} value={`${creditSignOf(line.onAccountDeltaMinor) === '+' ? '+' : ''}${money(line.onAccountDeltaMinor, currency)}`} />}

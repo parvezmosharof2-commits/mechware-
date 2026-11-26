@@ -10,6 +10,7 @@ import { companiesApi } from '../../lib/api';
 import type { DashboardTab } from '../../lib/dashboard-tab';
 import { useResource } from '../../lib/useResource';
 import { StatusBadge } from './CompanyListView';
+import { InvoicesLinkCard } from '../invoices/InvoicesLinkCard';
 import { RfqLinkCard } from '../quotes/RfqLinkCard';
 import { ListSkeleton, LoadError, PageShell, RequireSignIn, useLocalePath } from './shared';
 
@@ -73,6 +74,7 @@ function Dashboard({ companyId, initialTab }: { companyId: string; initialTab: D
 
       <CompanyCreditCard company={c} />
       <RfqLinkCard companyId={companyId} />
+      {(isAdmin || hasRole(roles, CompanyRoles.Buyer)) && <InvoicesLinkCard companyId={companyId} />}
 
       <Tabs defaultValue={initialTab === 'members' && !isAdmin ? 'sites' : initialTab}>
         <TabsList>
