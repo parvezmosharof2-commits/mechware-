@@ -83,6 +83,10 @@ public static class Permissions
     // Invoices (ADR-0012 §14).
     /// <summary>Read invoices and credit notes, their PDFs and the document check (Support, Finance, Admin).</summary>
     public const string InvoicesView = "invoices.view";
+    /// <summary>Ask for a credit note (6.7) of a tax invoice, or withdraw one's own request; a request has no number and moves nothing (Support, Finance, Admin).</summary>
+    public const string InvoicesCreditRequest = "invoices.credit_request";
+    /// <summary>Approve (issue) or reject someone else's credit-note request, with step-up <c>invoice.credit_note</c> (Finance, Admin; ADR-0012 §9.3).</summary>
+    public const string InvoicesCreditApprove = "invoices.credit_approve";
 
     public static class Roles
     {
@@ -110,14 +114,14 @@ public static class Permissions
             Roles.Support =>
             [
                 OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, OrdersFulfil, ReturnsManage, CompaniesView, PriceListsView, PriceListsEdit, ShippingView,
-                QuotesView, QuotesEdit, InvoicesView
+                QuotesView, QuotesEdit, InvoicesView, InvoicesCreditRequest
             ],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
                 PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView,
-                QuotesView, QuotesApprove, InvoicesView
+                QuotesView, QuotesApprove, InvoicesView, InvoicesCreditRequest, InvoicesCreditApprove
             ],
             Roles.Admin =>
             [
@@ -158,7 +162,9 @@ public static class Permissions
                 QuotesEdit,
                 QuotesApprove,
                 QuotesApproveBelowFloor,
-                InvoicesView
+                InvoicesView,
+                InvoicesCreditRequest,
+                InvoicesCreditApprove
             ],
             _ => []
         };

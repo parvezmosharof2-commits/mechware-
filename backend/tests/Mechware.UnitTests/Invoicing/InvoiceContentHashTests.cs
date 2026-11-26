@@ -16,6 +16,8 @@ public class InvoiceContentHashTests
     private static readonly string[] NotHashed =
     [
         "Invoice.ContentHash", "Invoice.IssuedBy", "Invoice.CreatedAtUtc", "Invoice.UpdatedAtUtc",
+        // E6.5b credit-note bookkeeping, never printed on the 6.7: who asked (like IssuedBy) and the money owed back outside the ledger.
+        "Invoice.RequestedBy", "Invoice.RefundDueMinor",
         "InvoiceLine.Id", "InvoiceLine.InvoiceId", "InvoiceLine.CreatedAtUtc", "InvoiceLine.UpdatedAtUtc"
     ];
 
@@ -65,7 +67,7 @@ public class InvoiceContentHashTests
                 }
 
         InvoiceContentHash.Compute(invoice).Should().Be(baseline);
-        tried.Should().Contain(["Invoice.Buyer.Bin", "Invoice.Seller.Bin", "Invoice.Delivery.ShipTo.Line1", "InvoiceLine.DiscountMinor", "Invoice.ConsultantChecked"]);
+        tried.Should().Contain(["Invoice.Buyer.Bin", "Invoice.Seller.Bin", "Invoice.Delivery.ShipTo.Line1", "InvoiceLine.DiscountMinor", "Invoice.ConsultantChecked", "Invoice.Reason", "Invoice.ReasonText"]);
         tried.Count.Should().BeGreaterThan(80);
     }
 
@@ -120,6 +122,7 @@ public class InvoiceContentHashTests
         else if (t == typeof(decimal)) yield return (label, (decimal)value! + 0.0001m);
         else if (t == typeof(bool)) yield return (label, !(bool)value!);
         else if (t == typeof(DateTime)) yield return (label, ((DateTime)value!).AddTicks(1));
+        else if (t == typeof(DateOnly)) yield return (label, ((DateOnly?)value ?? new DateOnly(2026, 11, 10)).AddDays(1));
         else if (t.IsEnum)
         {
             var values = Enum.GetValues(t);

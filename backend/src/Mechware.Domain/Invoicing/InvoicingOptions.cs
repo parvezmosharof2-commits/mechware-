@@ -11,7 +11,11 @@ public enum InvoicingMode
     Live
 }
 
-/// <summary>BIN and TIN format checks. ASCII digits only: Bangla digits or full-width ones never pass (they would print as another number).</summary>
+/// <summary>
+/// BIN and TIN format checks. ASCII digits only: Bangla digits or full-width ones never pass (they would print as another number).
+/// A BIN is written either as 13 plain digits (<c>0000000000101</c>) or in the printed form <c>#########-####</c>; it is always stored and compared
+/// as the 13 digits (<see cref="NormalizeBin"/>) and printed in the dashed form (<see cref="PrintBin"/>).
+/// </summary>
 public static class TaxIdFormat
 {
     /// <summary>A BIN is 13 digits as best known (ADR-0012 §3, §19 Q8: consultant to confirm).</summary>
@@ -19,9 +23,29 @@ public static class TaxIdFormat
 
     public const int TinLength = 12;
 
-    public static bool IsBin(string? value) => value is { Length: BinLength } && value.All(char.IsAsciiDigit);
+    /// <summary>Digits before the dash of the printed BIN.</summary>
+    public const int BinHead = 9;
+
+    public static bool IsBin(string? value) => NormalizeBin(value) is not null;
 
     public static bool IsTin(string? value) => value is { Length: TinLength } && value.All(char.IsAsciiDigit);
+
+    /// <summary>The 13 digits of a BIN written plain or as <c>#########-####</c>; null for anything else (no spaces, no other dash position, no non-ASCII digits).</summary>
+    public static string? NormalizeBin(string? value)
+    {
+        if (value is null) return null;
+        if (value.Length == BinLength) return value.All(char.IsAsciiDigit) ? value : null;
+        if (value.Length == BinLength + 1 && value[BinHead] == '-')
+        {
+            var digits = value.Remove(BinHead, 1);
+            return digits.All(char.IsAsciiDigit) ? digits : null;
+        }
+
+        return null;
+    }
+
+    /// <summary>The BIN as printed (<c>#########-####</c>); text that is not a BIN comes back unchanged.</summary>
+    public static string PrintBin(string value) => NormalizeBin(value) is { } d ? d[..BinHead] + "-" + d[BinHead..] : value;
 }
 
 /// <summary>
@@ -53,6 +77,13 @@ public sealed record InvoicingOptions
     public string? IssuingPremisesAddressBn { get; init; }
     public string? ResponsiblePersonName { get; init; }
     public string? ResponsiblePersonDesignation { get; init; }
+
+    /// <summary>Payment terms and bank details printed on the invoice PDF when set. Not tax facts: read at render time, never part of the snapshot or its hash.</summary>
+    public InvoicingBankOptions Bank { get; init; } = new();
+
+    /// <summary>The person who signs the PDF (name and designation); when blank the snapshot's responsible person is printed. Render time, not snapshot.</summary>
+    public InvoicingSignatoryOptions Signatory { get; init; } = new();
+
     public string NumberPrefix { get; init; } = "MW";
     public int CreditNoteMaxAgeDays { get; init; } = 180;
 
@@ -91,7 +122,7 @@ public sealed record InvoicingOptions
         Check(!isProduction || Mode != InvoicingMode.Specimen, nameof(Mode), "Specimen is not allowed in Production");
         if (Mode == InvoicingMode.Live)
             foreach (var fact in MissingIssuerFacts()) Check(false, fact, "is required in Live mode (set it, or the host does not start)");
-        Check(string.IsNullOrWhiteSpace(Bin) || TaxIdFormat.IsBin(Bin.Trim()), nameof(Bin), $"must be {TaxIdFormat.BinLength} digits");
+        Check(string.IsNullOrWhiteSpace(Bin) || TaxIdFormat.IsBin(Bin.Trim()), nameof(Bin), $"must be {TaxIdFormat.BinLength} digits, plain or as #########-####");
         Check(string.IsNullOrWhiteSpace(Tin) || TaxIdFormat.IsTin(Tin.Trim()), nameof(Tin), $"must be {TaxIdFormat.TinLength} digits");
         Check(NumberPrefix is { Length: >= 2 and <= 6 } && NumberPrefix.All(char.IsAsciiLetterUpper) && NumberPrefix != InvoiceNumber.SpecimenPrefix,
             nameof(NumberPrefix), "must be 2 to 6 capital letters and not SPEC");
@@ -106,9 +137,26 @@ public sealed record InvoicingOptions
         Problems(isProduction) is { Count: > 0 } p ? throw new InvalidOperationException("Invalid invoicing options: " + string.Join(" ", p)) : this;
 
     internal InvoiceSellerSnapshot SellerSnapshot() => new(
-        Clean(LegalNameEn), Clean(LegalNameBn), Clean(Bin), Clean(Tin), Clean(TradeLicence), Clean(RegisteredAddressEn), Clean(RegisteredAddressBn),
+        Clean(LegalNameEn), Clean(LegalNameBn), TaxIdFormat.NormalizeBin(Clean(Bin)) ?? Clean(Bin), Clean(Tin), Clean(TradeLicence), Clean(RegisteredAddressEn), Clean(RegisteredAddressBn),
         Clean(IssuingPremisesAddressEn) ?? Clean(RegisteredAddressEn), Clean(IssuingPremisesAddressBn) ?? Clean(RegisteredAddressBn),
         Clean(ResponsiblePersonName), Clean(ResponsiblePersonDesignation));
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}
+
+/// <summary>Configuration <c>Invoicing:Bank</c>: every field optional; the block prints only the fields that are set, and not at all when none is.</summary>
+public sealed record InvoicingBankOptions
+{
+    public string? AccountName { get; init; }
+    public string? AccountNumber { get; init; }
+    public string? BankName { get; init; }
+    public string? Branch { get; init; }
+    public string? RoutingNumber { get; init; }
+}
+
+/// <summary>Configuration <c>Invoicing:Signatory</c>.</summary>
+public sealed record InvoicingSignatoryOptions
+{
+    public string? Name { get; init; }
+    public string? Designation { get; init; }
 }

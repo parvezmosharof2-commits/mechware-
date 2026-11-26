@@ -23,7 +23,7 @@ namespace Mechware.Infrastructure.Invoicing;
 /// recomputes the SHA-256 of the stored bytes; a mismatch is never sent, it is logged and audited.
 /// </summary>
 public sealed class InvoicePdfService(MechwareDbContext db, IOrderService orders, IPdfRenderer renderer, IObjectStorage storage, ICurrentUserService user,
-    TimeProvider clock, ILogger<InvoicePdfService> log) : IInvoicePdfService
+    TimeProvider clock, InvoicingOptions options, ILogger<InvoicePdfService> log) : IInvoicePdfService
 {
     /// <summary>One message for everything the caller may not see: a foreign order, an invoice of another order, an unknown id.</summary>
     private static KeyNotFoundException NotFound() => new("Order not found.");
@@ -92,7 +92,7 @@ public sealed class InvoicePdfService(MechwareDbContext db, IOrderService orders
         }
 
         // Nothing recorded yet, or the stored file is gone: render from the snapshot (outside any row lock).
-        var rendered = InvoicePdfComposer.Render(renderer, invoice, lang, await OriginalNumberAsync(invoice, ct));
+        var rendered = InvoicePdfComposer.Render(renderer, invoice, lang, await OriginalNumberAsync(invoice, ct), options);
         if (key is not null && sha is not null)
         {
             // A missing file is rendered again; only the same hash may be put back (a changed renderer is an alert, ADR-0012 §12).
@@ -177,12 +177,12 @@ public sealed class InvoicePdfService(MechwareDbContext db, IOrderService orders
     private static string FileName(Invoice invoice, string lang) => $"{invoice.Number}-{lang}.pdf";
 }
 
-/// <summary>Outbox consumer: renders both languages of a newly issued invoice after its COMMIT (the lazy download is the fallback).</summary>
+/// <summary>Outbox consumer: renders both languages of a newly issued invoice or credit note after its COMMIT (the lazy download is the fallback).</summary>
 public sealed class InvoicePdfPublisher(IInvoicePdfService pdfs) : IOutboxPublisher
 {
     public async Task PublishAsync(OutboxEnvelope message, CancellationToken ct = default)
     {
-        if (message.EventType != InvoiceIssuer.IssuedEvent) return;
+        if (message.EventType is not (InvoiceIssuer.IssuedEvent or CreditNoteService.IssuedEvent)) return;
         await pdfs.RenderBothAsync(message.AggregateId, ct);
     }
 }

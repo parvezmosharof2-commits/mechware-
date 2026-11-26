@@ -70,6 +70,8 @@ public static class DependencyInjection
         // E6.3c: the 6.3 issued at shipment. Off unless the host registered validated Invoicing:* options first (Api, Worker).
         services.TryAddSingleton(new Mechware.Domain.Invoicing.InvoicingOptions());
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceIssuer, Invoicing.InvoiceIssuer>();
+        // E6.5b: credit-note requests and their four-eyes approval (the 6.7 + its money in one transaction).
+        services.TryAddScoped<Mechware.Application.Invoicing.ICreditNoteService, Invoicing.CreditNoteService>();
         // E6.3d: the nightly invoice check (alert + audit, never repairs); hosted by AddCatalogWorkers.
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceReconciliationService, Invoicing.InvoiceReconciliationService>();
         // E6.8a: buyer and staff invoice reads (one class, two interfaces).

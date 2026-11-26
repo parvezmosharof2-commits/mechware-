@@ -39,8 +39,8 @@ internal sealed class InvoiceNumberCounterConfiguration : IEntityTypeConfigurati
 /// E6.3b issued invoices, both kinds (ADR-0012 §8, §16). Money is bigint poisha like <c>orders</c> and the domain (never numeric
 /// taka), enums are text with CHECK lists, every FK is RESTRICT, nothing is ever deleted. The CHECKs repeat the row shapes; what
 /// needs the previous row, another table or the end of the transaction lives in <see cref="InvoiceSql"/>. Columns the E6.3a
-/// domain does not carry yet (credit-note reason, requester and refund, the replacement link, the PDF records) are shadow
-/// properties for E6.4b/E6.5. The buyer BIN is encrypted inside its snapshot, as in <c>companies</c> and quote snapshots.
+/// domain does not carry (the replacement link, the PDF records) are shadow properties; the credit-note reason, requester and
+/// refund became domain properties in E6.5b (same columns). The buyer BIN is encrypted inside its snapshot, as in <c>companies</c> and quote snapshots.
 /// </summary>
 internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 {
@@ -97,8 +97,8 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.Property(i => i.ReplacementNo).HasColumnName("replacement_no");
         b.Property<Guid?>("ReplacesInvoiceId").HasColumnName("replaces_invoice_id");
         b.Property(i => i.OriginalInvoiceId).HasColumnName("original_invoice_id");
-        b.Property<string?>("Reason").HasColumnName("reason").HasMaxLength(40);
-        b.Property<string?>("ReasonText").HasColumnName("reason_text").HasMaxLength(500);
+        b.Property(i => i.Reason).HasColumnName("reason").HasMaxLength(40);
+        b.Property(i => i.ReasonText).HasColumnName("reason_text").HasMaxLength(500);
         b.Property(i => i.CompanyId).HasColumnName("company_id");
         b.Property(i => i.Seller).Jsonb("seller_snapshot", v => QuoteColumns.Json(v), s => QuoteColumns.FromJson<InvoiceSellerSnapshot>(s), (x, y) => Equals(x, y));
         b.Property(i => i.Buyer).Jsonb("buyer_snapshot",
@@ -107,17 +107,18 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.Property(i => i.Delivery).Jsonb("delivery_snapshot", v => QuoteColumns.Json(v), s => QuoteColumns.FromJson<InvoiceDeliverySnapshot>(s), (x, y) => Equals(x, y));
         b.Property(i => i.PurchaseOrderNumber).HasColumnName("purchase_order_number").HasMaxLength(Order.PurchaseOrderNumberMaxLength);
         b.Property(i => i.QuoteNumber).HasColumnName("quote_number").HasMaxLength(40);
+        b.Property(i => i.QuoteDate).HasColumnName("quote_date");
         b.Property(i => i.OrderNumber).HasColumnName("order_number").HasMaxLength(16).IsRequired();
         b.Property(i => i.Currency).HasColumnName("currency").HasMaxLength(3).IsFixedLength();
         b.Property(i => i.NetMinor).HasColumnName("net_minor");
         b.Property(i => i.SdMinor).HasColumnName("sd_minor");
         b.Property(i => i.VatMinor).HasColumnName("vat_minor");
         b.Property(i => i.TotalMinor).HasColumnName("total_minor");
-        b.Property<long?>("RefundDueMinor").HasColumnName("refund_due_minor");
+        b.Property(i => i.RefundDueMinor).HasColumnName("refund_due_minor");
         b.Property(i => i.ConsultantChecked).HasColumnName("consultant_checked");
         b.Property(i => i.ContentHash).HasColumnName("content_hash").HasMaxLength(64).IsFixedLength();
         b.Property(i => i.IssuedBy).HasColumnName("issued_by");
-        b.Property<Guid?>("RequestedBy").HasColumnName("requested_by");
+        b.Property(i => i.RequestedBy).HasColumnName("requested_by");
         // §12: written null → value once by the PDF store (E6.4b); the guard refuses every other UPDATE.
         foreach (var (name, locale) in new[] { ("En", "en"), ("Bn", "bn") })
         {
@@ -133,7 +134,7 @@ internal sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         b.HasOne<Invoice>().WithMany().HasForeignKey(i => i.OriginalInvoiceId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Invoice>().WithMany().HasForeignKey("ReplacesInvoiceId").OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(i => i.IssuedBy).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne<User>().WithMany().HasForeignKey("RequestedBy").OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(i => i.RequestedBy).OnDelete(DeleteBehavior.Restrict);
         b.HasMany(i => i.Lines).WithOne().HasForeignKey(l => l.InvoiceId).OnDelete(DeleteBehavior.Restrict);
         b.Navigation(i => i.Lines).UsePropertyAccessMode(PropertyAccessMode.Field);
 

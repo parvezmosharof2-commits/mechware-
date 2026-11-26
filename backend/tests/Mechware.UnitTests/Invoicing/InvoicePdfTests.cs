@@ -51,13 +51,30 @@ public class InvoicePdfTests
         return InvoiceSnapshotBuilder.BuildTaxInvoice(InvoiceFixtures.Issue(order, shipment, company, InvoiceFixtures.Site(company)), InvoiceFixtures.Live);
     }
 
+    /// <summary>Test values only: never a real account or BIN.</summary>
+    private static InvoicingOptions Print => new()
+    {
+        Bank = new InvoicingBankOptions { AccountName = "Test Trading Ltd", AccountNumber = "1234567890123", BankName = "Test Bank PLC", Branch = "Gulshan Branch", RoutingNumber = "123456789" },
+        Signatory = new InvoicingSignatoryOptions { Name = "Test Signatory", Designation = "Authorised Signatory" }
+    };
+
+    /// <summary>The owner's invoice: PO, quotation no. and date, a discount, a dashed BIN in the config.</summary>
+    private static Invoice Full()
+    {
+        var company = InvoiceFixtures.ActiveCompany();
+        var order = InvoiceFixtures.Shipped([InvoiceFixtures.Line("PLC-1200", 2, 4_550_000, 0.15m, 100_000), InvoiceFixtures.Line("CBL-10", 25, 12_345, 0.075m)], 12_000,
+            company.Id, out var shipment, po: "PO-2026/77", orderId: Guid.Parse("0d000000-0000-4000-8000-000000000008"));
+        return InvoiceSnapshotBuilder.BuildTaxInvoice(InvoiceFixtures.Issue(order, shipment, company, InvoiceFixtures.Site(company), quoteDate: new DateOnly(2026, 11, 10)),
+            InvoiceFixtures.Live with { Bin = "000123456-7890" });
+    }
+
     private static string Text(byte[] pdf)
     {
         using var doc = PdfDocument.Open(pdf);
         return string.Join(" ", doc.GetPages().SelectMany(p => p.GetWords().Select(w => w.Text)));
     }
 
-    private static PdfResult Render(Invoice i, string locale, string? original = null) => InvoicePdfComposer.Render(Renderer, i, locale, original);
+    private static PdfResult Render(Invoice i, string locale, string? original = null, InvoicingOptions? print = null) => InvoicePdfComposer.Render(Renderer, i, locale, original, print);
 
     /// <summary>Fixtures draw random row ids, which feed the content hash printed in the footer; the golden files pin the layout, so the hash is fixed here.</summary>
     private static Invoice Pinned(Invoice i)
@@ -66,26 +83,28 @@ public class InvoicePdfTests
         return i;
     }
 
-    private static IEnumerable<(string Name, Invoice Invoice, string Locale, string? Original)> Cases()
+    private static IEnumerable<(string Name, Invoice Invoice, string Locale, string? Original, InvoicingOptions? Print)> Cases()
     {
-        yield return ("company-en", Pinned(Company()), "en", null);
-        yield return ("company-bn", Pinned(Company()), "bn", null);
-        yield return ("personal-en", Pinned(Personal()), "en", null);
-        yield return ("specimen-en", Pinned(Specimen()), "en", null);
-        yield return ("specimen-bn", Pinned(Specimen()), "bn", null);
-        yield return ("crore-discount-en", Pinned(BigDiscounted()), "en", null);
-        yield return ("crore-discount-bn", Pinned(BigDiscounted()), "bn", null);
-        yield return ("creditnote-en", Pinned(CreditNote()), "en", "MW-INV-2026-27-000482");
+        yield return ("company-en", Pinned(Company()), "en", null, null);
+        yield return ("company-bn", Pinned(Company()), "bn", null, null);
+        yield return ("personal-en", Pinned(Personal()), "en", null, null);
+        yield return ("specimen-en", Pinned(Specimen()), "en", null, null);
+        yield return ("specimen-bn", Pinned(Specimen()), "bn", null, null);
+        yield return ("crore-discount-en", Pinned(BigDiscounted()), "en", null, null);
+        yield return ("crore-discount-bn", Pinned(BigDiscounted()), "bn", null, null);
+        yield return ("creditnote-en", Pinned(CreditNote()), "en", "MW-INV-2026-27-000482", null);
+        yield return ("full-en", Pinned(Full()), "en", null, Print);
+        yield return ("full-bn", Pinned(Full()), "bn", null, Print);
     }
 
     [Fact]
     public void TheInvoicePdf_IsByteIdenticalForTheSameSnapshot_AndItsHashIsRecorded()
     {
         var lines = new List<string>();
-        foreach (var (name, invoice, locale, original) in Cases())
+        foreach (var (name, invoice, locale, original, print) in Cases())
         {
-            var first = Render(invoice, locale, original);
-            var second = Render(invoice, locale, original);
+            var first = Render(invoice, locale, original, print);
+            var second = Render(invoice, locale, original, print);
             second.Bytes.Should().Equal(first.Bytes, name);
             first.Sha256Hex.Should().Be(Convert.ToHexStringLower(SHA256.HashData(first.Bytes)), name);
             lines.Add($"{name} {first.Sha256Hex}");
@@ -93,7 +112,7 @@ public class InvoicePdfTests
         }
 
         if (Environment.GetEnvironmentVariable("MW_UPDATE_GOLDEN") == "1") File.WriteAllLines(GoldenFile, lines);
-        File.ReadAllLines(GoldenFile).Should().Equal(lines, "golden hashes of the eight reference PDFs (MW_UPDATE_GOLDEN=1 regenerates after a deliberate layout change)");
+        File.ReadAllLines(GoldenFile).Should().Equal(lines, "golden hashes of the ten reference PDFs (MW_UPDATE_GOLDEN=1 regenerates after a deliberate layout change)");
     }
 
     [Fact]
@@ -108,7 +127,7 @@ public class InvoicePdfTests
         var after = Render(invoice, "en");
         after.Bytes.Should().Equal(before.Bytes);
         var text = Text(after.Bytes);
-        text.Should().Contain("Square").And.Contain("0012345678901").And.Contain("0001234567890").And.NotContain("Renamed").And.NotContain("9999999999999");
+        text.Should().Contain("Square").And.Contain("001234567-8901").And.Contain("000123456-7890").And.NotContain("Renamed").And.NotContain("9999999999999");
         text.Should().Contain("not yet checked by a VAT consultant");
     }
 
@@ -118,7 +137,7 @@ public class InvoicePdfTests
         var invoice = Company();
         var text = Text(Render(invoice, "en").Bytes);
         text.Should().Contain("25 pcs").And.Contain("2 pcs", "the unit of supply prints on every line, next to the quantity");
-        foreach (var fact in new[] { "Mushak-6.3", invoice.Number, invoice.PrintedIssueTime[..10], "Square", "0012345678901", "0001234567890", "123456789012",
+        foreach (var fact in new[] { "Mushak-6.3", invoice.Number, invoice.PrintedIssueTime[..10], "Square", "001234567-8901", "000123456-7890", "123456789012",
                      "PO-2026/77", "Tongi", "Steadfast", "SF-123", "PLC-1200", "Delivery", "Amount in words:", "Taka", "Only", invoice.ContentHash[..16] })
             text.Should().Contain(fact);
         text.Should().Contain(PdfText.Money(invoice.TotalMinor, false));
@@ -194,7 +213,7 @@ public class InvoicePdfTests
     [Fact]
     public void EveryInvoicePdf_CarriesTheConsultantCheckFooter_UntilTheFlagIsSet()
     {
-        foreach (var (name, invoice, locale, original) in Cases())
+        foreach (var (name, invoice, locale, original, _) in Cases())
         {
             invoice.ConsultantChecked.Should().BeFalse(name);
             InvoicePdfComposer.Compose(invoice, locale, original).FooterLines.Should().ContainSingle(l => l.Contains(locale == "bn" ? "পরামর্শক" : "VAT consultant"), name);
@@ -203,6 +222,61 @@ public class InvoicePdfTests
         var checkedInvoice = Company();
         typeof(Invoice).GetProperty(nameof(Invoice.ConsultantChecked))!.SetValue(checkedInvoice, true);
         InvoicePdfComposer.Compose(checkedInvoice, "en").FooterLines.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("en")]
+    [InlineData("bn")]
+    public void TheOwnersInvoiceBlocks_ArePrinted_AndTheTaxFieldsStay(string locale)
+    {
+        var invoice = Full();
+        invoice.QuoteDate.Should().Be(new DateOnly(2026, 11, 10));
+        var model = InvoicePdfComposer.Compose(invoice, locale, null, Print);
+        var paragraphs = model.Blocks.OfType<PdfParagraph>().Select(p => p.Text).ToList();
+        var keyValues = model.Blocks.OfType<PdfKeyValues>().SelectMany(k => k.Rows).ToList();
+        bool bn = locale == "bn";
+        keyValues.Should().Contain(r => r.Key == (bn ? "রেফারেন্স পিও" : "Reference PO") && r.Value == "PO-2026/77");
+        keyValues.Should().Contain(r => r.Key == (bn ? "কোটেশন নং" : "Against quotation no.") && r.Value.StartsWith("MWQ-2026-000012") && r.Value.Contains(PdfText.Date(new DateOnly(2026, 11, 10), bn)));
+        paragraphs.Should().Contain(p => p.StartsWith(bn ? "বিষয়: অর্ডার নং " : "Subject: Supply of goods against order ") && p.Contains(invoice.OrderNumber));
+        var bankBlock = paragraphs.Should().ContainSingle(p => p.StartsWith(bn ? "পরিশোধের শর্ত ও ব্যাংকের তথ্য" : "Payment terms & bank details")).Subject;
+        bankBlock.Should().Contain("Test Trading Ltd").And.Contain("1234567890123").And.Contain("Test Bank PLC").And.Contain("Gulshan Branch").And.Contain("123456789");
+        paragraphs.Should().Contain(p => p.Contains("Test Signatory") && p.Contains("Authorised Signatory"));
+        var text = Text(Renderer.Render(model).Bytes);
+        text.Should().Contain("000123456-7890").And.Contain("001234567-8901").And.Contain("123456789012").And.Contain(PdfText.Digits(invoice.Number, bn));
+    }
+
+    [Fact]
+    public void WithoutBankConfig_NoBankBlockPrints_AndTheSignatoryFallsBackToTheSnapshot()
+    {
+        var model = InvoicePdfComposer.Compose(Full(), "en", null, new InvoicingOptions());
+        model.Blocks.OfType<PdfParagraph>().Should().NotContain(p => p.Text.Contains("bank details"));
+        model.Blocks.OfType<PdfParagraph>().Should().Contain(p => p.Text.Contains("Md. Parvez Mosharaf") && p.Text.Contains("Managing Director"));
+        InvoicePdfComposer.Compose(Full(), "en").Blocks.OfType<PdfParagraph>().Should().NotContain(p => p.Text.Contains("bank details"));
+        var partial = InvoicePdfComposer.Compose(Full(), "en", null, new InvoicingOptions { Bank = new InvoicingBankOptions { AccountNumber = "99" } });
+        partial.Blocks.OfType<PdfParagraph>().Single(p => p.Text.Contains("bank details")).Text.Should().Contain("Account number: 99").And.NotContain("Branch");
+    }
+
+    [Fact]
+    public void AnOrderWithoutPoOrQuote_PrintsNeitherLine_AndTheSubjectStays()
+    {
+        var model = InvoicePdfComposer.Compose(Personal(), "en");
+        var keys = model.Blocks.OfType<PdfKeyValues>().SelectMany(k => k.Rows).Select(r => r.Key).ToList();
+        keys.Should().NotContain("Reference PO").And.NotContain("Against quotation no.");
+        model.Blocks.OfType<PdfParagraph>().Should().Contain(p => p.Text.StartsWith("Subject: Supply of goods against order "));
+    }
+
+    [Fact]
+    public void TheQuoteDate_IsInTheSnapshotAndInTheHash_AndV1InvoicesStillVerify()
+    {
+        var v1 = Company();
+        v1.QuoteDate.Should().BeNull();
+        System.Text.Encoding.UTF8.GetString(InvoiceContentHash.CanonicalJson(v1)).Should().Contain("\"schema\":\"mechware.invoice.v1\"").And.NotContain("quoteDate");
+        InvoiceContentHash.Matches(v1, v1.ContentHash).Should().BeTrue();
+        var v2 = Full();
+        System.Text.Encoding.UTF8.GetString(InvoiceContentHash.CanonicalJson(v2)).Should().Contain("\"schema\":\"mechware.invoice.v2\"").And.Contain("\"quoteDate\":\"2026-11-10\"");
+        InvoiceContentHash.Matches(v2, v2.ContentHash).Should().BeTrue();
+        typeof(Invoice).GetProperty(nameof(Invoice.QuoteDate))!.SetValue(v2, new DateOnly(2026, 11, 11));
+        InvoiceContentHash.Matches(v2, v2.ContentHash).Should().BeFalse("the date is hashed");
     }
 
     [Fact]

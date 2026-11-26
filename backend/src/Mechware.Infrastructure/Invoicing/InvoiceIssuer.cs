@@ -72,6 +72,10 @@ public sealed class InvoiceIssuer(
 
         var quoteNumber = order.QuoteId is { } quoteId
             ? await db.Quotes.AsNoTracking().Where(q => q.Id == quoteId).Select(q => q.Number).FirstOrDefaultAsync(ct) : null;
+        // The quote's own date (Dhaka day it was sent) for "against quotation no. X dated D": the version this order accepted.
+        var quoteSentUtc = quoteNumber is null ? null
+            : await db.QuoteVersions.AsNoTracking().Where(v => v.AcceptedOrderId == order.Id).Select(v => v.SentAtUtc).FirstOrDefaultAsync(ct);
+        DateOnly? quoteDate = quoteSentUtc is { } sent ? Mechware.Domain.Quotes.QuoteValidity.DhakaDate(sent) : null;
         foreach (var sub in subs) await db.Entry(sub).Collection(s => s.Items).LoadAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT 1 FROM sub_orders so JOIN sellers se ON se.id = so.seller_id WHERE so.order_id = {order.Id} FOR KEY SHARE", ct);
@@ -83,7 +87,7 @@ public sealed class InvoiceIssuer(
         {
             var taken = await allocator.TakeAsync(sub.SellerId, series, ct);   // the LAST lock; only inserts follow
             var invoice = InvoiceSnapshotBuilder.BuildTaxInvoice(new InvoiceIssue(Guid.NewGuid(), order, sub.SellerId, shipment, company, site, buyerName,
-                quoteNumber, taken.Series, taken.FiscalYear, taken.Serial, taken.IssuedAtUtc, issuedBy), options);
+                quoteNumber, taken.Series, taken.FiscalYear, taken.Serial, taken.IssuedAtUtc, issuedBy, quoteDate), options);
             db.Invoices.Add(invoice);
             db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), issuedBy, user.IpAddress, "invoice.issued", "invoices", invoice.Id.ToString(), null,
                 JsonSerializer.Serialize(new

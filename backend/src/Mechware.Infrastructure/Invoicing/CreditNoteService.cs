@@ -1,0 +1,206 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Mechware.Application.Catalog;
+using Mechware.Application.Credit;
+using Mechware.Application.Identity;
+using Mechware.Application.Invoicing;
+using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Identity;
+using Mechware.Domain.Invoicing;
+using Mechware.Infrastructure.Persistence;
+using Mechware.Infrastructure.Persistence.Configurations;
+using Mechware.Infrastructure.Persistence.Outbox;
+
+namespace Mechware.Infrastructure.Invoicing;
+
+/// <summary>
+/// E6.5b (ADR-0012 §9.3, §10, §15; threat model IT3, IT4, IT9, IT15). The request plans against what is left without a lock (the approval plans
+/// again); the approval is ONE transaction in the global lock order: <c>orders</c> → the original <c>invoices</c> row (both FOR NO KEY UPDATE: credit
+/// lines and ledger lines reference them by foreign key) → the request (FOR UPDATE) → plan again, 409 when it differs → <see cref="ICreditLedger.ReduceChargeAsync"/>
+/// (<c>companies</c>) → the counter (LAST) → the 6.7, the request's move, audit and outbox → COMMIT. A paid order that is not on credit records
+/// <c>refund_due_minor</c>; no gateway money moves here. Nothing slow runs inside (the PDF renders from the outbox).
+/// </summary>
+public sealed partial class CreditNoteService(
+    MechwareDbContext db, IInvoiceNumberAllocator allocator, ICreditLedger ledger, InvoicingOptions options, ICurrentUserService user, TimeProvider clock)
+    : ICreditNoteService
+{
+    public const string IssuedEvent = "CreditNoteIssuedEvent";
+    public const string Changed = "CREDIT_NOTE_CHANGED";
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    public async Task<RequestedCreditNote> RequestAsync(Guid invoiceId, RequestCreditNoteRequest request, string? idempotencyKey, CancellationToken ct = default)
+    {
+        var (actor, now) = (Actor, Now);
+        ArgumentNullException.ThrowIfNull(request);
+        if (idempotencyKey is null || !KeyPattern().IsMatch(idempotencyKey))
+            throw new ValidationException("Idempotency-Key", "The Idempotency-Key header is 8 to 100 letters, digits, '_', ':' or '-'.");
+        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { invoiceId, request }, Json))));
+        if (await ReplayAsync(actor, idempotencyKey, hash, ct) is { } replay) return new(replay, true);
+
+        var original = await db.Invoices.AsNoTracking().Include(i => i.Lines).SingleOrDefaultAsync(i => i.Id == invoiceId, ct)
+            ?? throw new KeyNotFoundException("Invoice not found.");
+        var asked = request.Lines?.Select((l, n) => new CreditLineRequest(
+            original.Lines.SingleOrDefault(o => o.LineNo == l.LineNo)?.Id ?? throw new ValidationException($"lines[{n}].lineNo", "This is not a line of the invoice."),
+            l.Quantity, l.NetMinor)).ToList();
+        var reason = Enum.GetValues<CreditNoteReason>().Where(r => Wire(r) == request.Reason).DefaultIfEmpty((CreditNoteReason)(-1)).First();
+        var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct), asked, reason, request.ReasonText, now, options.CreditNoteMaxAgeDays);
+
+        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, idempotencyKey, hash, null, now);   // no number: only the approval takes one
+        db.CreditNoteRequests.Add(asking);
+        db.AuditLogs.Add(Audit("invoice.credit_requested", asking.Id, new { original.Number, asking.OrderId, Reason = Wire(plan.Reason), asking.TotalMinor }, now));
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            db.ChangeTracker.Clear();   // the same key in parallel: the first one won
+            return new(await ReplayAsync(actor, idempotencyKey, hash, ct) ?? throw new InvalidOperationException("Unique violation without a replay.", ex), true);
+        }
+        return new((await DtosAsync([asking], ct))[0], false);
+    }
+
+    public async Task<PagedResult<CreditNoteRequestDto>> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default)
+    {
+        var wanted = status is null ? CreditNoteRequestStatus.Requested
+            : Enum.GetValues<CreditNoteRequestStatus>().Where(s => Wire(s) == status).DefaultIfEmpty((CreditNoteRequestStatus)(-1)).First();
+        if (!Enum.IsDefined(wanted)) throw new ValidationException("status", "Use requested, approved, rejected or withdrawn.");
+        (page, pageSize) = (Math.Max(page, 1), Math.Clamp(pageSize, 1, ICreditNoteService.MaxPageSize));
+        var rows = db.CreditNoteRequests.AsNoTracking().Where(r => r.Status == wanted);
+        var total = await rows.CountAsync(ct);
+        var items = await rows.OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct);
+        return new(await DtosAsync(items, ct), page, pageSize, total);
+    }
+
+    public async Task<CreditNoteRequestDto> GetAsync(Guid requestId, CancellationToken ct = default) =>
+        (await DtosAsync([await db.CreditNoteRequests.AsNoTracking().SingleOrDefaultAsync(r => r.Id == requestId, ct) ?? throw NotFound()], ct))[0];
+
+    public async Task<ApprovedCreditNote> ApproveAsync(Guid requestId, CancellationToken ct = default)
+    {
+        var (actor, now) = (Actor, Now);
+        db.ChangeTracker.Clear();   // ReduceChargeAsync must read the company fresh under its own lock (B3.5 watch item)
+        var ids = await db.CreditNoteRequests.Where(r => r.Id == requestId).Select(r => new { r.OrderId, r.OriginalInvoiceId }).SingleOrDefaultAsync(ct)
+            ?? throw NotFound();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM orders WHERE id = {ids.OrderId} FOR NO KEY UPDATE", ct);
+        // Parallel approvals of one invoice queue here, so each plans with the credit lines the previous one committed (IT3).
+        var original = (await db.Invoices.FromSqlInterpolated($"SELECT i.*, i.xmin FROM invoices i WHERE i.id = {ids.OriginalInvoiceId} FOR NO KEY UPDATE")
+            .AsNoTracking().Include(i => i.Lines).ToListAsync(ct)).Single();
+        var request = (await db.CreditNoteRequests.FromSqlInterpolated($"SELECT r.*, r.xmin FROM credit_note_requests r WHERE r.id = {requestId} FOR UPDATE")
+            .ToListAsync(ct)).Single();
+        request.EnsureDecidableBy(actor);   // four eyes before anything is counted or numbered (IT4)
+
+        var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct),
+            [.. request.Lines.Select(l => new CreditLineRequest(l.OriginalLineId, l.Quantity, l.NetMinor))], request.Reason, request.ReasonText, now,
+            options.CreditNoteMaxAgeDays);
+        if (!plan.Lines.Select(l => new CreditNoteRequestLine(l.OriginalLineId, l.Quantity, l.NetMinor, l.VatMinor)).SequenceEqual(request.Lines))
+            throw new ConflictException(Changed, "Another credit note of this invoice was issued since this request; reject it and ask again.");
+
+        var id = Guid.NewGuid();
+        // A credit order owes less (or its paid part goes on account) in THIS transaction; null = not on credit: the money is a refund due.
+        var money = await ledger.ReduceChargeAsync(new CreditReduction(original.OrderId, CreditReductionKind.CreditNote, plan.TotalMinor,
+            $"creditnote:{id:N}", id, actor, plan.ReasonText), ct);
+        var refundDue = money is null ? plan.TotalMinor : 0;
+        var taken = await allocator.TakeAsync(original.SellerId,
+            original.Mode == InvoicingMode.Live ? InvoiceSeries.CreditNote : InvoiceSeries.SpecimenCreditNote, ct);   // the LAST lock: only inserts follow
+        var note = Invoice.CreditNote(id, original, plan, taken.Series, taken.FiscalYear, taken.Serial, taken.IssuedAtUtc, request.RequestedBy, actor,
+            refundDue, options.ConsultantChecked);
+        db.Invoices.Add(note);
+        request.Approve(actor, id, now);
+        var (released, onAccount) = (money?.ReceivableReleasedMinor ?? 0, money?.MovedOnAccountMinor ?? 0);
+        db.AuditLogs.Add(Audit("invoice.credit_approved", request.Id, new
+        {
+            note.Number,
+            CreditNoteId = id,
+            OriginalNumber = original.Number,
+            note.OrderId,
+            note.TotalMinor,
+            RefundDueMinor = refundDue,
+            CreditReleasedMinor = released,
+            MovedOnAccountMinor = onAccount
+        }, taken.IssuedAtUtc));
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = Guid.NewGuid(),
+            EventType = IssuedEvent,
+            AggregateType = nameof(Invoice),
+            AggregateId = id,
+            OccurredAtUtc = taken.IssuedAtUtc,
+            Payload = JsonSerializer.Serialize(new { InvoiceId = id, OriginalInvoiceId = original.Id, note.OrderId, note.Number, RequestId = request.Id }, Json)
+        });
+        await db.SaveChangesAsync(ct);   // the deferred caps, counter and line checks run at COMMIT
+        await tx.CommitAsync(ct);
+        return new((await DtosAsync([request], ct))[0], id, note.Number, note.TotalMinor, refundDue, released, onAccount);
+    }
+
+    public Task<CreditNoteRequestDto> RejectAsync(Guid requestId, RejectCreditNoteRequest request, CancellationToken ct = default) =>
+        DecideAsync(requestId, "invoice.credit_rejected", r => r.Reject(Actor, request?.Reason, Now), ct);
+
+    public Task<CreditNoteRequestDto> WithdrawAsync(Guid requestId, CancellationToken ct = default) =>
+        DecideAsync(requestId, "invoice.credit_withdrawn", r => r.Withdraw(Actor, Now), ct);
+
+    private async Task<CreditNoteRequestDto> DecideAsync(Guid requestId, string action, Action<CreditNoteRequest> decide, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var request = (await db.CreditNoteRequests.FromSqlInterpolated($"SELECT r.*, r.xmin FROM credit_note_requests r WHERE r.id = {requestId} FOR UPDATE")
+            .ToListAsync(ct)).SingleOrDefault() ?? throw NotFound();
+        decide(request);   // nothing is issued and nothing moves
+        db.AuditLogs.Add(Audit(action, request.Id, new { request.OriginalInvoiceId, request.OrderId, request.TotalMinor, request.DecisionReason }, Now));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return (await DtosAsync([request], ct))[0];
+    }
+
+    /// <summary>Σ quantity, value and VAT of the issued credit lines per original line (committed rows; under the approval's locks nothing else adds any).</summary>
+    private async Task<Dictionary<Guid, CreditedSoFar>> CreditedAsync(Guid originalId, CancellationToken ct) =>
+        (await db.InvoiceLines.AsNoTracking()
+            .Where(l => l.OriginalLineId != null && db.Invoices.Any(c => c.Id == l.InvoiceId && c.OriginalInvoiceId == originalId && c.Kind == InvoiceKind.CreditNote))
+            .GroupBy(l => l.OriginalLineId!.Value)
+            .Select(g => new { g.Key, Quantity = g.Sum(l => l.Quantity), Net = g.Sum(l => l.NetMinor), Vat = g.Sum(l => l.VatMinor) }).ToListAsync(ct))
+        .ToDictionary(x => x.Key, x => new CreditedSoFar(x.Quantity, x.Net, x.Vat));
+
+    private async Task<CreditNoteRequestDto?> ReplayAsync(Guid actor, string key, string hash, CancellationToken ct)
+    {
+        var first = await db.CreditNoteRequests.AsNoTracking().SingleOrDefaultAsync(r => r.RequestedBy == actor && r.IdempotencyKey == key, ct);
+        if (first is null) return null;
+        return first.RequestHash == hash
+            ? (await DtosAsync([first], ct))[0]
+            : throw new ConflictException("IDEMPOTENCY_KEY_REUSED", "This Idempotency-Key was already used for a different credit-note request.");
+    }
+
+    private async Task<List<CreditNoteRequestDto>> DtosAsync(IReadOnlyList<CreditNoteRequest> requests, CancellationToken ct)
+    {
+        var ids = requests.Select(r => r.OriginalInvoiceId).Distinct().ToList();
+        var originals = await db.Invoices.AsNoTracking().Include(i => i.Lines).Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        var issuedIds = requests.Where(r => r.IssuedInvoiceId is not null).Select(r => r.IssuedInvoiceId!.Value).ToList();
+        var issued = await db.Invoices.AsNoTracking().Where(i => issuedIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, i => i.Number, ct);
+        return [.. requests.Select(r =>
+        {
+            var o = originals[r.OriginalInvoiceId];
+            return new CreditNoteRequestDto(r.Id, o.Id, o.Number, r.OrderId, o.OrderNumber, Wire(r.Status), Wire(r.Reason), r.ReasonText,
+                [.. r.Lines.Select(l => (Asked: l, Line: o.Lines.Single(x => x.Id == l.OriginalLineId))).Select(x => new CreditNoteRequestLineDto(x.Line.LineNo,
+                    Wire(x.Line.Kind), x.Line.Sku, x.Line.DescriptionEn, x.Asked.Quantity, x.Asked.NetMinor, x.Asked.VatMinor, x.Asked.NetMinor + x.Asked.VatMinor))],
+                r.TotalMinor, r.RequestedBy, r.CreatedAtUtc, r.DecidedBy, r.DecidedAtUtc, r.DecisionReason, r.IssuedInvoiceId,
+                r.IssuedInvoiceId is { } i ? issued.GetValueOrDefault(i) : null);
+        })];
+    }
+
+    private AuditLog Audit(string action, Guid requestId, object after, DateTime at) =>
+        new(Guid.NewGuid(), Actor, user.IpAddress, action, "credit_note_requests", requestId.ToString(), null, JsonSerializer.Serialize(after, Json),
+            user.CorrelationId, at);
+
+    private static KeyNotFoundException NotFound() => new("Credit-note request not found.");
+
+    private Guid Actor => user.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+
+    private DateTime Now => clock.GetUtcNow().UtcDateTime;
+
+    private static string Wire<T>(T value) where T : struct, Enum => SnakeCaseEnumConverter<T>.ToSnake(value.ToString());
+
+    [GeneratedRegex("^[A-Za-z0-9_:-]{8,100}$")]
+    private static partial Regex KeyPattern();
+}

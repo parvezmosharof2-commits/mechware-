@@ -77,6 +77,42 @@ public sealed class InvoiceLine : Entity<Guid>
         (UnitPriceMinor, DisplayUnitPriceMinor, GrossMinor, DiscountMinor, NetMinor, VatRate, VatMinor, TotalMinor) =
             (unitPriceMinor, displayUnitPriceMinor, gross, discount, net, vatRate, vat, total);
     }
+
+    /// <summary>
+    /// E6.5b: a 6.7 line crediting <paramref name="original"/> as planned (ADR-0012 §9.1): the original's kind, order line, texts and rates;
+    /// quantity 0 (value only) … what was left; gross = net, no discount; the printed unit price is net / quantity (net for a value-only line),
+    /// in the same column (exact or display) as the original's.
+    /// </summary>
+    internal static InvoiceLine Credit(Guid invoiceId, int lineNo, InvoiceLine original, PlannedCreditLine p)
+    {
+        if (p.OriginalLineId != original.Id || p.Quantity < 0 || p.Quantity > original.Quantity || p.NetMinor < 1 || p.VatMinor < 0 || original.SdMinor != 0)
+            throw new InvalidOperationException($"Credit line {lineNo} does not fit line {original.LineNo} of the original.");
+        var unit = (long)decimal.Round((decimal)p.NetMinor / Math.Max(p.Quantity, 1), 0, MidpointRounding.ToEven);
+        var exact = original.UnitPriceMinor is not null;
+        return new InvoiceLine
+        {
+            Id = Guid.NewGuid(),
+            InvoiceId = invoiceId,
+            LineNo = lineNo,
+            Kind = original.Kind,
+            OrderItemId = original.OrderItemId,
+            OriginalLineId = original.Id,
+            Sku = original.Sku,
+            PartNumber = original.PartNumber,
+            DescriptionEn = original.DescriptionEn,
+            DescriptionBn = original.DescriptionBn,
+            Unit = original.Unit,
+            Quantity = p.Quantity,
+            UnitPriceMinor = exact ? unit : null,
+            DisplayUnitPriceMinor = exact ? null : unit,
+            GrossMinor = p.NetMinor,
+            NetMinor = p.NetMinor,
+            SdRate = original.SdRate,
+            VatRate = original.VatRate,
+            VatMinor = p.VatMinor,
+            TotalMinor = p.TotalMinor
+        };
+    }
 }
 
 /// <summary>
@@ -107,6 +143,9 @@ public sealed class Invoice : Entity<Guid>
     public InvoiceDeliverySnapshot Delivery { get; private set; } = null!;
     public string? PurchaseOrderNumber { get; private set; }
     public string? QuoteNumber { get; private set; }
+
+    /// <summary>The Dhaka calendar day the quote was sent (printed as "against quotation no. X dated D"); null on invoices issued before E6.4c and for orders without a quote.</summary>
+    public DateOnly? QuoteDate { get; private set; }
     public string OrderNumber { get; private set; } = string.Empty;
     public string Currency { get; private set; } = "BDT";
     public long NetMinor { get; private set; }
@@ -117,6 +156,16 @@ public sealed class Invoice : Entity<Guid>
     public string ContentHash { get; private set; } = string.Empty;
     public Guid IssuedBy { get; private set; }
 
+    /// <summary>Credit note only (E6.5b): the <see cref="CreditNoteReason"/> name and the cleaned text, both printed and hashed.</summary>
+    public string? Reason { get; private set; }
+    public string? ReasonText { get; private set; }
+
+    /// <summary>Credit note only: who asked for it (never <see cref="IssuedBy"/>, the approver; DB CHECK).</summary>
+    public Guid? RequestedBy { get; private set; }
+
+    /// <summary>Credit note only: money owed back outside the credit ledger (a paid, non-credit order); 0 when the ledger took it.</summary>
+    public long? RefundDueMinor { get; private set; }
+
     public IReadOnlyList<InvoiceLine> Lines => _lines.AsReadOnly();
 
     private Invoice() { }
@@ -125,7 +174,7 @@ public sealed class Invoice : Entity<Guid>
     internal Invoice(Guid id, InvoicingMode mode, string number, InvoiceSeries series, int fiscalYear, long serial, DateTime issuedAtUtc,
         Guid sellerId, Guid orderId, string orderNumber, Guid subOrderId, Guid shipmentId, Guid? companyId, InvoiceSellerSnapshot seller,
         InvoiceBuyerSnapshot buyer, InvoiceDeliverySnapshot delivery, string? purchaseOrderNumber, string? quoteNumber, string currency,
-        bool consultantChecked, Guid issuedBy, IEnumerable<InvoiceLine> lines) : base(id)
+        bool consultantChecked, Guid issuedBy, IEnumerable<InvoiceLine> lines, DateOnly? quoteDate = null) : base(id)
     {
         _lines.AddRange(lines);
         if (_lines.Count == 0 || _lines.Any(l => l.InvoiceId != id)) throw new InvalidOperationException("An invoice needs its own lines.");
@@ -134,11 +183,69 @@ public sealed class Invoice : Entity<Guid>
         (SellerId, OrderId, OrderNumber, SubOrderId, ShipmentId, CompanyId, Seller, Buyer, Delivery) =
             (sellerId, orderId, orderNumber, subOrderId, shipmentId, companyId, seller, buyer, delivery);
         (PurchaseOrderNumber, QuoteNumber, Currency, ConsultantChecked, IssuedBy) = (purchaseOrderNumber, quoteNumber, currency, consultantChecked, issuedBy);
+        QuoteDate = quoteDate;
         NetMinor = _lines.Sum(l => l.NetMinor);
         SdMinor = _lines.Sum(l => l.SdMinor);
         VatMinor = _lines.Sum(l => l.VatMinor);
         TotalMinor = _lines.Sum(l => l.TotalMinor);
         ContentHash = InvoiceContentHash.Compute(this);
+    }
+
+    /// <summary>
+    /// E6.5b, ADR-0012 §9: the Mushak-6.7 of an approved <paramref name="plan"/> of <paramref name="original"/>. Everything printed is copied from
+    /// the original (seller, buyer, delivery, PO, quote, order), never read live; the number is of the original's mode (series
+    /// <c>CreditNote</c> or <c>SpecimenCreditNote</c>) with the original's prefix; lines follow the plan; the hash is taken last.
+    /// </summary>
+    public static Invoice CreditNote(Guid id, Invoice original, CreditNotePlan plan, InvoiceSeries series, int fiscalYear, long serial, DateTime issuedAtUtc,
+        Guid requestedBy, Guid issuedBy, long refundDueMinor, bool consultantChecked)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (original.Kind != InvoiceKind.TaxInvoice || plan.OriginalInvoiceId != original.Id || plan.Lines.Count == 0)
+            throw new InvalidOperationException("A credit note credits a tax invoice by its own plan.");
+        if (series != (original.Mode == InvoicingMode.Live ? InvoiceSeries.CreditNote : InvoiceSeries.SpecimenCreditNote))
+            throw new InvalidOperationException($"A credit note of a {original.Mode} invoice cannot take a number of the {series} series.");
+        if (issuedAtUtc.Kind != DateTimeKind.Utc || serial < 1 || Invoicing.FiscalYear.Of(issuedAtUtc) != fiscalYear)
+            throw new InvalidOperationException("The number does not belong to the issue instant.");
+        if (requestedBy == issuedBy) throw new InvalidOperationException("The approver of a credit note is never its requester.");
+        if (refundDueMinor < 0 || refundDueMinor > plan.TotalMinor) throw new InvalidOperationException("The refund due is 0 … the credit note's total.");
+        var prefix = original.Number[..original.Number.IndexOf('-', StringComparison.Ordinal)];
+        var note = new Invoice
+        {
+            Id = id,
+            Kind = InvoiceKind.CreditNote,
+            Mode = original.Mode,
+            Series = series,
+            FiscalYear = fiscalYear,
+            Serial = serial,
+            // A specimen prints SPEC whatever the live prefix is, so any valid one will do there.
+            Number = InvoiceNumber.Format(prefix == InvoiceNumber.SpecimenPrefix ? "MW" : prefix, series, fiscalYear, serial),
+            IssuedAtUtc = issuedAtUtc,
+            CreatedAtUtc = issuedAtUtc,
+            SellerId = original.SellerId,
+            OrderId = original.OrderId,
+            OrderNumber = original.OrderNumber,
+            SubOrderId = original.SubOrderId,
+            OriginalInvoiceId = original.Id,
+            CompanyId = original.CompanyId,
+            Seller = original.Seller,
+            Buyer = original.Buyer,
+            Delivery = original.Delivery,
+            PurchaseOrderNumber = original.PurchaseOrderNumber,
+            QuoteNumber = original.QuoteNumber,
+            Currency = original.Currency,
+            ConsultantChecked = consultantChecked,
+            IssuedBy = issuedBy,
+            Reason = plan.Reason.ToString(),
+            ReasonText = plan.ReasonText,
+            RequestedBy = requestedBy,
+            RefundDueMinor = refundDueMinor
+        };
+        note._lines.AddRange(plan.Lines.Select((p, n) => InvoiceLine.Credit(id, n + 1, original.Lines.Single(l => l.Id == p.OriginalLineId), p)));
+        (note.NetMinor, note.SdMinor, note.VatMinor, note.TotalMinor) =
+            (note._lines.Sum(l => l.NetMinor), 0, note._lines.Sum(l => l.VatMinor), note._lines.Sum(l => l.TotalMinor));
+        note.ContentHash = InvoiceContentHash.Compute(note);
+        return note;
     }
 
     /// <summary>The printed date and time: Dhaka local (+06:00), <c>dd-MM-yyyy HH:mm</c> (ADR-0012 §5); the stored value stays UTC.</summary>

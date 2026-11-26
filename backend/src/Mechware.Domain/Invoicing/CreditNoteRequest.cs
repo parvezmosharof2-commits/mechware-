@@ -1,4 +1,6 @@
+using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Common.Primitives;
+using Mechware.Domain.Quotes;
 
 namespace Mechware.Domain.Invoicing;
 
@@ -63,5 +65,40 @@ public sealed class CreditNoteRequest : Entity<Guid>
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc
         };
+    }
+
+    public const string FourEyes = "CREDIT_NOTE_FOUR_EYES";
+    public const string NotRequested = "CREDIT_NOTE_NOT_REQUESTED";
+    public const string NotYours = "CREDIT_NOTE_NOT_YOURS";
+
+    /// <summary>Four eyes (IT4): only an open request, and never by the person who asked (they withdraw instead). Checked before any lock-heavy work.</summary>
+    public void EnsureDecidableBy(Guid actor)
+    {
+        if (Status != CreditNoteRequestStatus.Requested) throw new ConflictException(NotRequested, "This credit-note request is already decided or withdrawn.");
+        if (actor == RequestedBy) throw new ConflictException(FourEyes, "Another person approves or rejects a credit note; withdraw your own request instead.");
+    }
+
+    /// <summary>The approval: names the 6.7 issued in the same transaction (the DB guard checks it is that request's credit note).</summary>
+    public void Approve(Guid actor, Guid creditNoteId, DateTime nowUtc)
+    {
+        EnsureDecidableBy(actor);
+        (Status, DecidedBy, DecidedAtUtc, IssuedInvoiceId, UpdatedAtUtc) = (CreditNoteRequestStatus.Approved, actor, nowUtc, creditNoteId, nowUtc);
+    }
+
+    /// <summary>A refusal by another person, with a plain-text reason of 5–500 characters; nothing is issued and nothing moves.</summary>
+    public void Reject(Guid actor, string? reason, DateTime nowUtc)
+    {
+        EnsureDecidableBy(actor);
+        var text = PlainText.Clean(reason)?.Trim();
+        if (text is not { Length: >= 5 and <= 500 }) throw new ValidationException("reason", "Give a reason of 5 to 500 characters.");
+        (Status, DecidedBy, DecidedAtUtc, DecisionReason, UpdatedAtUtc) = (CreditNoteRequestStatus.Rejected, actor, nowUtc, text, nowUtc);
+    }
+
+    /// <summary>The requester takes their own open request back.</summary>
+    public void Withdraw(Guid actor, DateTime nowUtc)
+    {
+        if (Status != CreditNoteRequestStatus.Requested) throw new ConflictException(NotRequested, "This credit-note request is already decided or withdrawn.");
+        if (actor != RequestedBy) throw new ConflictException(NotYours, "Only the person who asked may withdraw a request; reject it instead.");
+        (Status, DecidedBy, DecidedAtUtc, UpdatedAtUtc) = (CreditNoteRequestStatus.Withdrawn, actor, nowUtc, nowUtc);
     }
 }

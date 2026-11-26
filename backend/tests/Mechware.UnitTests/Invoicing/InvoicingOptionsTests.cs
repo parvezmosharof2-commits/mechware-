@@ -75,6 +75,16 @@ public class InvoicingOptionsTests
     /// <summary>A BIN is 13 ASCII digits as best known (ADR-0012 §19 Q8: the consultant confirms the format).</summary>
     [Theory]
     [InlineData("0001234567890", true)]
+    [InlineData("000123456-7890", true)]
+    [InlineData("000000000-0101", true)]
+    [InlineData("00012345-67890", false)]     // dash in the wrong place
+    [InlineData("0001234567-890", false)]
+    [InlineData("000123456-78901", false)]    // 14 digits
+    [InlineData("000123456--890", false)]
+    [InlineData("000123456-789A", false)]
+    [InlineData("০০০১২৩৪৫৬-৭৮৯০", false)]    // Bangla digits with the dash
+    [InlineData("-000123456789", false)]
+    [InlineData("000123456–7890", false)]     // en dash
     [InlineData("1234567890123", true)]
     [InlineData("123456789012", false)]
     [InlineData("12345678901234", false)]
@@ -85,7 +95,7 @@ public class InvoicingOptionsTests
     [InlineData("０００１２３４５６７８９０", false)] // full-width
     [InlineData("", false)]
     [InlineData(null, false)]
-    public void ABin_IsThirteenAsciiDigits(string? bin, bool valid)
+    public void ABin_IsThirteenAsciiDigits_PlainOrDashed(string? bin, bool valid)
     {
         TaxIdFormat.IsBin(bin).Should().Be(valid);
         var options = new InvoicingOptions { Mode = InvoicingMode.Off, Bin = bin };
@@ -127,5 +137,55 @@ public class InvoicingOptionsTests
         (options.Mode, options.IssuerSellerId, options.Bin, options.ShippingVatRate, options.ConsultantChecked, options.NumberPrefix, options.CreditNoteMaxAgeDays)
             .Should().Be((InvoicingMode.Live, InvoiceFixtures.Seller, "0001234567890", 0.15m, true, "MW", 180));
         options.MissingIssuerFacts().Should().Equal("LegalNameBn", "RegisteredAddressEn", "RegisteredAddressBn", "ResponsiblePersonName", "ResponsiblePersonDesignation");
+    }
+
+    [Theory]
+    [InlineData("000123456-7890", "0001234567890", "000123456-7890")]
+    [InlineData("0001234567890", "0001234567890", "000123456-7890")]
+    [InlineData("000000000-0101", "0000000000101", "000000000-0101")]
+    public void ABin_IsStoredAsDigits_AndPrintedDashed(string written, string stored, string printed)
+    {
+        TaxIdFormat.NormalizeBin(written).Should().Be(stored);
+        TaxIdFormat.PrintBin(stored).Should().Be(printed);
+        TaxIdFormat.PrintBin(printed).Should().Be(printed);
+        TaxIdFormat.PrintBin("not a bin").Should().Be("not a bin");
+        TaxIdFormat.NormalizeBin("12-34").Should().BeNull();
+    }
+
+    [Fact]
+    public void ADashedIssuerBin_IsSnapshottedAsDigits()
+    {
+        var (invoice, _, _, _) = InvoiceFixtures.CompanyInvoice(InvoiceFixtures.Live with { Bin = "000123456-7890" });
+        invoice.Seller.Bin.Should().Be("0001234567890");
+    }
+
+    [Fact]
+    public void ACompany_RegisteredWithADashedBin_IsStoredAsDigits_AndTheBuyerBinIsMasked()
+    {
+        var c = Mechware.Domain.Companies.Company.Register(Guid.NewGuid(), "Dash Ltd", "TL-1", "000123456-7890", null, null);
+        c.Bin.Should().Be("0001234567890");
+        Action bad = () => Mechware.Domain.Companies.Company.Register(Guid.NewGuid(), "Dash Ltd", "TL-1", "00012345-67890", null, null);
+        bad.Should().Throw<Exception>();
+        Mechware.Infrastructure.Invoicing.InvoiceReadService.MaskBin(c.Bin).Should().Be("*********7890");
+    }
+
+    [Fact]
+    public void TheBankAndSignatorySections_BindFromConfiguration()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Invoicing:Bank:AccountName"] = "Test Trading Ltd",
+            ["Invoicing:Bank:AccountNumber"] = "1234567890123",
+            ["Invoicing:Bank:BankName"] = "Test Bank",
+            ["Invoicing:Bank:Branch"] = "Gulshan",
+            ["Invoicing:Bank:RoutingNumber"] = "123456789",
+            ["Invoicing:Signatory:Name"] = "Test Signatory",
+            ["Invoicing:Signatory:Designation"] = "Director",
+            ["Invoicing:Bin"] = "000123456-7890"
+        }).Build();
+        var o = config.GetSection(InvoicingOptions.Section).Get<InvoicingOptions>()!;
+        o.Bank.Should().Be(new InvoicingBankOptions { AccountName = "Test Trading Ltd", AccountNumber = "1234567890123", BankName = "Test Bank", Branch = "Gulshan", RoutingNumber = "123456789" });
+        o.Signatory.Should().Be(new InvoicingSignatoryOptions { Name = "Test Signatory", Designation = "Director" });
+        o.Problems(isProduction: false).Should().BeEmpty("a dashed BIN is accepted");
     }
 }

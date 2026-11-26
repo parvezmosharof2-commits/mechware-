@@ -61,9 +61,9 @@ internal static class InvoiceFixtures
         new(Guid.NewGuid(), Guid.NewGuid(), Seller, sku, $"Item {sku}", quantity, unitPriceMinor, vatRate, discountMinor);
 
     public static InvoiceIssue Issue(Order order, Shipment shipment, Company? company = null, CompanySite? site = null, InvoiceSeries series = InvoiceSeries.TaxInvoice,
-        DateTime? at = null, Guid? invoiceId = null, string? buyerName = null) =>
+        DateTime? at = null, Guid? invoiceId = null, string? buyerName = null, DateOnly? quoteDate = null) =>
         new(invoiceId ?? Guid.Parse("17000000-0000-4000-8000-000000000007"), order, Seller, shipment, company, site,
-            company is null ? buyerName ?? "Nusrat Jahan" : null, company is null ? null : "MWQ-2026-000012", series, FiscalYear.Of(at ?? Now), 482, at ?? Now, Staff);
+            company is null ? buyerName ?? "Nusrat Jahan" : null, company is null ? null : "MWQ-2026-000012", series, FiscalYear.Of(at ?? Now), 482, at ?? Now, Staff, quoteDate);
 
     /// <summary>A company order (net basis) with two lines, a discount and shipping, issued Live.</summary>
     public static (Invoice Invoice, Order Order, Company Company, CompanySite Site) CompanyInvoice(InvoicingOptions? options = null)

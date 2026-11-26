@@ -2878,6 +2878,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("purchase_order_number");
 
+                    b.Property<DateOnly?>("QuoteDate")
+                        .HasColumnType("date")
+                        .HasColumnName("quote_date");
+
                     b.Property<string>("QuoteNumber")
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")

@@ -58,7 +58,9 @@ public sealed class Company : AggregateRoot<Guid>
 
         if (legalName.Length is < 2 or > 200) errors.Add(new("legalName", "Legal name must be 2-200 characters."));
         if (tradeLicenceNo.Length is < 3 or > 50) errors.Add(new("tradeLicenceNo", "Trade licence number must be 3-50 characters."));
-        if (!IsDigits(bin, 13)) errors.Add(new("bin", "BIN must be exactly 13 digits."));
+        // Written plain or as #########-####; stored and compared as the 13 digits.
+        if (Mechware.Domain.Invoicing.TaxIdFormat.NormalizeBin(bin) is { } digits) bin = digits;
+        else errors.Add(new("bin", "BIN must be exactly 13 digits (000000000-0000 is accepted)."));
         if (tin is not null && !IsDigits(tin, 12)) errors.Add(new("tin", "TIN must be exactly 12 digits."));
         if (industry is { Length: > 100 }) errors.Add(new("industry", "Industry must be at most 100 characters."));
         if (errors.Count > 0) throw new ValidationException(errors);

@@ -17,6 +17,13 @@ public static class InvoiceContentHash
     /// <summary>Changing anything in <see cref="CanonicalJson"/> needs a new schema name; issued hashes keep theirs (the reconciliation recomputes each under its own).</summary>
     public const string Schema = "mechware.invoice.v1";
 
+    /// <summary>
+    /// v2 (E6.4c) adds the quote's send date. The schema follows the content, so no stored marker is needed and v1 stays verifiable: an invoice
+    /// without <see cref="Invoice.QuoteDate"/> is written exactly as v1 (same bytes, same hash as before); one with it names v2 and carries "quoteDate".
+    /// E6.5b: a credit note's <see cref="Invoice.Reason"/> and <see cref="Invoice.ReasonText"/> (printed on the 6.7) follow the same rule.
+    /// </summary>
+    public const string SchemaV2 = "mechware.invoice.v2";
+
     private static readonly JsonWriterOptions Writer = new() { Indented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static string Compute(Invoice invoice) => Convert.ToHexStringLower(SHA256.HashData(CanonicalJson(invoice)));
@@ -31,7 +38,7 @@ public static class InvoiceContentHash
         using (var w = new Utf8JsonWriter(buffer, Writer))
         {
             w.WriteStartObject();
-            w.WriteString("schema", Schema);
+            w.WriteString("schema", i.QuoteDate is null && i.Reason is null && i.ReasonText is null ? Schema : SchemaV2);
             w.WriteString("invoiceId", Id(i.Id));
             w.WriteString("kind", i.Kind.ToString());
             w.WriteString("mode", i.Mode.ToString());
@@ -47,9 +54,13 @@ public static class InvoiceContentHash
             Text(w, "shipmentId", Id(i.ShipmentId));
             w.WriteNumber("replacementNo", i.ReplacementNo);
             Text(w, "originalInvoiceId", Id(i.OriginalInvoiceId));
+            // v2 (E6.5b): a credit note's reason and text are printed on the 6.7; absent (every tax invoice) they are not written at all.
+            if (i.Reason is not null) w.WriteString("reason", i.Reason);
+            if (i.ReasonText is not null) w.WriteString("reasonText", i.ReasonText);
             Text(w, "companyId", Id(i.CompanyId));
             Text(w, "purchaseOrderNumber", i.PurchaseOrderNumber);
             Text(w, "quoteNumber", i.QuoteNumber);
+            if (i.QuoteDate is { } quoteDate) w.WriteString("quoteDate", quoteDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
             w.WriteString("currency", i.Currency);
             w.WriteBoolean("consultantChecked", i.ConsultantChecked);
 

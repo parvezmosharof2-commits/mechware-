@@ -8,12 +8,12 @@ namespace Mechware.Domain.Invoicing;
 
 /// <summary>
 /// What the issuer read inside the ship transaction (ADR-0012 §2, §6): the shipped order, the issuing seller's sub-order, the shipment,
-/// the buyer company and its billing site (company orders), the person's display name (personal orders), the quote number, and the
+/// the buyer company and its billing site (company orders), the person's display name (personal orders), the quote number and its Dhaka send date, and the
 /// number just taken (E6.2: series, fiscal year, serial, database issue instant).
 /// </summary>
 public sealed record InvoiceIssue(
     Guid InvoiceId, Order Order, Guid SellerId, Shipment Shipment, Company? Company, CompanySite? BillingSite, string? BuyerDisplayName,
-    string? QuoteNumber, InvoiceSeries Series, int FiscalYear, long Serial, DateTime IssuedAtUtc, Guid IssuedBy);
+    string? QuoteNumber, InvoiceSeries Series, int FiscalYear, long Serial, DateTime IssuedAtUtc, Guid IssuedBy, DateOnly? QuoteDate = null);
 
 /// <summary>
 /// Builds the Mushak-6.3 snapshot (ADR-0012 §6, §7, threat model IT7, IT8). Everything printed is copied out of the inputs here, so a
@@ -48,7 +48,7 @@ public static class InvoiceSnapshotBuilder
             order.CompanyId, options.SellerSnapshot(), Buyer(issue, shipTo),
             new InvoiceDeliverySnapshot(shipTo, issue.Shipment.CourierName, issue.Shipment.TrackingNumber),
             order.PurchaseOrderNumber, Blank(issue.QuoteNumber), order.Currency, options.ConsultantChecked, issue.IssuedBy,
-            Lines(issue.InvoiceId, order.TaxMode, sub, options.ShippingVatRate));
+            Lines(issue.InvoiceId, order.TaxMode, sub, options.ShippingVatRate), Blank(issue.QuoteNumber) is null ? null : issue.QuoteDate);
     }
 
     /// <summary>
@@ -98,7 +98,7 @@ public static class InvoiceSnapshotBuilder
         var company = issue.Company;
         if (company is null || company.Id != order.CompanyId || (issue.BillingSite is { } s && s.CompanyId != company.Id))
             throw new InvalidOperationException("The company is not the order's.");
-        var bin = Blank(company.Bin);   // Live: active + valid BIN checked by EnsureLiveIssuable; Specimen prints what is there
+        var bin = Blank(company.Bin) is { } raw ? TaxIdFormat.NormalizeBin(raw) ?? raw : null;   // Live: active + valid BIN checked by EnsureLiveIssuable; Specimen prints what is there
         var site = issue.BillingSite;
         var address = site is null ? shipTo?.OneLine()
             : string.Join(", ", new[] { site.Line1, site.Line2, site.Upazila, site.District, site.Division, site.PostalCode }.Where(x => !string.IsNullOrWhiteSpace(x)));
