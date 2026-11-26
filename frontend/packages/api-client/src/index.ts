@@ -510,3 +510,5 @@ export * from "./returns-model";
 export * from "./returns";
 export * from "./invoices-model";
 export * from "./invoices";
+export * from "./invoices-staff-model";
+export * from "./invoices-staff";

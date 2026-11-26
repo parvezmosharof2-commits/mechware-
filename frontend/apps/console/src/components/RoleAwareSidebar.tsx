@@ -51,6 +51,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'invoices',
+    label: 'Invoices',
+    requiredPermission: 'invoices.view',
+    href: '/invoices',
+    group: 'Orders'
+  },
+  {
     id: 'quotes-rfqs',
     label: 'RFQ inbox',
     requiredPermission: 'quotes.view',

@@ -38,6 +38,8 @@ export interface StaffOrderDetail {
   subOrders: StaffSubOrder[]; events: StaffOrderEvent[]; payments: StaffOrderPayment[];
   /** Send with every fulfilment move (F1.1). */
   rowVersion: number; shipments: StaffShipment[];
+  /** Mushak-6.3 numbers of the order, oldest first (E6.3c); empty before shipping. */
+  invoiceNumbers?: string[];
 }
 
 // ---------- words ----------

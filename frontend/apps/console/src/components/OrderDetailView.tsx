@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
 import {
-  REFUND_STATUS_LABEL, cancelHint, canViewRefunds, canViewStaffOrders, creditStateText, dhakaWhen, formatBdt, orderStatusText, paymentStateText, paymentStatusText,
+  REFUND_STATUS_LABEL, cancelHint, canViewInvoices, canViewRefunds, canViewStaffOrders, creditStateText, dhakaWhen, formatBdt, orderStatusText, paymentStateText, paymentStatusText,
   priceSnapshotText, refundStatus, timelineText, type StaffOrderDetail, type StaffOrderPayment
 } from '@mechware/api-client';
 import { staffOrderError, staffOrdersApi } from '../lib/api';
@@ -14,6 +14,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, Loading, NoAccess } from './CreditShared';
 import { useOrderCancel } from './OrderCancelFlow';
+import { PrintMushak } from './InvoicePdfButtons';
 import { ShipmentBlock, useOrderFulfil } from './OrderFulfilment';
 
 const th = 'px-3 py-2';
@@ -104,6 +105,13 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
           </Section>
 
           <ShipmentBlock shipments={d.shipments ?? []} />
+
+          {(d.invoiceNumbers?.length ?? 0) > 0 && (
+            <Section title="Invoice (Mushak-6.3)">
+              <p className="text-sm" data-testid="invoice-numbers">{d.invoiceNumbers!.join(', ')}</p>
+              {canViewInvoices(permissions) ? <PrintMushak orderId={d.id} orderNumber={d.orderNumber} /> : <p className="text-xs text-text-muted">Printing needs the invoices.view permission.</p>}
+            </Section>
+          )}
 
           <Section title="Delivery address">
             {d.shipTo ? (
