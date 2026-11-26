@@ -512,3 +512,5 @@ export * from "./invoices-model";
 export * from "./invoices";
 export * from "./invoices-staff-model";
 export * from "./invoices-staff";
+export * from "./credit-notes-staff-model";
+export * from "./credit-notes-staff";

@@ -3,7 +3,7 @@ import {
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
-import { createStaffInvoicesApi, createStaffReturnsApi, shouldReloadReturn, staffReturnErrorText } from '@mechware/api-client';
+import { createStaffCreditNotesApi, createStaffInvoicesApi, createStaffReturnsApi, shouldReloadReturn, staffReturnErrorText } from '@mechware/api-client';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
 
@@ -23,6 +23,7 @@ export const staffQuotesApi = createStaffQuotesApi(api);
 export const quoteTermsApi = createQuoteTermsApi(api);
 export const staffReturnsApi = createStaffReturnsApi(api);
 export const staffInvoicesApi = createStaffInvoicesApi(api);
+export const staffCreditNotesApi = createStaffCreditNotesApi(api);
 
 export { problemCode, problemFieldErrors, problemMessage, problemStatus };
 

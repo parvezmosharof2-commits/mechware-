@@ -3,12 +3,13 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
-import { canViewInvoices, dhakaWhen, formatBdt, invoiceKindText, invoiceModeText, type StaffInvoiceDetail } from '@mechware/api-client';
+import { canRequestCreditNote, canViewInvoices, dhakaWhen, formatBdt, invoiceKindText, invoiceModeText, type StaffInvoiceDetail } from '@mechware/api-client';
 import { useAuth } from '../lib/auth';
 import { staffInvoicesApi } from '../lib/api';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, Loading, NoAccess } from './CreditShared';
+const CreditNoteRequestButton = React.lazy(() => import('./CreditNoteRequestButton').then((m) => ({ default: m.CreditNoteRequestButton })));
 import { InvoicePdfButtons, invoiceFailure } from './InvoicePdfButtons';
 
 const th = 'px-3 py-2';
@@ -26,7 +27,7 @@ function Facts({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   );
 }
 
-function Body({ s }: { s: StaffInvoiceDetail }) {
+function Body({ s, canRequest }: { s: StaffInvoiceDetail; canRequest: boolean }) {
   const d = s.detail;
   const i = d.invoice;
   return (
@@ -40,7 +41,11 @@ function Body({ s }: { s: StaffInvoiceDetail }) {
           </p>
           {i.mode === 'specimen' && <p className="text-sm font-medium" data-testid="invoice-specimen">Specimen, not a tax invoice.</p>}
         </div>
-        <InvoicePdfButtons invoiceId={i.id} number={i.number} />
+        <div className="space-y-3">
+          <InvoicePdfButtons invoiceId={i.id} number={i.number} />
+          {canRequest && i.kind === 'tax_invoice' && <React.Suspense fallback={null}><CreditNoteRequestButton detail={d} /></React.Suspense>}
+          {i.kind === 'credit_note' && <Link href="/invoices/credit-notes" className="block text-sm font-semibold text-brand-accent underline">Credit note queue</Link>}
+        </div>
       </header>
 
       <Section title="Invoice">
@@ -99,7 +104,7 @@ function Body({ s }: { s: StaffInvoiceDetail }) {
   );
 }
 
-function Detail({ id }: { id: string }) {
+function Detail({ id, canRequest }: { id: string; canRequest: boolean }) {
   const res = useResource(() => staffInvoicesApi.detail(id), id);
   const failure = res.error ? { text: invoiceFailure(res.error), retry: true } : null;
   return (
@@ -107,7 +112,7 @@ function Detail({ id }: { id: string }) {
       <BackLink href="/invoices">Back to all invoices</BackLink>
       <FailureAlert failure={failure} onRetry={res.reload} />
       {res.loading && !res.data && <Loading />}
-      {res.data && <Body s={res.data} />}
+      {res.data && <Body s={res.data} canRequest={canRequest} />}
     </div>
   );
 }
@@ -116,7 +121,7 @@ export function InvoiceDetailView({ id }: { id: string }) {
   const { user } = useAuth();
   return (
     <ConsoleShell activeItemId="invoices" title="Invoice">
-      {canViewInvoices(user?.permissions ?? []) ? <Detail id={id} /> : <NoAccess permission="invoices.view" />}
+      {canViewInvoices(user?.permissions ?? []) ? <Detail id={id} canRequest={canRequestCreditNote(user?.permissions ?? [])} /> : <NoAccess permission="invoices.view" />}
     </ConsoleShell>
   );
 }

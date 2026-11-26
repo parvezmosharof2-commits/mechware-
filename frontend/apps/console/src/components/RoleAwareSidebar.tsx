@@ -58,6 +58,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'credit-notes',
+    label: 'Credit notes',
+    requiredPermission: 'invoices.view',
+    href: '/invoices/credit-notes',
+    group: 'Orders'
+  },
+  {
     id: 'quotes-rfqs',
     label: 'RFQ inbox',
     requiredPermission: 'quotes.view',

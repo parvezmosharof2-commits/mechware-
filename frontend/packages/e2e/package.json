@@ -33,6 +33,7 @@
     "test:returns": "node tests/returns.mjs",
     "test:invoices": "node tests/invoices.mjs",
     "test:console-invoices": "node tests/console-invoices.mjs",
+    "test:console-credit-notes": "node tests/console-credit-notes.mjs",
     "test:console-returns": "node tests/console-returns.mjs",
     "test:quick-order": "node tests/quick-order.mjs"
   },
