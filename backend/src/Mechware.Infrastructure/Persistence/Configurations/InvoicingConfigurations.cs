@@ -157,8 +157,10 @@ internal sealed class InvoiceLineConfiguration : IEntityTypeConfiguration<Invoic
     {
         b.ToTable("invoice_lines", t =>
         {
+            // A credit line (E6.5a, §9.1) may credit value only (quantity 0) and always credits at least one poisha.
             t.HasCheckConstraint("ck_invoice_lines_shape",
-                "line_no >= 1 AND quantity >= 1 AND (kind = 'Goods' AND sku IS NOT NULL OR kind = 'Delivery' AND order_item_id IS NULL AND quantity = 1) " +
+                "line_no >= 1 AND (quantity >= 1 OR original_line_id IS NOT NULL AND quantity = 0) AND (original_line_id IS NULL OR net_minor >= 1) " +
+                "AND (kind = 'Goods' AND sku IS NOT NULL OR kind = 'Delivery' AND order_item_id IS NULL AND quantity <= 1 AND (quantity = 1 OR original_line_id IS NOT NULL)) " +
                 "AND char_length(btrim(description_en)) >= 1 AND char_length(btrim(description_bn)) >= 1 AND char_length(btrim(unit)) >= 1");
             // Exactly one printed unit price: exact (net basis, delivery) or the display-only rounded one of a personal order (§7).
             t.HasCheckConstraint("ck_invoice_lines_unit_price",
@@ -194,5 +196,66 @@ internal sealed class InvoiceLineConfiguration : IEntityTypeConfiguration<Invoic
         b.HasIndex(l => new { l.InvoiceId, l.LineNo }).IsUnique().HasDatabaseName("ux_invoice_lines_line_no");
         b.HasIndex(l => l.OrderItemId).HasFilter("order_item_id IS NOT NULL").HasDatabaseName("ix_invoice_lines_order_item");
         b.HasIndex(l => l.OriginalLineId).HasFilter("original_line_id IS NOT NULL").HasDatabaseName("ix_invoice_lines_original");
+    }
+}
+
+/// <summary>
+/// E6.5a credit-note requests (ADR-0012 §9.3, §16): asked lines as jsonb, four eyes by CHECK (an approver is never the requester), one
+/// request per return (<c>source_key</c>), at most one request per issued 6.7. The guard and the cross-row checks live in <see cref="CreditNoteSql"/>.
+/// </summary>
+internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<CreditNoteRequest>
+{
+    public void Configure(EntityTypeBuilder<CreditNoteRequest> b)
+    {
+        b.ToTable("credit_note_requests", t =>
+        {
+            t.HasCheckConstraint("ck_credit_note_requests_reason",
+                "reason IN ('GoodsReturned', 'PriceReduction', 'Error', 'Other') AND reason_text = btrim(reason_text) " +
+                $"AND char_length(reason_text) BETWEEN {CreditNotePlanner.ReasonTextMinLength} AND {CreditNotePlanner.ReasonTextMaxLength} " +
+                "AND reason_text !~ '[[:cntrl:]]' AND strpos(reason_text, '  ') = 0");
+            t.HasCheckConstraint("ck_credit_note_requests_lines",
+                $"jsonb_typeof(lines) = 'array' AND jsonb_array_length(lines) BETWEEN 1 AND {CreditNotePlanner.MaxLines} AND total_minor >= 1");
+            t.HasCheckConstraint("ck_credit_note_requests_key",
+                "idempotency_key ~ '^[A-Za-z0-9_:-]{8,100}$' AND request_hash ~ '^[0-9a-f]{64}$' AND (source_key IS NULL OR source_key ~ '^return:[0-9a-f]{32}$')");
+            t.HasCheckConstraint("ck_credit_note_requests_status", """
+                CASE status
+                WHEN 'Requested' THEN num_nonnulls(decided_by, decided_at, decision_reason, issued_invoice_id) = 0
+                WHEN 'Approved' THEN num_nonnulls(decided_by, decided_at, issued_invoice_id) = 3 AND decision_reason IS NULL AND decided_by <> requested_by
+                WHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND issued_invoice_id IS NULL
+                    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500
+                WHEN 'Withdrawn' THEN decided_by = requested_by AND decided_at IS NOT NULL AND num_nonnulls(decision_reason, issued_invoice_id) = 0
+                ELSE false END
+                """);
+        });
+        b.MapAudit();
+        b.Xmin();
+        b.Property(r => r.OriginalInvoiceId).HasColumnName("original_invoice_id");
+        b.Property(r => r.OrderId).HasColumnName("order_id");
+        b.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
+        b.Property(r => r.Reason).HasColumnName("reason").HasConversion<string>().HasMaxLength(20);
+        b.Property(r => r.ReasonText).HasColumnName("reason_text").HasMaxLength(CreditNotePlanner.ReasonTextMaxLength).IsRequired();
+        b.Property(r => r.Lines).Jsonb("lines", v => QuoteColumns.Json(v), s => QuoteColumns.FromJson<List<CreditNoteRequestLine>>(s),
+            (x, y) => x.SequenceEqual(y));
+        b.Property(r => r.TotalMinor).HasColumnName("total_minor");
+        b.Property(r => r.RequestedBy).HasColumnName("requested_by");
+        b.Property(r => r.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(100).IsRequired();
+        b.Property(r => r.RequestHash).HasColumnName("request_hash").HasMaxLength(64).IsFixedLength().IsRequired();
+        b.Property(r => r.SourceKey).HasColumnName("source_key").HasMaxLength(60);
+        b.Property(r => r.DecidedBy).HasColumnName("decided_by");
+        b.Property(r => r.DecidedAtUtc).HasColumnName("decided_at");
+        b.Property(r => r.DecisionReason).HasColumnName("decision_reason").HasMaxLength(500);
+        b.Property(r => r.IssuedInvoiceId).HasColumnName("issued_invoice_id");
+
+        b.HasOne<Invoice>().WithMany().HasForeignKey(r => r.OriginalInvoiceId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Invoice>().WithMany().HasForeignKey(r => r.IssuedInvoiceId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Order>().WithMany().HasForeignKey(r => r.OrderId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(r => r.RequestedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(r => r.DecidedBy).OnDelete(DeleteBehavior.Restrict);
+
+        b.HasIndex(r => new { r.RequestedBy, r.IdempotencyKey }).IsUnique().HasDatabaseName("ux_credit_note_requests_idempotency");
+        b.HasIndex(r => r.SourceKey).IsUnique().HasFilter("source_key IS NOT NULL").HasDatabaseName("ux_credit_note_requests_source");
+        b.HasIndex(r => r.IssuedInvoiceId).IsUnique().HasFilter("issued_invoice_id IS NOT NULL").HasDatabaseName("ux_credit_note_requests_issued");
+        b.HasIndex(r => r.OriginalInvoiceId).HasDatabaseName("ix_credit_note_requests_original");
+        b.HasIndex(r => new { r.Status, r.CreatedAtUtc }).HasDatabaseName("ix_credit_note_requests_status");
     }
 }

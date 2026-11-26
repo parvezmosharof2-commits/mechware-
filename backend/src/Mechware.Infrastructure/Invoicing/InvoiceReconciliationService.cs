@@ -28,7 +28,8 @@ namespace Mechware.Infrastructure.Invoicing;
 /// since the first shipment with a Live 6.3 has exactly one Live 6.3 of its seller (earlier shipments were Off or Specimen: ignored);</item>
 /// <item><see cref="InvoiceTotal"/>: a 6.3 equals its sub-order to the poisha (total, goods net, goods VAT); <see cref="LinesTotal"/>: the
 /// header equals the sum of its lines;</item>
-/// <item>credit caps: no credit notes exist before E6.5, so <see cref="CreditCaps"/> finds nothing yet; E6.5a/b extend it.</item>
+/// <item><see cref="CreditCap"/>: a credit note credits a tax invoice; Σ credit lines ≤ the original line (quantity, value, SD, VAT); Σ credit-note
+/// totals ≤ the original's total (E6.5a; E6.6 adds the withholding caps).</item>
 /// </list>
 /// </summary>
 public sealed class InvoiceReconciliationService(MechwareDbContext db, InvoicingOptions options, ILogger<InvoiceReconciliationService> logger)
@@ -37,7 +38,7 @@ public sealed class InvoiceReconciliationService(MechwareDbContext db, Invoicing
     public const string FindingEvent = "invoice.reconciliation_finding";
     public const string NumberGap = "number_gap", NumberDuplicate = "number_duplicate", CounterMismatch = "counter_mismatch",
         ContentHash = "content_hash", MissingInvoice = "missing_invoice", DuplicateInvoice = "duplicate_invoice",
-        InvoiceTotal = "invoice_total", LinesTotal = "invoice_lines_total";
+        InvoiceTotal = "invoice_total", LinesTotal = "invoice_lines_total", CreditCap = "credit_cap";
     private static readonly Meter Meter = new("Mechware.Invoicing");
     private static readonly Counter<long> Recorded = Meter.CreateCounter<long>("invoice_reconciliation_findings", description: "Invoice reconciliation findings recorded");
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -125,11 +126,34 @@ public sealed class InvoiceReconciliationService(MechwareDbContext db, Invoicing
         }
     }
 
-    /// <summary>
-    /// Σ credit notes ≤ the original per line and per invoice (ADR §9, §17). No credit note can exist before E6.5 (the domain, the API
-    /// and the deferred cap trigger come there), so this finds nothing yet; E6.5a/b add the check here, E6.6 the withholding caps.
-    /// </summary>
-    private static IEnumerable<InvoiceReconciliationFinding> CreditCaps(List<Invoice> invoices) => [];
+    /// <summary>Σ credit notes ≤ the original, per line and per invoice (ADR §9.2, §17): what the deferred trigger enforces, checked again.</summary>
+    private static IEnumerable<InvoiceReconciliationFinding> CreditCaps(List<Invoice> invoices)
+    {
+        var taxInvoices = invoices.Where(i => i.Kind == InvoiceKind.TaxInvoice).ToDictionary(i => i.Id);
+        var originalLines = taxInvoices.Values.SelectMany(i => i.Lines.Select(l => (Line: l, i.Number))).ToDictionary(x => x.Line.Id);
+        var notes = invoices.Where(i => i.Kind == InvoiceKind.CreditNote).ToList();
+        foreach (var n in notes.Where(n => n.OriginalInvoiceId is not { } o || !taxInvoices.ContainsKey(o)))
+            yield return new(CreditCap, "invoices", n.Id, $"{n.Number} credits no tax invoice", 1, 0);
+        foreach (var credits in notes.SelectMany(n => n.Lines.Select(l => (Line: l, n.Number))).GroupBy(x => x.Line.OriginalLineId))
+        {
+            if (credits.Key is not { } id || !originalLines.TryGetValue(id, out var o))
+            {
+                foreach (var (line, number) in credits) yield return new(CreditCap, "invoice_lines", line.Id, $"{number} line {line.LineNo} credits no invoice line", 1, 0);
+                continue;
+            }
+            var detail = $"{o.Number} line {o.Line.LineNo}";
+            foreach (var (part, cap, sum) in new[]
+            {
+                ("quantity", (long)o.Line.Quantity, credits.Sum(x => (long)x.Line.Quantity)), ("net", o.Line.NetMinor, credits.Sum(x => x.Line.NetMinor)),
+                ("sd", o.Line.SdMinor, credits.Sum(x => x.Line.SdMinor)), ("vat", o.Line.VatMinor, credits.Sum(x => x.Line.VatMinor))
+            })
+                if (sum > cap) yield return new(CreditCap, "invoice_lines", o.Line.Id, $"{detail} {part}", cap, sum);
+        }
+
+        foreach (var g in notes.Where(n => n.OriginalInvoiceId is { } o && taxInvoices.ContainsKey(o)).GroupBy(n => n.OriginalInvoiceId!.Value))
+            if (g.Sum(n => n.TotalMinor) > taxInvoices[g.Key].TotalMinor)
+                yield return new(CreditCap, "invoices", g.Key, $"{taxInvoices[g.Key].Number} total", taxInvoices[g.Key].TotalMinor, g.Sum(n => n.TotalMinor));
+    }
 
     private static IEnumerable<InvoiceReconciliationFinding> Missing(List<Invoice> invoices, Dictionary<Guid, Sub> subs, List<ShipmentRow> shipped)
     {

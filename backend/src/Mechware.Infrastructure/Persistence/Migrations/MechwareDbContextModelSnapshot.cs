@@ -2629,6 +2629,138 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("warehouses", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Invoicing.CreditNoteRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<Guid?>("IssuedInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_invoice_id");
+
+                    b.Property<string>("Lines")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("lines");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("OriginalInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("original_invoice_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("ReasonText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason_text");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .HasColumnName("request_hash")
+                        .IsFixedLength();
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("SourceKey")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("source_key");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<long>("TotalMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("total_minor");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedBy");
+
+                    b.HasIndex("IssuedInvoiceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_note_requests_issued")
+                        .HasFilter("issued_invoice_id IS NOT NULL");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("OriginalInvoiceId")
+                        .HasDatabaseName("ix_credit_note_requests_original");
+
+                    b.HasIndex("SourceKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_note_requests_source")
+                        .HasFilter("source_key IS NOT NULL");
+
+                    b.HasIndex("RequestedBy", "IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_note_requests_idempotency");
+
+                    b.HasIndex("Status", "CreatedAtUtc")
+                        .HasDatabaseName("ix_credit_note_requests_status");
+
+                    b.ToTable("credit_note_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_credit_note_requests_key", "idempotency_key ~ '^[A-Za-z0-9_:-]{8,100}$' AND request_hash ~ '^[0-9a-f]{64}$' AND (source_key IS NULL OR source_key ~ '^return:[0-9a-f]{32}$')");
+
+                            t.HasCheckConstraint("ck_credit_note_requests_lines", "jsonb_typeof(lines) = 'array' AND jsonb_array_length(lines) BETWEEN 1 AND 200 AND total_minor >= 1");
+
+                            t.HasCheckConstraint("ck_credit_note_requests_reason", "reason IN ('GoodsReturned', 'PriceReduction', 'Error', 'Other') AND reason_text = btrim(reason_text) AND char_length(reason_text) BETWEEN 5 AND 500 AND reason_text !~ '[[:cntrl:]]' AND strpos(reason_text, '  ') = 0");
+
+                            t.HasCheckConstraint("ck_credit_note_requests_status", "CASE status\r\nWHEN 'Requested' THEN num_nonnulls(decided_by, decided_at, decision_reason, issued_invoice_id) = 0\r\nWHEN 'Approved' THEN num_nonnulls(decided_by, decided_at, issued_invoice_id) = 3 AND decision_reason IS NULL AND decided_by <> requested_by\r\nWHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND issued_invoice_id IS NULL\r\n    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500\r\nWHEN 'Withdrawn' THEN decided_by = requested_by AND decided_at IS NOT NULL AND num_nonnulls(decision_reason, issued_invoice_id) = 0\r\nELSE false END");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Invoicing.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3000,7 +3132,7 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_invoice_lines_money", "gross_minor >= 0 AND discount_minor >= 0 AND net_minor >= 0 AND sd_minor >= 0 AND vat_minor >= 0 AND total_minor = net_minor + sd_minor + vat_minor AND sd_rate BETWEEN 0 AND 1 AND vat_rate BETWEEN 0 AND 1");
 
-                            t.HasCheckConstraint("ck_invoice_lines_shape", "line_no >= 1 AND quantity >= 1 AND (kind = 'Goods' AND sku IS NOT NULL OR kind = 'Delivery' AND order_item_id IS NULL AND quantity = 1) AND char_length(btrim(description_en)) >= 1 AND char_length(btrim(description_bn)) >= 1 AND char_length(btrim(unit)) >= 1");
+                            t.HasCheckConstraint("ck_invoice_lines_shape", "line_no >= 1 AND (quantity >= 1 OR original_line_id IS NOT NULL AND quantity = 0) AND (original_line_id IS NULL OR net_minor >= 1) AND (kind = 'Goods' AND sku IS NOT NULL OR kind = 'Delivery' AND order_item_id IS NULL AND quantity <= 1 AND (quantity = 1 OR original_line_id IS NOT NULL)) AND char_length(btrim(description_en)) >= 1 AND char_length(btrim(description_bn)) >= 1 AND char_length(btrim(unit)) >= 1");
 
                             t.HasCheckConstraint("ck_invoice_lines_unit_price", "(unit_price_minor IS NULL) <> (display_unit_price_minor IS NULL) AND COALESCE(unit_price_minor, display_unit_price_minor) >= 0");
                         });
@@ -6122,6 +6254,37 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("SellerId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.CreditNoteRequest", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("IssuedInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("OriginalInvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Mechware.Domain.Invoicing.Invoice", b =>

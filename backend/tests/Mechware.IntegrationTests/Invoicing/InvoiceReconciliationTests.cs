@@ -252,6 +252,56 @@ public sealed class InvoiceReconciliationDamageTests(PostgresDatabaseFixture fix
         (await AuditsOfAsync(invoice)).Should().ContainSingle();
     }
 
+    /// <summary>E6.5a, IT3: a credit note written around the deferred cap trigger (quantity and VAT over the PLC line, VAT over the delivery line, total
+    /// over the invoice) is found per line part and per invoice; nothing is repaired.</summary>
+    [PostgresFact]
+    public async Task CreditNotesAboveTheOriginal_AreFound_PerLineAndPerInvoice_AndNothingIsRepaired()
+    {
+        var w = await WorldAsync();
+        var (invoice, _, number) = await InvoiceOfAsync(await ShipAsync(w, company: true));
+        List<InvoiceLine> lines;
+        long total;
+        await using (var db = Fixture.CreateContext())
+        {
+            lines = await db.InvoiceLines.AsNoTracking().Where(l => l.InvoiceId == invoice).OrderBy(l => l.LineNo).ToListAsync();
+            total = await db.Invoices.Where(i => i.Id == invoice).Select(i => i.TotalMinor).SingleAsync();
+        }
+        var (plc, delivery) = (lines.Single(l => l.Sku == "PLC-1200"), lines.Single(l => l.Kind == InvoiceLineKind.Delivery));
+        var (vat1, vat3) = (plc.VatMinor + 1, delivery.VatMinor + 400_000);
+        var cnTotal = plc.NetMinor + vat1 + delivery.NetMinor + vat3;
+        Guid requester;
+        await using (var db = Fixture.CreateContext()) requester = await InvoiceTestIssues.UserAsync(db);
+        var (cn, cnNumber) = (Guid.NewGuid(), InvoiceNumber.Format(InvoiceTestIssues.Prefix(w.Seller), InvoiceSeries.CreditNote, FiscalYear.Of(DateTime.UtcNow), 1));
+        await RawAsync($"""
+            INSERT INTO invoices (id, kind, mode, number, seller_id, series, fiscal_year, serial, issued_at, order_id, sub_order_id, replacement_no,
+                original_invoice_id, reason, company_id, seller_snapshot, buyer_snapshot, delivery_snapshot, order_number, currency, net_minor, sd_minor,
+                vat_minor, total_minor, refund_due_minor, consultant_checked, content_hash, issued_by, requested_by, created_at)
+            SELECT @p0, 'CreditNote', o.mode, @p1, o.seller_id, 'CreditNote', {FiscalYear.Of(DateTime.UtcNow)}, 1, now(), o.order_id, o.sub_order_id, 0,
+                o.id, 'Error', o.company_id, o.seller_snapshot, o.buyer_snapshot, o.delivery_snapshot, o.order_number, o.currency, {plc.NetMinor + delivery.NetMinor}, 0,
+                {vat1 + vat3}, {cnTotal}, 0, o.consultant_checked, repeat('d', 64), o.issued_by, @p3, now()
+              FROM invoices o WHERE o.id = @p2;
+            INSERT INTO invoice_lines (id, invoice_id, line_no, kind, order_item_id, original_line_id, sku, description_en, description_bn, unit, quantity,
+                unit_price_minor, gross_minor, discount_minor, net_minor, sd_rate, sd_minor, vat_rate, vat_minor, total_minor, created_at)
+            SELECT gen_random_uuid(), @p0, row_number() OVER (ORDER BY l.line_no), l.kind, l.order_item_id, l.id, l.sku, l.description_en, l.description_bn,
+                l.unit, CASE l.line_no WHEN {plc.LineNo} THEN {plc.Quantity + 1} ELSE 1 END, l.net_minor, l.net_minor, 0, l.net_minor, 0, 0, l.vat_rate,
+                CASE l.line_no WHEN {plc.LineNo} THEN {vat1} ELSE {vat3} END, l.net_minor + CASE l.line_no WHEN {plc.LineNo} THEN {vat1} ELSE {vat3} END, now()
+              FROM invoice_lines l WHERE l.invoice_id = @p2 AND l.line_no IN ({plc.LineNo}, {delivery.LineNo});
+            """, cn, cnNumber, invoice, requester);
+        var before = await FingerprintAsync();
+
+        var report = await ReconcileAsync(LiveHost);
+
+        report.Findings.Where(f => f.Check == R.CreditCap && (f.EntityId == invoice || lines.Any(l => l.Id == f.EntityId))).Should().BeEquivalentTo(
+        [
+            new InvoiceReconciliationFinding(R.CreditCap, "invoice_lines", plc.Id, $"{number} line {plc.LineNo} quantity", plc.Quantity, plc.Quantity + 1),
+            new InvoiceReconciliationFinding(R.CreditCap, "invoice_lines", plc.Id, $"{number} line {plc.LineNo} vat", plc.VatMinor, vat1),
+            new InvoiceReconciliationFinding(R.CreditCap, "invoice_lines", delivery.Id, $"{number} line {delivery.LineNo} vat", delivery.VatMinor, vat3),
+            new InvoiceReconciliationFinding(R.CreditCap, "invoices", invoice, $"{number} total", total, cnTotal)
+        ]);
+        (await FingerprintAsync()).Should().Be(before);
+        (await AuditsOfAsync(plc.Id)).Should().HaveCount(2);
+    }
+
     [PostgresFact]
     public async Task OnAHostThatRunsOff_ShippedOrdersAreNotCheckedForAnInvoice_TheOtherChecksStillRun()
     {

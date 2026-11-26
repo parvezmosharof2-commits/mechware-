@@ -131,24 +131,40 @@ internal static class InvoiceTestIssues
         return taken => CreditNoteAsync(db, original, taken, requester);
     }
 
-    public static async Task CreditNoteAsync(MechwareDbContext db, Guid originalId, TakenInvoiceNumber taken, Guid requestedBy, long amountMinor = 100)
+    /// <summary>One credit line written by SQL: line <paramref name="LineNo"/> of the original, with the credited quantity, value and VAT.</summary>
+    public sealed record CreditSpec(int LineNo, int Quantity, long NetMinor, long VatMinor);
+
+    public static Task<Guid> CreditNoteAsync(MechwareDbContext db, Guid originalId, TakenInvoiceNumber taken, Guid requestedBy, long amountMinor = 100) =>
+        CreditNoteAsync(db, originalId, taken, requestedBy, [new CreditSpec(1, 1, amountMinor, 0)]);
+
+    /// <summary>A credit note of <paramref name="originalId"/> by SQL (snapshot copied, hash a placeholder), its lines copying kind, order line and rates
+    /// of the original's lines (or of <paramref name="linesFrom"/>'s, to test the cross-invoice check).</summary>
+    public static async Task<Guid> CreditNoteAsync(MechwareDbContext db, Guid originalId, TakenInvoiceNumber taken, Guid requestedBy, IReadOnlyList<CreditSpec> lines,
+        Guid? linesFrom = null)
     {
         var (id, number, series, at) = (Guid.NewGuid(), taken.Format(Prefix(taken.SellerId)), taken.Series.ToString(), taken.IssuedAtUtc);
+        var (net, vat, source) = (lines.Sum(l => l.NetMinor), lines.Sum(l => l.VatMinor), linesFrom ?? originalId);
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO invoices (id, kind, mode, number, seller_id, series, fiscal_year, serial, issued_at, order_id, sub_order_id, replacement_no,
                 original_invoice_id, reason, company_id, seller_snapshot, buyer_snapshot, delivery_snapshot, order_number, currency, net_minor, sd_minor,
                 vat_minor, total_minor, refund_due_minor, consultant_checked, content_hash, issued_by, requested_by, created_at)
             SELECT {id}, 'CreditNote', o.mode, {number}, o.seller_id, {series}, {taken.FiscalYear}, {taken.Serial}, {at}, o.order_id, o.sub_order_id, 0,
-                o.id, 'Return', o.company_id, o.seller_snapshot, o.buyer_snapshot, o.delivery_snapshot, o.order_number, o.currency, {amountMinor}, 0,
-                0, {amountMinor}, 0, o.consultant_checked, repeat('c', 64), o.issued_by, {requestedBy}, {at}
+                o.id, 'GoodsReturned', o.company_id, o.seller_snapshot, o.buyer_snapshot, o.delivery_snapshot, o.order_number, o.currency, {net}, 0,
+                {vat}, {net + vat}, 0, o.consultant_checked, repeat('c', 64), o.issued_by, {requestedBy}, {at}
               FROM invoices o WHERE o.id = {originalId}
             """);
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
-            INSERT INTO invoice_lines (id, invoice_id, line_no, kind, original_line_id, sku, description_en, description_bn, unit, quantity,
-                unit_price_minor, gross_minor, discount_minor, net_minor, sd_rate, sd_minor, vat_rate, vat_minor, total_minor, created_at)
-            SELECT {Guid.NewGuid()}, {id}, 1, 'Goods', l.id, l.sku, l.description_en, l.description_bn, l.unit, 1,
-                {amountMinor}, {amountMinor}, 0, {amountMinor}, 0, 0, 0, 0, {amountMinor}, {at}
-              FROM invoice_lines l WHERE l.invoice_id = {originalId} AND l.line_no = 1
-            """);
+        for (var n = 0; n < lines.Count; n++)
+        {
+            var (spec, lineNo) = (lines[n], n + 1);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO invoice_lines (id, invoice_id, line_no, kind, order_item_id, original_line_id, sku, description_en, description_bn, unit, quantity,
+                    unit_price_minor, display_unit_price_minor, gross_minor, discount_minor, net_minor, sd_rate, sd_minor, vat_rate, vat_minor, total_minor, created_at)
+                SELECT {Guid.NewGuid()}, {id}, {lineNo}, l.kind, l.order_item_id, l.id, l.sku, l.description_en, l.description_bn, l.unit, {spec.Quantity},
+                    CASE WHEN l.unit_price_minor IS NULL THEN NULL ELSE {spec.NetMinor} END, CASE WHEN l.unit_price_minor IS NULL THEN {spec.NetMinor} END,
+                    {spec.NetMinor}, 0, {spec.NetMinor}, l.sd_rate, 0, l.vat_rate, {spec.VatMinor}, {spec.NetMinor + spec.VatMinor}, {at}
+                  FROM invoice_lines l WHERE l.invoice_id = {source} AND l.line_no = {spec.LineNo}
+                """);
+        }
+        return id;
     }
 }

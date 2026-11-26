@@ -53,6 +53,7 @@ public class DbBackedFactory : WebApplicationFactory<Program>
         db.Database.ExecuteSqlRaw(ReturnSql.Install);
         db.Database.ExecuteSqlRaw(InvoiceNumberingSql.Install);
         db.Database.ExecuteSqlRaw(InvoiceSql.Install);
+        db.Database.ExecuteSqlRaw(CreditNoteSql.Install);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

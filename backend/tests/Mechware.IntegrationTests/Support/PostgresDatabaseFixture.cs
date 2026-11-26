@@ -93,6 +93,7 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         await db.Database.ExecuteSqlRawAsync(ReturnSql.Install);
         await db.Database.ExecuteSqlRawAsync(InvoiceNumberingSql.Install);
         await db.Database.ExecuteSqlRawAsync(InvoiceSql.Install);
+        await db.Database.ExecuteSqlRawAsync(CreditNoteSql.Install);
     }
 
     public MechwareDbContext CreateContext()

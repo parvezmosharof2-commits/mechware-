@@ -120,6 +120,7 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     /// <summary>E6.3b issued invoices and credit notes with their lines: insert-only, guards and COMMIT checks in InvoiceSql.</summary>
     public DbSet<Mechware.Domain.Invoicing.Invoice> Invoices => Set<Mechware.Domain.Invoicing.Invoice>();
     public DbSet<Mechware.Domain.Invoicing.InvoiceLine> InvoiceLines => Set<Mechware.Domain.Invoicing.InvoiceLine>();
+    public DbSet<Mechware.Domain.Invoicing.CreditNoteRequest> CreditNoteRequests => Set<Mechware.Domain.Invoicing.CreditNoteRequest>();
 
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
