@@ -29,7 +29,7 @@ public sealed partial class AuditRedactionTests
         "credit.hold_ended", "credit.hold_overridden", "credit.hold_started", "credit.on_account_applied", "credit.payment_bounced",
         "credit.payment_recorded", "credit.payment_rejected", "credit.payment_verified", "credit.reconciliation_mismatch", "credit.statement_exported",
         "inventory.reconciled", "inventory.restocked",
-        "invoice.issue_refused", "invoice.issued",
+        "invoice.issue_refused", "invoice.issued", "invoice.reconciliation_finding",
         "margin-floor.changed", "margin-floor.deleted",
         "order.cancelled_by_staff", "order.delivered", "order.packed", "order.processing_started", "order.shipped",
         "pricelist.approved", "pricelist.deleted", "pricelist.rejected", "pricelist.revised", "pricelist.submitted", "pricelist.withdrawn",

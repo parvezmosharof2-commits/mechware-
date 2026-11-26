@@ -24,7 +24,7 @@ public class ModuleBoundaryTests
 {
     private const string Root = "Mechware.Infrastructure";
 
-    private static readonly HashSet<string> SharedTargets = new(StringComparer.Ordinal) { "", "Persistence", "Security", "Caching" };
+    private static readonly HashSet<string> SharedTargets = new(StringComparer.Ordinal) { "", "Persistence", "Security", "Caching", "Pdf" };
     private static readonly HashSet<string> UnrestrictedSources = new(StringComparer.Ordinal) { "", "Workers", "Seed" };
 
     // "From -> To" pairs that exist today. Each is an existing violation, to remove in M01.

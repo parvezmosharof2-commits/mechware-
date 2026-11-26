@@ -27,6 +27,14 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         return new PdfResult(bytes, Convert.ToHexStringLower(SHA256.HashData(bytes)), pages);
     }
 
+    /// <summary>Width in points of a text on one line, shaped as the renderer shapes it (for layout decisions that must match the drawing).</summary>
+    public static float MeasureWidth(string text, bool bold, float size)
+    {
+        using var shaper = new SKShaper(bold ? Bold.Value : Regular.Value);
+        using var font = new SKFont(bold ? Bold.Value : Regular.Value, size) { Subpixel = true, LinearMetrics = true };
+        return shaper.Shape(text, font).Width;
+    }
+
     private static SKTypeface Load(string file)
     {
         using Stream s = typeof(SkiaPdfRenderer).Assembly.GetManifestResourceStream("Mechware.Pdf.Fonts." + file)
@@ -45,11 +53,16 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
         private readonly SKPaint _teal = new() { Color = new SKColor(0x13, 0xA8, 0x9E), IsAntialias = true, StrokeWidth = 1.5f };
         private readonly SKPaint _white = new() { Color = SKColors.White, IsAntialias = true };
         private readonly SKPaint _shade = new() { Color = new SKColor(0xEE, 0xF2, 0xF6) };
-        private readonly SKFont _fontT = Font(Bold.Value, 20), _fontS = Font(Regular.Value, 9);
+        private readonly SKFont _fontT = Font(Bold.Value, 20), _fontS = Font(Regular.Value, 9), _fontW = Font(Bold.Value, 34);
         private SKDocument _doc = null!;
         private SKCanvas? _canvas;
         private int _page;
         private float _y;
+        private SKFont? _tableR, _tableB;
+        private float _lead = Lead;
+
+        private float PageW => model.Landscape ? 842 : 595;
+        private float PageH => model.Landscape ? 595 : 842;
 
         private static SKFont Font(SKTypeface face, float size) => new(face, size) { Subpixel = true, LinearMetrics = true };
 
@@ -102,7 +115,7 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
                 _doc.Close();
             }
             bytes = ms.ToArray();
-            foreach (IDisposable d in new IDisposable[] { _shapeR, _shapeB, _fontR, _fontB, _fontH, _fontT, _fontS, _ink, _rule, _navy, _teal, _white, _shade }) d.Dispose();
+            foreach (IDisposable d in new IDisposable[] { _shapeR, _shapeB, _fontR, _fontB, _fontH, _fontT, _fontS, _fontW, _ink, _rule, _navy, _teal, _white, _shade }) d.Dispose();
             return _page;
         }
 
@@ -112,6 +125,17 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
             _page++;
             _canvas = _doc.BeginPage(PageW, PageH);
             _y = Margin;
+            if (!string.IsNullOrEmpty(model.Watermark)) Watermark(model.Watermark);
+        }
+
+        private void Watermark(string text)
+        {
+            using var pale = new SKPaint { Color = new SKColor(0xE4, 0xE7, 0xEB), IsAntialias = true };
+            _canvas!.Save();
+            _canvas.Translate(PageW / 2, PageH / 2);
+            _canvas.RotateDegrees(-45);
+            Text(text, -_shapeB.Shape(text, _fontW).Width / 2, 0, _fontW, _shapeB, false, pale);
+            _canvas.Restore();
         }
 
         private bool Ensure(float height)
@@ -235,33 +259,43 @@ public sealed class SkiaPdfRenderer : IPdfRenderer
 
         private void Table(PdfTable t)
         {
+            if (t.FontSize > 0)
+            {
+                (_tableR, _tableB, _lead) = (Font(Regular.Value, t.FontSize), Font(Bold.Value, t.FontSize), t.FontSize * 1.43f);
+            }
+            try { TableRows(t); }
+            finally { _tableR?.Dispose(); _tableB?.Dispose(); (_tableR, _tableB, _lead) = (null, null, Lead); }
+        }
+
+        private void TableRows(PdfTable t)
+        {
             int n = t.Header.Count;
             double[] w = t.ColumnWeights is { Count: var c } cw && c == n ? [.. cw] : [.. Enumerable.Repeat(1.0, n)];
             float[] colW = [.. w.Select(v => (float)(v / w.Sum()) * (PageW - 2 * Margin))];
-            Ensure(2 * Lead + 2 * Pad);
+            Ensure(2 * _lead + 2 * Pad);
             Row(t, colW, t.Header, true);
             foreach (var row in t.Rows) Row(t, colW, row, false);
         }
 
         private void Row(PdfTable t, float[] colW, IReadOnlyList<string> cells, bool header)
         {
-            SKFont font = header ? _fontB : _fontR;
+            SKFont font = header ? _tableB ?? _fontB : _tableR ?? _fontR;
             SKShaper shaper = header ? _shapeB : _shapeR;
             var lines = new List<string>[colW.Length];
             for (int c = 0; c < colW.Length; c++) lines[c] = [.. Wrap(c < cells.Count ? cells[c] : "", colW[c] - 2 * Pad, font, shaper)];
-            float h = lines.Max(l => l.Count) * Lead + 2 * Pad;
+            float h = lines.Max(l => l.Count) * _lead + 2 * Pad;
             if (Ensure(h) && !header) Row(t, colW, t.Header, true);   // repeat the header on a continuation page
             float x = Margin;
             bool branded = header && t.Branded;
             if (branded) _canvas!.DrawRect(Margin, _y, colW.Sum(), h, _navy);
             for (int c = 0; c < colW.Length; c++)
             {
-                float ly = _y + Pad + Lead - 4;
+                float ly = _y + Pad + _lead - 4;
                 foreach (string l in lines[c])
                 {
                     if (c == t.MoneyColumn) Text(l, x + colW[c] - Pad, ly, font, shaper, true, branded ? _white : null);
                     else Text(l, x + Pad, ly, font, shaper, false, branded ? _white : null);
-                    ly += Lead;
+                    ly += _lead;
                 }
                 x += colW[c];
             }

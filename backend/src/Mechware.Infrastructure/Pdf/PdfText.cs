@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text;
 
-namespace Mechware.Infrastructure.Quotes;
+namespace Mechware.Infrastructure.Pdf;
 
 /// <summary>Numbers, money, dates and amounts in words for the quote PDF, in English or Bangla (Bangla digits and lakh/crore grouping, as the site shows them).</summary>
-internal static class QuotePdfText
+internal static class PdfText
 {
     private const string BnDigits = "০১২৩৪৫৬৭৮৯";
 

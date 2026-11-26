@@ -1,7 +1,7 @@
 using Mechware.Application.Pdf;
 using Mechware.Application.Quotes;
 using Mechware.Domain.Quotes;
-using static Mechware.Infrastructure.Quotes.QuotePdfText;
+using static Mechware.Infrastructure.Pdf.PdfText;
 
 namespace Mechware.Infrastructure.Quotes;
 

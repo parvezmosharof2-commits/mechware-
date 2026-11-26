@@ -70,6 +70,8 @@ public static class DependencyInjection
         // E6.3c: the 6.3 issued at shipment. Off unless the host registered validated Invoicing:* options first (Api, Worker).
         services.TryAddSingleton(new Mechware.Domain.Invoicing.InvoicingOptions());
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceIssuer, Invoicing.InvoiceIssuer>();
+        // E6.3d: the nightly invoice check (alert + audit, never repairs); hosted by AddCatalogWorkers.
+        services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceReconciliationService, Invoicing.InvoiceReconciliationService>();
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();
@@ -236,6 +238,7 @@ public static class DependencyInjection
         services.AddHostedService<OutboxRelayWorker>();
         services.AddHostedService<CreditHoldWorker>();
         services.AddHostedService<CreditReconciliationWorker>();
+        services.AddHostedService<InvoiceReconciliationWorker>();
         services.TryAddScoped<Quotes.QuoteNoticeService>();
         services.AddHostedService<QuoteNoticeWorker>();
         // E7.3 stock sweep: options from StockReconciliation:* when the host registered them first, the defaults otherwise.

@@ -1,7 +1,7 @@
 namespace Mechware.Application.Pdf;
 
-/// <summary>A document to render. <see cref="Locale"/> is <c>en</c> or <c>bn</c> and picks the page-footer wording.</summary>
-public sealed record PdfDocumentModel(string Title, string Locale, IReadOnlyList<PdfBlock> Blocks, string? FooterText = null, IReadOnlyList<string>? FooterLines = null);
+/// <summary>A document to render. <see cref="Locale"/> is <c>en</c> or <c>bn</c> and picks the page-footer wording. <see cref="Watermark"/> (optional) is printed large, pale and diagonal behind every page; <see cref="Landscape"/> makes every page A4 landscape.</summary>
+public sealed record PdfDocumentModel(string Title, string Locale, IReadOnlyList<PdfBlock> Blocks, string? FooterText = null, IReadOnlyList<string>? FooterLines = null, string? Watermark = null, bool Landscape = false);
 
 public abstract record PdfBlock;
 
@@ -14,7 +14,7 @@ public sealed record PdfParagraph(string Text) : PdfBlock;
 /// <see cref="ColumnWeights"/> (optional, one per column) sets relative widths, default equal. The header repeats on each page.
 /// </summary>
 public sealed record PdfTable(IReadOnlyList<string> Header, IReadOnlyList<IReadOnlyList<string>> Rows, int MoneyColumn = -1, IReadOnlyList<double>? ColumnWeights = null,
-    bool Branded = false) : PdfBlock;
+    bool Branded = false, float FontSize = 0) : PdfBlock;
 
 /// <summary>A full-width navy band (teal when <paramref name="Teal"/>) with a white title, a small line under it and right-aligned lines; an optional PNG/JPEG logo sits left of the title.</summary>
 public sealed record PdfBand(string Title, string? Subtitle, IReadOnlyList<string> RightLines, byte[]? Logo = null, bool Teal = false) : PdfBlock;

@@ -30,16 +30,16 @@ public class QuotePdfTests
     [InlineData(100_000_00, true, "টাকা এক লাখ মাত্র")]
     [InlineData(99_99, true, "টাকা নিরানব্বই এবং নিরানব্বই পয়সা মাত্র")]
     public void AmountInWords_ReadsInEnglishAndBangla(long minor, bool bn, string expected) =>
-        Assert.Equal(expected, QuotePdfText.Words(minor, bn));
+        Assert.Equal(expected, PdfText.Words(minor, bn));
 
     [Fact]
     public void MoneyAndDates_FollowTheLocale()
     {
-        Assert.Equal("1,234,567.80", QuotePdfText.Money(123_456_780, false));
-        Assert.Equal("১২,৩৪,৫৬৭.৮০", QuotePdfText.Money(123_456_780, true));
-        Assert.Equal("2 Dec 2026", QuotePdfText.Date(new DateOnly(2026, 12, 2), false));
-        Assert.Equal("২ ডিসেম্বর ২০২৬", QuotePdfText.Date(new DateOnly(2026, 12, 2), true));
-        Assert.Equal("১৫%", QuotePdfText.Percent(0.15m, true));
+        Assert.Equal("1,234,567.80", PdfText.Money(123_456_780, false));
+        Assert.Equal("১২,৩৪,৫৬৭.৮০", PdfText.Money(123_456_780, true));
+        Assert.Equal("2 Dec 2026", PdfText.Date(new DateOnly(2026, 12, 2), false));
+        Assert.Equal("২ ডিসেম্বর ২০২৬", PdfText.Date(new DateOnly(2026, 12, 2), true));
+        Assert.Equal("১৫%", PdfText.Percent(0.15m, true));
     }
 
     [Fact]
