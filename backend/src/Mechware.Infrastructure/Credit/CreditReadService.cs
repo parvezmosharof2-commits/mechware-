@@ -197,11 +197,13 @@ public sealed class CreditReadService(MechwareDbContext db, ICurrentUserService 
         var paymentIds = rows.Where(r => r.PaymentId is not null).Select(r => r.PaymentId!.Value).Distinct().ToList();
         var numbers = await db.Orders.AsNoTracking().Where(o => orderIds.Contains(o.Id)).Select(o => new { o.Id, o.OrderNumber }).ToDictionaryAsync(o => o.Id, o => o.OrderNumber, ct);
         var payments = await db.CreditPayments.AsNoTracking().Where(p => paymentIds.Contains(p.Id)).Select(p => new { p.Id, p.Method, p.Reference }).ToDictionaryAsync(p => p.Id, ct);
+        var invoiceNumbers = await db.NumbersOfAsync(orderIds, ct);
         return rows.Select(l => new CreditLedgerLineDto(l.Seq, l.EventId, Wire(l.Kind), l.OccurredOn, l.CreatedAtUtc, l.OrderId,
             l.OrderId is { } o ? numbers.GetValueOrDefault(o) : null, l.PaymentId,
             l.PaymentId is { } p && payments.TryGetValue(p, out var pay) ? Wire(pay.Method) : null,
             l.PaymentId is { } p2 && payments.TryGetValue(p2, out var pay2) ? pay2.Reference : null, l.AdjustmentId, l.CreditNoteId,
-            l.ReceivableDeltaMinor, l.OnAccountDeltaMinor, l.ReceivableAfterMinor, l.OnAccountAfterMinor, l.DueOn, l.ActorUserId, l.Reason)).ToList();
+            l.ReceivableDeltaMinor, l.OnAccountDeltaMinor, l.ReceivableAfterMinor, l.OnAccountAfterMinor, l.DueOn, l.ActorUserId, l.Reason,
+            l.OrderId is { } oi ? invoiceNumbers.GetValueOrDefault(oi) ?? [] : [])).ToList();
     }
 
     /// <summary>One consistent moment for several queries, without a single lock (MVCC): the totals and the lines they add up never differ.</summary>

@@ -50,7 +50,7 @@ public class BuyerCreditTests
     public void BuyerStatement_HasOnlyTheAllowedFields()
     {
         Names<BuyerStatementLineDto>().Should().BeEquivalentTo("Seq", "OccurredOn", "Kind", "OrderNumber", "PaymentMethod", "ReferenceTail",
-            "ReceivableDeltaMinor", "OnAccountDeltaMinor", "ReceivableAfterMinor", "OnAccountAfterMinor", "DueOn");
+            "ReceivableDeltaMinor", "OnAccountDeltaMinor", "ReceivableAfterMinor", "OnAccountAfterMinor", "DueOn", "InvoiceNumbers");
         Names<BuyerStatementDto>().Should().BeEquivalentTo("CompanyId", "From", "To", "CurrentReceivableMinor", "CurrentOnAccountMinor", "Lines");
         Names<BuyerOpenItemDto>().Should().BeEquivalentTo("OrderNumber", "ChargeMinor", "ReceivableMinor", "DueOn", "DaysPastDue", "Status");
         Names<BuyerPendingPaymentDto>().Should().BeEquivalentTo("ReceivedOn", "Method", "AmountMinor", "ReferenceTail");

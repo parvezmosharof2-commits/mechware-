@@ -12,7 +12,7 @@ public sealed record CreditPage<T>(IReadOnlyList<T> Items, int Page, int PageSiz
 public sealed record CreditLedgerLineDto(long Seq, Guid EventId, string Kind, DateOnly OccurredOn, DateTime CreatedAtUtc, Guid? OrderId,
     string? OrderNumber, Guid? PaymentId, string? PaymentMethod, string? PaymentReference, Guid? AdjustmentId, Guid? CreditNoteId,
     long ReceivableDeltaMinor, long OnAccountDeltaMinor, long ReceivableAfterMinor, long OnAccountAfterMinor, DateOnly? DueOn, Guid? ActorUserId,
-    string? Reason);
+    string? Reason, IReadOnlyList<string> InvoiceNumbers);
 
 /// <summary><paramref name="LateEntry"/>: recorded with a late-entry reason; <paramref name="PostDated"/>: a cheque dated after today (Dhaka), not yet verifiable.</summary>
 public sealed record CreditPaymentListItem(CreditPaymentDto Payment, string CompanyName, bool LateEntry, bool PostDated);

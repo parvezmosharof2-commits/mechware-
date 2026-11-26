@@ -72,6 +72,10 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceIssuer, Invoicing.InvoiceIssuer>();
         // E6.3d: the nightly invoice check (alert + audit, never repairs); hosted by AddCatalogWorkers.
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceReconciliationService, Invoicing.InvoiceReconciliationService>();
+        // E6.8a: buyer and staff invoice reads (one class, two interfaces).
+        services.TryAddScoped<Invoicing.InvoiceReadService>();
+        services.TryAddScoped<Mechware.Application.Invoicing.IBuyerInvoiceReadService>(sp => sp.GetRequiredService<Invoicing.InvoiceReadService>());
+        services.TryAddScoped<Mechware.Application.Invoicing.IStaffInvoiceReadService>(sp => sp.GetRequiredService<Invoicing.InvoiceReadService>());
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();
@@ -195,6 +199,9 @@ public static class DependencyInjection
         services.TryAddSingleton<IPdfRenderer, SkiaPdfRenderer>();
         // Quote PDFs (D4.11) need the renderer and the object store (AddProductDocuments): API host only, the Worker renders nothing yet.
         services.TryAddScoped<Mechware.Application.Quotes.IQuotePdfService, Quotes.QuotePdfService>();
+        // Invoice PDFs (E6.4b): lazy download in the API, eager render after COMMIT in the Worker (outbox handler); both need the renderer and the object store.
+        services.TryAddScoped<Mechware.Application.Invoicing.IInvoicePdfService, Invoicing.InvoicePdfService>();
+        services.AddScoped<IOutboxPublisher, Invoicing.InvoicePdfPublisher>();
         return services;
     }
 

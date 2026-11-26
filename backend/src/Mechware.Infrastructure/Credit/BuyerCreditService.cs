@@ -67,12 +67,14 @@ public sealed class BuyerCreditService(MechwareDbContext db, CreditOptions optio
             var numbers = await db.Orders.AsNoTracking().Where(o => o.CompanyId == companyId && orderIds.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.OrderNumber, ct);
             var payments = await db.CreditPayments.AsNoTracking().Where(p => p.CompanyId == companyId && paymentIds.Contains(p.Id))
                 .Select(p => new { p.Id, p.Method, p.Reference }).ToDictionaryAsync(p => p.Id, ct);
+            var invoiceNumbers = await db.NumbersOfAsync(numbers.Keys.ToList(), ct);
             var lines = rows.Select(l =>
             {
                 var payment = l.PaymentId is { } id && payments.TryGetValue(id, out var p) ? p : null;
                 return new BuyerStatementLineDto(l.Seq, l.OccurredOn, Wire(l.Kind), l.OrderId is { } o ? numbers.GetValueOrDefault(o) : null,
                     payment is null ? null : Wire(payment.Method), payment is null ? null : CreditBuyerView.ReferenceTail(payment.Reference),
-                    l.ReceivableDeltaMinor, l.OnAccountDeltaMinor, l.ReceivableAfterMinor, l.OnAccountAfterMinor, l.DueOn);
+                    l.ReceivableDeltaMinor, l.OnAccountDeltaMinor, l.ReceivableAfterMinor, l.OnAccountAfterMinor, l.DueOn,
+                    l.OrderId is { } oi ? invoiceNumbers.GetValueOrDefault(oi) ?? [] : []);
             }).ToList();
             return new BuyerStatementDto(companyId, from, to, company.CreditUsedMinor, company.CreditOnAccountMinor, new CreditPage<BuyerStatementLineDto>(lines, page, pageSize, total));
         }, ct);

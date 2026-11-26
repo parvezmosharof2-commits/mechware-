@@ -80,6 +80,10 @@ public static class Permissions
     /// <summary>Needed in addition to approve a version with a line below the margin floor (Admin only).</summary>
     public const string QuotesApproveBelowFloor = "quotes.approve_below_floor";
 
+    // Invoices (ADR-0012 §14).
+    /// <summary>Read invoices and credit notes, their PDFs and the document check (Support, Finance, Admin).</summary>
+    public const string InvoicesView = "invoices.view";
+
     public static class Roles
     {
         public const string Buyer = "buyer";
@@ -106,14 +110,14 @@ public static class Permissions
             Roles.Support =>
             [
                 OrdersViewOwn, OrdersViewAll, OrdersRefund, OrdersCancel, OrdersFulfil, ReturnsManage, CompaniesView, PriceListsView, PriceListsEdit, ShippingView,
-                QuotesView, QuotesEdit
+                QuotesView, QuotesEdit, InvoicesView
             ],
             Roles.Moderator => [CatalogModerate, SellersKycReview],
             Roles.Finance =>
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
                 PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView,
-                QuotesView, QuotesApprove
+                QuotesView, QuotesApprove, InvoicesView
             ],
             Roles.Admin =>
             [
@@ -153,7 +157,8 @@ public static class Permissions
                 QuotesView,
                 QuotesEdit,
                 QuotesApprove,
-                QuotesApproveBelowFloor
+                QuotesApproveBelowFloor,
+                InvoicesView
             ],
             _ => []
         };

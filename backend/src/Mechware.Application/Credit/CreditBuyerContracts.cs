@@ -15,9 +15,9 @@ public sealed record BuyerCreditDto(Guid CompanyId, string Currency, DateOnly As
 /// <summary><paramref name="Status"/> is <c>open</c>, <c>partially_paid</c> or <c>overdue</c>; <paramref name="DaysPastDue"/> is 0 until the due date has passed.</summary>
 public sealed record BuyerOpenItemDto(string OrderNumber, long ChargeMinor, long ReceivableMinor, DateOnly DueOn, int DaysPastDue, string Status);
 
-/// <summary>One statement line: no ids of staff, adjustments or payments, no reason, no actor, only the end of a payment reference.</summary>
+/// <summary>One statement line: no ids of staff, adjustments or payments, no reason, no actor, only the end of a payment reference. <paramref name="InvoiceNumbers"/>: the tax invoices of the order (E6.8a), empty when none.</summary>
 public sealed record BuyerStatementLineDto(long Seq, DateOnly OccurredOn, string Kind, string? OrderNumber, string? PaymentMethod, string? ReferenceTail,
-    long ReceivableDeltaMinor, long OnAccountDeltaMinor, long ReceivableAfterMinor, long OnAccountAfterMinor, DateOnly? DueOn);
+    long ReceivableDeltaMinor, long OnAccountDeltaMinor, long ReceivableAfterMinor, long OnAccountAfterMinor, DateOnly? DueOn, IReadOnlyList<string> InvoiceNumbers);
 
 /// <summary>The company's ledger lines in posting order, with the current totals read in the same snapshot.</summary>
 public sealed record BuyerStatementDto(Guid CompanyId, DateOnly? From, DateOnly? To, long CurrentReceivableMinor, long CurrentOnAccountMinor,

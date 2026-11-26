@@ -75,6 +75,14 @@ builder.Services.AddNotifications(
     storefrontBaseUrl: builder.Configuration["Storefront:BaseUrl"],
     salesInboxEmail: builder.Configuration["Quotes:SalesInboxEmail"]);
 
+// Invoice PDFs (E6.4b): the outbox handler renders both languages after COMMIT, so this host needs the renderer and the SAME object store as the API
+// (Documents__LocalPath on the shared volume).
+builder.Services.AddPdfRendering();
+builder.Services.AddProductDocuments(
+    builder.Configuration.GetSection(Mechware.Infrastructure.Documents.DocumentOptions.SectionName).Get<Mechware.Infrastructure.Documents.DocumentOptions>() ?? new(),
+    builder.Configuration.GetSection(Mechware.Infrastructure.Documents.AntivirusOptions.SectionName).Get<Mechware.Infrastructure.Documents.AntivirusOptions>() ?? new(),
+    requireRealSetup: !(builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")));
+
 await builder.Build().RunAsync();
 return 0;
 

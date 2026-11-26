@@ -364,6 +364,20 @@ builder.Services.AddRateLimiter(options =>
             })
         : RateLimitPartition.GetNoLimiter("quote-read-anonymous"));
 
+    // Invoice PDFs, buyer and staff (ADR-0012 §14, E6.4b): 30 a minute per signed-in user.
+    options.AddPolicy("InvoiceRead", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "invoice-read:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:InvoiceReadPermitPerMinute") ?? 30,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("invoice-read-anonymous"));
+
     // Credit CSV exports (threat model CS27): a few a minute per signed-in staff member, on top of the general budget.
     // A request without a verified identity is not counted here (it gets 401 from the endpoint, and the general anonymous budget still applies).
     options.AddPolicy("CreditExport", httpContext =>
