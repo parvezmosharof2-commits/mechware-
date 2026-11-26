@@ -189,6 +189,12 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     label: 'Audit log integrity',
     requiredPermission: 'audit.view',
     href: '/audit'
+  },
+  {
+    id: 'audit-log',
+    label: 'Audit log',
+    requiredPermission: 'audit.view',
+    href: '/audit/log'
   }
 ];
 

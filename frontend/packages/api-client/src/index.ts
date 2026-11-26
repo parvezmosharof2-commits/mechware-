@@ -489,6 +489,7 @@ export * from "./credit-books";
 export * from "./credit-buyer-model";
 export * from "./credit-buyer";
 export * from "./audit-model";
+export * from "./audit-read-model";
 export * from "./audit";
 export * from "./staff-orders-model";
 export * from "./staff-orders-read-model";

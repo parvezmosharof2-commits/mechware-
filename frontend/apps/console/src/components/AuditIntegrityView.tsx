@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
 import { AUDIT_CHECK_CACHE_MINUTES, auditErrorText, auditVerdict, auditVerdictText, canViewAudit, groupHash } from '@mechware/api-client';
@@ -21,8 +22,7 @@ function Check() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-text-muted">
-        Every audit row is sealed into a hash chain, so a changed, removed or inserted row shows up here. This is the integrity check only: the
-        list of events (who did what, when) is not available in the console yet. The check reads the whole log, so one result is shared for
+        Every audit row is sealed into a hash chain, so a changed, removed or inserted row shows up here. This is the integrity check only; <Link href="/audit/log" className="font-semibold text-brand-accent underline">open the audit log</Link> to see who did what, when. The check reads the whole log, so one result is shared for
         up to {AUDIT_CHECK_CACHE_MINUTES} minutes.
       </p>
       <FailureAlert failure={failure} onRetry={res.reload} />

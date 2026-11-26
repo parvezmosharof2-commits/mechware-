@@ -122,7 +122,7 @@ const fmt = (n) => Number(n).toLocaleString('en-US');
   r.check('sealed number equals the API', (await page.getByTestId('audit-sealed').innerText()) === fmt(good.sealed));
   r.check('first broken row says none', (await page.getByTestId('audit-broken').innerText()) === 'none');
   r.check('head hash shown in groups of 8 and equals the API hash', (await page.getByTestId('audit-head').innerText()).replace(/\s/g, '') === good.headHash);
-  r.check('page mentions the shared 5-minute check and the missing event list', /5 minutes/.test(await page.locator('main').innerText()) && /not available in the console yet/.test(await page.locator('main').innerText()));
+  r.check('page mentions the shared 5-minute check and the link to the audit log', /5 minutes/.test(await page.locator('main').innerText()) && /open the audit log/.test(await page.locator('main').innerText()));
   r.check('intact state is a polite status, not an alert', (await page.getByTestId('audit-check').getByRole('status').count()) === 1 && (await page.getByTestId('audit-check').getByRole('alert').count()) === 0);
   await axeCheck(page, 'audit intact');
   r.check('active sidebar item is marked current', (await page.locator('a[aria-current="page"]').count()) === 1);
