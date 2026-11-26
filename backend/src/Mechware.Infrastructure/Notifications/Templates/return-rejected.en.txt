@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+We could not approve your return request for order {{orderNumber}}. Reason: {{reason}}
+
+Open your order: {{orderUrl}}

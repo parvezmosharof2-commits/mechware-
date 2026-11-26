@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Tax invoice {{invoiceNumber}} was issued for your order {{orderNumber}}. You can download it from your order page.
+
+Open your order: {{orderUrl}}

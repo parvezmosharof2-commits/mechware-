@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Your return request for order {{orderNumber}} was approved. Please send the items back as described on your order page.
+
+Open your order: {{orderUrl}}

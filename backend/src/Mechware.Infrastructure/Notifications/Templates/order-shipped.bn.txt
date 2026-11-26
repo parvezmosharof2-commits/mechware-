@@ -1,0 +1,7 @@
+প্রিয় {{customerName}},
+
+আপনার অর্ডার {{orderNumber}} {{courierName}}-এর কাছে হস্তান্তর করা হয়েছে। ট্র্যাকিং নম্বর: {{trackingNumber}}।
+
+পার্সেল ট্র্যাক করুন: {{trackingUrl}}
+
+আপনার ডেলিভারি চালান অর্ডার পেজে আছে। {{orderUrl}}

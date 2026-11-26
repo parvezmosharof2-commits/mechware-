@@ -1491,6 +1491,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/invoices/exports/vat-month": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** `month` = a Dhaka calendar month (`2026-12`); `format` = `json` (default) or `csv` (needs `X-Step-Up-Code`). */
+        get: {
+            parameters: {
+                query?: {
+                    month?: string;
+                    format?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/invoices/{invoiceId}/pdf": {
         parameters: {
             query?: never;

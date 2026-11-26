@@ -393,6 +393,20 @@ builder.Services.AddRateLimiter(options =>
             })
         : RateLimitPartition.GetNoLimiter("credit-export-anonymous"));
 
+    // The monthly 9.1 export, preview and CSV (ADR-0012 §13, IT12): a few a minute per signed-in staff member, like the credit CSVs.
+    options.AddPolicy("InvoiceExport", httpContext =>
+        httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId
+        ? RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: "invoice-export:" + userId,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = builder.Configuration.GetValue<int?>("RateLimiting:InvoiceExportPermitPerMinute") ?? 6,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            })
+        : RateLimitPartition.GetNoLimiter("invoice-export-anonymous"));
+
     // Audit log reads (G5.2b): 60 a minute per signed-in staff member, so the log cannot be scraped at speed; each read is audited too.
     options.AddPolicy("AuditRead", httpContext =>
         httpContext.User.Identity?.IsAuthenticated == true && httpContext.User.FindFirst("sub")?.Value is { } userId

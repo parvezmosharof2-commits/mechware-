@@ -1,0 +1,3 @@
+Hello {{staffName}},
+
+A buyer asked to return {{quantity}} item(s) of order {{orderNumber}}. Open the returns desk in the console to decide.

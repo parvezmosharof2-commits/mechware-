@@ -1,0 +1,7 @@
+Hello {{customerName}},
+
+Your order {{orderNumber}} was handed to {{courierName}}. Tracking number: {{trackingNumber}}.
+
+Track your parcel: {{trackingUrl}}
+
+Your delivery challan is on your order page. {{orderUrl}}

@@ -87,6 +87,8 @@ public static class Permissions
     public const string InvoicesCreditRequest = "invoices.credit_request";
     /// <summary>Approve (issue) or reject someone else's credit-note request, with step-up <c>invoice.credit_note</c> (Finance, Admin; ADR-0012 §9.3).</summary>
     public const string InvoicesCreditApprove = "invoices.credit_approve";
+    /// <summary>The monthly Mushak-9.1 working file: JSON preview, and the CSV with every buyer's full BIN only with step-up <c>invoice.export</c> (Finance, Admin; ADR-0012 §13).</summary>
+    public const string InvoicesExport = "invoices.export";
 
     public static class Roles
     {
@@ -121,7 +123,7 @@ public static class Permissions
             [
                 OrdersViewAll, OrdersRefund, OrdersCancel, PaymentsRefundApprove, FinancePayouts, AuditView, CompaniesView, CompaniesCredit,
                 PriceListsView, PriceListsApprove, PricingViewCost, ShippingView, CreditRecordPayment, CreditVerifyPayment, CreditAdjust, CreditView,
-                QuotesView, QuotesApprove, InvoicesView, InvoicesCreditRequest, InvoicesCreditApprove
+                QuotesView, QuotesApprove, InvoicesView, InvoicesCreditRequest, InvoicesCreditApprove, InvoicesExport
             ],
             Roles.Admin =>
             [
@@ -164,7 +166,8 @@ public static class Permissions
                 QuotesApproveBelowFloor,
                 InvoicesView,
                 InvoicesCreditRequest,
-                InvoicesCreditApprove
+                InvoicesCreditApprove,
+                InvoicesExport
             ],
             _ => []
         };

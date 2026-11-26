@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+The money for your return on order {{orderNumber}} went back. {{outcome}}
+
+Open your order: {{orderUrl}}

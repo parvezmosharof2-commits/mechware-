@@ -78,6 +78,8 @@ public static class DependencyInjection
         services.TryAddScoped<Invoicing.InvoiceReadService>();
         services.TryAddScoped<Mechware.Application.Invoicing.IBuyerInvoiceReadService>(sp => sp.GetRequiredService<Invoicing.InvoiceReadService>());
         services.TryAddScoped<Mechware.Application.Invoicing.IStaffInvoiceReadService>(sp => sp.GetRequiredService<Invoicing.InvoiceReadService>());
+        // E6.7: the monthly Mushak-9.1 working file (Live only, Dhaka month; reads, plus the audit row of a CSV).
+        services.TryAddScoped<Mechware.Application.Invoicing.IVatMonthExportService, Invoicing.VatMonthExportService>();
         // RFQs (D4.5): options from Quotes:* when the host registered them first, the owner defaults otherwise.
         services.TryAddSingleton(new Mechware.Domain.Quotes.QuoteOptions());
         services.TryAddScoped<Mechware.Application.Quotes.IStaffQuoteService, Quotes.StaffQuoteService>();
@@ -189,6 +191,7 @@ public static class DependencyInjection
         services.AddScoped<IOutboxPublisher, NotificationOutboxPublisher>();
         services.TryAddSingleton(new QuoteNoticeOptions(salesInboxEmail));
         services.AddScoped<IOutboxPublisher, QuoteNotificationPublisher>();
+        services.AddScoped<IOutboxPublisher, FulfilmentNotificationPublisher>();
         services.TryAddSingleton<INotificationTemplates, EmbeddedTemplates>();
         if (haveHost) services.TryAddSingleton<INotificationSender, SmtpEmailSender>();
         else services.TryAddSingleton<INotificationSender, LoggingEmailSender>();

@@ -1459,6 +1459,35 @@
         }
       }
     },
+    "/api/v1/admin/invoices/exports/vat-month": {
+      "get": {
+        "tags": [
+          "AdminInvoiceExports"
+        ],
+        "summary": "`month` = a Dhaka calendar month (`2026-12`); `format` = `json` (default) or `csv` (needs `X-Step-Up-Code`).",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/invoices/{invoiceId}/pdf": {
       "get": {
         "tags": [
@@ -10454,6 +10483,9 @@
     },
     {
       "name": "AdminCreditReads"
+    },
+    {
+      "name": "AdminInvoiceExports"
     },
     {
       "name": "AdminInvoicePdf"

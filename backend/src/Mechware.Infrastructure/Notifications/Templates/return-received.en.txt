@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+We received the items of your return for order {{orderNumber}}. We will inspect them and tell you how the money goes back.
+
+Open your order: {{orderUrl}}

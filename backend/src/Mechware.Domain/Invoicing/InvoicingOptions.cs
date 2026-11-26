@@ -87,6 +87,9 @@ public sealed record InvoicingOptions
     public string NumberPrefix { get; init; } = "MW";
     public int CreditNoteMaxAgeDays { get; init; } = 180;
 
+    /// <summary>A single 6.3 or 6.7 above this total (poisha) is listed as a Mushak-6.10 candidate in the 9.1 export (ADR-0012 §13 (e); default BDT 2,00,000).</summary>
+    public long Mushak610ThresholdMinor { get; init; } = 20_000_000;
+
     /// <summary>VAT inside the delivery charge (§7): default 0, "consultant check"; the owner action "VAT on shipping" is open.</summary>
     public decimal ShippingVatRate { get; init; }
 
@@ -127,6 +130,7 @@ public sealed record InvoicingOptions
         Check(NumberPrefix is { Length: >= 2 and <= 6 } && NumberPrefix.All(char.IsAsciiLetterUpper) && NumberPrefix != InvoiceNumber.SpecimenPrefix,
             nameof(NumberPrefix), "must be 2 to 6 capital letters and not SPEC");
         Check(CreditNoteMaxAgeDays is >= 1 and <= 3650, nameof(CreditNoteMaxAgeDays), "must be 1 to 3650");
+        Check(Mushak610ThresholdMinor >= 0, nameof(Mushak610ThresholdMinor), "must not be negative");
         Check(ShippingVatRate is >= 0m and <= 0.5m && decimal.Round(ShippingVatRate, 4) == ShippingVatRate, nameof(ShippingVatRate),
             "must be 0 to 0.5 with at most 4 decimals");
         return p;

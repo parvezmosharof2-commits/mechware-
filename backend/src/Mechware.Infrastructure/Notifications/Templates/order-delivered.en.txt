@@ -1,0 +1,5 @@
+Hello {{customerName}},
+
+Your order {{orderNumber}} was delivered. If something is wrong with it, you can ask for a return from your order page.
+
+Open your order: {{orderUrl}}
