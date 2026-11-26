@@ -132,7 +132,7 @@ public static class InvoiceSnapshotBuilder
     }
 
     /// <summary>The display members of the order's ship-to snapshot (E3c shape); anything unreadable is no address.</summary>
-    private static InvoiceAddress? ShipTo(string json)
+    public static InvoiceAddress? ShipTo(string json)
     {
         try
         {

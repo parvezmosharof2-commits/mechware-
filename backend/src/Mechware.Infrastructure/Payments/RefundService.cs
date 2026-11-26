@@ -1,8 +1,11 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Mechware.Application.Payments;
 using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Identity;
 using Mechware.Domain.Payments;
+using Mechware.Domain.Returns;
 using Mechware.Infrastructure.Persistence;
 
 namespace Mechware.Infrastructure.Payments;
@@ -10,6 +13,7 @@ namespace Mechware.Infrastructure.Payments;
 public sealed class RefundService(
     MechwareDbContext db, IEnumerable<IPaymentProvider> providers, TimeProvider clock, ILogger<RefundService>? log = null) : IRefundService
 {
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
     private readonly ILogger<RefundService> logger = log ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<RefundService>.Instance;
 
     public async Task<IReadOnlyList<RefundQueueItem>> QueueAsync(CancellationToken ct = default)
@@ -99,6 +103,7 @@ public sealed class RefundService(
                 var completed = await db.Refunds.Where(r => r.PaymentId == payment.Id && r.Status == RefundStatus.Completed && r.Id != refund.Id)
                     .SumAsync(r => (long?)r.AmountMinor, CancellationToken.None) ?? 0;
                 if (completed + refund.AmountMinor >= payment.AmountMinor && payment.IsRefundable) payment.MarkRefunded(Now);
+                await SettleReturnAsync(refund);
             }
             else
             {
@@ -120,6 +125,23 @@ public sealed class RefundService(
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ToDto(refund);
+    }
+
+    /// <summary>
+    /// F2.3b: the refund of an inspected return moves that return Inspected → Refunded in the transaction that records the money as paid
+    /// (lock order refunds → payments → return_requests; nobody locks a return before a payment). Other refunds name no return.
+    /// </summary>
+    private async Task SettleReturnAsync(Refund refund)
+    {
+        var returned = (await db.ReturnRequests
+            .FromSqlInterpolated($"SELECT r.*, r.xmin FROM return_requests r WHERE r.refund_id = {refund.Id} FOR NO KEY UPDATE")
+            .ToListAsync(CancellationToken.None)).SingleOrDefault();
+        if (returned is not { Status: ReturnStatus.Inspected }) return;
+        var approver = refund.DecidedBy ?? throw new InvalidOperationException("A completed refund has an approver.");
+        returned.MarkRefunded(approver, Now);
+        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), approver, null, "return.refunded", "return_requests", returned.Id.ToString(),
+            JsonSerializer.Serialize(new { Status = nameof(ReturnStatus.Inspected) }, Json),
+            JsonSerializer.Serialize(new { Status = returned.Status.ToString(), RefundId = refund.Id, refund.AmountMinor, returned.OrderId }, Json), null, Now));
     }
 
     private DateTime Now => clock.GetUtcNow().UtcDateTime;

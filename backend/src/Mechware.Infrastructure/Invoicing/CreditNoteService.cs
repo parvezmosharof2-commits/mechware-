@@ -22,7 +22,8 @@ namespace Mechware.Infrastructure.Invoicing;
 /// again); the approval is ONE transaction in the global lock order: <c>orders</c> → the original <c>invoices</c> row (both FOR NO KEY UPDATE: credit
 /// lines and ledger lines reference them by foreign key) → the request (FOR UPDATE) → plan again, 409 when it differs → <see cref="ICreditLedger.ReduceChargeAsync"/>
 /// (<c>companies</c>) → the counter (LAST) → the 6.7, the request's move, audit and outbox → COMMIT. A paid order that is not on credit records
-/// <c>refund_due_minor</c>; no gateway money moves here. Nothing slow runs inside (the PDF renders from the outbox).
+/// <c>refund_due_minor</c>; no gateway money moves here. Nothing slow runs inside (the PDF renders from the outbox). F2.3b: a request made for a
+/// return (source key <c>return:{id:N}</c>) also locks that return after the request and moves it Inspected → CreditNoted before the COMMIT.
 /// </summary>
 public sealed partial class CreditNoteService(
     MechwareDbContext db, IInvoiceNumberAllocator allocator, ICreditLedger ledger, InvoicingOptions options, ICurrentUserService user, TimeProvider clock)
@@ -64,6 +65,34 @@ public sealed partial class CreditNoteService(
         return new((await DtosAsync([asking], ct))[0], false);
     }
 
+    public async Task<CreditNoteRequestDto> RequestForReturnAsync(Guid returnId, Guid invoiceId, IReadOnlyList<ReturnCreditLine> lines,
+        CancellationToken ct = default)
+    {
+        var (actor, now) = (Actor, Now);
+        ArgumentNullException.ThrowIfNull(lines);
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("RequestForReturnAsync runs inside the caller's transaction (the return's lock), never its own.");
+        var source = $"return:{returnId:N}";
+        // The return is the key (ADR-0012 §10): asked again, the first request answers; the caller's return lock queues a parallel ask behind it.
+        if (await db.CreditNoteRequests.AsNoTracking().SingleOrDefaultAsync(r => r.SourceKey == source, ct) is { } first)
+            return (await DtosAsync([first], ct))[0];
+
+        var original = await db.Invoices.AsNoTracking().Include(i => i.Lines).SingleOrDefaultAsync(i => i.Id == invoiceId, ct)
+            ?? throw new KeyNotFoundException("Invoice not found.");
+        var asked = lines.Where(l => l.Quantity > 0).Select((l, n) => new CreditLineRequest(
+            original.Lines.SingleOrDefault(o => o.Kind == InvoiceLineKind.Goods && o.OrderItemId == l.OrderItemId)?.Id
+                ?? throw new ValidationException($"lines[{n}].orderItemId", "This order line is not on the invoice."), l.Quantity, null)).ToList();
+        var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct), asked, CreditNoteReason.GoodsReturned,
+            $"Goods returned and accepted at inspection (return {returnId:N})", now, options.CreditNoteMaxAgeDays);
+        var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { invoiceId, source, lines }, Json))));
+        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, source, hash, source, now);
+        db.CreditNoteRequests.Add(asking);
+        db.AuditLogs.Add(Audit("invoice.credit_requested", asking.Id,
+            new { original.Number, asking.OrderId, Reason = Wire(plan.Reason), asking.TotalMinor, ReturnId = returnId }, now));
+        await db.SaveChangesAsync(ct);   // in the caller's transaction: its COMMIT decides
+        return (await DtosAsync([asking], ct))[0];
+    }
+
     public async Task<PagedResult<CreditNoteRequestDto>> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default)
     {
         var wanted = status is null ? CreditNoteRequestStatus.Requested
@@ -93,6 +122,12 @@ public sealed partial class CreditNoteService(
         var request = (await db.CreditNoteRequests.FromSqlInterpolated($"SELECT r.*, r.xmin FROM credit_note_requests r WHERE r.id = {requestId} FOR UPDATE")
             .ToListAsync(ct)).Single();
         request.EnsureDecidableBy(actor);   // four eyes before anything is counted or numbered (IT4)
+        // F2.3b: the return of a return's credit note, locked after the request (payments → orders → invoices → … → return_requests).
+        var returned = request.SourceKey is { } key && key.StartsWith("return:", StringComparison.Ordinal)
+            ? (await db.ReturnRequests.FromSqlInterpolated(
+                    $"SELECT r.*, r.xmin FROM return_requests r WHERE r.id = {Guid.ParseExact(key["return:".Length..], "N")} FOR NO KEY UPDATE")
+                .ToListAsync(ct)).Single()
+            : null;
 
         var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct),
             [.. request.Lines.Select(l => new CreditLineRequest(l.OriginalLineId, l.Quantity, l.NetMinor))], request.Reason, request.ReasonText, now,
@@ -111,6 +146,14 @@ public sealed partial class CreditNoteService(
             refundDue, options.ConsultantChecked);
         db.Invoices.Add(note);
         request.Approve(actor, id, now);
+        if (returned is not null)
+        {
+            returned.MarkCreditNoted(actor, now);   // F2.3b: the return moves with its 6.7, in THIS transaction (four eyes again in the domain)
+            db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), actor, user.IpAddress, "return.credit_noted", "return_requests", returned.Id.ToString(),
+                JsonSerializer.Serialize(new { Status = "Inspected" }, Json),
+                JsonSerializer.Serialize(new { Status = returned.Status.ToString(), CreditNoteId = id, RequestId = request.Id, returned.OrderId }, Json),
+                user.CorrelationId, now));
+        }
         var (released, onAccount) = (money?.ReceivableReleasedMinor ?? 0, money?.MovedOnAccountMinor ?? 0);
         db.AuditLogs.Add(Audit("invoice.credit_approved", request.Id, new
         {

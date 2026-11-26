@@ -3,11 +3,12 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Mechware.Domain.Companies;
 using Mechware.Domain.Identity;
 using Mechware.Domain.Orders;
+using Mechware.Domain.Payments;
 using Mechware.Domain.Returns;
 
 namespace Mechware.Infrastructure.Persistence.Configurations;
 
-/// <summary>F2.1 return requests. The CHECKs repeat the domain's rules; <see cref="ReturnSql"/> adds the quantity guard.</summary>
+/// <summary>F2.1 return requests (F2.3b: how the money goes back). The CHECKs repeat the domain's rules; <see cref="ReturnSql"/> adds the quantity guard.</summary>
 internal sealed class ReturnRequestConfiguration : IEntityTypeConfiguration<ReturnRequest>
 {
     public void Configure(EntityTypeBuilder<ReturnRequest> b)
@@ -31,9 +32,25 @@ internal sealed class ReturnRequestConfiguration : IEntityTypeConfiguration<Retu
             t.HasCheckConstraint("ck_return_requests_note", "note IS NULL OR (char_length(note) BETWEEN 1 AND 1000 AND note = btrim(note))");
             t.HasCheckConstraint("ck_return_requests_key", "idempotency_key ~ '^[A-Za-z0-9_-]{8,100}$' AND char_length(request_hash) = 64");
             t.HasCheckConstraint("ck_return_requests_withdrawn", "(status = 'Withdrawn') = (withdrawn_at IS NOT NULL)");
+            // F2.3b: the money is asked only of an inspected return (who + when + how together); a refund names its E4 refund, a refund or
+            // reduction its positive amount, a credit note none (the 6.7 prices it); CreditNoted / Refunded only by that way and only once
+            // another person approved (four eyes, also here).
+            t.HasCheckConstraint("ck_return_requests_settlement",
+                "(settlement IS NULL) = (settlement_requested_by IS NULL) AND (settlement IS NULL) = (settlement_requested_at IS NULL) "
+                + "AND (settlement IS NULL OR status IN ('Inspected', 'Refunded', 'CreditNoted')) "
+                + "AND (settlement IS NULL OR settlement IN ('CreditNote', 'Refund', 'CreditReduction')) "
+                + "AND (refund_id IS NOT NULL) = (settlement IS NOT DISTINCT FROM 'Refund') "
+                + "AND (settlement_amount_minor IS NOT NULL) = COALESCE(settlement IN ('Refund', 'CreditReduction'), false) "
+                + "AND (settlement_amount_minor IS NULL OR settlement_amount_minor > 0)");
+            t.HasCheckConstraint("ck_return_requests_settled",
+                "(settled_by IS NULL) = (settled_at IS NULL) AND (settled_at IS NULL) = (status NOT IN ('Refunded', 'CreditNoted')) "
+                + "AND (status <> 'CreditNoted' OR settlement IS NOT DISTINCT FROM 'CreditNote') "
+                + "AND (status <> 'Refunded' OR COALESCE(settlement IN ('Refund', 'CreditReduction'), false)) "
+                + "AND (settled_by IS NULL OR settled_by <> settlement_requested_by)");
         });
         b.MapAudit();
         b.IgnoreEvents();
+        b.Ignore(r => r.SourceKey);
         b.Property(r => r.OrderId).HasColumnName("order_id");
         b.Property(r => r.CompanyId).HasColumnName("company_id");
         b.Property(r => r.RequestedBy).HasColumnName("requested_by");
@@ -51,11 +68,22 @@ internal sealed class ReturnRequestConfiguration : IEntityTypeConfiguration<Retu
         b.Property(r => r.ReceivedAtUtc).HasColumnName("received_at");
         b.Property(r => r.InspectedBy).HasColumnName("inspected_by");
         b.Property(r => r.InspectedAtUtc).HasColumnName("inspected_at");
+        b.Property(r => r.Settlement).HasColumnName("settlement").HasConversion<string>().HasMaxLength(20);
+        b.Property(r => r.SettlementAmountMinor).HasColumnName("settlement_amount_minor");
+        b.Property(r => r.SettlementRequestedBy).HasColumnName("settlement_requested_by");
+        b.Property(r => r.SettlementRequestedAtUtc).HasColumnName("settlement_requested_at");
+        b.Property(r => r.RefundId).HasColumnName("refund_id");
+        b.Property(r => r.SettledBy).HasColumnName("settled_by");
+        b.Property(r => r.SettledAtUtc).HasColumnName("settled_at");
         // The staff decisions' rowVersion (F2.3a): Postgres' row version, never stored by us.
         b.Property<uint>("xmin").HasColumnName("xmin").HasColumnType("xid").ValueGeneratedOnAddOrUpdate().IsConcurrencyToken();
         b.HasOne<User>().WithMany().HasForeignKey(r => r.DecidedBy).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(r => r.ReceivedBy).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(r => r.InspectedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(r => r.SettlementRequestedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(r => r.SettledBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Refund>().WithMany().HasForeignKey(r => r.RefundId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(r => r.RefundId).IsUnique().HasFilter("refund_id IS NOT NULL").HasDatabaseName("ux_return_requests_refund");
         b.HasOne<Order>().WithMany().HasForeignKey(r => r.OrderId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Company>().WithMany().HasForeignKey(r => r.CompanyId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<User>().WithMany().HasForeignKey(r => r.RequestedBy).OnDelete(DeleteBehavior.Restrict);

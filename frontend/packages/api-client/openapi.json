@@ -282,6 +282,36 @@
         }
       }
     },
+    "/api/v1/admin/orders/{orderId}/challan": {
+      "get": {
+        "tags": [
+          "AdminChallanPdf"
+        ],
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/companies": {
       "get": {
         "tags": [
@@ -4283,6 +4313,73 @@
         }
       }
     },
+    "/api/v1/admin/returns/{returnId}/money-back": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "Inspected → money asked, body `{rowVersion}`; idempotent (the return is the key: asked already = the same answer). The order's Live\r\n6.3 → a credit-note request of the accepted units (`settlement.creditNoteRequestId`); none → a credit order's credit reduction\r\n(approve below) or an E4 refund of the paid gateway payment (`settlement.refundId`).",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReturnStepRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}/money-back/approve": {
+      "post": {
+        "tags": [
+          "AdminReturns"
+        ],
+        "summary": "A credit order's reduction, approved by another person with a step-up code: the charge is reduced and the return Refunded.",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/returns": {
       "get": {
         "tags": [
@@ -5483,6 +5580,37 @@
         }
       }
     },
+    "/api/v1/orders/{orderId}/challan": {
+      "get": {
+        "tags": [
+          "ChallanPdf"
+        ],
+        "summary": "`locale` = `en` or `bn` (default `en`).",
+        "parameters": [
+          {
+            "name": "orderId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/companies": {
       "post": {
         "tags": [
@@ -6151,6 +6279,45 @@
               "type": "integer",
               "format": "int32",
               "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/companies/{companyId}/invoices/{invoiceId}/pdf": {
+      "get": {
+        "tags": [
+          "CompanyInvoicePdf"
+        ],
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "locale",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -10268,6 +10435,9 @@
       "name": "AdminCatalogLookup"
     },
     {
+      "name": "AdminChallanPdf"
+    },
+    {
       "name": "AdminCompanies"
     },
     {
@@ -10346,10 +10516,16 @@
       "name": "Cart"
     },
     {
+      "name": "ChallanPdf"
+    },
+    {
       "name": "Companies"
     },
     {
       "name": "CompanyCredit"
+    },
+    {
+      "name": "CompanyInvoicePdf"
     },
     {
       "name": "CompanyPrices"

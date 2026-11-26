@@ -19,6 +19,9 @@ public sealed record CreditNoteRequestDto(Guid Id, Guid OriginalInvoiceId, strin
     string ReasonText, IReadOnlyList<CreditNoteRequestLineDto> Lines, long TotalMinor, Guid RequestedBy, DateTime RequestedAtUtc, Guid? DecidedBy,
     DateTime? DecidedAtUtc, string? DecisionReason, Guid? IssuedInvoiceId, string? IssuedNumber);
 
+/// <summary>One accepted line of an inspected return (F2.3b): the order line and the units accepted (≥ 1).</summary>
+public sealed record ReturnCreditLine(Guid OrderItemId, int Quantity);
+
 public sealed record RequestedCreditNote(CreditNoteRequestDto Request, bool Replayed);
 
 /// <summary>
@@ -42,6 +45,14 @@ public interface ICreditNoteService
 
     /// <summary>Same person + same key + same body = the first request (Replayed); another body under the key = 409.</summary>
     Task<RequestedCreditNote> RequestAsync(Guid invoiceId, RequestCreditNoteRequest request, string? idempotencyKey, CancellationToken ct = default);
+
+    /// <summary>
+    /// F2.3b: the credit-note request of an inspected return against <paramref name="invoiceId"/> (a Live 6.3 of its order), reason
+    /// <c>goods_returned</c>, each order line mapped to the invoice line printing it, source key and Idempotency-Key <c>return:{returnId:N}</c>.
+    /// Runs INSIDE the caller's transaction (the return's lock); the same return again answers the first request. Its approval moves the
+    /// return Inspected → CreditNoted in the approving transaction. 400 <c>lines</c> (an order line not on the invoice), the planner's 409s.
+    /// </summary>
+    Task<CreditNoteRequestDto> RequestForReturnAsync(Guid returnId, Guid invoiceId, IReadOnlyList<ReturnCreditLine> lines, CancellationToken ct = default);
 
     /// <summary>The queue: requests of one status (default requested), oldest first.</summary>
     Task<PagedResult<CreditNoteRequestDto>> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default);

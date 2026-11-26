@@ -63,3 +63,26 @@ public sealed class AdminInvoicePdfController(IInvoicePdfService pdfs) : Control
         return Ok(new { data = await pdfs.CheckAsync(sha256, ct) });
     }
 }
+
+/// <summary>
+/// Company side of the invoice PDF (E6.4d): the rule of the company invoice list (an effective Admin or Buyer member, <c>Credit:BalanceVisibleTo</c>), so
+/// a colleague's invoice can be downloaded too. A stranger, a Requester, another company's invoice and an unknown id all get the same 404.
+/// Same stored, hash-checked file, rate limit and <c>private, no-store</c> as the order route.
+/// </summary>
+[ApiController]
+[Authorize]
+[Route("api/v1/companies/{companyId:guid}/invoices")]
+public sealed class CompanyInvoicePdfController(IInvoicePdfService pdfs, ICurrentUserService currentUser) : ControllerBase
+{
+    [HttpGet("{invoiceId:guid}/pdf")]
+    [EnableRateLimiting(InvoicePdfController.ReadRateLimitPolicy)]
+    [Produces("application/pdf", "application/json")]
+    public async Task<IActionResult> Pdf(Guid companyId, Guid invoiceId, [FromQuery] string? locale, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.Append(HeaderNames.Vary, "Authorization");
+        var actor = currentUser.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+        var file = await pdfs.CompanyPdfAsync(actor, companyId, invoiceId, locale, ct);
+        return File(file.Bytes, "application/pdf", file.FileName);
+    }
+}

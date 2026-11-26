@@ -8,11 +8,17 @@ namespace Mechware.Domain.Returns;
 
 /// <summary>
 /// F2.1 opens <see cref="Requested"/> and the buyer may withdraw it until staff decide. F2.3a: Requested → Approved | Rejected,
-/// Approved → Received → Inspected (awaiting the refund or credit note of F2.3b: Inspected → Refunded | CreditNoted).
+/// Approved → Received → Inspected (awaiting the refund or credit note of F2.3b: Inspected → Refunded | CreditNoted, see <see cref="ReturnSettlement"/>).
 /// </summary>
 public enum ReturnStatus { Requested = 1, Approved = 2, Rejected = 3, Received = 4, Refunded = 5, CreditNoted = 6, Withdrawn = 7, Inspected = 8 }
 
 public enum ReturnReason { Damaged = 1, WrongItem = 2, NotAsDescribed = 3, Other = 4 }
+
+/// <summary>
+/// How an inspected return's money goes back (F2.3b): a credit note (Mushak-6.7, E6.5) against the order's Live 6.3 → CreditNoted; without
+/// one, a gateway refund (E4, its own four eyes) or, for a credit order, a reduction of its charge (approved here by another person) → Refunded.
+/// </summary>
+public enum ReturnSettlement { CreditNote = 1, Refund = 2, CreditReduction = 3 }
 
 /// <summary>A buyer asked to return lines of a delivered order (F2.1). Published through the outbox for staff and mails (F3).</summary>
 public sealed record ReturnRequestedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy, Guid? CompanyId, int Quantity) : DomainEventBase;
@@ -29,6 +35,13 @@ public sealed record ReturnReceivedEvent(Guid ReturnId, Guid OrderId, string Ord
 
 /// <summary>Inspected: what was accepted (to refund or credit, F2.3b) and how much of it goes back on the shelf.</summary>
 public sealed record ReturnInspectedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy, int AcceptedQuantity, int RestockQuantity) : DomainEventBase;
+
+/// <summary>Staff asked for the money of an inspected return back (F2.3b); <paramref name="AmountMinor"/> is null for a credit note (the 6.7 prices it).</summary>
+public sealed record ReturnMoneyBackRequestedEvent(Guid ReturnId, Guid OrderId, string OrderNumber, Guid RequestedBy, string Settlement, long? AmountMinor)
+    : DomainEventBase;
+
+/// <summary>The money went back: CreditNoted (the 6.7 was approved) or Refunded (the refund completed, the credit charge was reduced).</summary>
+public sealed record ReturnSettledEvent(Guid ReturnId, Guid OrderId, Guid RequestedBy, string Status, string Settlement) : DomainEventBase;
 
 /// <summary>The inspection of one return line: accepted 0..asked, restocked 0..accepted (the rest is scrapped), an internal note.</summary>
 public sealed record ReturnInspection(Guid ReturnLineId, int AcceptedQuantity, int RestockQuantity, string? Note);
@@ -105,6 +118,15 @@ public sealed class ReturnRequest : AggregateRoot<Guid>
     public DateTime? ReceivedAtUtc { get; private set; }
     public Guid? InspectedBy { get; private set; }
     public DateTime? InspectedAtUtc { get; private set; }
+    /// <summary>F2.3b: how the money goes back, once asked (by whom, when); the amount for a refund or credit reduction; the E4 refund.</summary>
+    public ReturnSettlement? Settlement { get; private set; }
+    public long? SettlementAmountMinor { get; private set; }
+    public Guid? SettlementRequestedBy { get; private set; }
+    public DateTime? SettlementRequestedAtUtc { get; private set; }
+    public Guid? RefundId { get; private set; }
+    /// <summary>Who approved the money (never the one who asked) and when the return became CreditNoted or Refunded.</summary>
+    public Guid? SettledBy { get; private set; }
+    public DateTime? SettledAtUtc { get; private set; }
     public IReadOnlyList<ReturnRequestLine> Lines => _lines;
 
     public const int ReasonMinLength = 5;
@@ -288,6 +310,58 @@ public sealed class ReturnRequest : AggregateRoot<Guid>
         Status = ReturnStatus.Inspected;
         (InspectedBy, InspectedAtUtc, UpdatedAtUtc) = (actor, nowUtc, nowUtc);
         AddDomainEvent(new ReturnInspectedEvent(Id, OrderId, orderNumber, RequestedBy, lines.Sum(l => l.AcceptedQuantity), lines.Sum(l => l.RestockQuantity)));
+    }
+
+    public const string FourEyes = "RETURN_FOUR_EYES";
+    public const string NothingToSettle = "RETURN_NOTHING_TO_SETTLE";
+
+    /// <summary>The source key of everything this return's money moves under (credit-note request, credit reduction): <c>return:{id:N}</c>.</summary>
+    public string SourceKey => $"return:{Id:N}";
+
+    /// <summary>An inspected return whose money was not asked for yet, with at least one accepted unit (409 otherwise).</summary>
+    public void EnsureMoneyBackOpen()
+    {
+        Ensure(ReturnStatus.Inspected, "settled");
+        if (Settlement is not null) throw new ConflictException("RETURN_INVALID_TRANSITION", "The money of this return was already asked for.");
+        if (_lines.Sum(l => l.AcceptedQuantity ?? 0) == 0)
+            throw new ConflictException(NothingToSettle, "No unit was accepted at inspection, so no money goes back.");
+    }
+
+    /// <summary>
+    /// Inspected, money asked: a credit note (no amount: the 6.7 prices the accepted units), a refund of <paramref name="amountMinor"/>
+    /// (<paramref name="refundId"/> = the E4 refund asked in the same transaction) or a credit reduction of <paramref name="amountMinor"/>.
+    /// The status stays Inspected until another person approves the money.
+    /// </summary>
+    public void RequestMoneyBack(ReturnSettlement how, long? amountMinor, Guid? refundId, Guid actor, string orderNumber, DateTime nowUtc)
+    {
+        EnsureMoneyBackOpen();
+        if (!Enum.IsDefined(how) || (how == ReturnSettlement.CreditNote) != (amountMinor is null) || amountMinor <= 0
+            || (how == ReturnSettlement.Refund) != (refundId is not null))
+            throw new InvalidOperationException("A credit note has no amount; a refund names its refund; a refund or reduction is positive.");
+        (Settlement, SettlementAmountMinor, RefundId, SettlementRequestedBy, SettlementRequestedAtUtc, UpdatedAtUtc) =
+            (how, amountMinor, refundId, actor, nowUtc, nowUtc);
+        AddDomainEvent(new ReturnMoneyBackRequestedEvent(Id, OrderId, orderNumber, RequestedBy, how.ToString(), amountMinor));
+    }
+
+    /// <summary>Inspected → CreditNoted, in the transaction that approves the return's credit note (E6.5b).</summary>
+    public void MarkCreditNoted(Guid approver, DateTime nowUtc) => Settle(ReturnSettlement.CreditNote, ReturnStatus.CreditNoted, approver, nowUtc);
+
+    /// <summary>Inspected → Refunded: the E4 refund completed, or another person approved the credit reduction (in its transaction).</summary>
+    public void MarkRefunded(Guid approver, DateTime nowUtc)
+    {
+        if (Settlement is not (ReturnSettlement.Refund or ReturnSettlement.CreditReduction))
+            throw new ConflictException("RETURN_INVALID_TRANSITION", "This return's money does not go back as a refund.");
+        Settle(Settlement.Value, ReturnStatus.Refunded, approver, nowUtc);
+    }
+
+    private void Settle(ReturnSettlement how, ReturnStatus to, Guid approver, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Inspected, "settled");
+        if (Settlement != how) throw new ConflictException("RETURN_INVALID_TRANSITION", "This return's money was not asked for that way.");
+        if (approver == SettlementRequestedBy)
+            throw new ConflictException(FourEyes, "Another person approves the money of a return; the one who asked for it cannot.");
+        (Status, SettledBy, SettledAtUtc, UpdatedAtUtc) = (to, approver, nowUtc, nowUtc);
+        AddDomainEvent(new ReturnSettledEvent(Id, OrderId, RequestedBy, to.ToString(), how.ToString()));
     }
 
     private void Ensure(ReturnStatus from, string action)

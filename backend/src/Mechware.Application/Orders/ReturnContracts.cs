@@ -63,7 +63,15 @@ public sealed record StaffReturnDto(
     Guid Id, Guid OrderId, string OrderNumber, Guid? CompanyId, Guid RequestedBy, string Status, string ReasonCode, string? Note,
     DateTime RequestedAtUtc, DateTime? WithdrawnAtUtc, Guid? DecidedBy, DateTime? DecidedAtUtc, string? RejectionReason,
     Guid? ReceivedBy, DateTime? ReceivedAtUtc, Guid? InspectedBy, DateTime? InspectedAtUtc, bool RestockPending, uint RowVersion,
-    IReadOnlyList<StaffReturnLineDto> Lines);
+    IReadOnlyList<StaffReturnLineDto> Lines, ReturnSettlementDto? Settlement = null);
+
+/// <summary>
+/// F2.3b, how the money goes back once asked. <c>Kind</c>: <c>credit_note</c> (<c>CreditNoteRequestId</c>, approved in the credit-note queue →
+/// credit_noted), <c>refund</c> (<c>RefundId</c>, approved in the refund queue → refunded when the provider paid), <c>credit_reduction</c>
+/// (a credit order: approved at <c>money-back/approve</c> → refunded). <c>AmountMinor</c>: the refund or reduction (null for a credit note).
+/// </summary>
+public sealed record ReturnSettlementDto(string Kind, long? AmountMinor, Guid RequestedBy, DateTime RequestedAtUtc, Guid? CreditNoteRequestId,
+    Guid? RefundId, Guid? SettledBy, DateTime? SettledAtUtc);
 
 /// <summary>A staff move without other input: the return's <c>rowVersion</c> from the last read (required).</summary>
 public sealed record ReturnStepRequest(uint? RowVersion);
@@ -97,7 +105,7 @@ public interface IReturnRequestService
     Task<StaffReturnDto> GetStaffAsync(Guid returnId, CancellationToken ct = default);
 
     // F2.3a staff moves. Each checks the rowVersion (409 RETURN_CHANGED) and the status (409 RETURN_INVALID_TRANSITION), locks the order row
-    // then the return, writes an audit row and an outbox event. No money moves here (refund / credit note: F2.3b after E6.5).
+    // then the return, writes an audit row and an outbox event. No money moves in these four.
 
     /// <summary>Requested → approved.</summary>
     Task<StaffReturnDto> ApproveAsync(Guid returnId, ReturnStepRequest request, CancellationToken ct = default);
@@ -107,4 +115,22 @@ public interface IReturnRequestService
     Task<StaffReturnDto> MarkReceivedAsync(Guid returnId, ReturnStepRequest request, CancellationToken ct = default);
     /// <summary>Received → inspected; after the commit the restocked units go back on the shelf against the order's deduction.</summary>
     Task<StaffReturnDto> InspectAsync(Guid returnId, InspectReturnRequest request, CancellationToken ct = default);
+
+    // F2.3b money. Lock order payments → orders → (invoices: read) → return_requests; the approvals keep it (see ReturnSettlementDto).
+
+    /// <summary>
+    /// Inspected, money asked (idempotent: the return is the key; asked already = the same answer, before the rowVersion check). The order has a
+    /// Live 6.3 → a credit-note request of the accepted units; otherwise a credit order → a credit reduction of their share, waiting for a
+    /// second person; otherwise the paid gateway payment → an E4 refund of their share (≤ what it still holds). 409 <c>RETURN_CHANGED</c>,
+    /// <c>RETURN_INVALID_TRANSITION</c>, <c>RETURN_NOTHING_TO_SETTLE</c>, <c>RETURN_INVOICE_UNCLEAR</c>, <c>RETURN_NOT_PAID</c>,
+    /// <c>REFUND_EXCEEDS_PAYMENT</c>, the credit-note planner's codes.
+    /// </summary>
+    Task<StaffReturnDto> RequestMoneyBackAsync(Guid returnId, ReturnStepRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// A credit order's reduction approved by ANOTHER person: the charge is reduced (owed less, or on account) and the return Refunded in one
+    /// transaction. Again = the same answer. 409 <c>RETURN_FOUR_EYES</c>, <c>RETURN_NOT_AWAITING_APPROVAL</c>, <c>RETURN_NOT_CHARGED</c>,
+    /// <c>CREDIT_REDUCTION_EXCEEDS_CHARGE</c>.
+    /// </summary>
+    Task<StaffReturnDto> ApproveMoneyBackAsync(Guid returnId, CancellationToken ct = default);
 }

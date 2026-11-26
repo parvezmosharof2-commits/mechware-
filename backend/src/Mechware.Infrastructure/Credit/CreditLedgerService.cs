@@ -23,8 +23,9 @@ public sealed class CreditLedgerService(MechwareDbContext db, ICurrentUserServic
         if (db.Database.CurrentTransaction is null)
             throw new InvalidOperationException("ReduceChargeAsync runs inside the caller's transaction (the cancel or the credit note), never its own.");
         var creditNote = request.Kind == CreditReductionKind.CreditNote;
-        if (!Enum.IsDefined(request.Kind) || creditNote != request.CreditNoteId.HasValue || (creditNote && request.AmountMinor is null))
-            throw new ValidationException("kind", "A credit note names itself and its amount; a cancellation names no credit note.");
+        if (!Enum.IsDefined(request.Kind) || creditNote != request.CreditNoteId.HasValue
+            || (request.Kind != CreditReductionKind.OrderCancelled && request.AmountMinor is null))
+            throw new ValidationException("kind", "A credit note names itself and its amount; a return gives its amount; a cancellation names no credit note.");
 
         // Charge lines never change, so finding the company before its lock is safe; no charge = nothing to release.
         var companyId = await db.CreditLedgerEntries.Where(l => l.OrderId == request.OrderId && l.Kind == CreditLedgerKind.Charge)

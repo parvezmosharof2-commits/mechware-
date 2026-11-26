@@ -17,6 +17,9 @@ public interface IInvoicePdfService
     /// <summary>The buyer's PDF: only for an order the caller may read (<c>IOrderService.GetAsync</c>) and an invoice of that order.</summary>
     Task<InvoicePdfFile> BuyerPdfAsync(Guid actorUserId, Guid orderId, Guid invoiceId, string? locale, CancellationToken ct = default);
 
+    /// <summary>The company's PDF (E6.4d): the caller must be an effective Admin/Buyer member (<c>Credit:BalanceVisibleTo</c>) of the company and the invoice must be the company's.</summary>
+    Task<InvoicePdfFile> CompanyPdfAsync(Guid actorUserId, Guid companyId, Guid invoiceId, string? locale, CancellationToken ct = default);
+
     /// <summary>Staff PDF of any invoice (the same stored, verified file).</summary>
     Task<InvoicePdfFile> StaffPdfAsync(Guid invoiceId, string? locale, CancellationToken ct = default);
 

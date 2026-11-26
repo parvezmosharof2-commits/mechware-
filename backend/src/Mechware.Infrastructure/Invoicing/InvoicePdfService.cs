@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Mechware.Application.Catalog;
 using Mechware.Application.Common;
+using Mechware.Application.Credit;
 using Mechware.Application.Identity;
 using Mechware.Application.Invoicing;
 using Mechware.Application.Orders;
@@ -23,7 +24,7 @@ namespace Mechware.Infrastructure.Invoicing;
 /// recomputes the SHA-256 of the stored bytes; a mismatch is never sent, it is logged and audited.
 /// </summary>
 public sealed class InvoicePdfService(MechwareDbContext db, IOrderService orders, IPdfRenderer renderer, IObjectStorage storage, ICurrentUserService user,
-    TimeProvider clock, InvoicingOptions options, ILogger<InvoicePdfService> log) : IInvoicePdfService
+    TimeProvider clock, InvoicingOptions options, CreditOptions credit, ILogger<InvoicePdfService> log) : IInvoicePdfService
 {
     /// <summary>One message for everything the caller may not see: a foreign order, an invoice of another order, an unknown id.</summary>
     private static KeyNotFoundException NotFound() => new("Order not found.");
@@ -45,6 +46,16 @@ public sealed class InvoicePdfService(MechwareDbContext db, IOrderService orders
         await orders.GetAsync(actorUserId, orderId, ct);
         var invoice = await LoadAsync(invoiceId, ct);
         if (invoice is null || invoice.OrderId != orderId) throw NotFound();
+        return await ServeAsync(invoice, lang, ct);
+    }
+
+    public async Task<InvoicePdfFile> CompanyPdfAsync(Guid actorUserId, Guid companyId, Guid invoiceId, string? locale, CancellationToken ct = default)
+    {
+        var lang = Locale(locale);
+        // The rule of the company invoice list (E6.8a): an effective member whose role is in Credit:BalanceVisibleTo of an Active or Suspended company.
+        if (!await BuyerCreditAccess.MayViewAsync(db, actorUserId, companyId, credit, ct)) throw NotFound();
+        var invoice = await LoadAsync(invoiceId, ct);
+        if (invoice is null || invoice.CompanyId != companyId) throw NotFound();
         return await ServeAsync(invoice, lang, ct);
     }
 

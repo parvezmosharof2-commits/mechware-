@@ -204,6 +204,8 @@ public static class DependencyInjection
         // Invoice PDFs (E6.4b): lazy download in the API, eager render after COMMIT in the Worker (outbox handler); both need the renderer and the object store.
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoicePdfService, Invoicing.InvoicePdfService>();
         services.AddScoped<IOutboxPublisher, Invoicing.InvoicePdfPublisher>();
+        // Delivery challan (E6.4d): rendered on demand from the order and its shipment, never stored.
+        services.TryAddScoped<Mechware.Application.Orders.IChallanPdfService, Orders.ChallanPdfService>();
         return services;
     }
 

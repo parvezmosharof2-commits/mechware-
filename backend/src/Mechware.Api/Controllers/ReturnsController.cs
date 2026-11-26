@@ -73,7 +73,9 @@ public sealed class ReturnsController(IReturnRequestService returns, ICurrentUse
 /// <summary>
 /// Staff returns: reads of every return (F2.1, <c>orders.view_all</c>: Support, Finance, Admin) and the F2.3a moves (<c>returns.manage</c>:
 /// Support, Admin). A move sends the return's <c>rowVersion</c> (stale: 409 <c>RETURN_CHANGED</c>); from the wrong status it is 409
-/// <c>RETURN_INVALID_TRANSITION</c>; each writes an audit row and an outbox event. No money moves here. Every answer is <c>private, no-store</c>.
+/// <c>RETURN_INVALID_TRANSITION</c>; each writes an audit row and an outbox event. F2.3b money: <c>money-back</c> (<c>returns.manage</c>) asks
+/// for it, a different person approves it (the credit-note or refund queue, or <c>money-back/approve</c> for a credit order). Every answer is
+/// <c>private, no-store</c>.
 /// </summary>
 [ApiController]
 [Route("api/v1/admin/returns")]
@@ -118,6 +120,32 @@ public sealed class AdminReturnsController(IReturnRequestService returns) : Cont
         Response.Headers.CacheControl = "private, no-store";
         return Ok(new { data = await returns.InspectAsync(returnId, body, ct) });
     }
+
+    /// <summary>
+    /// Inspected → money asked, body <c>{rowVersion}</c>; idempotent (the return is the key: asked already = the same answer). The order's Live
+    /// 6.3 → a credit-note request of the accepted units (<c>settlement.creditNoteRequestId</c>); none → a credit order's credit reduction
+    /// (approve below) or an E4 refund of the paid gateway payment (<c>settlement.refundId</c>).
+    /// </summary>
+    [HttpPost("{returnId:guid}/money-back")]
+    [RequirePermission(Permissions.ReturnsManage)]
+    public async Task<IActionResult> MoneyBack(Guid returnId, [FromBody] ReturnStepRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.RequestMoneyBackAsync(returnId, body, ct) });
+    }
+
+    /// <summary>A credit order's reduction, approved by another person with a step-up code: the charge is reduced and the return Refunded.</summary>
+    [HttpPost("{returnId:guid}/money-back/approve")]
+    [RequirePermission(Permissions.PaymentsRefundApprove)]
+    [RequireStepUp(MoneyBackStepUpAction)]
+    public async Task<IActionResult> ApproveMoneyBack(Guid returnId, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.ApproveMoneyBackAsync(returnId, ct) });
+    }
+
+    /// <summary>The step-up purpose of the E4 refund approval: a credit reduction gives money back the same way.</summary>
+    public const string MoneyBackStepUpAction = "refund.approve";
 
     /// <summary>Newest first. Filters: <c>status</c> (wire name), <c>orderNumber</c> (prefix), <c>companyId</c>. <c>pageSize</c> at most 50; a bad filter is 400.</summary>
     [HttpGet]

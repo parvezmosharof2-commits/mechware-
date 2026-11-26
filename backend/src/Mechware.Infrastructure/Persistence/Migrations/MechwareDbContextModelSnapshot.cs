@@ -5308,6 +5308,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("received_by");
 
+                    b.Property<Guid?>("RefundId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("refund_id");
+
                     b.Property<string>("RejectionReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -5326,6 +5330,31 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RequestedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("requested_by");
+
+                    b.Property<DateTime?>("SettledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settled_at");
+
+                    b.Property<Guid?>("SettledBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("settled_by");
+
+                    b.Property<string>("Settlement")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("settlement");
+
+                    b.Property<long?>("SettlementAmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("settlement_amount_minor");
+
+                    b.Property<DateTime?>("SettlementRequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settlement_requested_at");
+
+                    b.Property<Guid?>("SettlementRequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("settlement_requested_by");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -5360,6 +5389,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ReceivedBy");
 
+                    b.HasIndex("RefundId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_return_requests_refund")
+                        .HasFilter("refund_id IS NOT NULL");
+
+                    b.HasIndex("SettledBy");
+
+                    b.HasIndex("SettlementRequestedBy");
+
                     b.HasIndex("RequestedBy", "IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ux_return_requests_idempotency");
@@ -5385,6 +5423,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_return_requests_received", "(received_by IS NULL) = (received_at IS NULL) AND (received_at IS NULL) = (status IN ('Requested', 'Withdrawn', 'Approved', 'Rejected'))");
 
                             t.HasCheckConstraint("ck_return_requests_rejection", "(status = 'Rejected') = (rejection_reason IS NOT NULL) AND (rejection_reason IS NULL OR (char_length(rejection_reason) BETWEEN 5 AND 500 AND rejection_reason = btrim(rejection_reason)))");
+
+                            t.HasCheckConstraint("ck_return_requests_settled", "(settled_by IS NULL) = (settled_at IS NULL) AND (settled_at IS NULL) = (status NOT IN ('Refunded', 'CreditNoted')) AND (status <> 'CreditNoted' OR settlement IS NOT DISTINCT FROM 'CreditNote') AND (status <> 'Refunded' OR COALESCE(settlement IN ('Refund', 'CreditReduction'), false)) AND (settled_by IS NULL OR settled_by <> settlement_requested_by)");
+
+                            t.HasCheckConstraint("ck_return_requests_settlement", "(settlement IS NULL) = (settlement_requested_by IS NULL) AND (settlement IS NULL) = (settlement_requested_at IS NULL) AND (settlement IS NULL OR status IN ('Inspected', 'Refunded', 'CreditNoted')) AND (settlement IS NULL OR settlement IN ('CreditNote', 'Refund', 'CreditReduction')) AND (refund_id IS NOT NULL) = (settlement IS NOT DISTINCT FROM 'Refund') AND (settlement_amount_minor IS NOT NULL) = COALESCE(settlement IN ('Refund', 'CreditReduction'), false) AND (settlement_amount_minor IS NULL OR settlement_amount_minor > 0)");
 
                             t.HasCheckConstraint("ck_return_requests_status", "status IN ('Requested', 'Approved', 'Rejected', 'Received', 'Inspected', 'Refunded', 'CreditNoted', 'Withdrawn')");
 
@@ -6713,11 +6755,26 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasForeignKey("ReceivedBy")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Mechware.Domain.Payments.Refund", null)
+                        .WithMany()
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Mechware.Domain.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("RequestedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("SettledBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("SettlementRequestedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequestLine", b =>

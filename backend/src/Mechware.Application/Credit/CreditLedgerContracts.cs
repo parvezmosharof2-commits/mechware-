@@ -1,6 +1,7 @@
 namespace Mechware.Application.Credit;
 
-public enum CreditReductionKind { OrderCancelled = 1, CreditNote = 2 }
+/// <summary><c>ReturnRefund</c> (F2.3b): an inspected return of a credit order without a Live 6.3, key <c>return:{id:N}</c>, approved by a second person.</summary>
+public enum CreditReductionKind { OrderCancelled = 1, CreditNote = 2, ReturnRefund = 3 }
 
 /// <summary>
 /// One reduction of an order's charge (ADR-0010 §8.2). <paramref name="AmountMinor"/> null = everything not yet reduced (a

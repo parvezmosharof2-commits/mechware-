@@ -6,13 +6,17 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Mechware.Application.Catalog;
+using Mechware.Application.Credit;
 using Mechware.Application.Identity;
 using Mechware.Application.Inventory;
+using Mechware.Application.Invoicing;
 using Mechware.Application.Orders;
 using Mechware.Domain.Common.Exceptions;
 using Mechware.Domain.Identity;
 using Mechware.Domain.Inventory;
+using Mechware.Domain.Invoicing;
 using Mechware.Domain.Orders;
+using Mechware.Domain.Payments;
 using Mechware.Domain.Returns;
 using Mechware.Infrastructure.Companies;
 using Mechware.Infrastructure.Persistence;
@@ -25,10 +29,11 @@ namespace Mechware.Infrastructure.Orders;
 /// else is the same 404. Opening and withdrawing lock the <c>orders</c> row first (FOR NO KEY UPDATE, like F1.1 and E7.2), so all
 /// requests of one order queue up and the delivered-minus-claimed check cannot be passed twice; no payment, company or promotion row
 /// is locked, so no cycle with the global order (payments → orders → companies → promotions). The F2.3a staff moves take the same order
-/// lock first, then the return row (FOR NO KEY UPDATE), and touch inventory only after the commit (its own transactions).
+/// lock first, then the return row (FOR NO KEY UPDATE), and touch inventory only after the commit (its own transactions). F2.3b money:
+/// the paid payment (FOR UPDATE) before the order, so the lock order stays payments → orders → (invoices) → return_requests → companies.
 /// </summary>
 public sealed partial class ReturnRequestService(MechwareDbContext db, ICurrentUserService user, TimeProvider clock, ReturnOptions? options = null,
-    IInventoryService? inventory = null, ILogger<ReturnRequestService>? log = null)
+    IInventoryService? inventory = null, ILogger<ReturnRequestService>? log = null, ICreditNoteService? creditNotes = null, ICreditLedger? ledger = null)
     : IReturnRequestService
 {
     /// <summary>The stock reference type of a return's restock: key (return, return id, ReturnRestocked, variant), capped by its order.</summary>
@@ -195,6 +200,127 @@ public sealed partial class ReturnRequestService(MechwareDbContext db, ICurrentU
         }
     }
 
+    public async Task<StaffReturnDto> RequestMoneyBackAsync(Guid returnId, ReturnStepRequest request, CancellationToken ct = default)
+    {
+        var actor = user.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+        if (request.RowVersion is not { } expected) throw new ValidationException("rowVersion", "Send the rowVersion of the return you loaded.");
+        var orderId = await OrderOfAsync(returnId, ct);
+        // Payments come first in the lock order, so the order's paid gateway payment is found before any lock and locked first.
+        var paymentId = await db.Payments.AsNoTracking()
+            .Where(p => p.OrderId == orderId && (p.Status == PaymentStatus.Captured || p.Status == PaymentStatus.NeedsRefund))
+            .OrderBy(p => p.CreatedAtUtc).Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct);
+        var now = Now();
+        db.ChangeTracker.Clear();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var payment = paymentId is { } pid
+            ? (await db.Payments.FromSqlInterpolated($"SELECT p.*, p.xmin FROM payments p WHERE p.id = {pid} FOR UPDATE").ToListAsync(ct)).Single()
+            : null;
+        var order = (await db.Orders.FromSqlInterpolated($"SELECT o.*, o.xmin FROM orders o WHERE o.id = {orderId} FOR NO KEY UPDATE")
+            .AsNoTracking().ToListAsync(ct)).Single();
+        var ret = await LockReturnAsync(returnId, ct);
+        // The return is the idempotency key: money asked already (also by a parallel call that won the lock) = the same answer, nothing new.
+        if (ret.Settlement is null)
+        {
+            if (db.Entry(ret).Property<uint>("xmin").CurrentValue != expected) throw Changed();
+            ret.EnsureMoneyBackOpen();
+            await AskMoneyBackAsync(ret, order, payment, actor, now, ct);
+            db.AuditLogs.Add(Audit("return.money_back_requested", ret, nameof(ReturnStatus.Inspected), now));
+            await SaveAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return (await ToStaffDtosAsync([ret], ct))[0];
+    }
+
+    /// <summary>
+    /// The way the money goes back. A Live 6.3 printing every accepted line (the newest replacement) → its credit-note request (E6.5b approves
+    /// it, four eyes and step-up there). Otherwise the accepted units' share of their lines (Σ line total × accepted ÷ ordered, rounded down,
+    /// shipping not included): a credit order waits for a second person here; any other order refunds its paid gateway payment through E4.
+    /// </summary>
+    private async Task AskMoneyBackAsync(ReturnRequest ret, Order order, Payment? payment, Guid actor, DateTime now, CancellationToken ct)
+    {
+        var accepted = ret.Lines.Where(l => l.AcceptedQuantity > 0).Select(l => new ReturnCreditLine(l.OrderItemId, l.AcceptedQuantity!.Value)).ToList();
+        // Issued 6.3s never change and a delivered order issues no new one, so reading them under the order lock is enough.
+        var invoices = await db.Invoices.AsNoTracking().Include(i => i.Lines)
+            .Where(i => i.OrderId == order.Id && i.Kind == InvoiceKind.TaxInvoice && i.Mode == InvoicingMode.Live).ToListAsync(ct);
+        if (invoices.Count > 0)
+        {
+            var printing = accepted.Select(a => invoices.Where(i => i.Lines.Any(l => l.OrderItemId == a.OrderItemId))
+                .OrderByDescending(i => i.ReplacementNo).Select(i => (Guid?)i.Id).FirstOrDefault()).Distinct().ToList();
+            if (printing is not [{ } invoiceId])
+                throw new ConflictException("RETURN_INVOICE_UNCLEAR", "The accepted lines are not all on one Live tax invoice of this order; settle it by hand.");
+            ret.RequestMoneyBack(ReturnSettlement.CreditNote, null, null, actor, order.OrderNumber, now);
+            await (creditNotes ?? throw new InvalidOperationException("A return with a tax invoice needs the credit-note service."))
+                .RequestForReturnAsync(ret.Id, invoiceId, accepted, ct);
+            return;
+        }
+
+        var ids = accepted.Select(a => a.OrderItemId).ToList();
+        var items = await db.OrderItems.AsNoTracking().Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id, i => (i.Quantity, i.TotalMinor), ct);
+        var amount = accepted.Sum(a => items[a.OrderItemId].TotalMinor * a.Quantity / items[a.OrderItemId].Quantity);
+        if (amount < 1) throw new ConflictException(ReturnRequest.NothingToSettle, "The accepted units were free, so no money goes back.");
+        if (order.PaysOnCredit)
+        {
+            ret.RequestMoneyBack(ReturnSettlement.CreditReduction, amount, null, actor, order.OrderNumber, now);
+            return;
+        }
+        if (payment is null)
+            throw new ConflictException("RETURN_NOT_PAID", "This order has no paid gateway payment to refund and no Live tax invoice to credit.");
+        var held = await db.Refunds.Where(r => r.PaymentId == payment.Id && r.Status != RefundStatus.Rejected).SumAsync(r => (long?)r.AmountMinor, ct) ?? 0;
+        if (amount > payment.AmountMinor - held)
+            throw new ConflictException("REFUND_EXCEEDS_PAYMENT", $"At most {payment.AmountMinor - held} can still be refunded on this payment.");
+        var refund = new Refund(Guid.NewGuid(), payment.Id, amount, payment.Currency, $"Goods returned (return {ret.Id:N})", actor, now);
+        db.Refunds.Add(refund);   // Requested: a different person with payments.refund_approve approves it in the refund queue
+        ret.RequestMoneyBack(ReturnSettlement.Refund, amount, refund.Id, actor, order.OrderNumber, now);
+    }
+
+    public async Task<StaffReturnDto> ApproveMoneyBackAsync(Guid returnId, CancellationToken ct = default)
+    {
+        var actor = user.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+        var credit = ledger ?? throw new InvalidOperationException("Approving a credit reduction needs the credit ledger.");
+        var orderId = await OrderOfAsync(returnId, ct);
+        var now = Now();
+        db.ChangeTracker.Clear();   // ReduceChargeAsync reads the company fresh under its own lock
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM orders WHERE id = {orderId} FOR NO KEY UPDATE", ct);
+        var ret = await LockReturnAsync(returnId, ct);
+        if (ret.Settlement != ReturnSettlement.CreditReduction)
+            throw new ConflictException("RETURN_NOT_AWAITING_APPROVAL",
+                "Only a credit order's return waiting for its credit reduction is approved here; credit notes and refunds have their own queues.");
+        if (ret.Status == ReturnStatus.Inspected)   // Refunded already = the same answer
+        {
+            ret.MarkRefunded(actor, now);   // four eyes before anything is reduced
+            db.AuditLogs.Add(Audit("return.refunded", ret, nameof(ReturnStatus.Inspected), now));
+            _ = await credit.ReduceChargeAsync(new CreditReduction(ret.OrderId, CreditReductionKind.ReturnRefund, ret.SettlementAmountMinor, ret.SourceKey,
+                    null, actor, "Goods returned and accepted at inspection"), ct)
+                ?? throw new ConflictException("RETURN_NOT_CHARGED", "This order was never charged to the company's credit, so there is nothing to reduce.");
+            await SaveAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return (await ToStaffDtosAsync([ret], ct))[0];
+    }
+
+    private async Task<Guid> OrderOfAsync(Guid returnId, CancellationToken ct) =>
+        await db.ReturnRequests.AsNoTracking().Where(r => r.Id == returnId).Select(r => (Guid?)r.OrderId).FirstOrDefaultAsync(ct)
+        ?? throw new KeyNotFoundException("Return not found.");
+
+    private async Task<ReturnRequest> LockReturnAsync(Guid returnId, CancellationToken ct) =>
+        (await db.ReturnRequests.FromSqlInterpolated($"SELECT r.*, r.xmin FROM return_requests r WHERE r.id = {returnId} FOR NO KEY UPDATE")
+            .Include(r => r.Lines).ToListAsync(ct)).Single();
+
+    private static ConflictException Changed() => new("RETURN_CHANGED", "Someone changed this return since you loaded it. Reload it and try again.");
+
+    private async Task SaveAsync(CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("RETURN_CHANGED", "Someone changed this return at the same time. Reload it and try again.");
+        }
+    }
+
     /// <summary>
     /// One staff move in one transaction: the order row (FOR NO KEY UPDATE, as F2.1: every return of the order queues behind it, so a
     /// parallel withdraw and approve have exactly one winner), then the return row, the rowVersion check, the move, the audit row and the
@@ -302,13 +428,20 @@ public sealed partial class ReturnRequestService(MechwareDbContext db, ICurrentU
                                 where m.ReferenceType == ReturnReference && m.Reason == RestockReason.ReturnRestocked && ids.Contains(m.ReferenceId)
                                 select new { m.ReferenceId, i.VariantId }).Distinct().ToListAsync(ct))
             .Select(x => (x.ReferenceId, x.VariantId)).ToHashSet();
+        var keys = rows.Where(r => r.Settlement == ReturnSettlement.CreditNote).Select(r => r.SourceKey).ToList();
+        var notes = keys.Count == 0 ? [] : await db.CreditNoteRequests.AsNoTracking().Where(c => keys.Contains(c.SourceKey!))
+            .ToDictionaryAsync(c => c.SourceKey!, c => c.Id, ct);
         return rows.Select(r => new StaffReturnDto(r.Id, r.OrderId, numbers[r.OrderId], r.CompanyId, r.RequestedBy, OrderService.ToWire(r.Status),
             OrderService.ToWire(r.Reason), r.Note, r.RequestedAtUtc, r.WithdrawnAtUtc, r.DecidedBy, r.DecidedAtUtc, r.RejectionReason,
             r.ReceivedBy, r.ReceivedAtUtc, r.InspectedBy, r.InspectedAtUtc,
             r.InspectedAtUtc is not null && r.Lines.Any(l => l.RestockQuantity > 0 && !restocked.Contains((r.Id, items[l.OrderItemId].VariantId))),
             versions[r.Id],
             r.Lines.OrderBy(l => items[l.OrderItemId].Sku).Select(l => new StaffReturnLineDto(l.Id, l.OrderItemId, items[l.OrderItemId].VariantId,
-                items[l.OrderItemId].Sku, items[l.OrderItemId].Title, l.Quantity, l.AcceptedQuantity, l.RestockQuantity, l.InspectionNote)).ToList())).ToList();
+                items[l.OrderItemId].Sku, items[l.OrderItemId].Title, l.Quantity, l.AcceptedQuantity, l.RestockQuantity, l.InspectionNote)).ToList(),
+            r.Settlement is { } how
+                ? new ReturnSettlementDto(OrderService.ToWire(how), r.SettlementAmountMinor, r.SettlementRequestedBy!.Value, r.SettlementRequestedAtUtc!.Value,
+                    notes.TryGetValue(r.SourceKey, out var note) ? note : null, r.RefundId, r.SettledBy, r.SettledAtUtc)
+                : null)).ToList();
     }
 
     /// <summary>The clock at the database's microsecond precision, so an answer shows exactly what was stored.</summary>
