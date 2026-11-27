@@ -29,7 +29,10 @@ export function createStaffReturnsApi(client: MechWareApiClient) {
     approve: (returnId: string, rowVersion: number) => move(returnId, 'approve', { rowVersion }),
     reject: (returnId: string, rowVersion: number, reason: string) => move(returnId, 'reject', { rowVersion, reason }),
     received: (returnId: string, rowVersion: number) => move(returnId, 'received', { rowVersion }),
-    inspect: (returnId: string, body: ReturnType<typeof inspectBody>) => move(returnId, 'inspect', body)
+    inspect: (returnId: string, body: ReturnType<typeof inspectBody>) => move(returnId, 'inspect', body),
+    /** Reject a pending credit reduction (`payments.refund_approve`, second person, authenticator code). Answers the return, back at Inspected. */
+    rejectMoneyBack: (returnId: string, reason: string, stepUpCode: string) =>
+      client.fetch<Data<StaffReturn>>(`${base}/${id(returnId)}/money-back/reject`, { method: 'POST', headers: { 'X-Step-Up-Code': stepUpCode }, body: JSON.stringify({ reason }) })
   };
 }
 export type StaffReturnsApi = ReturnType<typeof createStaffReturnsApi>;

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildCreditNoteBody, canApproveCreditNote, canRequestCreditNote, creditApprovalText, creditBdtToMinor, creditDecision, creditNoteErrorText, creditRequestFingerprint,
-  shouldReloadCreditNote, type CreditLineDraft
+  buildReplacementBody, replacementApprovalText, shouldReloadCreditNote, type CreditLineDraft
 } from '../src/credit-notes-staff-model.ts';
 
 const line = (o: Partial<CreditLineDraft> = {}): CreditLineDraft => ({ lineNo: 1, maxQuantity: 5, maxNetMinor: 100000, quantity: '', value: '', ...o });
@@ -66,4 +66,13 @@ test('error words: changed, caps, step-up, four eyes; reload only when the facts
   assert.match(creditNoteErrorText({ status: null }), /cannot be reached/);
   assert.equal(shouldReloadCreditNote('CREDIT_NOTE_CHANGED'), true);
   assert.equal(shouldReloadCreditNote('CREDIT_NOTE_FOUR_EYES'), false);
+});
+
+test('replacement body: reason error, replace flag, no lines; text 5 to 500', () => {
+  assert.deepEqual(buildReplacementBody('  Wrong BIN  '), { body: { reason: 'error', reasonText: 'Wrong BIN', replace: true } });
+  assert.ok('problem' in buildReplacementBody('abc'));
+  assert.ok('problem' in buildReplacementBody('x'.repeat(501)));
+  assert.equal(replacementApprovalText({ replacementNumber: 'MW-2' }), 'The new tax invoice MW-2 was issued in place of the old one.');
+  assert.equal(replacementApprovalText({}), null);
+  assert.match(creditNoteErrorText({ status: 409, code: 'INVOICE_REPLACEMENT_NEEDS_FULL_CREDIT' }), /not been credited before/);
 });

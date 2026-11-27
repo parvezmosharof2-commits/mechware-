@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
 import {
-  canViewInvoices, creditApprovalText, creditDecision, creditReasonText, creditStatusText, dhakaWhen, formatBdt, isCreditNoteStepUp, shouldReloadCreditNote,
+  canViewInvoices, creditApprovalText, creditDecision, creditReasonText, creditStatusText, dhakaWhen, replacementApprovalText, formatBdt, isCreditNoteStepUp, shouldReloadCreditNote,
   type CreditNoteApproval, type CreditNoteRequest
 } from '@mechware/api-client';
 import { staffCreditNotesApi } from '../lib/api';
@@ -64,6 +64,12 @@ function Decision({ id, me }: { id: string; me: { id: string; permissions: reado
       {alertText && <FocusAlert ref={alertRef} testId="decision-alert">{alertText}</FocusAlert>}
       {note && <Notice testId="decision-note">{note}</Notice>}
       {issued && <Notice testId="decision-issued">{creditApprovalText(issued)}</Notice>}
+      {issued?.replacementNumber && issued.replacementInvoiceId && (
+        <Notice testId="decision-replacement">{replacementApprovalText(issued)} <Link className="font-mono font-semibold text-brand-accent underline" href={`/invoices/${issued.replacementInvoiceId}`} data-testid="cn-replacement-link">{issued.replacementNumber}</Link></Notice>
+      )}
+      {req.replace && (
+        <Notice testId="cn-replace-note">This is a replacement request: approving credits the whole invoice and issues a new tax invoice with the buyer details as they are now. If the buyer BIN is no longer valid, the approval is refused.</Notice>
+      )}
 
       <section aria-labelledby="cn-h" className="space-y-3 rounded-xl border border-surface-border bg-surface p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

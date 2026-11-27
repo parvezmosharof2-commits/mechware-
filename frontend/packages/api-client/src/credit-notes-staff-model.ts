@@ -7,13 +7,14 @@ export interface CreditNoteLine { lineNo: number; kind: string; sku: string | nu
 export interface CreditNoteRequest {
   id: string; originalInvoiceId: string; originalNumber: string; orderId: string; orderNumber: string; status: CreditNoteStatus | string; reason: string; reasonText: string;
   lines: CreditNoteLine[]; totalMinor: number; requestedBy: string; requestedAtUtc: string; decidedBy: string | null; decidedAtUtc: string | null;
-  decisionReason: string | null; issuedInvoiceId: string | null; issuedNumber: string | null;
+  decisionReason: string | null; issuedInvoiceId: string | null; issuedNumber: string | null; replace?: boolean;
 }
 export interface CreditNotePage { items: CreditNoteRequest[]; page: number; pageSize: number; totalCount: number }
 export interface CreditNoteApproval {
   request: CreditNoteRequest; creditNoteId: string; number: string; totalMinor: number; refundDueMinor: number; creditReleasedMinor: number; movedOnAccountMinor: number;
+  replacementInvoiceId?: string | null; replacementNumber?: string | null;
 }
-export interface CreditNoteBody { reason: string; reasonText: string; lines: Array<{ lineNo: number; quantity: number; netMinor?: number }> }
+export interface CreditNoteBody { reason: string; reasonText: string; lines?: Array<{ lineNo: number; quantity: number; netMinor?: number }>; replace?: boolean }
 
 export const CREDIT_QUEUE_PAGE_SIZE = 50;
 const has = (permissions: readonly string[], p: string) => permissions.some((x) => x.toLowerCase() === p);
@@ -61,6 +62,17 @@ export function buildCreditNoteBody(lines: readonly CreditLineDraft[], reason: s
   return { body: { reason, reasonText: text, lines: out } };
 }
 
+/** E6.5e: replace an invoice (wrong buyer details). No lines = credit everything left; reason is always `error`. The server refuses it unless the invoice is still whole (409). */
+export function buildReplacementBody(reasonText: string): { body: CreditNoteBody } | { problem: string } {
+  const text = reasonText.trim();
+  if (text.length < 5 || text.length > 500) return { problem: 'Write what was wrong in 5 to 500 characters.' };
+  return { body: { reason: 'error', reasonText: text, replace: true } };
+}
+export const REPLACE_EXPLAIN = 'This credits the whole invoice with a credit note and issues a new tax invoice with the same lines and the buyer details as they are now. Another person must approve it, with their authenticator code. Until then nothing changes. It only works when no earlier credit note has been issued on this invoice.';
+/** After approving a replacement: the 6.7 and the new 6.3. */
+export const replacementApprovalText = (a: { replacementNumber?: string | null }): string | null =>
+  a.replacementNumber ? `The new tax invoice ${a.replacementNumber} was issued in place of the old one.` : null;
+
 /** Same details, same key: a retry replays; a changed form is a new request with a new key. */
 export const creditRequestFingerprint = (invoiceId: string, body: CreditNoteBody): string => JSON.stringify([invoiceId, body]);
 
@@ -91,6 +103,8 @@ const TEXT: Record<string, string> = {
   CREDIT_NOTE_TOO_LATE: 'This invoice is too old for a credit note (the limit is 180 days).',
   CREDIT_NOTE_OF_CREDIT_NOTE: 'A credit note cannot be raised against another credit note. Use the original invoice.',
   CREDIT_REDUCTION_EXCEEDS_CHARGE: 'The credit is more than the order still owes on credit. Ask Finance to check the order before approving.',
+  INVOICE_REPLACEMENT_NEEDS_FULL_CREDIT: 'An invoice can only be replaced when it has not been credited before (a replacement credits all of it). Use a normal credit note instead.',
+  INVOICE_BUYER_BIN_INVALID: 'The buyer BIN is missing or no longer valid, so a new invoice cannot be issued. Fix the company details first.',
   IDEMPOTENCY_KEY_REUSED: 'This request was already sent with different details. Reload the page and start again.',
   STEP_UP_REQUIRED: 'This action needs the 6-digit code from your authenticator app.',
   STEP_UP_FAILED: 'The code was not accepted. Codes work once: wait for the next code (up to 30 seconds) and enter that one.'

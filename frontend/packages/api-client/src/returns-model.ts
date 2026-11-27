@@ -20,8 +20,10 @@ export interface BuyerReturn {
   inspectedAtUtc: string | null; lines: ReturnLine[];
 }
 export interface StaffReturnLine extends ReturnLine { id: string; restockQuantity: number | null; inspectionNote: string | null }
+/** How the money goes back (F2.3b). `credit_reduction` waits for a second person at `money-back/approve` or `money-back/reject`. */
+export interface ReturnSettlement { kind: string; amountMinor: number | null; requestedBy: string; requestedAtUtc: string; creditNoteRequestId: string | null; refundId: string | null; settledBy: string | null; settledAtUtc: string | null }
 export interface StaffReturn extends Omit<BuyerReturn, 'lines'> {
-  decidedBy: string | null; receivedBy: string | null; inspectedBy: string | null; restockPending: boolean; rowVersion: number; lines: StaffReturnLine[];
+  decidedBy: string | null; receivedBy: string | null; inspectedBy: string | null; restockPending: boolean; rowVersion: number; lines: StaffReturnLine[]; settlement?: ReturnSettlement | null;
 }
 export interface ReturnPage<T> { items: T[]; page: number; pageSize: number; totalCount: number }
 
@@ -203,12 +205,24 @@ export function inspectBody(rowVersion: number, rows: InspectionRow[]) {
   return { rowVersion, lines: rows.map((r) => ({ returnLineId: r.returnLineId, acceptedQty: Number.parseInt(r.accepted, 10), restockQty: Number.parseInt(r.restock, 10), note: r.note.trim() || null })) };
 }
 
+/** E6.5e: a second person (not the asker) with refund approval may reject a pending credit reduction. */
+export function canRejectCreditReduction(r: Pick<StaffReturn, 'status' | 'settlement'>, me: { id: string; permissions: readonly string[] }): { show: boolean; canReject: boolean; hint: string | null } {
+  const s = r.settlement;
+  if (r.status !== 'inspected' || !s || s.kind !== 'credit_reduction' || s.settledAtUtc) return { show: false, canReject: false, hint: null };
+  if (!me.permissions.some((p) => p.toLowerCase() === 'payments.refund_approve')) return { show: true, canReject: false, hint: 'Your role may not decide credit reductions (payments.refund_approve).' };
+  if (s.requestedBy.toLowerCase() === me.id.toLowerCase()) return { show: true, canReject: false, hint: 'You asked for this credit reduction, so another person must decide it (two people must agree).' };
+  return { show: true, canReject: true, hint: null };
+}
+export const MONEY_BACK_REJECTED_TEXT = 'The credit reduction was rejected. The return is back to Inspected and the money back can be asked again.';
+
 /** The server's answers that mean the screen shows an old state: reload it. */
-export const shouldReloadReturn = (code: string | null): boolean => code === 'RETURN_CHANGED' || code === 'RETURN_INVALID_TRANSITION';
+export const shouldReloadReturn = (code: string | null): boolean => code === 'RETURN_CHANGED' || code === 'RETURN_INVALID_TRANSITION' || code === 'RETURN_NOT_AWAITING_APPROVAL';
 
 export function staffReturnErrorText(e: { status: number | null; code: string | null; message?: string; fields?: Record<string, string> }): string {
   if (e.code === 'RETURN_CHANGED') return 'Someone changed this return while you had it open. The page was reloaded; check it and try again.';
   if (e.code === 'RETURN_INVALID_TRANSITION') return 'This return is no longer in the state this step needs (it was withdrawn or already moved on). The page was reloaded.';
+  if (e.code === 'RETURN_FOUR_EYES') return 'You asked for this money back, so another person must decide it.';
+  if (e.code === 'RETURN_NOT_AWAITING_APPROVAL') return 'No credit reduction is waiting for a decision on this return any more. The page was reloaded.';
   switch (e.status) {
     case 400: return Object.values(e.fields ?? {})[0] ?? 'Some of what you entered is not allowed. Check it and try again.';
     case 401: return 'Your session has ended. Sign in again.';

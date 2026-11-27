@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  RETURN_NOTE_MAX, buildReturnBody, canManageReturns, canWithdrawReturn, inspectBody, inspectionProblems, keepReturnKey, noReturnStepText, parseReturnFilters,
+  RETURN_NOTE_MAX, canRejectCreditReduction, buildReturnBody, canManageReturns, canWithdrawReturn, inspectBody, inspectionProblems, keepReturnKey, noReturnStepText, parseReturnFilters,
   returnAvailability, returnErrorKey, returnFiltersToSearch, returnFormProblems, returnListQuery, returnStatusKey, returnSteps, returnWindowEnd, returnableByLine,
   shouldReloadReturn, staffReturnErrorText, EMPTY_RETURN_FILTERS
 } from '../src/returns-model.ts';
@@ -108,4 +108,16 @@ test('filters: round trip through the address, junk status dropped, query only w
   assert.equal(parseReturnFilters((k) => (k === 'status' ? 'bogus' : k === 'page' ? '-4' : null)).status, '');
   assert.equal(returnListQuery(EMPTY_RETURN_FILTERS), 'page=1&pageSize=20');
   assert.equal(returnListQuery(f), 'status=approved&orderNumber=MW-1&companyId=c1&page=3&pageSize=20');
+});
+
+test('reject credit reduction: only pending, second person, with the permission', () => {
+  const r = (o: object = {}) => ({ status: 'inspected', settlement: { kind: 'credit_reduction', amountMinor: 100, requestedBy: 'AA', requestedAtUtc: '', creditNoteRequestId: null, refundId: null, settledBy: null, settledAtUtc: null, ...o } });
+  const perm = ['payments.refund_approve'];
+  assert.deepEqual(canRejectCreditReduction(r(), { id: 'bb', permissions: perm }), { show: true, canReject: true, hint: null });
+  assert.equal(canRejectCreditReduction(r(), { id: 'aa', permissions: perm }).canReject, false);
+  assert.equal(canRejectCreditReduction(r(), { id: 'bb', permissions: [] }).canReject, false);
+  assert.equal(canRejectCreditReduction(r({ settledAtUtc: 'x' }), { id: 'bb', permissions: perm }).show, false);
+  assert.equal(canRejectCreditReduction(r({ kind: 'refund' }), { id: 'bb', permissions: perm }).show, false);
+  assert.equal(canRejectCreditReduction({ status: 'inspected', settlement: null }, { id: 'bb', permissions: perm }).show, false);
+  assert.match(staffReturnErrorText({ status: 409, code: 'RETURN_FOUR_EYES' }), /another person/);
 });

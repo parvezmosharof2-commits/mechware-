@@ -6,7 +6,7 @@ import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
 import { Input } from '@mechware/ui/src/components/Input';
 import {
-  MANAGE_MISSING_TEXT, STAFF_REASON_LABEL, canManageReturns, canViewStaffOrders, dhakaWhen, inspectBody, inspectionProblems, noReturnStepText, returnSteps, staffReturnStatusText,
+  MANAGE_MISSING_TEXT, MONEY_BACK_REJECTED_TEXT, STAFF_REASON_LABEL, canManageReturns, canRejectCreditReduction, isCreditNoteStepUp, creditNoteErrorText, canViewStaffOrders, dhakaWhen, inspectBody, inspectionProblems, noReturnStepText, returnSteps, staffReturnStatusText,
   type InspectionRow, type StaffReturn
 } from '@mechware/api-client';
 import { staffReturnError, staffReturnsApi } from '../lib/api';
@@ -15,6 +15,7 @@ import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, Notice, useFocusOn } from './CreditShared';
 import { ReasonDialog } from './ReasonDialog';
+import { StepUpDialog } from './StepUpDialog';
 
 const shortId = (id: string | null) => (id ? id.slice(0, 8) : 'the system');
 
@@ -58,11 +59,14 @@ function InspectForm({ d, busy, onSubmit }: { d: StaffReturn; busy: boolean; onS
   );
 }
 
-function Detail({ id, permissions }: { id: string; permissions: readonly string[] }) {
+function Detail({ id, permissions, meId }: { id: string; permissions: readonly string[]; meId: string }) {
   const res = useResource(() => staffReturnsApi.get(id), id);
   const [fresh, setFresh] = React.useState<StaffReturn | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [rejectOpen, setRejectOpen] = React.useState(false);
+  const [mbAsking, setMbAsking] = React.useState(false);
+  const [mbReason, setMbReason] = React.useState<string | null>(null);
+  const [mbError, setMbError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [alertText, setAlertText] = React.useState<string | null>(null);
   const alertRef = useFocusOn(alertText);
@@ -70,6 +74,7 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
   const failure = res.error ? staffReturnError(res.error) : null;
   const d = fresh ?? res.data?.data ?? null;
   const manage = canManageReturns(permissions);
+  const mb = d ? canRejectCreditReduction(d, { id: meId, permissions }) : null;
   const steps = d ? returnSteps(d.status) : [];
 
   // The row version is the one on screen; a move answers with the new return, so a second click can never send a stale one.
@@ -85,6 +90,19 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
       setAlertText(f.text);
       if (f.reload) { setFresh(null); res.reload(); }
       return false;
+    } finally { setBusy(false); }
+  };
+
+  const rejectMoneyBack = async (code: string) => {
+    if (!d || mbReason === null) return;
+    setBusy(true); setMbError(null); setNotice(null); setAlertText(null);
+    try {
+      setFresh((await staffReturnsApi.rejectMoneyBack(d.id, mbReason, code)).data);
+      setNotice(MONEY_BACK_REJECTED_TEXT); setMbReason(null);
+    } catch (err) {
+      const f = staffReturnError(err);
+      if (isCreditNoteStepUp(f.code)) setMbError(creditNoteErrorText({ status: f.status, code: f.code }));
+      else { setMbReason(null); setAlertText(f.text); if (f.reload) { setFresh(null); res.reload(); } }
     } finally { setBusy(false); }
   };
 
@@ -125,6 +143,15 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
           )}
           {d.status === 'rejected' && d.rejectionReason && <p className="rounded-md border border-surface-border bg-bg-subtle p-3 text-sm" data-testid="rejection-reason"><span className="font-semibold">Rejection reason (the buyer sees it):</span> {d.rejectionReason}</p>}
 
+          {mb?.show && (
+            <section aria-labelledby="ret-mb" className="space-y-2 rounded-md border border-surface-border p-3" data-testid="money-back-pending">
+              <h2 id="ret-mb" className="text-base font-semibold">Credit reduction waiting for a decision</h2>
+              <p className="text-sm text-text-muted">A reduction of what the company owes on credit was asked. A second person approves it or rejects it. Rejecting puts the return back to Inspected so it can be asked again.</p>
+              <Button type="button" variant="destructive" disabled={busy || !mb.canReject} aria-describedby={mb.hint ? 'mb-hint' : undefined} data-testid="money-back-reject" onClick={() => setMbAsking(true)}>Reject the credit reduction</Button>
+              {mb.hint && <p id="mb-hint" className="text-sm font-medium text-text-muted" data-testid="money-back-hint">{mb.hint}</p>}
+            </section>
+          )}
+
           <section aria-labelledby="ret-facts" className="space-y-2">
             <h2 id="ret-facts" className="text-base font-semibold">Request</h2>
             <Facts rows={[
@@ -164,6 +191,11 @@ function Detail({ id, permissions }: { id: string; permissions: readonly string[
               <InspectForm d={d} busy={busy} onSubmit={(rows) => void run('inspection saved', (v) => staffReturnsApi.inspect(d.id, inspectBody(v, rows)))} />
             </section>
           )}
+          {mbAsking && <React.Suspense fallback={null}><ReasonDialog open title="Reject this credit reduction?" label="Reason (5 to 500 characters)" confirmLabel="Continue" busy={false}
+            description="Nothing is reduced. The return goes back to Inspected and can be asked again. You will be asked for your authenticator code next."
+            onCancel={() => setMbAsking(false)} onSubmit={(text) => { setMbAsking(false); setMbError(null); setMbReason(text); }} /></React.Suspense>}
+          {mbReason !== null && <React.Suspense fallback={null}><StepUpDialog open title="Confirm the rejection" description={`This rejects the credit reduction for order ${d.orderNumber}.`} confirmLabel="Reject" busy={busy} error={mbError}
+            onCancel={() => { setMbReason(null); setMbError(null); }} onSubmit={rejectMoneyBack} /></React.Suspense>}
           <ReasonDialog
             open={rejectOpen} title="Reject this return" description="The buyer sees this reason. Their units become returnable again." label="Reason (5 to 500 characters)"
             confirmLabel="Reject the return" busy={busy} onCancel={() => setRejectOpen(false)}
@@ -180,7 +212,7 @@ export function ReturnDetailView({ id }: { id: string }) {
   const permissions = user?.permissions ?? [];
   return (
     <ConsoleShell activeItemId="returns" title="Return">
-      {canViewStaffOrders(permissions) ? <Detail id={id} permissions={permissions} /> : <NoAccess permission="orders.view_all" />}
+      {canViewStaffOrders(permissions) ? <Detail id={id} permissions={permissions} meId={user?.id ?? ''} /> : <NoAccess permission="orders.view_all" />}
     </ConsoleShell>
   );
 }

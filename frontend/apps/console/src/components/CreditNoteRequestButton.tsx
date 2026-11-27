@@ -6,7 +6,7 @@ import { Button } from '@mechware/ui/src/components/Button';
 import { Input } from '@mechware/ui/src/components/Input';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
-  CREDIT_REASON_OPTIONS, attemptFor, buildCreditNoteBody, creditNoteErrorText, creditRequestFingerprint, formatBdt, type BuyerInvoiceDetail, type CreditLineDraft, type PlaceAttempt
+  CREDIT_REASON_OPTIONS, REPLACE_EXPLAIN, attemptFor, buildCreditNoteBody, buildReplacementBody, creditNoteErrorText, creditRequestFingerprint, formatBdt, type BuyerInvoiceDetail, type CreditLineDraft, type PlaceAttempt
 } from '@mechware/api-client';
 import { problemCode, problemMessage, problemStatus, staffCreditNotesApi } from '../lib/api';
 import { Modal, ModalFooter } from './Modal';
@@ -25,6 +25,7 @@ export function CreditNoteRequestButton({ detail }: { detail: BuyerInvoiceDetail
   const [text, setText] = React.useState('');
   const [problem, setProblem] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [replace, setReplace] = React.useState(false);
   const [sent, setSent] = React.useState<string | null>(null);
   const attempt = React.useRef<PlaceAttempt | null>(null);
   const inFlight = React.useRef(false);
@@ -37,7 +38,7 @@ export function CreditNoteRequestButton({ detail }: { detail: BuyerInvoiceDetail
     e.preventDefault();
     if (inFlight.current) return;
     const lines: CreditLineDraft[] = detail.lines.map((l) => ({ lineNo: l.lineNo, maxQuantity: l.quantity, maxNetMinor: l.netMinor, quantity: drafts[l.lineNo]?.quantity ?? '', value: drafts[l.lineNo]?.value ?? '' }));
-    const built = buildCreditNoteBody(lines, reason, text);
+    const built = replace ? buildReplacementBody(text) : buildCreditNoteBody(lines, reason, text);
     if ('problem' in built) { setProblem(built.problem); return; }
     inFlight.current = true; setBusy(true); setProblem(null);
     attempt.current = attemptFor(attempt.current, creditRequestFingerprint(detail.invoice.id, built.body));
@@ -51,16 +52,19 @@ export function CreditNoteRequestButton({ detail }: { detail: BuyerInvoiceDetail
 
   return (
     <div className="space-y-2">
-      <Button type="button" variant="outline" onClick={() => { setSent(null); setOpen(true); }} data-testid="request-credit-note">Request credit note</Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" onClick={() => { setSent(null); setReplace(false); setOpen(true); }} data-testid="request-credit-note">Request credit note</Button>
+        <Button type="button" variant="outline" onClick={() => { setSent(null); setReplace(true); setOpen(true); }} data-testid="request-replacement">Replace this invoice (wrong buyer details)</Button>
+      </div>
       {sent && (
         <Notice testId="credit-requested">
-          Credit note requested. It has no number yet: another person with the right to approve credit notes must approve it. <Link className="text-brand-accent underline" href={`/invoices/credit-notes/${sent}`} data-testid="credit-requested-link">Open the request</Link>
+          {replace ? 'Replacement requested. Nothing changes yet' : 'Credit note requested. It has no number yet'}: another person with the right to approve credit notes must approve it. <Link className="text-brand-accent underline" href={`/invoices/credit-notes/${sent}`} data-testid="credit-requested-link">Open the request</Link>
         </Notice>
       )}
-      <Modal open={open} onOpenChange={(o) => { if (!busy) setOpen(o); }} title={`Request a credit note for ${detail.invoice.number}`} description="Choose how much to credit on each line: a quantity, a value, or both. The figures shown are the invoice line; credit notes issued earlier also count, and the server checks them." contentTestId="credit-form">
+      <Modal open={open} onOpenChange={(o) => { if (!busy) setOpen(o); }} title={replace ? `Replace invoice ${detail.invoice.number}` : `Request a credit note for ${detail.invoice.number}`} description={replace ? REPLACE_EXPLAIN : "Choose how much to credit on each line: a quantity, a value, or both. The figures shown are the invoice line; credit notes issued earlier also count, and the server checks them."} contentTestId="credit-form">
         <form onSubmit={submit} noValidate className="max-h-[70vh] space-y-4 overflow-y-auto pr-1" aria-label="Request a credit note">
           {problem && <div ref={alertRef} tabIndex={-1} role="alert" data-testid="credit-problem" className="rounded-md border border-fault bg-bg-subtle p-3 text-sm font-medium text-fault">{problem}</div>}
-          {detail.lines.map((l) => (
+          {!replace && detail.lines.map((l) => (
             <fieldset key={l.lineNo} className="space-y-2 rounded-md border border-surface-border p-3" data-testid="credit-line">
               <legend className="px-1 text-sm font-semibold">Line {l.lineNo}: {l.descriptionEn}</legend>
               <p className="text-xs text-text-muted">Invoiced: quantity {l.quantity}, net BDT {formatBdt(l.netMinor)}</p>
@@ -70,17 +74,17 @@ export function CreditNoteRequestButton({ detail }: { detail: BuyerInvoiceDetail
               </div>
             </fieldset>
           ))}
-          <div className="space-y-1.5">
+          {!replace && <div className="space-y-1.5">
             <label htmlFor="credit-reason" className="text-sm font-medium">Reason</label>
             <select id="credit-reason" className="block h-11 w-full rounded-md border border-surface-border-strong bg-bg-muted px-3 text-sm" value={reason} onChange={(e) => { setProblem(null); setReason(e.target.value); }} disabled={busy} data-testid="credit-reason">
               <option value="">Choose a reason</option>
               {CREDIT_REASON_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-          </div>
-          <Textarea label="Explain in words (5 to 500 characters; printed on the credit note)" value={text} onChange={(e) => { setProblem(null); setText(e.target.value); }} rows={3} maxLength={500} disabled={busy} data-testid="credit-text" />
+          </div>}
+          <Textarea label={replace ? 'What was wrong? (5 to 500 characters; printed on the credit note)' : 'Explain in words (5 to 500 characters; printed on the credit note)'} value={text} onChange={(e) => { setProblem(null); setText(e.target.value); }} rows={3} maxLength={500} disabled={busy} data-testid="credit-text" />
           <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
-            <Button type="submit" isLoading={busy} disabled={busy} data-testid="credit-send">Send the request</Button>
+            <Button type="submit" isLoading={busy} disabled={busy} data-testid="credit-send">{replace ? 'Ask to replace the invoice' : 'Send the request'}</Button>
           </ModalFooter>
         </form>
       </Modal>
