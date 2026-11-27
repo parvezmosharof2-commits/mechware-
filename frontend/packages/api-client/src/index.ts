@@ -518,3 +518,5 @@ export * from "./credit-notes-staff-model";
 export * from "./credit-notes-staff";
 export * from "./vat-month-model";
 export * from "./vat-month";
+export * from "./withholdings-staff-model";
+export * from "./withholdings-staff";

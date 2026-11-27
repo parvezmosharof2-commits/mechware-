@@ -5,7 +5,7 @@ import { Button } from '@mechware/ui/src/components/Button';
 import { Input } from '@mechware/ui/src/components/Input';
 import {
   canExportVat, isCreditStepUpFailure, isVatMonth, lastMonthDhaka, problemCode, problemMessage, problemStatus, vatBandText, vatBdt, vatCsvName,
-  vatMonthCounts, vatMonthErrorText, vatRateText, type VatMonthReport
+  vatMonthCounts, vatMonthErrorText, vdsTotalMinor, vatRateText, type VatMonthReport
 } from '@mechware/api-client';
 import { vatMonthApi } from '../lib/vatMonth';
 import { useAuth } from '../lib/auth';
@@ -65,12 +65,11 @@ function Report({ r }: { r: VatMonthReport }) {
         head={[['Number', false], ['Issued (Dhaka)', false], ['Corrects', false], ['Buyer', false], ['BIN', false], ...MONEY4, ['VAT rate', false]]}
         rows={r.creditNotes.map((c) => [c.number, c.issuedAtDhaka, `${c.originalNumber} (${c.originalMonth})`, c.buyerName, c.buyerBin ?? '-', money(c.netMinor), money(c.sdMinor), money(c.vatMinor), money(c.totalMinor), vatBandText(c.vatBand)])}
         empty="No credit notes were issued in this month." />
-      <section aria-labelledby="vat-c-h" className="space-y-2" data-testid="vat-c">
-        <h2 id="vat-c-h" className="text-base font-semibold">(c) VAT withheld at source</h2>
-        <p role="status" className="rounded-md border border-surface-border bg-surface p-3 text-sm text-text-muted">
-          {r.withholdingsAvailable ? 'Withholding certificates are included in the file.' : 'Not recorded yet. Withholding certificates come with a later release, so add them by hand.'}
-        </p>
-      </section>
+      <Section id="vat-c" title="(c) VAT withheld at source (VDS)" caption={`Verified VDS certificates of ${r.month}, in BDT.`}
+        head={[['Certificate', false], ['Certificate date', false], ['Verified (Dhaka)', false], ['Invoice', false], ['Buyer', false], ['BIN', false], ['VDS amount', true]]}
+        rows={(r.vds ?? []).map((v) => [v.certificateNumber, v.certificateDate, v.verifiedAtDhaka, v.invoiceNumber, v.buyerName, v.buyerBin ?? '-', money(v.amountMinor)])}
+        empty={r.withholdingsAvailable ? 'No VDS certificate was verified in this month.' : 'Not recorded yet, so add them by hand.'} />
+      {(r.vds ?? []).length > 0 && <p className="text-sm" data-testid="vat-c-total">Total VDS of {r.month}: <strong className="font-mono">BDT {vatBdt(vdsTotalMinor(r.vds ?? []))}</strong>. Certificates count in the month they were verified.</p>}
       <Section id="vat-d" title="(d) Totals by VAT rate" caption={`Sales and credit notes of ${r.month} per VAT rate, in BDT.`}
         head={[['Rate', false], ['Sales net', true], ['Sales SD', true], ['Sales VAT', true], ['Credit net', true], ['Credit SD', true], ['Credit VAT', true], ['Net VAT', true]]}
         rows={r.rateTotals.map((x) => [`${vatRateText(x.vatRate)} ${vatBandText(x.band)}`, money(x.salesNetMinor), money(x.salesSdMinor), money(x.salesVatMinor), money(x.creditNetMinor), money(x.creditSdMinor), money(x.creditVatMinor), money(x.salesVatMinor - x.creditVatMinor)])}

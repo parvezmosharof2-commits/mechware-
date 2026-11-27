@@ -3,6 +3,7 @@
  * able to test it). Hand-written from `VatExportContracts.cs`. Amounts are whole poisha. The API checks `invoices.export`, the rate
  * limit and the authenticator code again; this only helps the person. The VAT consultant has not checked the layout yet.
  */
+import type { VatVdsRow } from "./withholdings-staff-model";
 export interface VatSaleRow { invoiceId: string; number: string; issuedAtDhaka: string; orderNumber: string; buyerName: string; buyerBin: string | null; netMinor: number; sdMinor: number; vatMinor: number; totalMinor: number; vatBand: string }
 export interface VatCreditNoteRow { invoiceId: string; number: string; issuedAtDhaka: string; originalNumber: string; originalMonth: string; buyerName: string; buyerBin: string | null; netMinor: number; sdMinor: number; vatMinor: number; totalMinor: number; vatBand: string }
 export interface VatRateTotal { band: string; vatRate: number; salesNetMinor: number; salesSdMinor: number; salesVatMinor: number; creditNetMinor: number; creditSdMinor: number; creditVatMinor: number }
@@ -10,7 +11,7 @@ export interface VatMushak610Row { kind: string; number: string; issuedAtDhaka: 
 export interface VatPaidNotShippedRow { orderId: string; orderNumber: string; status: string; paidAtDhaka: string; paidMinor: number }
 export interface VatMonthTotals { sales: number; salesNetMinor: number; salesSdMinor: number; salesVatMinor: number; salesTotalMinor: number; creditNotes: number; creditNetMinor: number; creditSdMinor: number; creditVatMinor: number; creditTotalMinor: number; netVatMinor: number }
 export interface VatMonthReport {
-  month: string; sales: VatSaleRow[]; creditNotes: VatCreditNoteRow[]; withholdingsAvailable: boolean; rateTotals: VatRateTotal[];
+  month: string; sales: VatSaleRow[]; creditNotes: VatCreditNoteRow[]; withholdingsAvailable: boolean; vds?: VatVdsRow[]; rateTotals: VatRateTotal[];
   mushak610ThresholdMinor: number; mushak610Candidates: VatMushak610Row[]; paidNotShipped: VatPaidNotShippedRow[]; totals: VatMonthTotals; consultantChecked: boolean;
 }
 

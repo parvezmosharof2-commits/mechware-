@@ -3,13 +3,14 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
-import { canRequestCreditNote, canViewInvoices, dhakaWhen, formatBdt, invoiceKindText, invoiceModeText, type StaffInvoiceDetail } from '@mechware/api-client';
+import { canRecordWithholding, canRequestCreditNote, canViewInvoices, dhakaWhen, formatBdt, invoiceKindText, invoiceModeText, type StaffInvoiceDetail } from '@mechware/api-client';
 import { useAuth } from '../lib/auth';
 import { staffInvoicesApi } from '../lib/api';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, Loading, NoAccess } from './CreditShared';
 const CreditNoteRequestButton = React.lazy(() => import('./CreditNoteRequestButton').then((m) => ({ default: m.CreditNoteRequestButton })));
+const WithholdingRecordButton = React.lazy(() => import('./WithholdingRecordButton').then((m) => ({ default: m.WithholdingRecordButton })));
 import { InvoicePdfButtons, invoiceFailure } from './InvoicePdfButtons';
 
 const th = 'px-3 py-2';
@@ -27,7 +28,7 @@ function Facts({ rows }: { rows: Array<[string, React.ReactNode]> }) {
   );
 }
 
-function Body({ s, canRequest }: { s: StaffInvoiceDetail; canRequest: boolean }) {
+function Body({ s, canRequest, canWithhold }: { s: StaffInvoiceDetail; canRequest: boolean; canWithhold: boolean }) {
   const d = s.detail;
   const i = d.invoice;
   return (
@@ -44,6 +45,8 @@ function Body({ s, canRequest }: { s: StaffInvoiceDetail; canRequest: boolean })
         <div className="space-y-3">
           <InvoicePdfButtons invoiceId={i.id} number={i.number} />
           {canRequest && i.kind === 'tax_invoice' && <React.Suspense fallback={null}><CreditNoteRequestButton detail={d} /></React.Suspense>}
+          {canWithhold && i.kind === 'tax_invoice' && i.mode !== 'specimen' && <React.Suspense fallback={null}><WithholdingRecordButton invoiceId={i.id} invoiceNumber={i.number} /></React.Suspense>}
+          {i.kind === 'tax_invoice' && <Link href={`/invoices/withholdings?status=verified&invoiceId=${i.id}`} className="block text-sm font-semibold text-brand-accent underline" data-testid="withholdings-link">VDS/AIT certificates of this invoice</Link>}
           {i.kind === 'credit_note' && <Link href="/invoices/credit-notes" className="block text-sm font-semibold text-brand-accent underline">Credit note queue</Link>}
         </div>
       </header>
@@ -104,7 +107,7 @@ function Body({ s, canRequest }: { s: StaffInvoiceDetail; canRequest: boolean })
   );
 }
 
-function Detail({ id, canRequest }: { id: string; canRequest: boolean }) {
+function Detail({ id, canRequest, canWithhold }: { id: string; canRequest: boolean; canWithhold: boolean }) {
   const res = useResource(() => staffInvoicesApi.detail(id), id);
   const failure = res.error ? { text: invoiceFailure(res.error), retry: true } : null;
   return (
@@ -112,7 +115,7 @@ function Detail({ id, canRequest }: { id: string; canRequest: boolean }) {
       <BackLink href="/invoices">Back to all invoices</BackLink>
       <FailureAlert failure={failure} onRetry={res.reload} />
       {res.loading && !res.data && <Loading />}
-      {res.data && <Body s={res.data} canRequest={canRequest} />}
+      {res.data && <Body s={res.data} canRequest={canRequest} canWithhold={canWithhold} />}
     </div>
   );
 }
@@ -121,7 +124,7 @@ export function InvoiceDetailView({ id }: { id: string }) {
   const { user } = useAuth();
   return (
     <ConsoleShell activeItemId="invoices" title="Invoice">
-      {canViewInvoices(user?.permissions ?? []) ? <Detail id={id} canRequest={canRequestCreditNote(user?.permissions ?? [])} /> : <NoAccess permission="invoices.view" />}
+      {canViewInvoices(user?.permissions ?? []) ? <Detail id={id} canRequest={canRequestCreditNote(user?.permissions ?? [])} canWithhold={canRecordWithholding(user?.permissions ?? [])} /> : <NoAccess permission="invoices.view" />}
     </ConsoleShell>
   );
 }

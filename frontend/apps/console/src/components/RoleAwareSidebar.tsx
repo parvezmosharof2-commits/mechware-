@@ -65,6 +65,13 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     group: 'Orders'
   },
   {
+    id: 'withholdings',
+    label: 'Withholdings (VDS/AIT)',
+    requiredPermission: 'invoices.view',
+    href: '/invoices/withholdings',
+    group: 'Orders'
+  },
+  {
     id: 'vat-month',
     label: 'Monthly VAT file',
     requiredPermission: 'invoices.export',
