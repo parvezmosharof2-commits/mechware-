@@ -5,10 +5,10 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { ModalProps } from './Modal';
 
 /** The Radix dialog behind `Modal`; only fetched when a modal is first opened. */
-export function ModalImpl({ open, onOpenChange, title, description, descriptionTestId, contentTestId, children }: ModalProps) {
+export function ModalImpl({ open, onOpenChange, title, description, descriptionTestId, contentTestId, contentClassName, children }: ModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid={contentTestId}>
+      <DialogContent data-testid={contentTestId} className={contentClassName}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription data-testid={descriptionTestId}>{description}</DialogDescription>

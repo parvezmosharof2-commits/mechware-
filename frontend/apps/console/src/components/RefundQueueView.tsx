@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { Modal, ModalFooter } from './Modal';
 import { Input } from '@mechware/ui/src/components/Input';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
@@ -172,37 +172,27 @@ function Queue({ me }: { me: { id: string; permissions: readonly string[] } }) {
       )}
       <div><Button type="button" variant="ghost" size="sm" onClick={list.reload}>Refresh</Button></div>
 
-      <Dialog open={flow?.k === 'request'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Ask for a refund on order {flow?.k === 'request' ? flow.item.orderNumber : ''}</DialogTitle>
-            <DialogDescription>
+      <Modal open={flow?.k === 'request'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Ask for a refund on order {flow?.k === 'request' ? flow.item.orderNumber : ''}</>}
+        description={<>
+
               Nothing is sent to the provider yet. A different person with refund approval rights must approve it, with an authenticator code.
               {flow?.k === 'request' ? ` At most BDT ${formatBdt(askableMinor(flow.item))} is still free to ask for.` : ''}
-            </DialogDescription>
-          </DialogHeader>
+            </>}>
           <Input label="Amount (BDT)" value={amount} onChange={(e) => setAmount(e.target.value)} error={problems.amountBdt ?? problems.amountMinor} inputMode="decimal" autoComplete="off" />
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problems.reason} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={doRequest} isLoading={busy} disabled={busy}>Ask for the refund</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
-      <Dialog open={flow?.k === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject this refund?</DialogTitle>
-            <DialogDescription>No money moves and no authenticator code is needed. The amount becomes free to ask for again.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Reject this refund?</>} description={<>No money moves and no authenticator code is needed. The amount becomes free to ask for again.</>}>
           <Textarea label="Why is it rejected? (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problems.reason} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button>
             <Button type="button" variant="destructive" onClick={doReject} isLoading={busy} disabled={busy}>Reject refund</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.k === 'approve'}

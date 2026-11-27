@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { Modal, ModalFooter } from './Modal';
 import { Input } from '@mechware/ui/src/components/Input';
 import { Skeleton } from '@mechware/ui/src/components/Skeleton';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
@@ -193,14 +193,7 @@ function Detail({ detail, me, onChanged }: { detail: CreditPaymentDetail; me: { 
         <Lines lines={detail.lines} />
       </div>
 
-      <Dialog open={flow?.k === 'verify'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Verify this payment?</DialogTitle>
-            <DialogDescription>
-              You confirm that BDT {formatBdt(p.amountMinor)} from {detail.companyName} is in the bank. It then counts against their credit, oldest invoices first. You will be asked for your authenticator code next.
-            </DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'verify'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Verify this payment?</>} description={<>You confirm that BDT {formatBdt(p.amountMinor)} from {detail.companyName} is in the bank. It then counts against their credit, oldest invoices first. You will be asked for your authenticator code next.</>}>
           <Input
             label="Day the money cleared"
             type="date"
@@ -209,12 +202,11 @@ function Detail({ detail, me, onChanged }: { detail: CreditPaymentDetail; me: { 
             onChange={(e) => { setProblem(null); if (flow?.k === 'verify') setFlow({ k: 'verify', clearedOn: e.target.value }); }}
             error={problem ?? undefined}
           />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close}>Cancel</Button>
             <Button type="button" data-testid="verify-continue" onClick={() => flow?.k === 'verify' && toVerifyCode(flow.clearedOn)}>Continue to the authenticator code</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.k === 'verify-code'}
@@ -227,33 +219,21 @@ function Detail({ detail, me, onChanged }: { detail: CreditPaymentDetail; me: { 
         onSubmit={async (code) => { if (flow?.k === 'verify-code') await doVerify(flow.clearedOn, code); }}
       />
 
-      <Dialog open={flow?.k === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject this payment?</DialogTitle>
-            <DialogDescription>Use this for a mistaken entry. Nothing was released, so no authenticator code is needed. The reference becomes free to record again.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'reject'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Reject this payment?</>} description={<>Use this for a mistaken entry. Nothing was released, so no authenticator code is needed. The reference becomes free to record again.</>}>
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problem ?? undefined} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={doReject} isLoading={busy} disabled={busy}>Reject payment</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
-      <Dialog open={flow?.k === 'bounce'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Bounce this payment?</DialogTitle>
-            <DialogDescription>The bank returned the money. The debt goes back on the orders this payment paid, and the company may go over its limit or on hold. You will be asked for your authenticator code next.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'bounce'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Bounce this payment?</>} description={<>The bank returned the money. The debt goes back on the orders this payment paid, and the company may go over its limit or on hold. You will be asked for your authenticator code next.</>}>
           <Textarea label="Why did it bounce? (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problem ?? undefined} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close}>Cancel</Button>
             <Button type="button" variant="destructive" data-testid="bounce-continue" onClick={toBounceCode}>Continue to the authenticator code</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.k === 'bounce-code'}

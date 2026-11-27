@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Input, Skeleton } from '@mechware/ui';
+import { Button, Input, Skeleton } from '@mechware/ui';
+import { Modal, ModalFooter } from './Modal';
 import {
   FLOOR_CHANGE_NOTE, FLOOR_PERMISSIONS, exactSkuMatch, SCOPE_LABEL, buildUpsertBody, effectiveSummary, findExistingRow, floorTarget, formatMarkup, groupFloors, isFloorStepUpFailure,
   markupToInput, scopeNeeds, updatedByText, type EffectiveFloor, type FloorScope, type MarginFloorRow, type UpsertFloorBody
@@ -247,12 +248,7 @@ function Floors({ canManage }: { canManage: boolean }) {
 
       <EffectivePanel />
 
-      <Dialog open={flow?.k === 'form'} onOpenChange={closeIdle}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{form.mode === 'add' ? 'Add a margin floor' : `Change the floor for ${form.row ? floorTarget(form.row) : ''}`}</DialogTitle>
-            <DialogDescription>The minimum markup on cost below which a price needs a reason and an administrator&apos;s approval. Markups only; costs are never shown here.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'form'} onOpenChange={closeIdle} contentClassName="max-h-[90vh] overflow-y-auto" title={<>{form.mode === 'add' ? 'Add a margin floor' : `Change the floor for ${form.row ? floorTarget(form.row) : ''}`}</>} description={<>The minimum markup on cost below which a price needs a reason and an administrator&apos;s approval. Markups only; costs are never shown here.</>}>
           <form onSubmit={review} noValidate className="space-y-3" aria-label="Floor form">
             {formErrors.server && <div role="alert" data-testid="floor-form-error" className="rounded-md border border-fault bg-bg-subtle p-3 text-sm font-medium text-fault">{formErrors.server}</div>}
             {form.mode === 'add' && (
@@ -281,27 +277,20 @@ function Floors({ canManage }: { canManage: boolean }) {
               error={formErrors.markup}
               data-testid="floor-markup-input"
             />
-            <DialogFooter>
+            <ModalFooter>
               <Button type="button" variant="outline" onClick={() => setFlow(null)} disabled={busy}>Cancel</Button>
               <Button type="submit" disabled={busy} data-testid="floor-review">Review</Button>
-            </DialogFooter>
+            </ModalFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+      </Modal>
 
-      <Dialog open={flow?.k === 'confirm'} onOpenChange={(next) => { if (!next && !busy) setFlow({ k: 'form' }); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm the floor change</DialogTitle>
-            <DialogDescription data-testid="floor-confirm-statement">{flow?.k === 'confirm' ? flow.summary : ''}</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'confirm'} onOpenChange={(next) => { if (!next && !busy) setFlow({ k: 'form' }); }} title={<>Confirm the floor change</>} description={<>{flow?.k === 'confirm' ? flow.summary : ''}</>} descriptionTestId="floor-confirm-statement">
           <p className="text-sm" data-testid="floor-change-note">{FLOOR_CHANGE_NOTE}</p>
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setFlow({ k: 'form' })} disabled={busy}>Back</Button>
             <Button type="button" onClick={() => { if (flow?.k === 'confirm') { setCodeError(null); setFlow({ k: 'code', body: flow.body, summary: flow.summary }); } }} disabled={busy} data-testid="floor-confirm">Continue to the code</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.k === 'code'}
@@ -314,21 +303,13 @@ function Floors({ canManage }: { canManage: boolean }) {
         onCancel={() => { if (!busy) setFlow({ k: 'form' }); }}
       />
 
-      <Dialog open={flow?.k === 'del-confirm'} onOpenChange={closeIdle}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this floor?</DialogTitle>
-            <DialogDescription data-testid="floor-delete-statement">
-              {flow?.k === 'del-confirm' ? `Delete the ${formatMarkup(flow.row.minMarkupPercent)} % floor for "${floorTarget(flow.row)}". Products there follow the next more general row.` : ''}
-            </DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'del-confirm'} onOpenChange={closeIdle} title={<>Delete this floor?</>} description={<>{flow?.k === 'del-confirm' ? `Delete the ${formatMarkup(flow.row.minMarkupPercent)} % floor for "${floorTarget(flow.row)}". Products there follow the next more general row.` : ''}</>} descriptionTestId="floor-delete-statement">
           <p className="text-sm">{FLOOR_CHANGE_NOTE}</p>
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setFlow(null)} disabled={busy}>Cancel</Button>
             <Button type="button" onClick={() => { if (flow?.k === 'del-confirm') { setCodeError(null); setFlow({ k: 'del-code', row: flow.row }); } }} disabled={busy} data-testid="floor-delete-continue">Continue to the code</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
 
       <StepUpDialog
         open={flow?.k === 'del-code'}

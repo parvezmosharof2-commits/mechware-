@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import {
-  Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-  EmptyState, ErrorState, Input, Skeleton
+  Badge, Button, EmptyState, ErrorState, Input, Skeleton
 } from '@mechware/ui';
+import { Modal, ModalFooter } from './Modal';
 import type { StaffAwaitingTwoFactor, TwoFactorSetupCode } from '@mechware/api-client';
 import { problemCode, problemMessage, problemStatus, staffApi } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -63,15 +63,12 @@ function IssueDialog({ staff, onClose, onDone }: { staff: StaffAwaitingTwoFactor
   };
 
   return (
-    <Dialog open={staff !== null} onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Setup code for {staff?.fullName}</DialogTitle>
-          <DialogDescription>
+    <Modal open={staff !== null} onOpenChange={(next) => !next && onClose()} title={<>Setup code for {staff?.fullName}</>}
+      description={<>
+
             {staff?.email}. They sign in with their password and this code, then add MECHWARE to their authenticator app.
             {staff?.hasActiveSetupCode && ' A code is already out: a new one cancels it.'}
-          </DialogDescription>
-        </DialogHeader>
+          </>}>
         {issued ? (
           <div className="space-y-3">
             <div role="status" className="rounded-md border border-surface-border bg-bg-subtle p-4 text-center">
@@ -82,9 +79,9 @@ function IssueDialog({ staff, onClose, onDone }: { staff: StaffAwaitingTwoFactor
             <p className="text-xs text-text-muted">
               This is the only time the code is shown. Hand it over in person or by phone, never by e-mail or chat.
             </p>
-            <DialogFooter>
+            <ModalFooter>
               <Button type="button" onClick={onClose}>Done</Button>
-            </DialogFooter>
+            </ModalFooter>
           </div>
         ) : (
           <form onSubmit={issue} noValidate className="space-y-3">
@@ -98,14 +95,13 @@ function IssueDialog({ staff, onClose, onDone }: { staff: StaffAwaitingTwoFactor
               inputMode="numeric"
               autoComplete="one-time-code"
             />
-            <DialogFooter>
+            <ModalFooter>
               <Button type="button" variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
               <Button type="submit" isLoading={busy}>Issue code</Button>
-            </DialogFooter>
+            </ModalFooter>
           </form>
         )}
-      </DialogContent>
-    </Dialog>
+    </Modal>
   );
 }
 

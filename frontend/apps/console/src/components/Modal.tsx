@@ -10,6 +10,7 @@ export interface ModalProps {
   description: React.ReactNode;
   descriptionTestId?: string;
   contentTestId?: string;
+  contentClassName?: string;
   children?: React.ReactNode;
 }
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Badge } from '@mechware/ui/src/components/Badge';
 import { Button } from '@mechware/ui/src/components/Button';
 import { Checkbox } from '@mechware/ui/src/components/Checkbox';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { Modal, ModalFooter } from './Modal';
 import { Textarea } from '@mechware/ui/src/components/Textarea';
 import {
   STAFF_ROLES, STAFF_ROLE_LABEL, USER_STATUS_LABEL, approveChangeHint, canManageUsers, userWhen, disableHint, lastSignInText, roleChangeProblems, roleDiffText, twoFactorText, userRolesText
@@ -106,12 +106,7 @@ function Detail({ id, meId }: { id: string; meId: string }) {
       <StepUpDialog open={flow?.k === 'enable'} title="Enable this account" description={`${user?.email ?? 'The account'} can sign in again. Old sessions stay ended.`} confirmLabel="Enable" busy={busy} error={codeError} onCancel={close}
         onSubmit={(code) => run(() => staffUsersApi.enable(id, code), 'Enabled. The person can sign in again.')} />
 
-      <Dialog open={flow?.k === 'roles-form'} onOpenChange={(next) => { if (!next && !busy) close(); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change roles</DialogTitle>
-            <DialogDescription>Pick the full set of staff roles this person should have. Nothing changes yet: a different administrator must approve the request.</DialogDescription>
-          </DialogHeader>
+      <Modal open={flow?.k === 'roles-form'} onOpenChange={(next) => { if (!next && !busy) close(); }} title={<>Change roles</>} description={<>Pick the full set of staff roles this person should have. Nothing changes yet: a different administrator must approve the request.</>}>
           <fieldset className="space-y-2">
             <legend className="text-xs font-semibold text-text-muted">Staff roles</legend>
             {STAFF_ROLES.map((r) => (
@@ -120,12 +115,11 @@ function Detail({ id, meId }: { id: string; meId: string }) {
             {problems.roles && <p role="alert" className="text-xs font-medium text-fault">{problems.roles}</p>}
           </fieldset>
           <Textarea label="Reason (5 to 500 characters)" value={reason} onChange={(e) => setReason(e.target.value)} error={problems.reason} maxLength={500} rows={3} />
-          <DialogFooter>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={close}>Cancel</Button>
             <Button type="button" onClick={continueRoles}>Continue</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
       <StepUpDialog open={flow?.k === 'roles-code'} title="Ask for this role change" description={user ? `${user.email} ${roleDiffText(user.roles, chosen)}.` : ''} confirmLabel="Send the request" busy={busy} error={codeError} onCancel={() => begin({ k: 'roles-form' })}
         onSubmit={(code) => run(() => staffUsersApi.requestRoles(id, chosen, reason.trim(), code), 'Request sent. It waits for a different administrator to approve it.')} />
     </div>

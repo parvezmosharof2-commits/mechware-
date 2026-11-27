@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { Button } from '@mechware/ui/src/components/Button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui/src/components/Dialog';
+import { Modal, ModalFooter } from './Modal';
 import { dhakaWhen, flagWords, sendOutcome, sendOutcomeTitle, type QuoteSendResult } from '@mechware/api-client';
 
 /** What a send did, in words: sent (with the validity dates on the Dhaka clock) or waiting for approval (with the flags). Takes the focus when it appears. */
@@ -44,17 +44,11 @@ export function SendConfirmDialog({ open, title, description, confirmLabel, busy
   open: boolean; title: string; description: string; confirmLabel: string; busy: boolean; onCancel: () => void; onConfirm: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(next) => { if (!next && !busy) onCancel(); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
+    <Modal open={open} onOpenChange={(next) => { if (!next && !busy) onCancel(); }} title={<>{title}</>} description={<>{description}</>}>
+        <ModalFooter>
           <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Not yet</Button>
           <Button type="button" onClick={onConfirm} isLoading={busy} disabled={busy} data-testid="send-confirm">{confirmLabel}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </ModalFooter>
+    </Modal>
   );
 }

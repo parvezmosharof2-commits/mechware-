@@ -1,7 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mechware/ui';
+import { Badge, Button } from '@mechware/ui';
+import { Modal, ModalFooter } from './Modal';
 import {
   checkImportFile, errorsToCsv,
   type ImportCommitResult, type ImportFileProblem, type ImportReport
@@ -251,21 +252,17 @@ function CatalogImport() {
         </section>
       )}
 
-      <Dialog open={confirmOpen} onOpenChange={(next) => { if (!next && busy !== 'commit') setConfirmOpen(false); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Import {report?.rows.toLocaleString('en')} rows?</DialogTitle>
-            <DialogDescription>
+      <Modal open={confirmOpen} onOpenChange={(next) => { if (!next && busy !== 'commit') setConfirmOpen(false); }} title={<>Import {report?.rows.toLocaleString('en')} rows?</>}
+        description={<>
+
               {report && `${report.newProducts} new and ${report.existingProducts} existing products, ${report.newVariants} new and ${report.existingVariants} existing variants`}
               {' '}for seller {sellerName}. All of it is written, or none of it.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+            </>}>
+          <ModalFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)} disabled={busy === 'commit'}>Cancel</Button>
             <Button type="button" onClick={commit} isLoading={busy === 'commit'}>Confirm import</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </ModalFooter>
+      </Modal>
     </div>
   );
 }
