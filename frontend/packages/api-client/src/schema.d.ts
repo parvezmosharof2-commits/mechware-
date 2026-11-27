@@ -5293,6 +5293,243 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/invoices/{invoiceId}/withholdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    invoiceId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RecordWithholdingRequest"];
+                    "text/json": components["schemas"]["RecordWithholdingRequest"];
+                    "application/*+json": components["schemas"]["RecordWithholdingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/withholdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** `status` recorded (default), verified or rejected; `kind` vds or ait; oldest first; `pageSize` at most 50. */
+        get: {
+            parameters: {
+                query?: {
+                    status?: string;
+                    kind?: string;
+                    invoiceId?: string;
+                    page?: number;
+                    pageSize?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/withholdings/{withholdingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    withholdingId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/withholdings/{withholdingId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    withholdingId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/withholdings/{withholdingId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Four eyes too, no code: nothing moves; the certificate number is free again for a corrected entry. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    withholdingId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["RejectWithholdingRequest"];
+                    "text/json": components["schemas"]["RejectWithholdingRequest"];
+                    "application/*+json": components["schemas"]["RejectWithholdingRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/companies/{companyId}/withholding-entity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** The company deducts VAT/tax at source: only a hint on the invoice PDF and payment text, never an amount (Admin, step-up, audited). */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    companyId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["SetWithholdingEntityRequest"];
+                    "text/json": components["schemas"]["SetWithholdingEntityRequest"];
+                    "application/*+json": components["schemas"]["SetWithholdingEntityRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies/{companyId}/approvals/rules": {
         parameters: {
             query?: never;
@@ -9324,6 +9561,14 @@ export interface components {
             note?: string | null;
             currency?: string | null;
         };
+        RecordWithholdingRequest: {
+            kind?: string | null;
+            certificateNumber?: string | null;
+            /** Format: date */
+            certificateDate?: string | null;
+            /** Format: int64 */
+            amountMinor?: number;
+        };
         RegisterCompanyRequest: {
             legalName?: string | null;
             tradeLicenceNo?: string | null;
@@ -9365,6 +9610,9 @@ export interface components {
         RejectReturnRequest: {
             /** Format: int32 */
             rowVersion?: number | null;
+            reason?: string | null;
+        };
+        RejectWithholdingRequest: {
             reason?: string | null;
         };
         RequestCreditAdjustmentRequest: {
@@ -9464,6 +9712,9 @@ export interface components {
             successorIsDropIn?: boolean | null;
             successorNote?: string | null;
             clearSuccessor?: boolean | null;
+        };
+        SetWithholdingEntityRequest: {
+            withholdingEntity?: boolean | null;
         };
         ShipOrderRequest: {
             /** Format: int32 */

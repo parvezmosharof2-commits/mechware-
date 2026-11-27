@@ -73,6 +73,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceIssuer, Invoicing.InvoiceIssuer>();
         // E6.5b: credit-note requests and their four-eyes approval (the 6.7 + its money in one transaction).
         services.TryAddScoped<Mechware.Application.Invoicing.ICreditNoteService, Invoicing.CreditNoteService>();
+        services.TryAddScoped<Mechware.Application.Invoicing.ITaxWithholdingService, Invoicing.TaxWithholdingService>();
         // E6.3d: the nightly invoice check (alert + audit, never repairs); hosted by AddCatalogWorkers.
         services.TryAddScoped<Mechware.Application.Invoicing.IInvoiceReconciliationService, Invoicing.InvoiceReconciliationService>();
         // E6.8a: buyer and staff invoice reads (one class, two interfaces).

@@ -1116,6 +1116,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<bool>("WithholdingEntity")
+                        .HasColumnType("boolean")
+                        .HasColumnName("withholding_entity");
+
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()

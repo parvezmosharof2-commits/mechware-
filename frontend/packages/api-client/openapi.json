@@ -5133,6 +5133,242 @@
         }
       }
     },
+    "/api/v1/admin/invoices/{invoiceId}/withholdings": {
+      "post": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "parameters": [
+          {
+            "name": "invoiceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordWithholdingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordWithholdingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordWithholdingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/withholdings": {
+      "get": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "summary": "`status` recorded (default), verified or rejected; `kind` vds or ait; oldest first; `pageSize` at most 50.",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "invoiceId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 25
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/withholdings/{withholdingId}": {
+      "get": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "parameters": [
+          {
+            "name": "withholdingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/withholdings/{withholdingId}/verify": {
+      "post": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "parameters": [
+          {
+            "name": "withholdingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/withholdings/{withholdingId}/reject": {
+      "post": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "summary": "Four eyes too, no code: nothing moves; the certificate number is free again for a corrected entry.",
+        "parameters": [
+          {
+            "name": "withholdingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectWithholdingRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectWithholdingRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectWithholdingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/companies/{companyId}/withholding-entity": {
+      "put": {
+        "tags": [
+          "AdminWithholdings"
+        ],
+        "summary": "The company deducts VAT/tax at source: only a hint on the invoice PDF and payment text, never an amount (Admin, step-up, audited).",
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWithholdingEntityRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWithholdingEntityRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetWithholdingEntityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/companies/{companyId}/approvals/rules": {
       "get": {
         "tags": [
@@ -9602,6 +9838,29 @@
         },
         "additionalProperties": false
       },
+      "RecordWithholdingRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "nullable": true
+          },
+          "certificateNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "certificateDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "amountMinor": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "RegisterCompanyRequest": {
         "type": "object",
         "properties": {
@@ -9738,6 +9997,16 @@
             "format": "int32",
             "nullable": true
           },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "RejectWithholdingRequest": {
+        "type": "object",
+        "properties": {
           "reason": {
             "type": "string",
             "nullable": true
@@ -10034,6 +10303,16 @@
             "nullable": true
           },
           "clearSuccessor": {
+            "type": "boolean",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetWithholdingEntityRequest": {
+        "type": "object",
+        "properties": {
+          "withholdingEntity": {
             "type": "boolean",
             "nullable": true
           }
@@ -10928,6 +11207,9 @@
     },
     {
       "name": "AdminVariants"
+    },
+    {
+      "name": "AdminWithholdings"
     },
     {
       "name": "Approvals"

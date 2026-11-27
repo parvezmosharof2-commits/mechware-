@@ -40,6 +40,9 @@ public sealed class Company : AggregateRoot<Guid>
     /// <summary>Why MECHWARE refused the registration; shown to the registrant.</summary>
     public string? RejectionReason { get; private set; }
 
+    /// <summary>ADR-0012 §11 (E6.6b): the company deducts VAT or tax at source. Only a hint (invoice PDF, payment text); it never changes an amount.</summary>
+    public bool WithholdingEntity { get; private set; }
+
     public Money CreditLimit => Money.FromMinorUnits(CreditLimitMinor, Currency);
     public Money CreditUsed => Money.FromMinorUnits(CreditUsedMinor, Currency);
     public Money CreditAvailable => CreditLimit - CreditUsed;
@@ -105,6 +108,15 @@ public sealed class Company : AggregateRoot<Guid>
         if (Status == CompanyStatus.Suspended) return;
         Status = CompanyStatus.Suspended;
         Touch();
+    }
+
+    /// <summary>Sets the withholding hint; false when it already had that value (nothing to audit).</summary>
+    public bool MarkWithholdingEntity(bool value)
+    {
+        if (WithholdingEntity == value) return false;
+        WithholdingEntity = value;
+        Touch();
+        return true;
     }
 
     public void AssignAccountManager(Guid? staffUserId)
