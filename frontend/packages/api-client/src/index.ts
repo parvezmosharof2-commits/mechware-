@@ -510,6 +510,8 @@ export * from "./quote-terms-model";
 export * from "./quote-terms";
 export * from "./returns-model";
 export * from "./returns";
+export * from "./notifications-model";
+export * from "./notifications";
 export * from "./invoices-model";
 export * from "./invoices";
 export * from "./invoices-staff-model";

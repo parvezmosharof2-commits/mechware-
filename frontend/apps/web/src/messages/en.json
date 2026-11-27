@@ -1552,5 +1552,45 @@
     "vat": "VAT {amount}",
     "net": "Subtotal",
     "vatTotal": "VAT"
+  },
+  "Notifications": {
+    "metaTitle": "Notifications",
+    "pageTitle": "Notifications",
+    "panelLabel": "Notifications",
+    "heading": "Notifications",
+    "bell": {
+      "label": "Notifications, {count, plural, =0 {none unread} one {1 unread} other {# unread}}"
+    },
+    "unreadMark": "Unread:",
+    "markAll": "Mark all read",
+    "viewAll": "All notifications",
+    "loading": "Loading…",
+    "loadError": "Notifications could not be loaded.",
+    "retry": "Try again",
+    "empty": "No notifications yet.",
+    "emptyUnread": "Nothing unread.",
+    "emptyBody": "Order, invoice, return and quote updates appear here.",
+    "filterLabel": "Filter",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "listLabel": "Notifications",
+    "pagesLabel": "Notification pages",
+    "prev": "Previous",
+    "next": "Next",
+    "pageOf": "Page {page} of {total}",
+    "title": {
+      "heading": "Notifications",
+      "generic": "You have a new update on your account.",
+      "order_shipped": "Order {orderNumber} has shipped with {courierName}, tracking {trackingNumber}.",
+      "order_delivered": "Order {orderNumber} was delivered.",
+      "invoice_issued": "Invoice {invoiceNumber} was issued for order {orderNumber}.",
+      "return_approved": "Your return for order {orderNumber} was approved.",
+      "return_rejected": "Your return for order {orderNumber} was rejected.",
+      "return_received": "We received your return for order {orderNumber}.",
+      "return_money_back": "{settlement, select, CreditNote {A credit note was issued} Refund {A refund was issued} CreditReduced {Your credit balance was reduced} other {Your money back was processed}} for the return on order {orderNumber}.",
+      "quote_sent": "Quote {quoteNumber} (version {versionNo}) is ready: {total}.",
+      "quote_expiring": "Quote {quoteNumber} (version {versionNo}) expires on {validUntil}.",
+      "quote_withdrawn": "Quote {quoteNumber} (version {versionNo}) was withdrawn."
+    }
   }
 }

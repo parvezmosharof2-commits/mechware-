@@ -1552,5 +1552,45 @@
     "vat": "ভ্যাট {amount}",
     "net": "উপমোট",
     "vatTotal": "ভ্যাট"
+  },
+  "Notifications": {
+    "metaTitle": "বিজ্ঞপ্তি",
+    "pageTitle": "বিজ্ঞপ্তি",
+    "panelLabel": "বিজ্ঞপ্তি",
+    "heading": "বিজ্ঞপ্তি",
+    "bell": {
+      "label": "বিজ্ঞপ্তি, {count, plural, =0 {অপঠিত নেই} other {# টি অপঠিত}}"
+    },
+    "unreadMark": "অপঠিত:",
+    "markAll": "সব পঠিত করুন",
+    "viewAll": "সব বিজ্ঞপ্তি",
+    "loading": "লোড হচ্ছে…",
+    "loadError": "বিজ্ঞপ্তি লোড করা যায়নি।",
+    "retry": "আবার চেষ্টা করুন",
+    "empty": "এখনও কোনো বিজ্ঞপ্তি নেই।",
+    "emptyUnread": "কিছুই অপঠিত নেই।",
+    "emptyBody": "অর্ডার, ইনভয়েস, রিটার্ন ও কোটেশনের আপডেট এখানে দেখা যাবে।",
+    "filterLabel": "ফিল্টার",
+    "filterAll": "সব",
+    "filterUnread": "অপঠিত",
+    "listLabel": "বিজ্ঞপ্তি",
+    "pagesLabel": "বিজ্ঞপ্তির পাতা",
+    "prev": "আগে",
+    "next": "পরে",
+    "pageOf": "পাতা {page} / {total}",
+    "title": {
+      "heading": "বিজ্ঞপ্তি",
+      "generic": "আপনার অ্যাকাউন্টে একটি নতুন আপডেট আছে।",
+      "order_shipped": "অর্ডার {orderNumber} {courierName}-এর মাধ্যমে পাঠানো হয়েছে, ট্র্যাকিং {trackingNumber}।",
+      "order_delivered": "অর্ডার {orderNumber} পৌঁছে দেওয়া হয়েছে।",
+      "invoice_issued": "অর্ডার {orderNumber}-এর জন্য ইনভয়েস {invoiceNumber} ইস্যু হয়েছে।",
+      "return_approved": "অর্ডার {orderNumber}-এর রিটার্ন অনুমোদিত হয়েছে।",
+      "return_rejected": "অর্ডার {orderNumber}-এর রিটার্ন প্রত্যাখ্যাত হয়েছে।",
+      "return_received": "অর্ডার {orderNumber}-এর রিটার্ন আমরা পেয়েছি।",
+      "return_money_back": "অর্ডার {orderNumber}-এর রিটার্নের জন্য {settlement, select, CreditNote {ক্রেডিট নোট ইস্যু হয়েছে} Refund {রিফান্ড দেওয়া হয়েছে} CreditReduced {আপনার ক্রেডিট ব্যালেন্স কমানো হয়েছে} other {টাকা ফেরতের কাজ সম্পন্ন হয়েছে}}।",
+      "quote_sent": "কোটেশন {quoteNumber} (সংস্করণ {versionNo}) প্রস্তুত: {total}।",
+      "quote_expiring": "কোটেশন {quoteNumber} (সংস্করণ {versionNo}) {validUntil} তারিখে শেষ হবে।",
+      "quote_withdrawn": "কোটেশন {quoteNumber} (সংস্করণ {versionNo}) প্রত্যাহার করা হয়েছে।"
+    }
   }
 }
