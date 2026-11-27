@@ -11,6 +11,7 @@ namespace Mechware.Infrastructure.Persistence;
 /// <item><c>credit_note_requests</c>: a new request is Requested and names a tax invoice of its order; afterwards only one move out of
 /// Requested (status, decision and the issued 6.7, which must be a credit note of that original, requested by the requester and issued
 /// by the approver); DELETE and TRUNCATE refused.</item>
+/// <item>E6.5c: at COMMIT a replacement 6.3 follows its fully credited predecessor (ADR-0012 §9.4).</item>
 /// </list>
 /// SQLSTATE 23000, messages start with the table. Idempotent: migration <c>AddCreditNoteRequests</c> runs it, tests that use EnsureCreated
 /// run it after <see cref="InvoiceSql"/>.
@@ -78,6 +79,32 @@ public static class CreditNoteSql
         END
         $fn$;
 
+        -- E6.5c (§9.4): a replacement 6.3 names the previous tax invoice of its shipment and seller (replacement_no - 1, same mode, order and
+        -- total: the lines are copied) and that one is fully credited (its credit notes sum to its total) by COMMIT.
+        CREATE OR REPLACE FUNCTION invoice_replacement_check() RETURNS trigger
+        LANGUAGE plpgsql AS $fn$
+        DECLARE
+            prev invoices%ROWTYPE; credited bigint;
+        BEGIN
+            SELECT * INTO prev FROM invoices i WHERE i.id = NEW.replaces_invoice_id;
+            IF NOT FOUND OR prev.kind <> 'TaxInvoice' OR prev.mode <> NEW.mode OR prev.shipment_id IS DISTINCT FROM NEW.shipment_id
+               OR prev.seller_id <> NEW.seller_id OR prev.order_id <> NEW.order_id OR prev.replacement_no <> NEW.replacement_no - 1
+               OR prev.total_minor <> NEW.total_minor THEN
+                RAISE EXCEPTION 'invoices: replacement % names the previous tax invoice of its shipment and seller, with the same total', NEW.number
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            SELECT COALESCE(sum(c.total_minor), 0) INTO credited FROM invoices c WHERE c.original_invoice_id = prev.id AND c.kind = 'CreditNote';
+            IF credited <> prev.total_minor THEN
+                RAISE EXCEPTION 'invoices: % replaces % before it is fully credited (% of %)', NEW.number, prev.number, credited, prev.total_minor
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            RETURN NULL;
+        END
+        $fn$;
+
+        DROP TRIGGER IF EXISTS trg_invoice_replacement_check ON invoices;
+        CREATE CONSTRAINT TRIGGER trg_invoice_replacement_check AFTER INSERT ON invoices DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW WHEN (NEW.kind = 'TaxInvoice' AND NEW.replacement_no > 0) EXECUTE FUNCTION invoice_replacement_check();
         DROP TRIGGER IF EXISTS trg_invoice_credit_caps_check ON invoice_lines;
         CREATE CONSTRAINT TRIGGER trg_invoice_credit_caps_check AFTER INSERT ON invoice_lines
             DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION invoice_credit_caps_check();
@@ -89,7 +116,15 @@ public static class CreditNoteSql
             FOR EACH STATEMENT EXECUTE FUNCTION credit_note_requests_guard();
         """;
 
+    /// <summary>E6.5c only (migration <c>AddReplacementAndReturnRetry</c> Down): the replacement check, nothing of E6.5a.</summary>
+    public const string UninstallReplacement = """
+        DROP TRIGGER IF EXISTS trg_invoice_replacement_check ON invoices;
+        DROP FUNCTION IF EXISTS invoice_replacement_check();
+        """;
+
     public const string Uninstall = """
+        DROP TRIGGER IF EXISTS trg_invoice_replacement_check ON invoices;
+        DROP FUNCTION IF EXISTS invoice_replacement_check();
         DROP TRIGGER IF EXISTS trg_credit_note_requests_no_truncate ON credit_note_requests;
         DROP TRIGGER IF EXISTS trg_credit_note_requests_guard ON credit_note_requests;
         DROP TRIGGER IF EXISTS trg_invoice_credit_caps_check ON invoice_lines;

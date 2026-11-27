@@ -85,21 +85,34 @@ public static class InvoiceSnapshotBuilder
     public static long DisplayUnitPriceMinor(long netMinor, int quantity) =>
         quantity < 1 ? throw new ArgumentOutOfRangeException(nameof(quantity)) : (long)decimal.Round((decimal)netMinor / quantity, 0, MidpointRounding.ToEven);
 
-    private static InvoiceBuyerSnapshot Buyer(InvoiceIssue issue, InvoiceAddress? shipTo)
+    private static InvoiceBuyerSnapshot Buyer(InvoiceIssue issue, InvoiceAddress? shipTo) =>
+        BuyerOf(issue.Order, issue.Company, issue.BillingSite, issue.BuyerDisplayName, shipTo);
+
+    /// <summary>
+    /// The buyer as printed, read now: the company's legal name, BIN and billing site, or the person's name and the ship-to address. E6.5c
+    /// (ADR-0012 §9.4) reads it again for a replacement 6.3 after the company record was fixed; in Live mode it refuses a company without a valid BIN.
+    /// </summary>
+    public static InvoiceBuyerSnapshot ReplacementBuyer(Order order, Company? company, CompanySite? billingSite, string? buyerDisplayName, InvoicingMode mode)
     {
-        var order = issue.Order;
+        ArgumentNullException.ThrowIfNull(order);
+        if (mode == InvoicingMode.Live && order.CompanyId is not null && company is not null && (!company.IsActive || !TaxIdFormat.IsBin(Blank(company.Bin))))
+            throw new ConflictException(BuyerBinInvalid, "The buyer company must be active with a valid BIN before its replacement invoice is issued.");
+        return BuyerOf(order, company, billingSite, buyerDisplayName, ShipTo(order.ShipToJson));
+    }
+
+    private static InvoiceBuyerSnapshot BuyerOf(Order order, Company? company, CompanySite? billingSite, string? buyerDisplayName, InvoiceAddress? shipTo)
+    {
         if (order.CompanyId is null)
         {
-            if (issue.Company is not null || issue.BillingSite is not null) throw new InvalidOperationException("A personal order has no company.");
-            var name = Blank(issue.BuyerDisplayName) ?? throw new InvalidOperationException("A personal order needs the buyer's name.");
+            if (company is not null || billingSite is not null) throw new InvalidOperationException("A personal order has no company.");
+            var name = Blank(buyerDisplayName) ?? throw new InvalidOperationException("A personal order needs the buyer's name.");
             return new InvoiceBuyerSnapshot(name, null, Blank(shipTo?.OneLine()));
         }
 
-        var company = issue.Company;
-        if (company is null || company.Id != order.CompanyId || (issue.BillingSite is { } s && s.CompanyId != company.Id))
+        if (company is null || company.Id != order.CompanyId || (billingSite is { } s && s.CompanyId != company.Id))
             throw new InvalidOperationException("The company is not the order's.");
         var bin = Blank(company.Bin) is { } raw ? TaxIdFormat.NormalizeBin(raw) ?? raw : null;   // Live: active + valid BIN checked by EnsureLiveIssuable; Specimen prints what is there
-        var site = issue.BillingSite;
+        var site = billingSite;
         var address = site is null ? shipTo?.OneLine()
             : string.Join(", ", new[] { site.Line1, site.Line2, site.Upazila, site.District, site.Division, site.PostalCode }.Where(x => !string.IsNullOrWhiteSpace(x)));
         return new InvoiceBuyerSnapshot(company.LegalName, bin, Blank(address));

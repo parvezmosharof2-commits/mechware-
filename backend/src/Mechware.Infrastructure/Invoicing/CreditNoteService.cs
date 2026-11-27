@@ -9,8 +9,10 @@ using Mechware.Application.Credit;
 using Mechware.Application.Identity;
 using Mechware.Application.Invoicing;
 using Mechware.Domain.Common.Exceptions;
+using Mechware.Domain.Companies;
 using Mechware.Domain.Identity;
 using Mechware.Domain.Invoicing;
+using Mechware.Domain.Returns;
 using Mechware.Infrastructure.Persistence;
 using Mechware.Infrastructure.Persistence.Configurations;
 using Mechware.Infrastructure.Persistence.Outbox;
@@ -44,13 +46,20 @@ public sealed partial class CreditNoteService(
 
         var original = await db.Invoices.AsNoTracking().Include(i => i.Lines).SingleOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new KeyNotFoundException("Invoice not found.");
-        var asked = request.Lines?.Select((l, n) => new CreditLineRequest(
-            original.Lines.SingleOrDefault(o => o.LineNo == l.LineNo)?.Id ?? throw new ValidationException($"lines[{n}].lineNo", "This is not a line of the invoice."),
-            l.Quantity, l.NetMinor)).ToList();
         var reason = Enum.GetValues<CreditNoteReason>().Where(r => Wire(r) == request.Reason).DefaultIfEmpty((CreditNoteReason)(-1)).First();
-        var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct), asked, reason, request.ReasonText, now, options.CreditNoteMaxAgeDays);
+        var replace = request.Replace == true;
+        if (replace && reason != CreditNoteReason.Error)
+            throw new ValidationException("replace", "A replacement invoice follows a full credit note with reason error.");
+        var credited = await CreditedAsync(original.Id, ct);
+        var asked = replace && request.Lines is null or []
+            ? EverythingLeft(original, credited)   // E6.5c: no lines = credit all that is left
+            : request.Lines?.Select((l, n) => new CreditLineRequest(
+                original.Lines.SingleOrDefault(o => o.LineNo == l.LineNo)?.Id ?? throw new ValidationException($"lines[{n}].lineNo", "This is not a line of the invoice."),
+                l.Quantity, l.NetMinor)).ToList();
+        var plan = CreditNotePlanner.Plan(original, credited, asked, reason, request.ReasonText, now, options.CreditNoteMaxAgeDays);
+        if (replace) await EnsureFullyCreditedAsync(original, plan, ct);
 
-        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, idempotencyKey, hash, null, now);   // no number: only the approval takes one
+        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, idempotencyKey, hash, null, now, replace);   // no number: only the approval takes one
         db.CreditNoteRequests.Add(asking);
         db.AuditLogs.Add(Audit("invoice.credit_requested", asking.Id, new { original.Number, asking.OrderId, Reason = Wire(plan.Reason), asking.TotalMinor }, now));
         try
@@ -73,9 +82,14 @@ public sealed partial class CreditNoteService(
         if (db.Database.CurrentTransaction is null)
             throw new InvalidOperationException("RequestForReturnAsync runs inside the caller's transaction (the return's lock), never its own.");
         var source = $"return:{returnId:N}";
-        // The return is the key (ADR-0012 §10): asked again, the first request answers; the caller's return lock queues a parallel ask behind it.
-        if (await db.CreditNoteRequests.AsNoTracking().SingleOrDefaultAsync(r => r.SourceKey == source, ct) is { } first)
+        // The return is the key (ADR-0012 §10): asked again, the open or approved request answers; the caller's return lock queues a parallel
+        // ask behind it. F2.3c: a rejected or withdrawn one no longer counts (partial unique index), so the return may ask again.
+        if (await db.CreditNoteRequests.AsNoTracking()
+                .SingleOrDefaultAsync(r => r.SourceKey == source && (r.Status == CreditNoteRequestStatus.Requested || r.Status == CreditNoteRequestStatus.Approved), ct)
+            is { } first)
             return (await DtosAsync([first], ct))[0];
+        var earlier = await db.CreditNoteRequests.CountAsync(r => r.SourceKey == source, ct);
+        var key = earlier == 0 ? source : $"{source}:{earlier + 1}";   // (requested_by, idempotency_key) stays unique across the asks
 
         var original = await db.Invoices.AsNoTracking().Include(i => i.Lines).SingleOrDefaultAsync(i => i.Id == invoiceId, ct)
             ?? throw new KeyNotFoundException("Invoice not found.");
@@ -85,7 +99,7 @@ public sealed partial class CreditNoteService(
         var plan = CreditNotePlanner.Plan(original, await CreditedAsync(original.Id, ct), asked, CreditNoteReason.GoodsReturned,
             $"Goods returned and accepted at inspection (return {returnId:N})", now, options.CreditNoteMaxAgeDays);
         var hash = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { invoiceId, source, lines }, Json))));
-        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, source, hash, source, now);
+        var asking = CreditNoteRequest.Create(Guid.NewGuid(), original, plan, actor, key, hash, source, now);
         db.CreditNoteRequests.Add(asking);
         db.AuditLogs.Add(Audit("invoice.credit_requested", asking.Id,
             new { original.Number, asking.OrderId, Reason = Wire(plan.Reason), asking.TotalMinor, ReturnId = returnId }, now));
@@ -135,17 +149,22 @@ public sealed partial class CreditNoteService(
         if (!plan.Lines.Select(l => new CreditNoteRequestLine(l.OriginalLineId, l.Quantity, l.NetMinor, l.VatMinor)).SequenceEqual(request.Lines))
             throw new ConflictException(Changed, "Another credit note of this invoice was issued since this request; reject it and ask again.");
 
+        if (request.IssuesReplacement) await EnsureFullyCreditedAsync(original, plan, ct);   // again under the lock (§9.4)
+
         var id = Guid.NewGuid();
         // A credit order owes less (or its paid part goes on account) in THIS transaction; null = not on credit: the money is a refund due.
         var money = await ledger.ReduceChargeAsync(new CreditReduction(original.OrderId, CreditReductionKind.CreditNote, plan.TotalMinor,
             $"creditnote:{id:N}", id, actor, plan.ReasonText), ct);
         var refundDue = money is null ? plan.TotalMinor : 0;
+        // E6.5c: the buyer is read again and the replacement's key rows share-locked BEFORE any counter (counters are the LAST locks).
+        var buyer = request.IssuesReplacement ? await ReplacementBuyerAsync(original, ct) : null;
         var taken = await allocator.TakeAsync(original.SellerId,
             original.Mode == InvoicingMode.Live ? InvoiceSeries.CreditNote : InvoiceSeries.SpecimenCreditNote, ct);   // the LAST lock: only inserts follow
         var note = Invoice.CreditNote(id, original, plan, taken.Series, taken.FiscalYear, taken.Serial, taken.IssuedAtUtc, request.RequestedBy, actor,
             refundDue, options.ConsultantChecked);
         db.Invoices.Add(note);
         request.Approve(actor, id, now);
+        var replacement = buyer is null ? null : await ReplaceAsync(original, buyer, actor, ct);   // E6.5c: its counter after the 6.7's
         if (returned is not null)
         {
             returned.MarkCreditNoted(actor, now);   // F2.3b: the return moves with its 6.7, in THIS transaction (four eyes again in the domain)
@@ -175,9 +194,9 @@ public sealed partial class CreditNoteService(
             OccurredAtUtc = taken.IssuedAtUtc,
             Payload = JsonSerializer.Serialize(new { InvoiceId = id, OriginalInvoiceId = original.Id, note.OrderId, note.Number, RequestId = request.Id }, Json)
         });
-        await db.SaveChangesAsync(ct);   // the deferred caps, counter and line checks run at COMMIT
+        await db.SaveChangesAsync(ct);   // the deferred caps, counter, line and replacement checks run at COMMIT
         await tx.CommitAsync(ct);
-        return new((await DtosAsync([request], ct))[0], id, note.Number, note.TotalMinor, refundDue, released, onAccount);
+        return new((await DtosAsync([request], ct))[0], id, note.Number, note.TotalMinor, refundDue, released, onAccount, replacement?.Id, replacement?.Number);
     }
 
     public Task<CreditNoteRequestDto> RejectAsync(Guid requestId, RejectCreditNoteRequest request, CancellationToken ct = default) =>
@@ -193,9 +212,101 @@ public sealed partial class CreditNoteService(
             .ToListAsync(ct)).SingleOrDefault() ?? throw NotFound();
         decide(request);   // nothing is issued and nothing moves
         db.AuditLogs.Add(Audit(action, request.Id, new { request.OriginalInvoiceId, request.OrderId, request.TotalMinor, request.DecisionReason }, Now));
+        if (request.SourceKey is { } key && key.StartsWith("return:", StringComparison.Ordinal))
+        {
+            // F2.3c: the return goes back to Inspected without a settlement (lock order credit_note_requests -> return_requests, as the approval).
+            var returned = (await db.ReturnRequests.FromSqlInterpolated(
+                    $"SELECT r.*, r.xmin FROM return_requests r WHERE r.id = {Guid.ParseExact(key["return:".Length..], "N")} FOR NO KEY UPDATE")
+                .ToListAsync(ct)).Single();
+            returned.ReleaseMoneyBack(ReturnSettlement.CreditNote, Now);
+            db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), Actor, user.IpAddress, ReleasedAction, "return_requests", returned.Id.ToString(),
+                JsonSerializer.Serialize(new { Status = "Inspected", Settlement = nameof(ReturnSettlement.CreditNote), CreditNoteRequestId = request.Id }, Json),
+                JsonSerializer.Serialize(new { Status = "Inspected", Settlement = (string?)null, Via = action, request.DecisionReason, returned.OrderId }, Json),
+                user.CorrelationId, Now));
+        }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return (await DtosAsync([request], ct))[0];
+    }
+
+    /// <summary>F2.3c audit action: an inspected return's asked money did not go out, so it waits at Inspected to be asked again.</summary>
+    public const string ReleasedAction = "return.money_back_released";
+
+    public const string NeedsFullCredit = "INVOICE_REPLACEMENT_NEEDS_FULL_CREDIT";
+
+    /// <summary>E6.5c: every line with value left, its units and value left (the planner then takes exactly the VAT left).</summary>
+    private static List<CreditLineRequest> EverythingLeft(Invoice original, Dictionary<Guid, CreditedSoFar> credited) =>
+        [.. original.Lines.Select(l => (Line: l, Done: credited.GetValueOrDefault(l.Id) ?? new CreditedSoFar(0, 0, 0)))
+            .Where(x => x.Line.NetMinor - x.Done.NetMinor > 0)
+            .Select(x => new CreditLineRequest(x.Line.Id, x.Line.Quantity - x.Done.Quantity, x.Line.NetMinor - x.Done.NetMinor))];
+
+    /// <summary>E6.5c (ADR-0012 §9.4): a replacement needs the old 6.3 fully credited: its earlier credit notes plus this one sum to its total.</summary>
+    private async Task EnsureFullyCreditedAsync(Invoice original, CreditNotePlan plan, CancellationToken ct)
+    {
+        var before = await db.Invoices.AsNoTracking().Where(c => c.OriginalInvoiceId == original.Id && c.Kind == InvoiceKind.CreditNote)
+            .SumAsync(c => (long?)c.TotalMinor, ct) ?? 0;
+        if (before + plan.TotalMinor != original.TotalMinor)
+            throw new ConflictException(NeedsFullCredit, "A replacement invoice needs the old one fully credited; credit every line in full.");
+    }
+
+    /// <summary>
+    /// E6.5c, ADR-0012 §9.4: the replacement 6.3 of <paramref name="previous"/>, issued by the credit note's approver in its transaction: the buyer
+    /// read again (company + default delivery site, or the person's name; Live refuses an invalid BIN), the same lines, the next replacement
+    /// number, a new tax-invoice number (counter after the credit-note counter: both LAST), audit <c>invoice.replaced</c> and the PDF event.
+    /// </summary>
+    private async Task<InvoiceBuyerSnapshot> ReplacementBuyerAsync(Invoice previous, CancellationToken ct)
+    {
+        var order = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == previous.OrderId, ct);
+        Company? company = null;
+        CompanySite? site = null;
+        string? name = null;
+        if (order.CompanyId is { } companyId)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM companies WHERE id = {companyId} FOR KEY SHARE", ct);
+            company = await db.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == companyId, ct);
+            site = await db.CompanySites.AsNoTracking().Where(s => s.CompanyId == companyId && s.IsDefaultDelivery).OrderBy(s => s.Id).FirstOrDefaultAsync(ct);
+        }
+        else
+        {
+            var person = await db.Users.AsNoTracking().Where(u => u.Id == order.UserId).Select(u => new { u.FullName, u.Email }).FirstAsync(ct);
+            name = string.IsNullOrWhiteSpace(person.FullName) ? person.Email : person.FullName;
+        }
+        var buyer = InvoiceSnapshotBuilder.ReplacementBuyer(order, company, site, name, previous.Mode);   // 409 before any counter
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM shipments sh JOIN sub_orders so ON so.id = {previous.SubOrderId} WHERE sh.id = {previous.ShipmentId} FOR KEY SHARE", ct);
+        return buyer;
+    }
+
+    private async Task<Invoice> ReplaceAsync(Invoice previous, InvoiceBuyerSnapshot buyer, Guid actor, CancellationToken ct)
+    {
+        var taken = await allocator.TakeAsync(previous.SellerId,
+            previous.Mode == InvoicingMode.Live ? InvoiceSeries.TaxInvoice : InvoiceSeries.SpecimenTaxInvoice, ct);
+        var replacement = Invoice.Replacement(Guid.NewGuid(), previous, buyer, taken.Series, taken.FiscalYear, taken.Serial, taken.IssuedAtUtc, actor,
+            options.ConsultantChecked);
+        db.Invoices.Add(replacement);
+        db.Entry(replacement).Property("ReplacesInvoiceId").CurrentValue = previous.Id;
+        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), actor, user.IpAddress, "invoice.replaced", "invoices", replacement.Id.ToString(), null,
+            JsonSerializer.Serialize(new
+            {
+                replacement.Number,
+                ReplacesNumber = previous.Number,
+                ReplacesInvoiceId = previous.Id,
+                replacement.ReplacementNo,
+                replacement.OrderId,
+                replacement.TotalMinor,
+                replacement.ContentHash
+            }, Json), user.CorrelationId, taken.IssuedAtUtc));
+        var eventId = Guid.NewGuid();
+        db.OutboxMessages.Add(new OutboxMessage
+        {
+            Id = eventId,
+            EventType = InvoiceIssuer.IssuedEvent,
+            AggregateType = nameof(Invoice),
+            AggregateId = replacement.Id,
+            OccurredAtUtc = taken.IssuedAtUtc,
+            Payload = JsonSerializer.Serialize(new { EventId = eventId, InvoiceId = replacement.Id, replacement.OrderId, replacement.Number, Mode = replacement.Mode.ToString() }, Json)
+        });
+        return replacement;
     }
 
     /// <summary>Σ quantity, value and VAT of the issued credit lines per original line (committed rows; under the approval's locks nothing else adds any).</summary>
@@ -228,7 +339,7 @@ public sealed partial class CreditNoteService(
                 [.. r.Lines.Select(l => (Asked: l, Line: o.Lines.Single(x => x.Id == l.OriginalLineId))).Select(x => new CreditNoteRequestLineDto(x.Line.LineNo,
                     Wire(x.Line.Kind), x.Line.Sku, x.Line.DescriptionEn, x.Asked.Quantity, x.Asked.NetMinor, x.Asked.VatMinor, x.Asked.NetMinor + x.Asked.VatMinor))],
                 r.TotalMinor, r.RequestedBy, r.CreatedAtUtc, r.DecidedBy, r.DecidedAtUtc, r.DecisionReason, r.IssuedInvoiceId,
-                r.IssuedInvoiceId is { } i ? issued.GetValueOrDefault(i) : null);
+                r.IssuedInvoiceId is { } i ? issued.GetValueOrDefault(i) : null, r.IssuesReplacement);
         })];
     }
 

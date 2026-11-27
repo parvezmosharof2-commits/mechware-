@@ -5,8 +5,12 @@ namespace Mechware.Application.Invoicing;
 /// <summary>One asked line: the invoice's printed <paramref name="LineNo"/>, the units (0 = value only) and optionally the value excl. VAT in poisha (null = the value of those units).</summary>
 public sealed record CreditNoteLineInput(int LineNo, int Quantity, long? NetMinor = null);
 
-/// <summary>Body of <c>POST admin/invoices/{id}/credit-notes</c>: reason <c>goods_returned | price_reduction | error | other</c>, a text of 5–500 characters, 1–200 lines.</summary>
-public sealed record RequestCreditNoteRequest(string? Reason, string? ReasonText, IReadOnlyList<CreditNoteLineInput>? Lines);
+/// <summary>
+/// Body of <c>POST admin/invoices/{id}/credit-notes</c>: reason <c>goods_returned | price_reduction | error | other</c>, a text of 5–500 characters, 1–200 lines.
+/// E6.5c: <paramref name="Replace"/> = true (reason <c>error</c> only) asks for a FULL credit note whose approval also issues the replacement 6.3 with the
+/// buyer read again (ADR-0012 §9.4); without lines it credits everything left; anything less is 409 <c>INVOICE_REPLACEMENT_NEEDS_FULL_CREDIT</c>.
+/// </summary>
+public sealed record RequestCreditNoteRequest(string? Reason, string? ReasonText, IReadOnlyList<CreditNoteLineInput>? Lines, bool? Replace = null);
 
 /// <summary>Body of a rejection: a reason of 5–500 characters.</summary>
 public sealed record RejectCreditNoteRequest(string? Reason);
@@ -17,7 +21,7 @@ public sealed record CreditNoteRequestLineDto(int LineNo, string Kind, string? S
 /// <summary>A credit-note request. <paramref name="Status"/>: requested, approved, rejected, withdrawn. The issued 6.7 is set once approved.</summary>
 public sealed record CreditNoteRequestDto(Guid Id, Guid OriginalInvoiceId, string OriginalNumber, Guid OrderId, string OrderNumber, string Status, string Reason,
     string ReasonText, IReadOnlyList<CreditNoteRequestLineDto> Lines, long TotalMinor, Guid RequestedBy, DateTime RequestedAtUtc, Guid? DecidedBy,
-    DateTime? DecidedAtUtc, string? DecisionReason, Guid? IssuedInvoiceId, string? IssuedNumber);
+    DateTime? DecidedAtUtc, string? DecisionReason, Guid? IssuedInvoiceId, string? IssuedNumber, bool Replace = false);
 
 /// <summary>One accepted line of an inspected return (F2.3b): the order line and the units accepted (≥ 1).</summary>
 public sealed record ReturnCreditLine(Guid OrderItemId, int Quantity);
@@ -30,7 +34,7 @@ public sealed record RequestedCreditNote(CreditNoteRequestDto Request, bool Repl
 /// paid back by Finance outside this call (no gateway money moves here).
 /// </summary>
 public sealed record ApprovedCreditNote(CreditNoteRequestDto Request, Guid CreditNoteId, string Number, long TotalMinor, long RefundDueMinor,
-    long CreditReleasedMinor, long MovedOnAccountMinor);
+    long CreditReleasedMinor, long MovedOnAccountMinor, Guid? ReplacementInvoiceId = null, string? ReplacementNumber = null);
 
 /// <summary>
 /// E6.5b, ADR-0012 §9.3, §10, §15 (threat model IT3, IT4, IT9, IT15). A request is planned against what is left but has no number and moves nothing;

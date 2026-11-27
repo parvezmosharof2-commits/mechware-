@@ -122,6 +122,18 @@ public sealed class RefundService(
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         var refund = await LockRefundAsync(refundId, ct);
         refund.Reject(actorId, request.Reason, Now);
+        // F2.3c: a rejected refund of an inspected return frees it to be asked again (lock order refunds -> return_requests, as step 3).
+        var returned = (await db.ReturnRequests
+            .FromSqlInterpolated($"SELECT r.*, r.xmin FROM return_requests r WHERE r.refund_id = {refund.Id} FOR NO KEY UPDATE")
+            .ToListAsync(ct)).SingleOrDefault();
+        if (returned is { Status: ReturnStatus.Inspected, Settlement: ReturnSettlement.Refund })
+        {
+            returned.ReleaseMoneyBack(ReturnSettlement.Refund, Now);
+            db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), actorId, null, "return.money_back_released", "return_requests", returned.Id.ToString(),
+                JsonSerializer.Serialize(new { Status = nameof(ReturnStatus.Inspected), Settlement = nameof(ReturnSettlement.Refund), RefundId = refund.Id }, Json),
+                JsonSerializer.Serialize(new { Status = nameof(ReturnStatus.Inspected), Settlement = (string?)null, Via = "refund_rejected", Reason = refund.Note, returned.OrderId }, Json),
+                null, Now));
+        }
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return ToDto(refund);

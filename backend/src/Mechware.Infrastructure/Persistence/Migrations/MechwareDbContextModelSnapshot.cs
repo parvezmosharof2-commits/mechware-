@@ -2238,6 +2238,81 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("role_permissions", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Identity.StaffRoleChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.PrimitiveCollection<string[]>("RolesAfter")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("roles_after");
+
+                    b.PrimitiveCollection<string[]>("RolesBefore")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("roles_before");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_staff_role_changes_open_user")
+                        .HasFilter("status = 'requested'");
+
+                    b.HasIndex("Status", "CreatedAtUtc")
+                        .HasDatabaseName("ix_staff_role_changes_status_created");
+
+                    b.ToTable("staff_role_changes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_staff_role_changes_four_eyes", "status <> 'approved' OR (decided_by IS NOT NULL AND decided_by <> requested_by)");
+
+                            t.HasCheckConstraint("ck_staff_role_changes_not_self", "requested_by <> user_id AND (decided_by IS NULL OR decided_by <> user_id)");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Identity.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2662,6 +2737,12 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("issued_invoice_id");
 
+                    b.Property<bool>("IssuesReplacement")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("issues_replacement");
+
                     b.Property<string>("Lines")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -2740,7 +2821,7 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasIndex("SourceKey")
                         .IsUnique()
                         .HasDatabaseName("ux_credit_note_requests_source")
-                        .HasFilter("source_key IS NOT NULL");
+                        .HasFilter("source_key IS NOT NULL AND status IN ('Requested', 'Approved')");
 
                     b.HasIndex("RequestedBy", "IdempotencyKey")
                         .IsUnique()
@@ -2757,7 +2838,9 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_credit_note_requests_reason", "reason IN ('GoodsReturned', 'PriceReduction', 'Error', 'Other') AND reason_text = btrim(reason_text) AND char_length(reason_text) BETWEEN 5 AND 500 AND reason_text !~ '[[:cntrl:]]' AND strpos(reason_text, '  ') = 0");
 
-                            t.HasCheckConstraint("ck_credit_note_requests_status", "CASE status\r\nWHEN 'Requested' THEN num_nonnulls(decided_by, decided_at, decision_reason, issued_invoice_id) = 0\r\nWHEN 'Approved' THEN num_nonnulls(decided_by, decided_at, issued_invoice_id) = 3 AND decision_reason IS NULL AND decided_by <> requested_by\r\nWHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND issued_invoice_id IS NULL\r\n    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500\r\nWHEN 'Withdrawn' THEN decided_by = requested_by AND decided_at IS NOT NULL AND num_nonnulls(decision_reason, issued_invoice_id) = 0\r\nELSE false END");
+                            t.HasCheckConstraint("ck_credit_note_requests_replacement", "NOT issues_replacement OR (reason = 'Error' AND source_key IS NULL)");
+
+                            t.HasCheckConstraint("ck_credit_note_requests_status", "CASE status\nWHEN 'Requested' THEN num_nonnulls(decided_by, decided_at, decision_reason, issued_invoice_id) = 0\nWHEN 'Approved' THEN num_nonnulls(decided_by, decided_at, issued_invoice_id) = 3 AND decision_reason IS NULL AND decided_by <> requested_by\nWHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND issued_invoice_id IS NULL\n    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500\nWHEN 'Withdrawn' THEN decided_by = requested_by AND decided_at IS NOT NULL AND num_nonnulls(decision_reason, issued_invoice_id) = 0\nELSE false END");
                         });
                 });
 
@@ -6243,6 +6326,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany("Addresses")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Identity.StaffRoleChange", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

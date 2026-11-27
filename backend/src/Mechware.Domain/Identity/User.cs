@@ -268,6 +268,20 @@ public sealed class User : AggregateRoot<Guid>
         _userRoles.Add(new UserRole(Id, roleId, roleName.ToLowerInvariant()));
     }
 
+    /// <summary>An administrator disables a staff account (G5.7): no sign-in, and every session ends (the caller revokes them).</summary>
+    public void Suspend(DateTime utcNow)
+    {
+        if (Status != UserStatus.Active) throw new ConflictException("USER_NOT_ACTIVE", "Only an active account can be disabled.");
+        (Status, UpdatedAtUtc) = (UserStatus.Suspended, utcNow);
+    }
+
+    /// <summary>Undoes <see cref="Suspend"/> only; a banned or deleted account stays as it is.</summary>
+    public void Reactivate(DateTime utcNow)
+    {
+        if (Status != UserStatus.Suspended) throw new ConflictException("USER_NOT_DISABLED", "Only a disabled account can be enabled.");
+        (Status, UpdatedAtUtc) = (UserStatus.Active, utcNow);
+    }
+
     public void UpdateProfile(string fullName, string? locale, string? avatarUrl, DateTime utcNow)
     {
         if (!string.IsNullOrWhiteSpace(fullName))

@@ -299,6 +299,37 @@ public sealed partial class ReturnRequestService(MechwareDbContext db, ICurrentU
         return (await ToStaffDtosAsync([ret], ct))[0];
     }
 
+    public async Task<StaffReturnDto> RejectMoneyBackAsync(Guid returnId, RejectMoneyBackRequest request, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var actor = user.UserId ?? throw new UnauthorizedAccessException("Authentication required.");
+        var reason = ReturnRequest.NormaliseRejectionReason(request.Reason);   // 400 before any lock
+        var orderId = await OrderOfAsync(returnId, ct);
+        var now = Now();
+        db.ChangeTracker.Clear();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM orders WHERE id = {orderId} FOR NO KEY UPDATE", ct);
+        var ret = await LockReturnAsync(returnId, ct);
+        var asked = (ret.Settlement, ret.SettlementAmountMinor, ret.SettlementRequestedBy);
+        ret.RejectCreditReduction(actor, now);   // four eyes; only a pending credit reduction
+        db.AuditLogs.Add(new AuditLog(Guid.NewGuid(), actor, user.IpAddress, ReleasedAction, "return_requests", ret.Id.ToString(),
+            JsonSerializer.Serialize(new
+            {
+                Status = nameof(ReturnStatus.Inspected),
+                Settlement = asked.Settlement.ToString(),
+                AmountMinor = asked.SettlementAmountMinor,
+                RequestedBy = asked.SettlementRequestedBy
+            }, Json),
+            JsonSerializer.Serialize(new { Status = nameof(ReturnStatus.Inspected), Settlement = (string?)null, Via = "credit_reduction_rejected", Reason = reason, ret.OrderId }, Json),
+            user.CorrelationId, now));
+        await SaveAsync(ct);
+        await tx.CommitAsync(ct);
+        return (await ToStaffDtosAsync([ret], ct))[0];
+    }
+
+    /// <summary>F2.3c audit action (same as the credit-note and refund paths): the asked money did not go out; the return waits at Inspected.</summary>
+    public const string ReleasedAction = "return.money_back_released";
+
     private async Task<Guid> OrderOfAsync(Guid returnId, CancellationToken ct) =>
         await db.ReturnRequests.AsNoTracking().Where(r => r.Id == returnId).Select(r => (Guid?)r.OrderId).FirstOrDefaultAsync(ct)
         ?? throw new KeyNotFoundException("Return not found.");
@@ -429,7 +460,9 @@ public sealed partial class ReturnRequestService(MechwareDbContext db, ICurrentU
                                 select new { m.ReferenceId, i.VariantId }).Distinct().ToListAsync(ct))
             .Select(x => (x.ReferenceId, x.VariantId)).ToHashSet();
         var keys = rows.Where(r => r.Settlement == ReturnSettlement.CreditNote).Select(r => r.SourceKey).ToList();
-        var notes = keys.Count == 0 ? [] : await db.CreditNoteRequests.AsNoTracking().Where(c => keys.Contains(c.SourceKey!))
+        // F2.3c: a return may have rejected or withdrawn requests before; only the open or approved one (at most one, DB) is its settlement.
+        var notes = keys.Count == 0 ? [] : await db.CreditNoteRequests.AsNoTracking().Where(c => keys.Contains(c.SourceKey!)
+                && (c.Status == CreditNoteRequestStatus.Requested || c.Status == CreditNoteRequestStatus.Approved))
             .ToDictionaryAsync(c => c.SourceKey!, c => c.Id, ct);
         return rows.Select(r => new StaffReturnDto(r.Id, r.OrderId, numbers[r.OrderId], r.CompanyId, r.RequestedBy, OrderService.ToWire(r.Status),
             OrderService.ToWire(r.Reason), r.Note, r.RequestedAtUtc, r.WithdrawnAtUtc, r.DecidedBy, r.DecidedAtUtc, r.RejectionReason,

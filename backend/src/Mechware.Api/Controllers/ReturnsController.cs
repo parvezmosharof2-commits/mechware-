@@ -144,6 +144,16 @@ public sealed class AdminReturnsController(IReturnRequestService returns) : Cont
         return Ok(new { data = await returns.ApproveMoneyBackAsync(returnId, ct) });
     }
 
+    /// <summary>F2.3c: another person refuses a credit order's pending reduction (reason 5-500, step-up); the return can be asked again.</summary>
+    [HttpPost("{returnId:guid}/money-back/reject")]
+    [RequirePermission(Permissions.PaymentsRefundApprove)]
+    [RequireStepUp(MoneyBackStepUpAction)]
+    public async Task<IActionResult> RejectMoneyBack(Guid returnId, [FromBody] RejectMoneyBackRequest body, CancellationToken ct)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        return Ok(new { data = await returns.RejectMoneyBackAsync(returnId, body, ct) });
+    }
+
     /// <summary>The step-up purpose of the E4 refund approval: a credit reduction gives money back the same way.</summary>
     public const string MoneyBackStepUpAction = "refund.approve";
 

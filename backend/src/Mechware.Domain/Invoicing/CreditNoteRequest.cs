@@ -39,15 +39,20 @@ public sealed class CreditNoteRequest : Entity<Guid>
     public string? DecisionReason { get; private set; }
     public Guid? IssuedInvoiceId { get; private set; }
 
+    /// <summary>E6.5c (ADR-0012 §9.4): a full credit note with reason Error whose approval also issues the replacement 6.3, in the same transaction.</summary>
+    public bool IssuesReplacement { get; private set; }
+
     private CreditNoteRequest() { }
 
     /// <summary>A new request from a plan of <paramref name="original"/>; <paramref name="sourceKey"/> is <c>return:{id:N}</c> for an F2 return.</summary>
     public static CreditNoteRequest Create(Guid id, Invoice original, CreditNotePlan plan, Guid requestedBy, string idempotencyKey, string requestHash,
-        string? sourceKey, DateTime nowUtc)
+        string? sourceKey, DateTime nowUtc, bool issuesReplacement = false)
     {
         ArgumentNullException.ThrowIfNull(original);
         ArgumentNullException.ThrowIfNull(plan);
         if (plan.OriginalInvoiceId != original.Id) throw new InvalidOperationException("The plan belongs to another invoice.");
+        if (issuesReplacement && (plan.Reason != CreditNoteReason.Error || sourceKey is not null))
+            throw new InvalidOperationException("A replacement follows a credit note with reason Error that no return asked for.");
         return new CreditNoteRequest
         {
             Id = id,
@@ -62,6 +67,7 @@ public sealed class CreditNoteRequest : Entity<Guid>
             IdempotencyKey = idempotencyKey,
             RequestHash = requestHash,
             SourceKey = sourceKey,
+            IssuesReplacement = issuesReplacement,
             CreatedAtUtc = nowUtc,
             UpdatedAtUtc = nowUtc
         };

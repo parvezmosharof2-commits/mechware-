@@ -43,6 +43,7 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<StaffRoleChange> StaffRoleChanges => Set<StaffRoleChange>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<OtpCode> OtpCodes => Set<OtpCode>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();

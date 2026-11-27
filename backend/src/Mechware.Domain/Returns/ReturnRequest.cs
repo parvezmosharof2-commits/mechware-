@@ -354,6 +354,30 @@ public sealed class ReturnRequest : AggregateRoot<Guid>
         Settle(Settlement.Value, ReturnStatus.Refunded, approver, nowUtc);
     }
 
+    /// <summary>
+    /// F2.3c: the asked money did not go out (its credit-note request was rejected or withdrawn, its E4 refund rejected, or its credit reduction
+    /// rejected here): the return stays Inspected with no settlement, so it can be asked again. Returns what was released (for the audit row).
+    /// </summary>
+    public ReturnSettlement ReleaseMoneyBack(ReturnSettlement expected, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Inspected, "released");
+        if (Settlement != expected)
+            throw new ConflictException("RETURN_NOT_AWAITING_APPROVAL", "This return's money was not asked for that way, so there is nothing to release.");
+        (Settlement, SettlementAmountMinor, RefundId, SettlementRequestedBy, SettlementRequestedAtUtc, UpdatedAtUtc) = (null, null, null, null, null, nowUtc);
+        return expected;
+    }
+
+    /// <summary>F2.3c: another person refuses the pending credit reduction (the asker withdraws nothing here; four eyes as for the approval).</summary>
+    public void RejectCreditReduction(Guid actor, DateTime nowUtc)
+    {
+        Ensure(ReturnStatus.Inspected, "rejected");
+        if (Settlement != ReturnSettlement.CreditReduction)
+            throw new ConflictException("RETURN_NOT_AWAITING_APPROVAL", "Only a return waiting for its credit reduction is rejected here.");
+        if (actor == SettlementRequestedBy)
+            throw new ConflictException(FourEyes, "Another person rejects the money of a return; the one who asked for it cannot.");
+        ReleaseMoneyBack(ReturnSettlement.CreditReduction, nowUtc);
+    }
+
     private void Settle(ReturnSettlement how, ReturnStatus to, Guid approver, DateTime nowUtc)
     {
         Ensure(ReturnStatus.Inspected, "settled");

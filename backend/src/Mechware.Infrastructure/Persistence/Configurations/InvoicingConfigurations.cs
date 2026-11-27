@@ -202,7 +202,7 @@ internal sealed class InvoiceLineConfiguration : IEntityTypeConfiguration<Invoic
 
 /// <summary>
 /// E6.5a credit-note requests (ADR-0012 §9.3, §16): asked lines as jsonb, four eyes by CHECK (an approver is never the requester), one
-/// request per return (<c>source_key</c>), at most one request per issued 6.7. The guard and the cross-row checks live in <see cref="CreditNoteSql"/>.
+/// open or approved request per return (<c>source_key</c>, F2.3c), at most one request per issued 6.7. The guard and the cross-row checks live in <see cref="CreditNoteSql"/>.
 /// </summary>
 internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<CreditNoteRequest>
 {
@@ -227,6 +227,8 @@ internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<
                 WHEN 'Withdrawn' THEN decided_by = requested_by AND decided_at IS NOT NULL AND num_nonnulls(decision_reason, issued_invoice_id) = 0
                 ELSE false END
                 """);
+            // E6.5c: a replacement follows a credit note with reason Error that no return asked for (ADR-0012 §9.4).
+            t.HasCheckConstraint("ck_credit_note_requests_replacement", "NOT issues_replacement OR (reason = 'Error' AND source_key IS NULL)");
         });
         b.MapAudit();
         b.Xmin();
@@ -246,6 +248,7 @@ internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<
         b.Property(r => r.DecidedAtUtc).HasColumnName("decided_at");
         b.Property(r => r.DecisionReason).HasColumnName("decision_reason").HasMaxLength(500);
         b.Property(r => r.IssuedInvoiceId).HasColumnName("issued_invoice_id");
+        b.Property(r => r.IssuesReplacement).HasColumnName("issues_replacement").HasDefaultValue(false);   // raw inserts (tests, tools) need not name it
 
         b.HasOne<Invoice>().WithMany().HasForeignKey(r => r.OriginalInvoiceId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Invoice>().WithMany().HasForeignKey(r => r.IssuedInvoiceId).OnDelete(DeleteBehavior.Restrict);
@@ -254,7 +257,9 @@ internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<
         b.HasOne<User>().WithMany().HasForeignKey(r => r.DecidedBy).OnDelete(DeleteBehavior.Restrict);
 
         b.HasIndex(r => new { r.RequestedBy, r.IdempotencyKey }).IsUnique().HasDatabaseName("ux_credit_note_requests_idempotency");
-        b.HasIndex(r => r.SourceKey).IsUnique().HasFilter("source_key IS NOT NULL").HasDatabaseName("ux_credit_note_requests_source");
+        // F2.3c: one OPEN or approved request per return; a rejected or withdrawn one frees the key, so the return can ask again.
+        b.HasIndex(r => r.SourceKey).IsUnique().HasFilter("source_key IS NOT NULL AND status IN ('Requested', 'Approved')")
+            .HasDatabaseName("ux_credit_note_requests_source");
         b.HasIndex(r => r.IssuedInvoiceId).IsUnique().HasFilter("issued_invoice_id IS NOT NULL").HasDatabaseName("ux_credit_note_requests_issued");
         b.HasIndex(r => r.OriginalInvoiceId).HasDatabaseName("ix_credit_note_requests_original");
         b.HasIndex(r => new { r.Status, r.CreatedAtUtc }).HasDatabaseName("ix_credit_note_requests_status");

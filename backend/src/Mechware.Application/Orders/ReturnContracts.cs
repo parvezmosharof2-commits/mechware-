@@ -79,6 +79,9 @@ public sealed record ReturnStepRequest(uint? RowVersion);
 /// <summary>Reject with a reason (5-500 plain text; the buyer sees it).</summary>
 public sealed record RejectReturnRequest(uint? RowVersion, string? Reason);
 
+/// <summary>F2.3c: body of <c>money-back/reject</c>, a reason of 5-500 characters (internal, audited).</summary>
+public sealed record RejectMoneyBackRequest(string? Reason);
+
 /// <summary>One line of an inspection: accepted 0..asked, restocked 0..accepted (the rest is scrapped), an internal note (≤ 500).</summary>
 public sealed record ReturnInspectionInput(Guid ReturnLineId, int AcceptedQty, int RestockQty, string? Note);
 
@@ -133,4 +136,11 @@ public interface IReturnRequestService
     /// <c>CREDIT_REDUCTION_EXCEEDS_CHARGE</c>.
     /// </summary>
     Task<StaffReturnDto> ApproveMoneyBackAsync(Guid returnId, CancellationToken ct = default);
+
+    /// <summary>
+    /// F2.3c: ANOTHER person refuses a credit order's pending reduction (reason 5-500): nothing is reduced, the return stays Inspected without a
+    /// settlement (audit <c>return.money_back_released</c>) and can be asked again. 409 <c>RETURN_FOUR_EYES</c>, <c>RETURN_NOT_AWAITING_APPROVAL</c>,
+    /// <c>RETURN_INVALID_TRANSITION</c>. A rejected or withdrawn credit-note request and a rejected E4 refund release the return the same way.
+    /// </summary>
+    Task<StaffReturnDto> RejectMoneyBackAsync(Guid returnId, RejectMoneyBackRequest request, CancellationToken ct = default);
 }

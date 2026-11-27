@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.TryAddScoped<Mechware.Application.Orders.IOrderDeadlineService, Orders.OrderDeadlineService>();
         services.TryAddScoped<Mechware.Application.Orders.IStaffOrderReadService, Orders.StaffOrderReadService>();
         services.TryAddScoped<Mechware.Application.Audit.IAuditLogReadService, Persistence.AuditLogReadService>();
+        services.TryAddScoped<Mechware.Application.Identity.IStaffUserService, Identity.StaffUserService>();
         services.TryAddScoped<Mechware.Application.Orders.IDeliveryDeadlineCalculator, Orders.DeliveryDeadlineCalculator>();
         // Credit settlement defaults pending owner confirmation, unless the host registered options read from Credit:* first.
         services.TryAddSingleton(new Mechware.Application.Credit.CreditOptions());

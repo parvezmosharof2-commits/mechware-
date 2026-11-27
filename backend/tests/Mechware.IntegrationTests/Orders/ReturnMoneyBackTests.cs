@@ -5,6 +5,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Mechware.Application.Identity;
 using Mechware.Application.Invoicing;
 using Mechware.Application.Orders;
@@ -333,6 +334,92 @@ public sealed class ReturnMoneyBackTests(DefaultApiFactory factory) : IClassFixt
         var data = await DataAsync(answer);
         data.GetProperty("settlement").GetProperty("kind").GetString().Should().Be("credit_note");
         data.GetProperty("status").GetString().Should().Be("inspected");
+    }
+
+    // ---- F2.3c: a money-back that did not go out frees the return to ask again -----------------------------------------------
+
+    [PostgresFact]
+    public async Task AReturnAsksForOneCreditNoteOnly()
+    {
+        var w = await WorldAsync(invoice: true);
+        var (asker, approver) = (await StaffAsync(), await StaffAsync());
+
+        var first = (await AskAsync(asker, w)).Settlement!.CreditNoteRequestId!.Value;
+        await using (var db = Db()) await CreditNotes(db, approver, w.Seller).RejectAsync(first, new("Accepted units counted wrong"));
+        var back = await As(asker, w, s => s.GetStaffAsync(w.ReturnId));
+        (back.Status, back.Settlement).Should().Be(("inspected", (ReturnSettlementDto?)null), "the return waits at Inspected, cleanly");
+        (await AuditCountAsync(CreditNoteService.ReleasedAction, w.ReturnId)).Should().Be(1);
+
+        var second = (await AskAsync(asker, w)).Settlement!.CreditNoteRequestId!.Value;
+        second.Should().NotBe(first, "a rejected request frees the return's source key");
+        await using (var db = Db()) await CreditNotes(db, asker, w.Seller).WithdrawAsync(second);
+        (await As(asker, w, s => s.GetStaffAsync(w.ReturnId))).Settlement.Should().BeNull();
+
+        var third = (await AskAsync(asker, w)).Settlement!.CreditNoteRequestId!.Value;
+        (await AskAsync(await StaffAsync(), w)).Settlement!.CreditNoteRequestId.Should().Be(third, "asked again = the open request");
+        await using (var db = Db()) await CreditNotes(db, approver, w.Seller).ApproveAsync(third);
+        var settled = await As(approver, w, s => s.GetStaffAsync(w.ReturnId));
+        (settled.Status, settled.Settlement!.CreditNoteRequestId).Should().Be(("credit_noted", third));
+        (await AuditCountAsync(CreditNoteService.ReleasedAction, w.ReturnId)).Should().Be(2);
+
+        var requests = await RequestsOfAsync(w.ReturnId);
+        requests.Select(r => r.Status).Should().BeEquivalentTo(
+            [CreditNoteRequestStatus.Rejected, CreditNoteRequestStatus.Withdrawn, CreditNoteRequestStatus.Approved]);
+        requests.Select(r => r.IdempotencyKey).Should().OnlyHaveUniqueItems();
+        await using (var db = Db())
+        {
+            (await db.Invoices.CountAsync(i => i.OriginalInvoiceId == w.InvoiceId && i.Kind == InvoiceKind.CreditNote)).Should().Be(1, "exactly one 6.7 per return");
+            // The database: a second OPEN request under the return's key, while one is approved, is a unique violation.
+            var ex = await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO credit_note_requests (id, original_invoice_id, order_id, status, reason, reason_text, lines, total_minor, requested_by,
+                    idempotency_key, request_hash, source_key, issues_replacement, created_at, updated_at)
+                SELECT {Guid.NewGuid()}, original_invoice_id, order_id, 'Requested', reason, reason_text, lines, total_minor, requested_by,
+                    {"dup-" + Guid.NewGuid().ToString("N")}, request_hash, source_key, false, created_at, updated_at FROM credit_note_requests WHERE id = {third}
+                """));
+            (ex.SqlState, ex.ConstraintName).Should().Be((PostgresErrorCodes.UniqueViolation, "ux_credit_note_requests_source"));
+        }
+    }
+
+    [PostgresFact]
+    public async Task ARejectedCreditReductionOrRefund_FreesTheReturn_AndTheNextAskSettlesIt()
+    {
+        var credit = await WorldAsync(invoice: false, credit: true);
+        var (asker, approver) = (await StaffAsync(), await StaffAsync());
+        await AskAsync(asker, credit);
+        (await CodeOf(() => As(asker, credit, s => s.RejectMoneyBackAsync(credit.ReturnId, new("Wrong share asked"))))).Should().Be(ReturnRequest.FourEyes);
+        await Assert.ThrowsAsync<ValidationException>(() => As(approver, credit, s => s.RejectMoneyBackAsync(credit.ReturnId, new("no"))));
+        var released = await As(approver, credit, s => s.RejectMoneyBackAsync(credit.ReturnId, new("Wrong share asked")));
+        (released.Status, released.Settlement).Should().Be(("inspected", (ReturnSettlementDto?)null));
+        (await CodeOf(() => As(approver, credit, s => s.RejectMoneyBackAsync(credit.ReturnId, new("Wrong share asked")))))
+            .Should().Be("RETURN_NOT_AWAITING_APPROVAL");
+        await AskAsync(asker, credit);
+        (await As(approver, credit, s => s.ApproveMoneyBackAsync(credit.ReturnId))).Status.Should().Be("refunded");
+        await using (var db = Db())
+            (await db.CreditLedgerEntries.Where(l => l.OrderId == credit.OrderId && l.Kind == CreditLedgerKind.ChargeReduced).SumAsync(l => l.ReceivableDeltaMinor))
+                .Should().Be(-credit.ShareMinor, "reduced once, by the second ask");
+
+        var paid = await WorldAsync(invoice: false, paid: true);
+        var refund = (await AskAsync(asker, paid)).Settlement!.RefundId!.Value;
+        await using (var db = Db()) await new RefundService(db, [_mock], TimeProvider.System).RejectAsync(approver, refund, new("Bank details missing"));
+        (await As(asker, paid, s => s.GetStaffAsync(paid.ReturnId))).Settlement.Should().BeNull();
+        var again = (await AskAsync(asker, paid)).Settlement!.RefundId!.Value;
+        again.Should().NotBe(refund);
+        await using (var db = Db()) await new RefundService(db, [_mock], TimeProvider.System).ApproveAsync(approver, again);
+        (await As(asker, paid, s => s.GetStaffAsync(paid.ReturnId))).Status.Should().Be("refunded");
+        _mock.RefundedOn(await PaymentRefAsync(paid.PaymentId!.Value)).Should().Be(paid.ShareMinor, "paid out once");
+        (await AuditCountAsync(CreditNoteService.ReleasedAction, credit.ReturnId) + await AuditCountAsync(CreditNoteService.ReleasedAction, paid.ReturnId))
+            .Should().Be(2);
+
+        // The endpoint: payments.refund_approve and a step-up code, as the approval.
+        var reject = $"/api/v1/admin/returns/{credit.ReturnId}/money-back/reject";
+        (await (await LoginAsync(Permissions.Roles.Support)).Client.PostAsJsonAsync(reject, new { reason = "Wrong share asked" }))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var finance = await LoginAsync(Permissions.Roles.Finance);
+        (await ErrorAsync(await finance.Client.PostAsJsonAsync(reject, new { reason = "Wrong share asked" }), HttpStatusCode.Forbidden))
+            .Should().Be("STEP_UP_REQUIRED");
+        var coded = new HttpRequestMessage(HttpMethod.Post, reject) { Content = JsonContent.Create(new { reason = "Wrong share asked" }) };
+        coded.Headers.Add("X-Step-Up-Code", await CodeAsync(finance));
+        (await ErrorAsync(await finance.Client.SendAsync(coded), HttpStatusCode.Conflict)).Should().Be("RETURN_INVALID_TRANSITION", "refunded already");
     }
 
     private async Task<string> PaymentRefAsync(Guid paymentId)

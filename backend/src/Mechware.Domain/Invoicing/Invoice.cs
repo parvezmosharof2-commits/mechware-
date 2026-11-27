@@ -113,6 +113,32 @@ public sealed class InvoiceLine : Entity<Guid>
             TotalMinor = p.TotalMinor
         };
     }
+
+    /// <summary>E6.5c, ADR-0012 §9.4: the same printed line on a replacement 6.3 (every field copied, money unchanged, I4).</summary>
+    internal static InvoiceLine Copy(Guid invoiceId, InvoiceLine l) => new()
+    {
+        Id = Guid.NewGuid(),
+        InvoiceId = invoiceId,
+        LineNo = l.LineNo,
+        Kind = l.Kind,
+        OrderItemId = l.OrderItemId,
+        Sku = l.Sku,
+        PartNumber = l.PartNumber,
+        DescriptionEn = l.DescriptionEn,
+        DescriptionBn = l.DescriptionBn,
+        Unit = l.Unit,
+        Quantity = l.Quantity,
+        UnitPriceMinor = l.UnitPriceMinor,
+        DisplayUnitPriceMinor = l.DisplayUnitPriceMinor,
+        GrossMinor = l.GrossMinor,
+        DiscountMinor = l.DiscountMinor,
+        NetMinor = l.NetMinor,
+        SdRate = l.SdRate,
+        SdMinor = l.SdMinor,
+        VatRate = l.VatRate,
+        VatMinor = l.VatMinor,
+        TotalMinor = l.TotalMinor
+    };
 }
 
 /// <summary>
@@ -246,6 +272,32 @@ public sealed class Invoice : Entity<Guid>
             (note._lines.Sum(l => l.NetMinor), 0, note._lines.Sum(l => l.VatMinor), note._lines.Sum(l => l.TotalMinor));
         note.ContentHash = InvoiceContentHash.Compute(note);
         return note;
+    }
+
+    /// <summary>
+    /// E6.5c, ADR-0012 §9.4: the replacement 6.3 of a fully credited <paramref name="previous"/> (wrong BIN, wrong buyer). Same shipment, seller,
+    /// order, lines, seller facts, delivery, PO and quote, of the previous one's mode and prefix; only the <paramref name="buyer"/> is read again.
+    /// <see cref="ReplacementNo"/> = previous + 1. The caller checks "fully credited" and links <c>replaces_invoice_id</c>; the DB checks both at COMMIT.
+    /// </summary>
+    public static Invoice Replacement(Guid id, Invoice previous, InvoiceBuyerSnapshot buyer, InvoiceSeries series, int fiscalYear, long serial,
+        DateTime issuedAtUtc, Guid issuedBy, bool consultantChecked)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        ArgumentNullException.ThrowIfNull(buyer);
+        if (previous.Kind != InvoiceKind.TaxInvoice || previous.ShipmentId is not { } shipmentId)
+            throw new InvalidOperationException("Only a tax invoice of a shipment is replaced.");
+        if (series != (previous.Mode == InvoicingMode.Live ? InvoiceSeries.TaxInvoice : InvoiceSeries.SpecimenTaxInvoice))
+            throw new InvalidOperationException($"A replacement of a {previous.Mode} invoice cannot take a number of the {series} series.");
+        var prefix = previous.Number[..previous.Number.IndexOf('-', StringComparison.Ordinal)];
+        var replacement = new Invoice(id, previous.Mode, InvoiceNumber.Format(prefix == InvoiceNumber.SpecimenPrefix ? "MW" : prefix, series, fiscalYear, serial),
+            series, fiscalYear, serial, issuedAtUtc, previous.SellerId, previous.OrderId, previous.OrderNumber, previous.SubOrderId, shipmentId,
+            previous.CompanyId, previous.Seller, buyer, previous.Delivery, previous.PurchaseOrderNumber, previous.QuoteNumber, previous.Currency,
+            consultantChecked, issuedBy, previous.Lines.OrderBy(l => l.LineNo).Select(l => InvoiceLine.Copy(id, l)), previous.QuoteDate);
+        if (issuedAtUtc.Kind != DateTimeKind.Utc || serial < 1 || Invoicing.FiscalYear.Of(issuedAtUtc) != fiscalYear)
+            throw new InvalidOperationException("The number does not belong to the issue instant.");
+        replacement.ReplacementNo = previous.ReplacementNo + 1;
+        replacement.ContentHash = InvoiceContentHash.Compute(replacement);   // again: the replacement number is printed and hashed
+        return replacement;
     }
 
     /// <summary>The printed date and time: Dhaka local (+06:00), <c>dd-MM-yyyy HH:mm</c> (ADR-0012 §5); the stored value stays UTC.</summary>
