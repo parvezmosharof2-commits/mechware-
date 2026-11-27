@@ -257,6 +257,28 @@ export class MechWareApiClient {
     return this.fetch<ArrayBuffer>(path, options, false, true);
   }
 
+  /** A multipart upload with progress (`fetch` cannot report one): same Bearer token, errors thrown as problem details. No silent refresh: a 401 is thrown. */
+  public async upload<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+    const token = this.getAccessToken ? await this.getAccessToken() : null;
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${this.baseUrl}/${path.replace(/^\//, '')}`);
+      xhr.withCredentials = true;
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total); };
+      xhr.onerror = () => reject(new TypeError('Network error'));
+      xhr.onload = () => {
+        let body: unknown = null;
+        try { body = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch { body = null; }
+        if (xhr.status >= 200 && xhr.status < 300) { resolve((body ?? {}) as T); return; }
+        const problem = (typeof body === 'object' && body !== null ? body : { type: 'https://api.mechware.com.bd/errors/HTTP_ERROR', title: xhr.statusText || 'HTTP Error' }) as ProblemDetails;
+        problem.status ??= xhr.status;
+        reject(problem);
+      };
+      xhr.send(form);
+    });
+  }
+
   private async tryRefreshAccessToken(): Promise<string | null> {
     if (this.refreshPromise) {
       return this.refreshPromise;

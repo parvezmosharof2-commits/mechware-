@@ -232,3 +232,33 @@ export function staffReturnErrorText(e: { status: number | null; code: string | 
     default: return e.status === null || e.status >= 500 ? 'The service did not answer. Nothing was changed that you can see; reload and check before you try again.' : 'The step was refused.';
   }
 }
+
+// ---------- photos ----------
+
+export interface ReturnPhoto { id: string; slot: number; contentType: string; sizeBytes: number; width: number; height: number; createdAtUtc: string }
+export const RETURN_PHOTO_MAX = 5;
+export const RETURN_PHOTO_BYTES = 5 * 1024 * 1024;
+export const RETURN_PHOTO_TYPES: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
+export const RETURN_PHOTO_ACCEPT = RETURN_PHOTO_TYPES.join(',');
+/** Photos can be added while Requested or Approved, removed only while Requested. */
+export const canAddReturnPhoto = (status: string): boolean => status === 'requested' || status === 'approved';
+export const canRemoveReturnPhoto = (status: string): boolean => status === 'requested';
+/** Checked before anything is sent; the server checks again (type by the first bytes). */
+export function returnPhotoProblem(file: { type: string; size: number }, count: number): 'full' | 'type' | 'size' | 'empty' | null {
+  if (count >= RETURN_PHOTO_MAX) return 'full';
+  if (!RETURN_PHOTO_TYPES.includes(file.type)) return 'type';
+  if (file.size <= 0) return 'empty';
+  if (file.size > RETURN_PHOTO_BYTES) return 'size';
+  return null;
+}
+/** Message key (under `Returns.photos.error`) for a failed photo call. */
+export function returnPhotoErrorKey(status: number | null, code: string | null): string {
+  if (code === 'RETURN_PHOTOS_CLOSED') return 'closed';
+  if (code === 'RETURN_PHOTOS_FULL') return 'full';
+  if (code === 'SCAN_UNAVAILABLE' || status === 503) return 'scanDown';
+  if (status === 413) return 'size';
+  if (status === 400) return 'invalid';
+  if (status === 404) return 'notFound';
+  if (status === 401 || status === 403) return 'signedOut';
+  return 'unavailable';
+}

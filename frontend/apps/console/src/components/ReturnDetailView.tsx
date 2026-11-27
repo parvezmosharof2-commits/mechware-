@@ -7,13 +7,14 @@ import { Button } from '@mechware/ui/src/components/Button';
 import { Input } from '@mechware/ui/src/components/Input';
 import {
   MANAGE_MISSING_TEXT, MONEY_BACK_REJECTED_TEXT, STAFF_REASON_LABEL, canManageReturns, canRejectCreditReduction, isCreditNoteStepUp, creditNoteErrorText, canViewStaffOrders, dhakaWhen, inspectBody, inspectionProblems, noReturnStepText, returnSteps, staffReturnStatusText,
-  type InspectionRow, type StaffReturn
+  type InspectionRow, type ReturnPhoto, type StaffReturn
 } from '@mechware/api-client';
 import { staffReturnError, staffReturnsApi } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useResource } from '../lib/useResource';
 import { ConsoleShell } from './ConsoleShell';
 import { BackLink, FailureAlert, FocusAlert, Loading, NoAccess, Notice, useFocusOn } from './CreditShared';
+import { Modal } from './Modal';
 import { ReasonDialog } from './ReasonDialog';
 import { StepUpDialog } from './StepUpDialog';
 
@@ -56,6 +57,52 @@ function InspectForm({ d, busy, onSubmit }: { d: StaffReturn; busy: boolean; onS
       })}
       <Button type="submit" isLoading={busy} disabled={busy} data-testid="inspect-submit">Save the inspection</Button>
     </form>
+  );
+}
+
+/* eslint-disable @next/next/no-img-element -- blob URLs from an authenticated fetch cannot go through next/image */
+/** Read-only gallery of the buyer's photos; bytes come through the access-checked staff route, a click enlarges one in the lazy modal. */
+function PhotoGallery({ returnId, orderNumber }: { returnId: string; orderNumber: string }) {
+  const [photos, setPhotos] = React.useState<ReturnPhoto[]>([]);
+  const [urls, setUrls] = React.useState<Record<string, string>>({});
+  const [failed, setFailed] = React.useState(false);
+  const [open, setOpen] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    let dead = false;
+    const made: string[] = [];
+    staffReturnsApi.photos(returnId).then(async (list) => {
+      if (dead) return;
+      setPhotos(list);
+      for (const p of list) {
+        const b = await staffReturnsApi.photoBytes(returnId, p.id).catch(() => null);
+        if (dead || !b) continue;
+        const u = URL.createObjectURL(new Blob([b], { type: 'image/jpeg' }));
+        made.push(u);
+        setUrls((m) => ({ ...m, [p.id]: u }));
+      }
+    }).catch(() => { if (!dead) setFailed(true); });
+    return () => { dead = true; made.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [returnId]);
+  const alt = (i: number) => `Photo ${i + 1} of return ${orderNumber}`;
+  const current = open === null ? null : photos[open];
+  return (
+    <section aria-labelledby="ret-photos" className="space-y-2" data-testid="return-photos">
+      <h2 id="ret-photos" className="text-base font-semibold">Photos from the buyer</h2>
+      {failed && <p role="alert" className="text-sm font-medium">The photos could not be loaded. Reload the page to try again.</p>}
+      {!failed && photos.length === 0 && <p className="text-sm text-text-muted">The buyer added no photos.</p>}
+      <ul className="flex flex-wrap gap-3">
+        {photos.map((p, i) => (
+          <li key={p.id}>
+            <button type="button" onClick={() => setOpen(i)} aria-label={`Enlarge photo ${i + 1}`} data-testid="photo-open" className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent">
+              {urls[p.id] ? <img src={urls[p.id]} alt={alt(i)} className="h-28 w-28 rounded-md border border-surface-border object-cover" /> : <span className="block h-28 w-28 animate-pulse rounded-md bg-bg-subtle" aria-hidden="true" />}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <Modal open={current !== undefined && current !== null} onOpenChange={(o) => { if (!o) setOpen(null); }} title={open === null ? '' : alt(open)} description={current ? `${current.width} x ${current.height} px` : ''} contentClassName="max-w-3xl">
+        {current && urls[current.id] && <img src={urls[current.id]} alt={alt(open ?? 0)} className="max-h-[70vh] w-full rounded-md object-contain" data-testid="photo-large" />}
+      </Modal>
+    </section>
   );
 }
 
@@ -184,6 +231,8 @@ function Detail({ id, permissions, meId }: { id: string; permissions: readonly s
               </table>
             </div>
           </section>
+
+          <PhotoGallery returnId={d.id} orderNumber={d.orderNumber} />
 
           {manage && steps.includes('inspect') && (
             <section aria-labelledby="ret-inspect" className="space-y-2">

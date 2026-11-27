@@ -854,6 +854,27 @@
       "invalid": "Some of what you entered is not accepted. Check the items, reason and note.",
       "signedOut": "Please sign in again.",
       "unavailable": "The service did not answer. Press send again: we will not create a second request."
+    },
+    "photos": {
+      "title": "Photos ({count} of {max})",
+      "alt": "Photo {n} of return {order}",
+      "add": "Add a photo",
+      "remove": "Delete",
+      "removeLabel": "Delete photo {n}",
+      "uploading": "Uploading the photo",
+      "help": "JPEG, PNG or WebP, up to 5 MB each, at most {max} photos. You can add photos until we receive the goods and delete them until we decide.",
+      "error": {
+        "full": "This return already has 5 photos. Delete one first.",
+        "type": "Only JPEG, PNG or WebP photos are accepted.",
+        "size": "This photo is larger than 5 MB. Choose a smaller one.",
+        "empty": "This file is empty. Choose another photo.",
+        "closed": "Photos can no longer be changed because we already decided on this return.",
+        "invalid": "We could not use this file. Choose a different, undamaged JPEG, PNG or WebP photo.",
+        "scanDown": "We could not check the photo for safety right now. Try again in a few minutes.",
+        "notFound": "We could not find this return for you.",
+        "signedOut": "Please sign in again.",
+        "unavailable": "The photo was not saved because the service did not answer. Try again."
+      }
     }
   },
   "QuickOrder": {

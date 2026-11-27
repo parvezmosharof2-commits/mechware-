@@ -1,5 +1,5 @@
 import type { MechWareApiClient } from './index';
-import { returnListQuery, type BuyerReturn, type ReturnPage, type StaffReturn, type StaffReturnFilters, type buildReturnBody, type inspectBody } from './returns-model';
+import { returnListQuery, type BuyerReturn, type ReturnPage, type ReturnPhoto, type StaffReturn, type StaffReturnFilters, type buildReturnBody, type inspectBody } from './returns-model';
 
 type Data<T> = { data: T };
 
@@ -12,7 +12,17 @@ export function createReturnsApi(client: MechWareApiClient) {
     list: (page = 1, pageSize = 20) =>
       client.fetch<Data<ReturnPage<BuyerReturn>>>(`/api/v1/returns?page=${Math.max(1, Math.floor(page))}&pageSize=${Math.min(50, Math.max(1, Math.floor(pageSize)))}`).then((r) => r.data),
     get: (returnId: string) => client.fetch<Data<BuyerReturn>>(`/api/v1/returns/${id(returnId)}`).then((r) => r.data),
-    withdraw: (returnId: string) => client.fetch<Data<BuyerReturn>>(`/api/v1/returns/${id(returnId)}/withdraw`, { method: 'POST' }).then((r) => r.data)
+    withdraw: (returnId: string) => client.fetch<Data<BuyerReturn>>(`/api/v1/returns/${id(returnId)}/withdraw`, { method: 'POST' }).then((r) => r.data),
+    photos: (returnId: string) => client.fetch<Data<ReturnPhoto[]>>(`/api/v1/returns/${id(returnId)}/photos`).then((r) => r.data),
+    /** Multipart field `file`; `onProgress` gets 0..1. */
+    uploadPhoto: (returnId: string, file: Blob, onProgress?: (fraction: number) => void) => {
+      const form = new FormData();
+      form.append('file', file);
+      return client.upload<Data<ReturnPhoto>>(`/api/v1/returns/${id(returnId)}/photos`, form, onProgress).then((r) => r.data);
+    },
+    /** The stored JPEG bytes (the route needs the Bearer token, so an img src cannot reach it). */
+    photoBytes: (returnId: string, photoId: string) => client.fetchBytes(`/api/v1/returns/${id(returnId)}/photos/${id(photoId)}`),
+    removePhoto: (returnId: string, photoId: string) => client.fetch<unknown>(`/api/v1/returns/${id(returnId)}/photos/${id(photoId)}`, { method: 'DELETE' }).then(() => undefined)
   };
 }
 export type ReturnsApi = ReturnType<typeof createReturnsApi>;
@@ -26,6 +36,8 @@ export function createStaffReturnsApi(client: MechWareApiClient) {
   return {
     list: (f: StaffReturnFilters) => client.fetch<Data<ReturnPage<StaffReturn>>>(`${base}?${returnListQuery(f)}`),
     get: (returnId: string) => client.fetch<Data<StaffReturn>>(`${base}/${id(returnId)}`),
+    photos: (returnId: string) => client.fetch<Data<ReturnPhoto[]>>(`${base}/${id(returnId)}/photos`).then((r) => r.data),
+    photoBytes: (returnId: string, photoId: string) => client.fetchBytes(`${base}/${id(returnId)}/photos/${id(photoId)}`),
     approve: (returnId: string, rowVersion: number) => move(returnId, 'approve', { rowVersion }),
     reject: (returnId: string, rowVersion: number, reason: string) => move(returnId, 'reject', { rowVersion, reason }),
     received: (returnId: string, rowVersion: number) => move(returnId, 'received', { rowVersion }),

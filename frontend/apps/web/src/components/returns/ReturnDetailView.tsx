@@ -11,6 +11,7 @@ import { classifyOrderError, formatOrderDate, orderHref } from '../../lib/orders
 import { returnsApi } from '../../lib/returns-client';
 import { useResource } from '../../lib/useResource';
 import { ReturnAlert, ReturnStatusChip } from './ReturnParts';
+import { ReturnPhotos } from './ReturnPhotos';
 
 const linkClass = 'inline-flex h-10 items-center rounded-md border border-surface-border px-4 text-sm font-semibold text-text hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 
@@ -118,6 +119,7 @@ export function ReturnDetailView({ locale, returnId }: { locale: 'en' | 'bn'; re
           ))}
         </ul>
       </section>
+      <ReturnPhotos returnId={r.id} orderNumber={r.orderNumber} status={r.status} />
       {failure && <ReturnAlert>{t(`error.${failure}`)}</ReturnAlert>}
       {canWithdrawReturn(r.status) && (
         <Withdraw ret={r} onDone={(next) => { setFailure(null); setOverride(next); }}

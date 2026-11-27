@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   RETURN_NOTE_MAX, canRejectCreditReduction, buildReturnBody, canManageReturns, canWithdrawReturn, inspectBody, inspectionProblems, keepReturnKey, noReturnStepText, parseReturnFilters,
   returnAvailability, returnErrorKey, returnFiltersToSearch, returnFormProblems, returnListQuery, returnStatusKey, returnSteps, returnWindowEnd, returnableByLine,
-  shouldReloadReturn, staffReturnErrorText, EMPTY_RETURN_FILTERS
+  shouldReloadReturn, staffReturnErrorText, RETURN_PHOTO_BYTES, canAddReturnPhoto, canRemoveReturnPhoto, returnPhotoErrorKey, returnPhotoProblem, EMPTY_RETURN_FILTERS
 } from '../src/returns-model.ts';
 
 test('window: closes at Dhaka midnight after the 7th Dhaka day after delivery', () => {
@@ -120,4 +120,26 @@ test('reject credit reduction: only pending, second person, with the permission'
   assert.equal(canRejectCreditReduction(r({ kind: 'refund' }), { id: 'bb', permissions: perm }).show, false);
   assert.equal(canRejectCreditReduction({ status: 'inspected', settlement: null }, { id: 'bb', permissions: perm }).show, false);
   assert.match(staffReturnErrorText({ status: 409, code: 'RETURN_FOUR_EYES' }), /another person/);
+});
+
+test('photos: count, type and size checked before sending; add Requested|Approved, remove Requested only', () => {
+  const ok = { type: 'image/webp', size: 1000 };
+  assert.equal(returnPhotoProblem(ok, 4), null);
+  assert.equal(returnPhotoProblem(ok, 5), 'full');
+  assert.equal(returnPhotoProblem({ type: 'image/gif', size: 10 }, 0), 'type');
+  assert.equal(returnPhotoProblem({ type: 'image/png', size: RETURN_PHOTO_BYTES }, 0), null);
+  assert.equal(returnPhotoProblem({ type: 'image/png', size: RETURN_PHOTO_BYTES + 1 }, 0), 'size');
+  assert.equal(returnPhotoProblem({ type: 'image/png', size: 0 }, 0), 'empty');
+  assert.deepEqual(['requested', 'approved', 'received'].map(canAddReturnPhoto), [true, true, false]);
+  assert.deepEqual(['requested', 'approved'].map(canRemoveReturnPhoto), [true, false]);
+});
+
+test('photo errors: every refusal has its own key', () => {
+  assert.equal(returnPhotoErrorKey(409, 'RETURN_PHOTOS_CLOSED'), 'closed');
+  assert.equal(returnPhotoErrorKey(409, 'RETURN_PHOTOS_FULL'), 'full');
+  assert.equal(returnPhotoErrorKey(413, 'FILE_TOO_LARGE'), 'size');
+  assert.equal(returnPhotoErrorKey(400, null), 'invalid');
+  assert.equal(returnPhotoErrorKey(503, 'SCAN_UNAVAILABLE'), 'scanDown');
+  assert.equal(returnPhotoErrorKey(404, 'NOT_FOUND'), 'notFound');
+  assert.equal(returnPhotoErrorKey(null, null), 'unavailable');
 });
