@@ -17,7 +17,7 @@ namespace Mechware.Infrastructure.Notifications;
 /// order they must also be an effective member of the company (active, accepted), the D4.12 rule. Free text (the rejection reason, the courier)
 /// is only a template value, so the engine encodes it, and it never reaches a subject. Specimen invoices are not mailed.
 /// </summary>
-public sealed class FulfilmentNotificationPublisher(MechwareDbContext db, NotificationDispatcher dispatcher, StorefrontLinks links, QuoteNoticeOptions options) : IOutboxPublisher
+public sealed class FulfilmentNotificationPublisher(MechwareDbContext db, NotificationDispatcher dispatcher, StorefrontLinks links, QuoteNoticeOptions options, InAppNotifier inApp) : IOutboxPublisher
 {
     public const string Shipped = "order-shipped";
     public const string Delivered = "order-delivered";
@@ -90,7 +90,8 @@ public sealed class FulfilmentNotificationPublisher(MechwareDbContext db, Notifi
         var model = new Dictionary<string, string> { ["orderNumber"] = number, ["orderUrl"] = OrderUrl(buyer.Locale, number) };
         if (template == ReturnRejected) model["reason"] = Cut(ret.RejectionReason);
         if (template == ReturnMoneyBack) model["outcome"] = Outcome(buyer.Locale, ret.Settlement);
-        await SendAsync(message.Id, template, buyer, model, ct);
+        // The in-app notice carries the settlement as a key (the web words it in EN/BN), not the mail's rendered sentence.
+        await SendAsync(message.Id, template, buyer, model, ct, template == ReturnMoneyBack ? new Dictionary<string, string> { ["settlement"] = ret.Settlement?.ToString() ?? "CreditReduced" } : null);
     }
 
     private async Task ReturnRequestedAsync(OutboxEnvelope message, CancellationToken ct)
@@ -140,10 +141,16 @@ public sealed class FulfilmentNotificationPublisher(MechwareDbContext db, Notifi
 
     private string OrderUrl(string locale, string orderNumber) => links.Url(locale, $"account/orders/{Uri.EscapeDataString(orderNumber)}");
 
-    private Task SendAsync(Guid eventId, string template, Person buyer, Dictionary<string, string> model, CancellationToken ct)
+    private static readonly string[] InAppValues = ["orderNumber", "courierName", "trackingNumber", "invoiceNumber"];
+
+    /// <summary>The buyer's in-app notice first (idempotent per event and recipient), then the mail; a mail retry finds the notice already there.</summary>
+    private async Task SendAsync(Guid eventId, string template, Person buyer, Dictionary<string, string> model, CancellationToken ct, Dictionary<string, string>? extra = null)
     {
+        var values = model.Where(kv => InAppValues.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (extra is not null) foreach (var kv in extra) values[kv.Key] = kv.Value;
+        await inApp.AddAsync(eventId, buyer.Id, template, inApp.Link(buyer.Locale, $"account/orders/{Uri.EscapeDataString(model["orderNumber"])}"), values, ct);
         model["customerName"] = buyer.FullName;
-        return dispatcher.DispatchAsync(eventId, template, [new NotificationTarget(buyer.Id, buyer.Email, buyer.Locale, model)], ct);
+        await dispatcher.DispatchAsync(eventId, template, [new NotificationTarget(buyer.Id, buyer.Email, buyer.Locale, model)], ct);
     }
 
     private static string Cut(string? s) => s is null ? "" : s.Length <= MaxReason ? s : s[..MaxReason] + "...";

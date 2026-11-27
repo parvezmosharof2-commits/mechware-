@@ -6070,6 +6070,66 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.ToTable("shipping_zone_districts", (string)null);
                 });
 
+            modelBuilder.Entity("Mechware.Infrastructure.Persistence.Outbox.InAppNotification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LinkPath")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("link_path");
+
+                    b.Property<string>("ParamsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("params");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<string>("TitleKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("title_key");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_in_app_notifications_event_user");
+
+                    b.HasIndex("UserId", "ReadAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("ix_in_app_notifications_user_read_created");
+
+                    b.ToTable("in_app_notifications", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_in_app_notifications_link_relative", "link_path LIKE '/%' AND link_path NOT LIKE '//%' AND position(chr(92) in link_path) = 0 AND link_path !~ '[[:cntrl:]]'");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Infrastructure.Persistence.Outbox.NotificationLogEntry", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7129,6 +7189,15 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasOne("Mechware.Domain.Shipping.ShippingZone", null)
                         .WithMany("Districts")
                         .HasForeignKey("ZoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Infrastructure.Persistence.Outbox.InAppNotification", b =>
+                {
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

@@ -190,6 +190,10 @@ public static class DependencyInjection
         services.AddSingleton(options);
         services.TryAddSingleton(new StorefrontLinks(NotificationFormat.NormalizeBaseUrl(storefrontBaseUrl, requireRealSetup)));
         services.TryAddScoped<NotificationDispatcher>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<InAppNotifier>();
+        services.TryAddScoped<InAppNotificationService>();
+        services.TryAddScoped<Mechware.Application.Notifications.IInAppNotificationService>(sp => sp.GetRequiredService<InAppNotificationService>());
         services.AddScoped<IOutboxPublisher, NotificationOutboxPublisher>();
         services.TryAddSingleton(new QuoteNoticeOptions(salesInboxEmail));
         services.AddScoped<IOutboxPublisher, QuoteNotificationPublisher>();
@@ -257,6 +261,7 @@ public static class DependencyInjection
         services.AddHostedService<InvoiceReconciliationWorker>();
         services.TryAddScoped<Quotes.QuoteNoticeService>();
         services.AddHostedService<QuoteNoticeWorker>();
+        services.AddHostedService<InAppNotificationRetentionWorker>();
         // E7.3 stock sweep: options from StockReconciliation:* when the host registered them first, the defaults otherwise.
         services.TryAddSingleton(new Orders.StockReconciliationOptions());
         services.TryAddScoped<Orders.StockReconciliationService>();

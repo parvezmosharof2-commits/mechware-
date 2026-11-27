@@ -11,7 +11,7 @@ E3.1–E3.4 cart page + checkout delivery/review (placeholder confirmation) · E
 E8.1/E8.2 shipping zones + calculator + priced inside orders (no zones ⇒ Production refuses orders until the owner enters tariffs; `POST /orders/shipping-quote`; PO number) ·
 C10.1–C10.3b bulk catalogue import (dry run, commit, console screen + seller picker; images C10.4 wait for C3) · D5.1 quick-order parser ·
 D2.1–D2.4 price lists: ADR-0008 + decisions (lowest valid price, VAT-inclusive catalogue price for everyone, 10 % global margin floor, no group lists), pure resolver, PriceList aggregate + four-eyes, tables + DB triggers + permissions ·
-H3a Dockerfiles ×4 + staging compose + H3a.2 deploy readiness (`Mechware.Worker migrate`) · TOTP secrets encrypted at rest · F3a.1/.2a/.3 email + OTP limits · F3b fulfilment/return/invoice mails (not committed; HANDOFF in F3.md) · D2/E1/E8 threat-model sections.
+H3a Dockerfiles ×4 + staging compose + H3a.2 deploy readiness (`Mechware.Worker migrate`) · TOTP secrets encrypted at rest · F3a.1/.2a/.3 email + OTP limits · F3b fulfilment/return/invoice mails + F3c in-app notifications (migration `InAppNotifications`; not committed; HANDOFFs in F3.md) · D2/E1/E8 threat-model sections.
 Branch `claude/c6-search-and-module-plan` (pushed; PR not opened yet — open it on GitHub).
 
 **Launch scope (owner 2026-11-20):** first launch without SSLCommerz/bKash, SMS provider, VAT consultant, courier API → bank/PO/credit/COD, email + in-app only, manual courier + tracking no., invoices to NBR format (consultant check later). Letterhead + pad T&C: `docs/COMPANY_FACTS.md` (missing items listed there).

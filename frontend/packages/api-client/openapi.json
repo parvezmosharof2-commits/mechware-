@@ -7701,6 +7701,85 @@
         }
       }
     },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Newest first, 50 per page. `unread=true` keeps only unread ones.",
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/orders": {
       "post": {
         "tags": [
@@ -11249,6 +11328,9 @@
     },
     {
       "name": "Locations"
+    },
+    {
+      "name": "Notifications"
     },
     {
       "name": "Orders"

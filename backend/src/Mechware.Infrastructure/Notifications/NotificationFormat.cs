@@ -7,6 +7,9 @@ public sealed record StorefrontLinks(string BaseUrl)
 {
     /// <summary>Absolute link to <paramref name="path"/> (segments already escaped), under the locale prefix.</summary>
     public string Url(string locale, string path) => $"{BaseUrl.TrimEnd('/')}/{NotificationFormat.Locale(locale)}/{path.TrimStart('/')}";
+
+    /// <summary>Relative web path starting with "/" (for in-app notices), under the locale prefix.</summary>
+    public string Path(string locale, string path) => $"/{NotificationFormat.Locale(locale)}/{path.TrimStart('/')}";
 }
 
 /// <summary>Pure helpers for building email model values.</summary>

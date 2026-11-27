@@ -35,7 +35,7 @@ public sealed class FulfilmentNoticeTests(PostgresDatabaseFixture fixture) : ICl
         await using var db = _kit.Db();
         await new FulfilmentNotificationPublisher(db,
             new NotificationDispatcher(db, sender, new EmbeddedTemplates(NullLogger<EmbeddedTemplates>.Instance), NullLogger<NotificationDispatcher>.Instance),
-            new StorefrontLinks("http://localhost:3000"), new QuoteNoticeOptions(Inbox)).PublishAsync(e);
+            new StorefrontLinks("http://localhost:3000"), new QuoteNoticeOptions(Inbox), new InAppNotifier(db, new StorefrontLinks("http://localhost:3000"))).PublishAsync(e);
     }
 
     private static OutboxEnvelope Env(string type, Guid aggregate, object payload) =>

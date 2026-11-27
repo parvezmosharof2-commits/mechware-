@@ -32,7 +32,7 @@ public sealed class QuoteNoticeTests(PostgresDatabaseFixture fixture) : IClassFi
 
     private static QuoteNotificationPublisher Publisher(MechwareDbContext db, CaptureSender sender, string? inbox = Inbox) =>
         new(db, new NotificationDispatcher(db, sender, new EmbeddedTemplates(NullLogger<EmbeddedTemplates>.Instance), NullLogger<NotificationDispatcher>.Instance),
-            new StorefrontLinks("http://localhost:3000"), new QuoteNoticeOptions(inbox));
+            new StorefrontLinks("http://localhost:3000"), new QuoteNoticeOptions(inbox), new InAppNotifier(db, new StorefrontLinks("http://localhost:3000")));
 
     private async Task<List<OutboxEnvelope>> EnvelopesAsync(Guid quote, string eventType)
     {

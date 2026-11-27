@@ -20,10 +20,12 @@ public sealed record QuoteNoticeOptions(string? SalesInboxEmail = null);
 /// submitted that version (four-eyes). Quote text is only ever a value of a template, so the engine encodes it (QT17) and it never
 /// reaches a subject. Mail contains a link to the quote page, never the PDF.
 /// </summary>
-public sealed class QuoteNotificationPublisher(MechwareDbContext db, NotificationDispatcher dispatcher, StorefrontLinks links, QuoteNoticeOptions options) : IOutboxPublisher
+public sealed class QuoteNotificationPublisher(MechwareDbContext db, NotificationDispatcher dispatcher, StorefrontLinks links, QuoteNoticeOptions options, InAppNotifier inApp) : IOutboxPublisher
 {
     public const string QuoteSent = "quote-sent";
     public const string QuoteExpiring = "quote-expiring";
+    /// <summary>In-app only at launch (ADR-0011 §14): the contact is told a sent version was withdrawn, no mail.</summary>
+    public const string QuoteWithdrawn = "quote-withdrawn";
     public const string StaffNotice = "quote-staff-notice";
     public const string ExpiringEvent = "QuoteExpiringEvent";
     public const string ExpiredEvent = "QuoteExpiredEvent";
@@ -38,6 +40,7 @@ public sealed class QuoteNotificationPublisher(MechwareDbContext db, Notificatio
         nameof(QuoteApprovalRequestedEvent) => ApprovalAsync(message, ct),
         nameof(QuoteSentEvent) => BuyerAsync(message, QuoteSent, ct),
         ExpiringEvent => BuyerAsync(message, QuoteExpiring, ct),
+        nameof(QuoteWithdrawnEvent) => BuyerAsync(message, QuoteWithdrawn, ct),
         nameof(QuoteAcceptedEvent) => StaffAboutQuoteAsync(message, "Quote accepted", "The buyer accepted version {0} of this quote; an order was placed.", ct),
         nameof(QuoteRejectedEvent) => StaffAboutQuoteAsync(message, "Quote rejected", "The buyer rejected version {0} of this quote.", ct),
         ExpiredEvent => StaffAboutQuoteAsync(message, "Quote expired", "Version {0} of this quote passed its valid-until time without an answer.", ct),
@@ -60,6 +63,7 @@ public sealed class QuoteNotificationPublisher(MechwareDbContext db, Notificatio
             .AnyAsync(m => m.CompanyId == q.Quote.CompanyId && m.UserId == contact.Id && m.IsActive && m.AcceptedAtUtc != null, ct);
         if (contact is null || !member)
         {
+            if (template == QuoteWithdrawn) return;   // in-app only: nobody to tell, and no staff notice for it
             await StaffAsync(message.Id, q.Quote.AssignedTo, "Quote notice not sent",
                 $"The contact of quote {q.Quote.Number} is no longer an active member of {q.Company}, so the buyer was not e-mailed.", q.Quote.Number, q.Company, ct);
             return;
@@ -73,6 +77,12 @@ public sealed class QuoteNotificationPublisher(MechwareDbContext db, Notificatio
             ["validUntil"] = ValidUntilText(q.Version),
             ["quoteUrl"] = links.Url(locale, $"account/company/{q.Quote.CompanyId}/quotes/{q.Quote.Id}"),
         };
+        var quotePath = $"account/company/{q.Quote.CompanyId}/quotes/{q.Quote.Id}";
+        var values = new Dictionary<string, string> { ["quoteNumber"] = q.Quote.Number, ["versionNo"] = q.Version.VersionNo.ToString(CultureInfo.InvariantCulture) };
+        if (template == QuoteExpiring) values["validUntil"] = model["validUntil"];
+        if (template == QuoteSent) values["total"] = NotificationFormat.Money(q.Version.GrandTotalMinor ?? q.Version.GoodsTotalMinor);
+        await inApp.AddAsync(message.Id, contact.Id, template, inApp.Link(locale, quotePath), values, ct);
+        if (template == QuoteWithdrawn) return;
         if (template == QuoteSent) model["total"] = NotificationFormat.Money(q.Version.GrandTotalMinor ?? q.Version.GoodsTotalMinor);
         await dispatcher.DispatchAsync(message.Id, template, [new NotificationTarget(contact.Id, contact.Email, locale, model)], ct);
     }
