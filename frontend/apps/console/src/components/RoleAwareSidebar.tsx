@@ -199,12 +199,10 @@ export const CONSOLE_NAV_ITEMS: ConsoleNavItem[] = [
     requiredPermission: 'finance.payouts',
     badge: '2FA REQUIRED'
   },
-  {
-    id: 'staff-2fa',
-    label: 'Staff authenticator setup',
-    requiredPermission: 'users.manage',
-    href: '/staff'
-  },
+  { id: 'staff-2fa', label: 'Staff authenticator setup', requiredPermission: 'users.manage', href: '/staff', group: 'Staff' },
+  { id: 'staff-users', label: 'Staff users', requiredPermission: 'users.manage', href: '/staff/users', group: 'Staff' },
+  { id: 'staff-role-changes', label: 'Role change requests', requiredPermission: 'users.manage', href: '/staff/role-changes', group: 'Staff' },
+  { id: 'staff-roles', label: 'Roles and permissions', requiredPermission: 'users.manage', href: '/staff/roles', group: 'Staff' },
   {
     id: 'audit-logs',
     label: 'Audit log integrity',

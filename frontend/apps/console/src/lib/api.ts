@@ -3,6 +3,7 @@ import {
   decisionErrorText, floorErrorText, mapServerFields, priceListErrorText, shouldReloadAfter, problemCode, problemFieldErrors, problemMessage, problemStatus, shippingErrorText
 } from '@mechware/api-client';
 
+import { createStaffUsersApi, staffUserErrorText, USER_RELOAD_CODES } from '@mechware/api-client';
 import { createStaffCreditNotesApi, createStaffInvoicesApi, createStaffReturnsApi, shouldReloadReturn, staffReturnErrorText } from '@mechware/api-client';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5000';
@@ -118,4 +119,13 @@ export function staffReturnError(err: unknown): { text: string; code: string | n
   const status = problemStatus(err);
   const code = problemCode(err);
   return { text: staffReturnErrorText({ status, code, message: problemMessage(err, ''), fields: problemFieldErrors(err) }), code, status, reload: shouldReloadReturn(code), retry: status === null || status >= 500 };
+}
+
+export const staffUsersApi = createStaffUsersApi(api);
+
+/** Plain words for a failed staff user call; `stepUp` keeps the code dialog open, `reload` says the screen is stale. */
+export function staffUserError(err: unknown): { text: string; code: string | null; status: number | null; reload: boolean; retry: boolean; stepUp: boolean } {
+  const status = problemStatus(err);
+  const code = problemCode(err);
+  return { text: staffUserErrorText({ status, code, message: problemMessage(err, '') }), code, status, reload: !!code && USER_RELOAD_CODES.has(code), retry: status === null || status >= 500, stepUp: code === 'STEP_UP_FAILED' || code === 'STEP_UP_REQUIRED' };
 }

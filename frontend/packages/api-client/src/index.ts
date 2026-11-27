@@ -495,6 +495,8 @@ export * from "./staff-orders-model";
 export * from "./staff-orders-read-model";
 export * from "./staff-fulfilment-model";
 export * from "./staff-orders";
+export * from "./staff-users-model";
+export * from "./staff-users";
 export * from "./rfq-buyer-model";
 export * from "./rfq-buyer";
 export * from "./quotes-buyer-model";
