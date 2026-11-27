@@ -1577,6 +1577,10 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("seq");
 
+                    b.Property<Guid?>("WithholdingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("withholding_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AdjustmentId");
@@ -1589,6 +1593,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_credit_ledger_order");
 
                     b.HasIndex("PaymentId");
+
+                    b.HasIndex("WithholdingId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_ledger_withholding")
+                        .HasFilter("withholding_id IS NOT NULL");
 
                     b.HasIndex("CompanyId", "OrderId")
                         .HasDatabaseName("ix_credit_ledger_company_order");
@@ -1605,7 +1614,7 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_credit_ledger_key", "length(idempotency_key) > 0");
 
-                            t.HasCheckConstraint("ck_credit_ledger_kind", "kind IN ('charge','payment_applied','payment_on_account','on_account_applied','payment_reversed','charge_reduced','write_off','on_account_correction','on_account_payout')");
+                            t.HasCheckConstraint("ck_credit_ledger_kind", "kind IN ('charge','payment_applied','payment_on_account','on_account_applied','payment_reversed','charge_reduced','write_off','on_account_correction','on_account_payout','withholding_applied')");
 
                             t.HasCheckConstraint("ck_credit_ledger_moves", "receivable_delta_minor <> 0 OR on_account_delta_minor <> 0");
 
@@ -1615,9 +1624,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_credit_ledger_seq", "seq >= 1");
 
-                            t.HasCheckConstraint("ck_credit_ledger_signs", "CASE kind\nWHEN 'charge' THEN receivable_delta_minor > 0 AND on_account_delta_minor = 0\nWHEN 'payment_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND payment_id IS NOT NULL\nWHEN 'payment_on_account' THEN receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND payment_id IS NOT NULL\nWHEN 'on_account_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = receivable_delta_minor\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'payment_reversed' THEN payment_id IS NOT NULL AND ((receivable_delta_minor > 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor < 0))\nWHEN 'charge_reduced' THEN order_id IS NOT NULL AND ((receivable_delta_minor < 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)))\nWHEN 'write_off' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND adjustment_id IS NOT NULL\nWHEN 'on_account_correction' THEN receivable_delta_minor = 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'on_account_payout' THEN receivable_delta_minor = 0 AND on_account_delta_minor < 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nELSE false END");
+                            t.HasCheckConstraint("ck_credit_ledger_signs", "CASE kind\nWHEN 'charge' THEN receivable_delta_minor > 0 AND on_account_delta_minor = 0\nWHEN 'payment_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND payment_id IS NOT NULL\nWHEN 'payment_on_account' THEN receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND payment_id IS NOT NULL\nWHEN 'on_account_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = receivable_delta_minor\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'payment_reversed' THEN payment_id IS NOT NULL AND ((receivable_delta_minor > 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor < 0))\nWHEN 'charge_reduced' THEN order_id IS NOT NULL AND ((receivable_delta_minor < 0 AND on_account_delta_minor = 0)\n    OR (receivable_delta_minor = 0 AND on_account_delta_minor > 0 AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)))\nWHEN 'write_off' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND adjustment_id IS NOT NULL\nWHEN 'on_account_correction' THEN receivable_delta_minor = 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'on_account_payout' THEN receivable_delta_minor = 0 AND on_account_delta_minor < 0 AND adjustment_id IS NOT NULL\n    AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)\nWHEN 'withholding_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND withholding_id IS NOT NULL\n    AND num_nonnulls(payment_id, adjustment_id, credit_note_id) = 0\nELSE false END");
 
                             t.HasCheckConstraint("ck_credit_ledger_totals", "receivable_after_minor >= 0 AND on_account_after_minor >= 0");
+
+                            t.HasCheckConstraint("ck_credit_ledger_withholding", "withholding_id IS NULL OR kind = 'withholding_applied'");
                         });
                 });
 
@@ -3255,6 +3266,116 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_invoice_number_counters_series", "series IN ('TaxInvoice', 'CreditNote', 'SpecimenTaxInvoice', 'SpecimenCreditNote')");
 
                             t.HasCheckConstraint("ck_invoice_number_counters_state", "(fiscal_year = 0 AND next_serial = 1 AND last_issued_at IS NULL) OR (fiscal_year BETWEEN 2000 AND 9998 AND next_serial >= 2 AND last_issued_at IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.TaxWithholding", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("AmountMinor")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount_minor");
+
+                    b.Property<DateOnly>("CertificateDate")
+                        .HasColumnType("date")
+                        .HasColumnName("certificate_date");
+
+                    b.Property<string>("CertificateKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("certificate_key");
+
+                    b.Property<string>("CertificateNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("certificate_number");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invoice_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid>("RecordedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recorded_by");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedBy");
+
+                    b.HasIndex("InvoiceId")
+                        .HasDatabaseName("ix_tax_withholdings_invoice");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("RecordedBy");
+
+                    b.HasIndex("Status", "DecidedAtUtc")
+                        .HasDatabaseName("ix_tax_withholdings_status");
+
+                    b.HasIndex("CompanyId", "Kind", "CertificateKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_tax_withholdings_certificate")
+                        .HasFilter("status <> 'Rejected'");
+
+                    b.ToTable("tax_withholdings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tax_withholdings_certificate", "certificate_number ~ '^[A-Z0-9][A-Z0-9 /-]{0,39}$' AND strpos(certificate_number, '  ') = 0 AND certificate_key = regexp_replace(certificate_number, '[^A-Z0-9]', '', 'g') AND certificate_key <> ''");
+
+                            t.HasCheckConstraint("ck_tax_withholdings_kind", "kind IN ('Vds', 'Ait') AND amount_minor >= 1");
+
+                            t.HasCheckConstraint("ck_tax_withholdings_status", "CASE status\nWHEN 'Recorded' THEN num_nonnulls(decided_by, decided_at, decision_reason) = 0\nWHEN 'Verified' THEN num_nonnulls(decided_by, decided_at) = 2 AND decision_reason IS NULL AND decided_by <> recorded_by\nWHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND decided_by <> recorded_by\n    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500\nELSE false END");
                         });
                 });
 
@@ -6298,6 +6419,11 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PaymentId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Invoicing.TaxWithholding", null)
+                        .WithMany()
+                        .HasForeignKey("WithholdingId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Mechware.Domain.Credit.CreditPayment", b =>
@@ -6501,6 +6627,38 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                     b.HasOne("Mechware.Domain.Sellers.Seller", null)
                         .WithMany()
                         .HasForeignKey("SellerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Invoicing.TaxWithholding", b =>
+                {
+                    b.HasOne("Mechware.Domain.Companies.Company", null)
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("DecidedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Mechware.Domain.Invoicing.Invoice", null)
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Orders.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("RecordedBy")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

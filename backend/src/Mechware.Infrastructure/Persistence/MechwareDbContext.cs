@@ -122,6 +122,8 @@ public sealed class MechwareDbContext : DbContext, IDataProtectionKeyContext
     public DbSet<Mechware.Domain.Invoicing.Invoice> Invoices => Set<Mechware.Domain.Invoicing.Invoice>();
     public DbSet<Mechware.Domain.Invoicing.InvoiceLine> InvoiceLines => Set<Mechware.Domain.Invoicing.InvoiceLine>();
     public DbSet<Mechware.Domain.Invoicing.CreditNoteRequest> CreditNoteRequests => Set<Mechware.Domain.Invoicing.CreditNoteRequest>();
+    /// <summary>E6.6a VDS/AIT certificates; caps at COMMIT and the guard in TaxWithholdingSql.</summary>
+    public DbSet<Mechware.Domain.Invoicing.TaxWithholding> TaxWithholdings => Set<Mechware.Domain.Invoicing.TaxWithholding>();
 
     /// <summary>ASP.NET Core Data Protection key ring, shared by all API instances (Security.DataProtectionKeyRing).</summary>
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();

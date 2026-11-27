@@ -94,7 +94,17 @@ public sealed class VatMonthExportService(MechwareDbContext db, ICurrentUserServ
         var totals = new VatMonthTotals(sales.Count, sales.Sum(r => r.NetMinor), sales.Sum(r => r.SdMinor), sales.Sum(r => r.VatMinor), sales.Sum(r => r.TotalMinor),
             credits.Count, credits.Sum(r => r.NetMinor), credits.Sum(r => r.SdMinor), credits.Sum(r => r.VatMinor), credits.Sum(r => r.TotalMinor));
 
-        return new VatMonthReport(m.Label, from, to, sales, credits, WithholdingsAvailable: false, rateTotals, threshold, candidates,
+        // (c) VDS certificates verified in the month (the month a certificate reaches the books; consultant §19 Q11), of Live invoices only.
+        var vds = (await (from w in db.TaxWithholdings.AsNoTracking()
+                          join i in db.Invoices.AsNoTracking() on w.InvoiceId equals i.Id
+                          where w.Kind == TaxWithholdingKind.Vds && w.Status == TaxWithholdingStatus.Verified && i.Mode == InvoicingMode.Live
+                                && w.DecidedAtUtc >= m.StartUtc && w.DecidedAtUtc < m.EndUtc
+                          orderby w.DecidedAtUtc, w.CertificateKey
+                          select new { w.Id, w.CertificateNumber, w.CertificateDate, At = w.DecidedAtUtc!.Value, i.Number, i.Buyer, w.AmountMinor }).ToListAsync(ct))
+            .Select(w => new VatMonthVdsRow(w.Id, w.CertificateNumber, w.CertificateDate, Dhaka(w.At), w.Number, w.Buyer.Name,
+                maskBin ? InvoiceReadService.MaskBin(w.Buyer.Bin) : w.Buyer.Bin, w.AmountMinor)).ToList();
+
+        return new VatMonthReport(m.Label, from, to, sales, credits, WithholdingsAvailable: true, vds, rateTotals, threshold, candidates,
             await PaidNotShippedAsync(from, to, ct), totals, options.ConsultantChecked);
     }
 
@@ -150,7 +160,11 @@ public static class VatMonthCsv
         rows.Add(CreditCsv.Row(T("total"), T(t.CreditNotes.ToString(CultureInfo.InvariantCulture)), T(""), T(""), T(""), T(""), Money(t.CreditNetMinor),
             Money(t.CreditSdMinor), Money(t.CreditVatMinor), Money(t.CreditTotalMinor), T("")));
 
-        rows.AddRange([Row(), Row("c", "verified VDS certificates", r.WithholdingsAvailable ? "" : "not recorded yet (E6.6)"), Row()]);
+        rows.AddRange([Row(), Row("c", "VDS certificates (Mushak-6.6) verified in the month"),
+            Row("certificate_number", "certificate_date", "verified_at_dhaka", "invoice_number", "buyer_name", "buyer_bin", "vds_minor", "vds_bdt")]);
+        rows.AddRange(r.Vds.Select(c => CreditCsv.Row(T(c.CertificateNumber), T(c.CertificateDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+            T(c.VerifiedAtDhaka), T(c.InvoiceNumber), T(c.BuyerName), T(c.BuyerBin), Money(c.AmountMinor))));
+        rows.AddRange([CreditCsv.Row(T("total"), T(r.Vds.Count.ToString(CultureInfo.InvariantCulture)), T(""), T(""), T(""), T(""), Money(r.Vds.Sum(c => c.AmountMinor))), Row()]);
 
         rows.AddRange([Row("d", "totals per VAT rate"),
             Row("band", "vat_rate", "sales_net_minor", "sales_net_bdt", "sales_sd_minor", "sales_sd_bdt", "sales_vat_minor", "sales_vat_bdt", "credit_net_minor",
@@ -168,7 +182,7 @@ public static class VatMonthCsv
             Row("order_number", "status", "paid_at_dhaka", "paid_minor", "paid_bdt")]);
         rows.AddRange(r.PaidNotShipped.Select(f => CreditCsv.Row(T(f.OrderNumber), T(f.Status), T(f.PaidAtDhaka), Money(f.PaidMinor))));
 
-        var dataRows = r.Sales.Count + r.CreditNotes.Count + r.RateTotals.Count + r.Mushak610Candidates.Count + r.PaidNotShipped.Count;
+        var dataRows = r.Sales.Count + r.CreditNotes.Count + r.Vds.Count + r.RateTotals.Count + r.Mushak610Candidates.Count + r.PaidNotShipped.Count;
         return new VatMonthCsvExport("mushak-9_1-" + r.Month + ".csv", CreditCsv.Document(rows), dataRows);
     }
 

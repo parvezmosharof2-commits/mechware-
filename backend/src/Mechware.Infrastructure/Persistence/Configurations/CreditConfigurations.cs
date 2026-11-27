@@ -15,7 +15,7 @@ namespace Mechware.Infrastructure.Persistence.Configurations;
 /// </summary>
 internal sealed class CreditLedgerEntryConfiguration : IEntityTypeConfiguration<CreditLedgerEntry>
 {
-    private const string Kinds = "'charge','payment_applied','payment_on_account','on_account_applied','payment_reversed','charge_reduced','write_off','on_account_correction','on_account_payout'";
+    private const string Kinds = "'charge','payment_applied','payment_on_account','on_account_applied','payment_reversed','charge_reduced','write_off','on_account_correction','on_account_payout','withholding_applied'";
 
     public void Configure(EntityTypeBuilder<CreditLedgerEntry> b)
     {
@@ -47,8 +47,11 @@ internal sealed class CreditLedgerEntryConfiguration : IEntityTypeConfiguration<
                     AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)
                 WHEN 'on_account_payout' THEN receivable_delta_minor = 0 AND on_account_delta_minor < 0 AND adjustment_id IS NOT NULL
                     AND (payment_id IS NOT NULL OR credit_note_id IS NOT NULL)
+                WHEN 'withholding_applied' THEN receivable_delta_minor < 0 AND on_account_delta_minor = 0 AND withholding_id IS NOT NULL
+                    AND num_nonnulls(payment_id, adjustment_id, credit_note_id) = 0
                 ELSE false END
                 """);
+            t.HasCheckConstraint("ck_credit_ledger_withholding", "withholding_id IS NULL OR kind = 'withholding_applied'");
         });
         b.MapAudit(updated: false);
         b.Property(e => e.CompanyId).HasColumnName("company_id");
@@ -60,6 +63,7 @@ internal sealed class CreditLedgerEntryConfiguration : IEntityTypeConfiguration<
         b.Property(e => e.PaymentId).HasColumnName("payment_id");
         b.Property(e => e.AdjustmentId).HasColumnName("adjustment_id");
         b.Property(e => e.CreditNoteId).HasColumnName("credit_note_id");
+        b.Property(e => e.WithholdingId).HasColumnName("withholding_id");
         b.Property(e => e.ReceivableDeltaMinor).HasColumnName("receivable_delta_minor");
         b.Property(e => e.OnAccountDeltaMinor).HasColumnName("on_account_delta_minor");
         b.Property(e => e.ReceivableAfterMinor).HasColumnName("receivable_after_minor");
@@ -81,6 +85,9 @@ internal sealed class CreditLedgerEntryConfiguration : IEntityTypeConfiguration<
         b.HasOne<Order>().WithMany().HasForeignKey(e => e.OrderId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<CreditPayment>().WithMany().HasForeignKey(e => e.PaymentId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<CreditAdjustment>().WithMany().HasForeignKey(e => e.AdjustmentId).OnDelete(DeleteBehavior.Restrict);
+        // E6.6: at most one line per verified withholding (its key is withholding:{id}; this index is the backstop).
+        b.HasOne<Mechware.Domain.Invoicing.TaxWithholding>().WithMany().HasForeignKey(e => e.WithholdingId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(e => e.WithholdingId).IsUnique().HasFilter("withholding_id IS NOT NULL").HasDatabaseName("ux_credit_ledger_withholding");
     }
 }
 

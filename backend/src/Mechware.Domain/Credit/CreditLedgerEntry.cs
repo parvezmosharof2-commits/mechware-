@@ -7,7 +7,9 @@ namespace Mechware.Domain.Credit;
 public enum CreditLedgerKind
 {
     Charge = 1, PaymentApplied = 2, PaymentOnAccount = 3, OnAccountApplied = 4, PaymentReversed = 5,
-    ChargeReduced = 6, WriteOff = 7, OnAccountCorrection = 8, OnAccountPayout = 9
+    ChargeReduced = 6, WriteOff = 7, OnAccountCorrection = 8, OnAccountPayout = 9,
+    /// <summary>E6.6 (ADR-0012 §11): a verified VDS/AIT certificate settles part of an order's receivable, like a payment.</summary>
+    WithholdingApplied = 10
 }
 
 /// <summary>
@@ -17,7 +19,7 @@ public enum CreditLedgerKind
 public sealed record CreditPosting(
     CreditLedgerKind Kind, long ReceivableDeltaMinor, long OnAccountDeltaMinor, string IdempotencyKey, DateOnly OccurredOn,
     Guid? OrderId = null, Guid? PaymentId = null, Guid? AdjustmentId = null, Guid? CreditNoteId = null, DateOnly? DueOn = null,
-    Guid? EventId = null, Guid? ActorUserId = null, string? CorrelationId = null, string? Reason = null);
+    Guid? EventId = null, Guid? ActorUserId = null, string? CorrelationId = null, string? Reason = null, Guid? WithholdingId = null);
 
 /// <summary>Deterministic ledger keys (ADR-0010 §2.1): a replayed command finds its own line instead of writing a second one.</summary>
 public static class CreditLedgerKeys
@@ -36,6 +38,8 @@ public static class CreditLedgerKeys
     public static string ApplyOnAccountRequest(string requestId) => $"apply:{requestId}:";
     /// <summary>The one line of an approved adjustment (§8.3, B3.6).</summary>
     public static string Adjust(Guid adjustmentId) => $"adjust:{adjustmentId:N}";
+    /// <summary>The one line of a verified tax withholding (E6.6, ADR-0012 §11).</summary>
+    public static string Withholding(Guid withholdingId) => $"withholding:{withholdingId:N}";
 }
 
 /// <summary>Credit dates are Bangladesh calendar dates: a fixed +06:00 (no daylight saving), as for E8.3.</summary>
@@ -65,6 +69,7 @@ public sealed class CreditLedgerEntry : Entity<Guid>
     public Guid? PaymentId { get; private set; }
     public Guid? AdjustmentId { get; private set; }
     public Guid? CreditNoteId { get; private set; }
+    public Guid? WithholdingId { get; private set; }
     public long ReceivableDeltaMinor { get; private set; }
     public long OnAccountDeltaMinor { get; private set; }
     public long ReceivableAfterMinor { get; private set; }
@@ -92,6 +97,7 @@ public sealed class CreditLedgerEntry : Entity<Guid>
         PaymentId = p.PaymentId;
         AdjustmentId = p.AdjustmentId;
         CreditNoteId = p.CreditNoteId;
+        WithholdingId = p.WithholdingId;
         ReceivableDeltaMinor = p.ReceivableDeltaMinor;
         OnAccountDeltaMinor = p.OnAccountDeltaMinor;
         ReceivableAfterMinor = receivableAfter;
@@ -112,7 +118,7 @@ public sealed class CreditLedgerEntry : Entity<Guid>
     public static void Validate(CreditPosting p)
     {
         long r = p.ReceivableDeltaMinor, a = p.OnAccountDeltaMinor;
-        bool order = p.OrderId is not null, payment = p.PaymentId is not null, adjustment = p.AdjustmentId is not null;
+        bool order = p.OrderId is not null, payment = p.PaymentId is not null, adjustment = p.AdjustmentId is not null, withholding = p.WithholdingId is not null;
         bool source = payment || p.CreditNoteId is not null;
         bool ok = p.Kind switch
         {
@@ -125,9 +131,10 @@ public sealed class CreditLedgerEntry : Entity<Guid>
             CreditLedgerKind.WriteOff => r < 0 && a == 0 && order && adjustment,
             CreditLedgerKind.OnAccountCorrection => r == 0 && a != 0 && adjustment && source,
             CreditLedgerKind.OnAccountPayout => r == 0 && a < 0 && adjustment && source,
+            CreditLedgerKind.WithholdingApplied => r < 0 && a == 0 && order && withholding && !payment && !adjustment && p.CreditNoteId is null,
             _ => false
         };
-        if (!ok || (r > 0 && adjustment) || (r != 0 && !order))
+        if (!ok || (r > 0 && adjustment) || (r != 0 && !order) || (withholding && p.Kind != CreditLedgerKind.WithholdingApplied))
             throw new ValidationException("kind", $"A {p.Kind} line cannot have these amounts or references.");
         if (p.DueOn is not null && p.Kind != CreditLedgerKind.Charge)
             throw new ValidationException("dueOn", "Only a charge has a due date.");
@@ -140,5 +147,6 @@ public sealed class CreditLedgerEntry : Entity<Guid>
     /// <summary>Whether a replay with this key asks for exactly this line (then it is a no-op) or for something else (a conflict).</summary>
     public bool Matches(CreditPosting p) =>
         Kind == p.Kind && ReceivableDeltaMinor == p.ReceivableDeltaMinor && OnAccountDeltaMinor == p.OnAccountDeltaMinor
-        && OrderId == p.OrderId && PaymentId == p.PaymentId && AdjustmentId == p.AdjustmentId && CreditNoteId == p.CreditNoteId;
+        && OrderId == p.OrderId && PaymentId == p.PaymentId && AdjustmentId == p.AdjustmentId && CreditNoteId == p.CreditNoteId
+        && WithholdingId == p.WithholdingId;
 }

@@ -65,14 +65,16 @@ public class VatMonthExportTests
             name, "1234567890123", 100, 0, 15, 115, "standard")).ToList();
         var credit = new VatMonthCreditNoteRow(Guid.NewGuid(), "MW-CN-2026-27-000001", DateTime.UtcNow, "2026-12-02T10:00:00+06:00", "MW-INV-2026-27-000001",
             "2026-11", "@evil", null, 10, 0, 1, 11, "standard");
-        var report = new VatMonthReport("2026-12", DateTime.UtcNow, DateTime.UtcNow, sales, [credit], false, [new VatMonthRateTotal("standard", 0.15m, 600, 0, 90, 10, 0, 1)],
+        var report = new VatMonthReport("2026-12", DateTime.UtcNow, DateTime.UtcNow, sales, [credit], true,
+            [new VatMonthVdsRow(Guid.NewGuid(), "VDS 2026/12", new DateOnly(2026, 12, 3), "2026-12-04T10:00:00+06:00", "MW-INV-2026-27-000001", "=VDS", null, 15)],
+            [new VatMonthRateTotal("standard", 0.15m, 600, 0, 90, 10, 0, 1)],
             20_000_000, [new VatMonthMushak610Row("tax_invoice", "MW-INV-2026-27-000009", "x", "=BIG", null, 30_000_000)],
             [new VatMonthPaidNotShippedRow(Guid.NewGuid(), "+MW-1", "confirmed", "y", 500)], new VatMonthTotals(6, 600, 0, 90, 690, 1, 10, 0, 1, 11), false);
 
         var csv = VatMonthCsv.Write(report).Content;
 
         foreach (var name in evil) csv.Should().Contain("\"'" + name.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"");
-        csv.Should().Contain("\"'=ORDER\"").And.Contain("\"'@evil\"").And.Contain("\"'=BIG\"").And.Contain("\"'+MW-1\"");
+        csv.Should().Contain("\"'=ORDER\"").And.Contain("\"'@evil\"").And.Contain("\"'=BIG\"").And.Contain("\"'+MW-1\"").And.Contain("\"'=VDS\"");
         Regex.IsMatch(csv, "(^|,|\n)\"[=+@\t\r]", RegexOptions.Multiline).Should().BeFalse("no cell starts with a formula character");
         Regex.IsMatch(csv, "(^|,|\n)\"-[^0-9]", RegexOptions.Multiline).Should().BeFalse("a leading minus only ever starts a number");
         csv.Should().StartWith("﻿").And.Contain("\"1234567890123\"").And.Contain("consultant check before relying on it");

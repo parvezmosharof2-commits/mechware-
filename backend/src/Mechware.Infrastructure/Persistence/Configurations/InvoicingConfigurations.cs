@@ -265,3 +265,56 @@ internal sealed class CreditNoteRequestConfiguration : IEntityTypeConfiguration<
         b.HasIndex(r => new { r.Status, r.CreatedAtUtc }).HasDatabaseName("ix_credit_note_requests_status");
     }
 }
+
+/// <summary>
+/// E6.6a VDS/AIT certificates (ADR-0012 §11, §16, threat model IT14): four eyes by CHECK, one live certificate number per issuing company and
+/// kind (letters and digits compared; a rejected entry frees it). The caps at COMMIT and the guard live in <see cref="TaxWithholdingSql"/>.
+/// </summary>
+internal sealed class TaxWithholdingConfiguration : IEntityTypeConfiguration<TaxWithholding>
+{
+    public void Configure(EntityTypeBuilder<TaxWithholding> b)
+    {
+        b.ToTable("tax_withholdings", t =>
+        {
+            t.HasCheckConstraint("ck_tax_withholdings_kind", "kind IN ('Vds', 'Ait') AND amount_minor >= 1");
+            t.HasCheckConstraint("ck_tax_withholdings_certificate",
+                "certificate_number ~ '^[A-Z0-9][A-Z0-9 /-]{0,39}$' AND strpos(certificate_number, '  ') = 0 " +
+                "AND certificate_key = regexp_replace(certificate_number, '[^A-Z0-9]', '', 'g') AND certificate_key <> ''");
+            t.HasCheckConstraint("ck_tax_withholdings_status", """
+                CASE status
+                WHEN 'Recorded' THEN num_nonnulls(decided_by, decided_at, decision_reason) = 0
+                WHEN 'Verified' THEN num_nonnulls(decided_by, decided_at) = 2 AND decision_reason IS NULL AND decided_by <> recorded_by
+                WHEN 'Rejected' THEN num_nonnulls(decided_by, decided_at) = 2 AND decided_by <> recorded_by
+                    AND char_length(btrim(decision_reason)) BETWEEN 5 AND 500
+                ELSE false END
+                """);
+        });
+        b.MapAudit();
+        b.Xmin();
+        b.Property(w => w.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(10);
+        b.Property(w => w.InvoiceId).HasColumnName("invoice_id");
+        b.Property(w => w.OrderId).HasColumnName("order_id");
+        b.Property(w => w.CompanyId).HasColumnName("company_id");
+        b.Property(w => w.CertificateNumber).HasColumnName("certificate_number").HasMaxLength(TaxWithholding.MaxCertificateLength).IsRequired();
+        b.Property(w => w.CertificateKey).HasColumnName("certificate_key").HasMaxLength(TaxWithholding.MaxCertificateLength).IsRequired();
+        b.Property(w => w.CertificateDate).HasColumnName("certificate_date");
+        b.Property(w => w.AmountMinor).HasColumnName("amount_minor");
+        b.Property(w => w.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
+        b.Property(w => w.RecordedBy).HasColumnName("recorded_by");
+        b.Property(w => w.DecidedBy).HasColumnName("decided_by");
+        b.Property(w => w.DecidedAtUtc).HasColumnName("decided_at");
+        b.Property(w => w.DecisionReason).HasColumnName("decision_reason").HasMaxLength(500);
+
+        b.HasOne<Invoice>().WithMany().HasForeignKey(w => w.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Order>().WithMany().HasForeignKey(w => w.OrderId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Company>().WithMany().HasForeignKey(w => w.CompanyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(w => w.RecordedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(w => w.DecidedBy).OnDelete(DeleteBehavior.Restrict);
+
+        // IT14: one certificate per issuer (the buyer company) and kind, whatever invoice it is typed against.
+        b.HasIndex(w => new { w.CompanyId, w.Kind, w.CertificateKey }).IsUnique().HasFilter("status <> 'Rejected'")
+            .HasDatabaseName("ux_tax_withholdings_certificate");
+        b.HasIndex(w => w.InvoiceId).HasDatabaseName("ix_tax_withholdings_invoice");
+        b.HasIndex(w => new { w.Status, w.DecidedAtUtc }).HasDatabaseName("ix_tax_withholdings_status");
+    }
+}

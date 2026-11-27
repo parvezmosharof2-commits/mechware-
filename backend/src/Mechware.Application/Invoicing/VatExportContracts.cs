@@ -25,12 +25,16 @@ public sealed record VatMonthTotals(int Sales, long SalesNetMinor, long SalesSdM
     public long NetVatMinor => SalesVatMinor - CreditVatMinor;
 }
 
+/// <summary>(c) One VDS certificate verified in the month (E6.6a): the Mushak-6.6 number and date as typed, the 6.3 it is for, the VAT deducted.</summary>
+public sealed record VatMonthVdsRow(Guid WithholdingId, string CertificateNumber, DateOnly CertificateDate, string VerifiedAtDhaka, string InvoiceNumber,
+    string BuyerName, string? BuyerBin, long AmountMinor);
+
 /// <summary>
-/// The 9.1 working file of one Dhaka calendar month (ADR-0012 §13 sections a-f), Live series only. (c) VDS certificates come with E6.6:
-/// until then <c>WithholdingsAvailable</c> is false and the section is empty. In the JSON preview the BINs are masked (last four digits).
+/// The 9.1 working file of one Dhaka calendar month (ADR-0012 §13 sections a-f), Live series only. (c) lists the VDS certificates verified in
+/// the month (E6.6a; <c>WithholdingsAvailable</c> is true since then). In the JSON preview the BINs are masked (last four digits).
 /// </summary>
 public sealed record VatMonthReport(string Month, DateTime FromUtc, DateTime ToUtc, IReadOnlyList<VatMonthSaleRow> Sales,
-    IReadOnlyList<VatMonthCreditNoteRow> CreditNotes, bool WithholdingsAvailable, IReadOnlyList<VatMonthRateTotal> RateTotals, long Mushak610ThresholdMinor,
+    IReadOnlyList<VatMonthCreditNoteRow> CreditNotes, bool WithholdingsAvailable, IReadOnlyList<VatMonthVdsRow> Vds, IReadOnlyList<VatMonthRateTotal> RateTotals, long Mushak610ThresholdMinor,
     IReadOnlyList<VatMonthMushak610Row> Mushak610Candidates, IReadOnlyList<VatMonthPaidNotShippedRow> PaidNotShipped, VatMonthTotals Totals, bool ConsultantChecked);
 
 public sealed record VatMonthCsvExport(string FileName, string Content, int Rows);
