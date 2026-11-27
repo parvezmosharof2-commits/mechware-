@@ -1,0 +1,13 @@
+# Runs mechware-backup.service every night at 02:30 server time (set the server to Asia/Dhaka, runbook step 4).
+# Persistent=true: a night missed while the server was off runs as soon as it is back.
+# Next run: systemctl list-timers mechware-backup.timer
+[Unit]
+Description=Nightly MECHWARE backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

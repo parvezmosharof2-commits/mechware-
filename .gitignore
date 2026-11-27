@@ -42,6 +42,9 @@ dump.rdb
 
 # Staging compose secrets
 infra/docker/staging.env
+# Production compose secrets (DEPLOY_RUNBOOK.md): settings file and the optional Data Protection certificate
+infra/docker/prod.env
+infra/docker/secrets/
 
 # Media written by local seed-catalog runs (generated, not source)
 backend/src/Mechware.Worker/seed-media/

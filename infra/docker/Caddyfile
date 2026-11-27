@@ -1,0 +1,47 @@
+# Caddy for docker-compose.prod.yml. DOMAIN and ACME_EMAIL come from prod.env. Caddy gets and renews the Let's Encrypt
+# certificates by itself; the DNS A records for DOMAIN, www, console and api must point at this server first.
+# For a local test, DOMAIN=<name>.localhost makes Caddy use its own internal certificates instead of Let's Encrypt.
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+(common) {
+	encode zstd gzip
+	header {
+		# ">" = set after the app answered, so this replaces (never duplicates) a header the app already sent
+		>Strict-Transport-Security "max-age=31536000"
+		-Server
+		-X-Powered-By
+	}
+}
+
+# Shop (storefront)
+{$DOMAIN} {
+	import common
+	reverse_proxy web:3000
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+# Staff console
+console.{$DOMAIN} {
+	import common
+	reverse_proxy console:3001
+}
+
+# API (called by the browser and the apps). /health/ready lists the internal components, so it is not public: check it
+# from the server with the command in docs/DEPLOY_RUNBOOK.md.
+api.{$DOMAIN} {
+	import common
+	@ready path /health/ready
+	respond @ready 404
+	reverse_proxy api:8080
+}
+
+# Health probe for the container healthcheck only (port 9180 is not published).
+http://:9180 {
+	respond /healthz "ok" 200
+}

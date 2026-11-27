@@ -1,0 +1,18 @@
+# Nightly MECHWARE backup (infra/scripts/backup.sh). Installed by docs/DEPLOY_RUNBOOK.md step 14:
+#   sudo cp infra/scripts/mechware-backup.service infra/scripts/mechware-backup.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mechware-backup.timer
+# Logs: journalctl -u mechware-backup     Last result: systemctl status mechware-backup
+[Unit]
+Description=MECHWARE nightly backup (database + documents)
+Wants=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+# Change this path if the repository is not in /opt/mechware.
+Environment=MECHWARE_DIR=/opt/mechware
+ExecStart=/bin/bash /opt/mechware/infra/scripts/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h

@@ -2,3 +2,6 @@
 backend/src/Mechware.Infrastructure/Persistence/Migrations/*.Designer.cs linguist-generated=true
 backend/src/Mechware.Infrastructure/Persistence/Migrations/*ModelSnapshot.cs linguist-generated=true
 frontend/pnpm-lock.yaml linguist-generated=true
+# Shell scripts and systemd units run on Linux servers: always LF, also in Windows working copies.
+*.sh text eol=lf
+infra/scripts/mechware-backup.* text eol=lf

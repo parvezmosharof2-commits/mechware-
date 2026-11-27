@@ -1,0 +1,362 @@
+# MECHWARE production stack for ONE Linux server (VPS): Caddy (HTTPS) + API + Worker + web + console
+# + Postgres 17 / Redis / Meilisearch / ClamAV. Step-by-step guide for the owner: docs/DEPLOY_RUNBOOK.md.
+#
+#   cp infra/docker/prod.env.example infra/docker/prod.env      # fill it in; prod.env is git-ignored, never commit it
+#   docker compose -f infra/docker/docker-compose.prod.yml --env-file infra/docker/prod.env up -d --build
+#
+# Safety rules built in:
+# - ${VAR:?msg} makes compose refuse to start when a value is missing; there are no default secrets in this file.
+# - The `preflight` one-shot refuses to start anything while prod.env still holds a CHANGE_ME example value, so Postgres
+#   is never initialised with an example password.
+# - Only Caddy publishes ports (80/443). Postgres, Redis and Meilisearch sit on the `data` network, which has no route
+#   to the internet and no published port. The `edge` network carries Caddy <-> web/console/api and the traffic that must
+#   leave the server (Let's Encrypt, SMTP, ClamAV signature updates, Google sign-in keys).
+# - `migrate` applies database migrations and exits; api and worker start only after it succeeded.
+# Differences from docker-compose.staging.yml: Postgres 17, Redis password, Caddy, internal network, the worker also mounts
+# the documents volume (it renders invoice PDFs), log rotation, Postgres sized for an 8 GB server.
+
+name: mechware
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "5" }   # at most ~50 MB of logs per container: a full disk stops the shop
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+x-api-env: &api-env
+  ASPNETCORE_ENVIRONMENT: Production
+  ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=mechware;Username=mechware;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+  ConnectionStrings__Redis: "redis:6379,password=${REDIS_PASSWORD:?set REDIS_PASSWORD},abortConnect=false"
+  Encryption__FieldKey: ${ENCRYPTION_FIELD_KEY:?set ENCRYPTION_FIELD_KEY (32 random bytes, base64)}
+  # Only during a key rotation: the old FieldKey value(s), comma-separated, until the backfill has rewritten every row.
+  Encryption__PreviousFieldKeys: ${ENCRYPTION_PREVIOUS_FIELD_KEYS:-}
+  Search__Url: http://meilisearch:7700
+  Search__ApiKey: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+  Email__Host: ${EMAIL_HOST:?set EMAIL_HOST (the SMTP server)}
+  Email__Port: ${EMAIL_PORT:-587}
+  Email__UseTls: ${EMAIL_USE_TLS:-true}
+  Email__Username: ${EMAIL_USERNAME:-}
+  Email__Password: ${EMAIL_PASSWORD:-}
+  Email__FromAddress: ${EMAIL_FROM_ADDRESS:?set EMAIL_FROM_ADDRESS}
+  Email__FromName: ${EMAIL_FROM_NAME:-MECHWARE}
+  Quotes__SalesInboxEmail: ${SALES_INBOX_EMAIL:?set SALES_INBOX_EMAIL}
+  Storefront__BaseUrl: https://${DOMAIN:?set DOMAIN}
+  Documents__LocalPath: /data/documents
+  Antivirus__Host: clamav
+  Antivirus__Port: "3310"
+  # Optional PKCS#12 file that encrypts the Data Protection keys at rest: put it in infra/docker/secrets/ (git-ignored) and
+  # set DATA_PROTECTION_CERT_PATH=/run/secrets/mechware/dp.pfx. Empty = keys stored as plain XML (a startup warning).
+  DataProtection__CertificatePath: ${DATA_PROTECTION_CERT_PATH:-}
+  DataProtection__CertificatePassword: ${DATA_PROTECTION_CERT_PASSWORD:-}
+  # Mushak-6.3 invoicing (ADR-0012 §3). Production has no default mode. Off = no invoice is issued (paper pad); Live needs
+  # every issuer fact below or the API and Worker refuse to start; Specimen is refused in Production.
+  Invoicing__Mode: ${INVOICING_MODE:?set INVOICING_MODE (Off or Live)}
+  Invoicing__IssuerSellerId: ${INVOICING_ISSUER_SELLER_ID:-}
+  Invoicing__LegalNameEn: ${INVOICING_LEGAL_NAME_EN:-}
+  Invoicing__LegalNameBn: ${INVOICING_LEGAL_NAME_BN:-}
+  Invoicing__Bin: ${INVOICING_BIN:-}
+  Invoicing__Tin: ${INVOICING_TIN:-}
+  Invoicing__TradeLicence: ${INVOICING_TRADE_LICENCE:-}
+  Invoicing__RegisteredAddressEn: ${INVOICING_REGISTERED_ADDRESS_EN:-}
+  Invoicing__RegisteredAddressBn: ${INVOICING_REGISTERED_ADDRESS_BN:-}
+  Invoicing__IssuingPremisesAddressEn: ${INVOICING_PREMISES_ADDRESS_EN:-}
+  Invoicing__IssuingPremisesAddressBn: ${INVOICING_PREMISES_ADDRESS_BN:-}
+  Invoicing__ResponsiblePersonName: ${INVOICING_RESPONSIBLE_PERSON_NAME:-}
+  Invoicing__ResponsiblePersonDesignation: ${INVOICING_RESPONSIBLE_PERSON_DESIGNATION:-}
+  Invoicing__ConsultantChecked: ${INVOICING_CONSULTANT_CHECKED:-false}
+  Invoicing__Bank__AccountName: ${BANK_ACCOUNT_NAME:-}
+  Invoicing__Bank__AccountNumber: ${BANK_ACCOUNT_NUMBER:-}
+  Invoicing__Bank__BankName: ${BANK_NAME:-}
+  Invoicing__Bank__Branch: ${BANK_BRANCH:-}
+  Invoicing__Bank__RoutingNumber: ${BANK_ROUTING_NUMBER:-}
+  Invoicing__Signatory__Name: ${SIGNATORY_NAME:-}
+  Invoicing__Signatory__Designation: ${SIGNATORY_DESIGNATION:-}
+
+services:
+  # Refuses to let the stack start while prod.env still contains an example value (CHANGE_ME). Runs in a few milliseconds.
+  preflight:
+    image: postgres:17
+    restart: "no"
+    network_mode: none
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        bad=$$(env | grep 'CHANGE_ME' | cut -d= -f1)
+        if [ -n "$$bad" ]; then echo "prod.env still has example values (CHANGE_ME) in:"; echo "$$bad"; exit 1; fi
+        case "$$DOMAIN" in *example*|*.invalid) echo "DOMAIN is still an example domain: $$DOMAIN"; exit 1;; esac
+        echo "preflight ok"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      ENCRYPTION_FIELD_KEY: ${ENCRYPTION_FIELD_KEY:?set ENCRYPTION_FIELD_KEY}
+      GUEST_CART_TOKEN_KEY: ${GUEST_CART_TOKEN_KEY:?set GUEST_CART_TOKEN_KEY}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      EMAIL_HOST: ${EMAIL_HOST:?set EMAIL_HOST}
+      EMAIL_USERNAME: ${EMAIL_USERNAME:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?set EMAIL_FROM_ADDRESS}
+      SALES_INBOX_EMAIL: ${SALES_INBOX_EMAIL:?set SALES_INBOX_EMAIL}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_TOTP_SECRET: ${BOOTSTRAP_ADMIN_TOTP_SECRET:-}
+    logging: *logging
+
+  # Deploy step: applies pending migrations, encrypts any second-factor secret still in clear, and exits (non-zero on
+  # failure, which keeps api/worker from starting). Safe to run several times at once (advisory lock).
+  migrate:
+    build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
+    image: mechware-worker:${MECHWARE_TAG:-prod}
+    restart: "no"
+    command: ["migrate"]
+    environment: *api-env
+    <<: *hardening
+    networks: [data]
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+    logging: *logging
+
+  api:
+    build: { context: ../.., dockerfile: infra/docker/api.Dockerfile }
+    image: mechware-api:${MECHWARE_TAG:-prod}
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      Jwt__Secret: ${JWT_SECRET:?set JWT_SECRET (at least 32 random bytes)}
+      Jwt__Issuer: https://api.${DOMAIN:?set DOMAIN}
+      Jwt__Audience: https://${DOMAIN:?set DOMAIN}
+      GuestCart__TokenKey: ${GUEST_CART_TOKEN_KEY:?set GUEST_CART_TOKEN_KEY (32 random bytes, base64)}
+      GuestCart__PreviousTokenKeys: ${GUEST_CART_PREVIOUS_TOKEN_KEYS:-}
+      # Only Caddy (fixed address below) may tell the API the visitor's real IP; rate limits are counted per visitor IP.
+      ForwardedHeaders__KnownProxies: ${CADDY_IP:-172.30.10.10}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      # First administrator (two-factor enforced). Created once at start when the e-mail is set and no such account exists;
+      # blank these three again after the first sign-in (see the runbook).
+      Identity__BootstrapAdmin__Email: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      Identity__BootstrapAdmin__FullName: ${BOOTSTRAP_ADMIN_FULL_NAME:-}
+      Identity__BootstrapAdmin__Phone: ${BOOTSTRAP_ADMIN_PHONE:-}
+      Identity__BootstrapAdmin__Password: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      Identity__BootstrapAdmin__TotpSecret: ${BOOTSTRAP_ADMIN_TOTP_SECRET:-}
+    <<: *hardening
+    volumes:
+      - documents:/data/documents
+      - ./secrets:/run/secrets/mechware:ro
+    networks: [edge, data]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      meilisearch: { condition: service_healthy }
+      clamav: { condition: service_healthy }
+    logging: *logging
+
+  worker:
+    build: { context: ../.., dockerfile: infra/docker/worker.Dockerfile }
+    image: mechware-worker:${MECHWARE_TAG:-prod}
+    restart: unless-stopped
+    environment: *api-env
+    <<: *hardening
+    # The worker renders invoice PDFs into the same document store as the API. It starts after the API so the API image
+    # (which owns /data/documents as uid 1654) initialises the volume first.
+    volumes:
+      - documents:/data/documents
+      - ./secrets:/run/secrets/mechware:ro
+    networks: [edge, data]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      api: { condition: service_healthy }
+    logging: *logging
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/next.Dockerfile
+      args:
+        APP: web
+        PORT: "3000"
+        NEXT_PUBLIC_API_BASE_URL: https://api.${DOMAIN:?set DOMAIN}
+        NEXT_PUBLIC_SITE_URL: https://${DOMAIN:?set DOMAIN}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    image: mechware-web:${MECHWARE_TAG:-prod}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_BASE_URL: http://api:8080   # server-side calls stay on the private network
+    read_only: true
+    tmpfs: [/tmp, "/repo/frontend/apps/web/.next/cache:uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *logging
+
+  console:
+    build:
+      context: ../..
+      dockerfile: infra/docker/next.Dockerfile
+      args:
+        APP: console
+        PORT: "3001"
+        NEXT_PUBLIC_API_BASE_URL: https://api.${DOMAIN:?set DOMAIN}
+        NEXT_PUBLIC_SITE_URL: https://console.${DOMAIN:?set DOMAIN}
+    image: mechware-console:${MECHWARE_TAG:-prod}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_BASE_URL: http://api:8080
+    read_only: true
+    tmpfs: [/tmp, "/repo/frontend/apps/console/.next/cache:uid=1000,gid=1000"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [edge]
+    depends_on:
+      api: { condition: service_healthy }
+    logging: *logging
+
+  # The only container with published ports. Gets and renews Let's Encrypt certificates by itself for DOMAIN,
+  # www.DOMAIN (redirects to DOMAIN), console.DOMAIN and api.DOMAIN; the DNS records must point here first.
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates and the ACME account: keep this volume
+      - caddy_config:/config
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    networks:
+      edge: { ipv4_address: "${CADDY_IP:-172.30.10.10}" }
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9180/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+    logging: *logging
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mechware
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: mechware
+    # Sized for an 8 GB server shared with the rest of the stack (raise shared_buffers to ~25 % of RAM after a resize).
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=200
+    shm_size: 256mb
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mechware -d mechware"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD}   # lets the healthcheck's redis-cli authenticate
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes: [redis_data:/data]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+    logging: *logging
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?set MEILI_MASTER_KEY}
+      MEILI_ENV: production
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: 512Mb
+    volumes: [meili_data:/meili_data]
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+    logging: *logging
+
+  # Virus scanner for uploads. On the edge network because it downloads new signatures (freshclam) every few hours.
+  # ConcurrentDatabaseReload=no keeps it at ~1.3 GB instead of ~2.6 GB during a signature reload (scans wait ~1 minute).
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    environment:
+      CLAMD_CONF_StreamMaxLength: 64M
+      CLAMD_CONF_MaxFileSize: 64M
+      CLAMD_CONF_ConcurrentDatabaseReload: "no"
+    volumes: [clamav_data:/var/lib/clamav]
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    depends_on:
+      preflight: { condition: service_completed_successfully }
+    logging: *logging
+
+networks:
+  # Caddy, web, console, api, worker and ClamAV. Fixed subnet so Caddy has a fixed address the API can trust.
+  # If Docker reports "Pool overlaps with other one on this address space", set EDGE_SUBNET and CADDY_IP in prod.env.
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-172.30.10.0/24}
+  # Databases only: no internet access, no published ports.
+  data:
+    internal: true
+
+volumes:
+  postgres_data:   # the database: backed up nightly by infra/scripts/backup.sh
+  documents:       # uploaded files and invoice PDFs: backed up nightly by infra/scripts/backup.sh
+  meili_data:      # search index: rebuilt from the database (`docker compose ... exec worker dotnet Mechware.Worker.dll rebuild-search`)
+  redis_data:      # carts and short-lived counters
+  clamav_data:     # virus signatures (re-downloaded when lost)
+  caddy_data:      # HTTPS certificates (re-issued when lost, but keep it: Let's Encrypt has rate limits)
+  caddy_config:
