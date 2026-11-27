@@ -121,3 +121,35 @@ internal sealed class ReturnRequestLineConfiguration : IEntityTypeConfiguration<
         b.HasIndex(l => l.OrderItemId).HasDatabaseName("ix_return_request_lines_order_item");
     }
 }
+
+/// <summary>
+/// F2.2 return photos: the CHECKs repeat the domain (slot 1-5, the server-built key, a positive size, a SHA-256); the unique slot per
+/// return caps the count at five even if the service's lock were ever lost. Deleting a return is not a thing, so no cascade.
+/// </summary>
+internal sealed class ReturnPhotoConfiguration : IEntityTypeConfiguration<ReturnPhoto>
+{
+    public void Configure(EntityTypeBuilder<ReturnPhoto> b)
+    {
+        b.ToTable("return_photos", t =>
+        {
+            t.HasCheckConstraint("ck_return_photos_slot", $"slot BETWEEN 1 AND {ReturnPhoto.MaxPerReturn}");
+            t.HasCheckConstraint("ck_return_photos_key",
+                "storage_key ~ '^uploads/rma/[0-9a-f]{32}/[0-9a-f]{32}[.]jpg$' AND storage_key LIKE ('uploads/rma/' || replace(return_request_id::text, '-', '') || '/%')");
+            t.HasCheckConstraint("ck_return_photos_file", "size_bytes > 0 AND width > 0 AND height > 0 AND sha256 ~ '^[0-9a-f]{64}$'");
+        });
+        b.MapAudit(updated: false);
+        b.Property(p => p.ReturnRequestId).HasColumnName("return_request_id");
+        b.Property(p => p.Slot).HasColumnName("slot");
+        b.Property(p => p.StorageKey).HasColumnName("storage_key").HasMaxLength(100).IsRequired();
+        b.Property(p => p.SizeBytes).HasColumnName("size_bytes");
+        b.Property(p => p.Width).HasColumnName("width");
+        b.Property(p => p.Height).HasColumnName("height");
+        b.Property(p => p.Sha256).HasColumnName("sha256").HasMaxLength(64).IsRequired();
+        b.Property(p => p.UploadedBy).HasColumnName("uploaded_by");
+        b.HasOne<ReturnRequest>().WithMany().HasForeignKey(p => p.ReturnRequestId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<User>().WithMany().HasForeignKey(p => p.UploadedBy).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(p => new { p.ReturnRequestId, p.Slot }).IsUnique().HasDatabaseName("ux_return_photos_slot");
+        b.HasIndex(p => p.StorageKey).IsUnique().HasDatabaseName("ux_return_photos_key");
+        b.HasIndex(p => p.UploadedBy).HasDatabaseName("ix_return_photos_uploaded_by");
+    }
+}

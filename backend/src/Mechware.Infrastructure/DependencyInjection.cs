@@ -147,6 +147,9 @@ public static class DependencyInjection
             ? new ClamAvScanner(antivirus.Host!, antivirus.Port, TimeSpan.FromSeconds(Math.Clamp(antivirus.TimeoutSeconds, 1, 600)))
             : new DevelopmentSignatureScanner());
         services.TryAddScoped<IProductDocumentService, ProductDocumentService>();
+        // F2.2 return photos use the same store and scanner (keys uploads/rma/...).
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<Mechware.Application.Orders.IReturnPhotoService, Orders.ReturnPhotoService>();
         return services;
     }
 

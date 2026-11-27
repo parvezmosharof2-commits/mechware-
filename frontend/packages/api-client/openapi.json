@@ -4170,6 +4170,61 @@
         }
       }
     },
+    "/api/v1/admin/returns/{returnId}/photos": {
+      "get": {
+        "tags": [
+          "AdminReturnPhotos"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/admin/returns/{returnId}/photos/{photoId}": {
+      "get": {
+        "tags": [
+          "AdminReturnPhotos"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/admin/returns/{returnId}/approve": {
       "post": {
         "tags": [
@@ -8113,6 +8168,135 @@
         }
       }
     },
+    "/api/v1/returns/{returnId}/photos": {
+      "post": {
+        "tags": [
+          "ReturnPhotos"
+        ],
+        "summary": "Multipart field `file`. 413 `FILE_TOO_LARGE`; 400 not JPEG/PNG/WebP by its first bytes, infected or unreadable; 503\r\n`SCAN_UNAVAILABLE`; 409 `RETURN_PHOTOS_CLOSED` (received or later, withdrawn, rejected), `RETURN_PHOTOS_FULL` (five).",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "File": {
+                    "type": "string",
+                    "description": "A JPEG, PNG or WebP photo of at most 5 MB; its name and claimed type are ignored.",
+                    "format": "binary"
+                  }
+                }
+              },
+              "encoding": {
+                "File": {
+                  "style": "form"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "ReturnPhotos"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/v1/returns/{returnId}/photos/{photoId}": {
+      "get": {
+        "tags": [
+          "ReturnPhotos"
+        ],
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ReturnPhotos"
+        ],
+        "summary": "Only before staff decide (409 `RETURN_PHOTOS_CLOSED` after).",
+        "parameters": [
+          {
+            "name": "returnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/v1/orders/{orderNumber}/returns": {
       "post": {
         "tags": [
@@ -11270,6 +11454,9 @@
       "name": "AdminRefunds"
     },
     {
+      "name": "AdminReturnPhotos"
+    },
+    {
       "name": "AdminReturns"
     },
     {
@@ -11340,6 +11527,9 @@
     },
     {
       "name": "QuickOrder"
+    },
+    {
+      "name": "ReturnPhotos"
     },
     {
       "name": "Returns"

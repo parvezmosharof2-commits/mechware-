@@ -5457,6 +5457,75 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnPhoto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer")
+                        .HasColumnName("height");
+
+                    b.Property<Guid>("ReturnRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("return_request_id");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<int>("Slot")
+                        .HasColumnType("integer")
+                        .HasColumnName("slot");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("storage_key");
+
+                    b.Property<Guid>("UploadedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer")
+                        .HasColumnName("width");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_return_photos_key");
+
+                    b.HasIndex("UploadedBy")
+                        .HasDatabaseName("ix_return_photos_uploaded_by");
+
+                    b.HasIndex("ReturnRequestId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ux_return_photos_slot");
+
+                    b.ToTable("return_photos", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_return_photos_file", "size_bytes > 0 AND width > 0 AND height > 0 AND sha256 ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_return_photos_key", "storage_key ~ '^uploads/rma/[0-9a-f]{32}/[0-9a-f]{32}[.]jpg$' AND storage_key LIKE ('uploads/rma/' || replace(return_request_id::text, '-', '') || '/%')");
+
+                            t.HasCheckConstraint("ck_return_photos_slot", "slot BETWEEN 1 AND 5");
+                        });
+                });
+
             modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7039,6 +7108,21 @@ namespace Mechware.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("VariantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Mechware.Domain.Returns.ReturnPhoto", b =>
+                {
+                    b.HasOne("Mechware.Domain.Returns.ReturnRequest", null)
+                        .WithMany()
+                        .HasForeignKey("ReturnRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Mechware.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UploadedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Mechware.Domain.Returns.ReturnRequest", b =>
